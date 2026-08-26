@@ -1,0 +1,63 @@
+name: 构建 Windows 安装包
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: 构建 NSIS 安装包
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-gnu
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 配置 Rust GNU 工具链
+        shell: pwsh
+        run: rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
+
+      - name: 安装 MinGW 链接工具
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-gcc
+
+      - name: 将 MinGW 加入构建路径
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value "${{ steps.msys2.outputs.msys2-location }}\mingw64\bin"
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 运行 Rust 测试
+        run: cargo test --workspace
+
+      - name: 运行前端测试
+        run: npm test -- --run
+
+      - name: 构建 Tauri 安装包
+        run: npm run tauri build
+
+      - name: 上传 NSIS 安装包
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-switchboard-windows-x64
+          path: target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 30

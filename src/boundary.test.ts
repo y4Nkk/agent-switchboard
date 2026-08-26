@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const srcRoot = dirname(fileURLToPath(import.meta.url));
+
+function collectSourceFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry === "test") continue;
+      files.push(...collectSourceFiles(full));
+    } else if (/\.(ts|tsx)$/.test(entry) && !/\.test\./.test(entry)) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+describe("UI boundary", () => {
+  it("lets only the api client talk to the backend", () => {
+    const offenders: string[] = [];
+    for (const file of collectSourceFiles(srcRoot)) {
+      const rel = relative(srcRoot, file).replace(/\\/g, "/");
+      const text = readFileSync(file, "utf8");
+      if (rel !== "api/client.ts" && text.includes("@tauri-apps/api")) {
+        offenders.push(`${rel} imports the backend directly`);
+      }
+      if (rel !== "api/client.ts" && /from ["']node:(fs|path)["']/.test(text)) {
+        offenders.push(`${rel} uses node fs/path directly`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps components from constructing configuration file text", () => {
+    const offenders: string[] = [];
+    for (const file of collectSourceFiles(join(srcRoot, "components"))) {
+      const text = readFileSync(file, "utf8");
+      if (/config\.toml|settings\.json/.test(text)) {
+        offenders.push(relative(srcRoot, file));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

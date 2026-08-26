@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Agent Switchboard app icon — flat dual-color gem, transparent background.
+    Token anchors (DESIGN.md): Action Blue #0A84FF (Codex half),
+    Claude Violet #8B7CFF (Claude half). The transparent gap between the
+    halves is the switch seam. Vector master; raster sizes export from it.
+  -->
+  <path d="M 249,60 C 182,60 89,174 89,256 C 89,338 182,452 249,452 Z" fill="#0A84FF"/>
+  <path d="M 263,60 C 330,60 423,174 423,256 C 423,338 330,452 263,452 Z" fill="#8B7CFF"/>
+</svg>

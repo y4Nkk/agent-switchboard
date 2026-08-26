@@ -1,0 +1,13 @@
+[package]
+name = "asb-core"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-support = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml_edit = "0.22"

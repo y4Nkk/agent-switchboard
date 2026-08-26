@@ -1,0 +1,36 @@
+[package]
+name = "agent-switchboard"
+version.workspace = true
+edition.workspace = true
+default-run = "agent-switchboard"
+
+[lib]
+name = "agent_switchboard_lib"
+# Desktop-only: link statically into the exe. A cdylib would push the GNU
+# linker past its export-ordinal limit on the windows-* dependency set.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+asb-core = { path = "../crates/asb-core" }
+asb-switch = { path = "../crates/asb-switch" }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# `common-controls-v6` stays off: it only embeds the manifest into bins, and
+# our build.rs embeds one for every target (tests included) via windres.
+tauri = { version = "2", default-features = false, features = [
+    "wry",
+    "compression",
+    "dynamic-acl",
+] }
+uuid = { version = "1", features = ["v4"] }
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_Networking_WinHttp",
+] }
+
+[dev-dependencies]
+tempfile = "3"
