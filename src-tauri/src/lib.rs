@@ -1,32 +1,171 @@
+mod ccswitch_source;
 mod commands;
 mod local_state;
 mod probe;
+mod session_manager;
+mod tray;
+mod update;
 
 pub use commands::local_config_paths;
 
+const WRY_DEFAULT_WEBVIEW2_BROWSER_ARGS: &str =
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+
+fn apply_hardware_acceleration(
+    windows: &mut [tauri::utils::config::WindowConfig],
+    hardware_acceleration: bool,
+) {
+    if hardware_acceleration {
+        return;
+    }
+
+    for window in windows {
+        // Supplying an explicit argument string replaces Wry's defaults, so
+        // seed this exact default before adding the GPU switch.
+        let arguments = window
+            .additional_browser_args
+            .get_or_insert_with(|| WRY_DEFAULT_WEBVIEW2_BROWSER_ARGS.to_string());
+        if !arguments
+            .split_ascii_whitespace()
+            .any(|argument| argument == "--disable-gpu")
+        {
+            if !arguments.is_empty() {
+                arguments.push(' ');
+            }
+            arguments.push_str("--disable-gpu");
+        }
+    }
+}
+
+fn configure_hardware_acceleration<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
+    let identifier = context.config().identifier.clone();
+    let hardware_acceleration = local_state::LocalState::from_startup_identifier(&identifier)
+        .and_then(|state| state.get_app_settings())
+        // A missing or malformed app setting must not stop the recovery shell;
+        // retain WebView2's current GPU-enabled default in that case.
+        .map(|settings| settings.hardware_acceleration)
+        .unwrap_or(true);
+
+    apply_hardware_acceleration(&mut context.config_mut().app.windows, hardware_acceleration);
+}
+
 /// Runs the Agent Switchboard desktop shell.
 pub fn run() {
+    use tauri::Manager;
+
+    let mut context = tauri::generate_context!();
+    configure_hardware_acceleration(&mut context);
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // A malformed settings file is rejected by the typed settings
+            // surface, but must never prevent the tray/window recovery shell
+            // from starting. Default native window behavior remains usable.
+            if let Ok(settings) = local_state::LocalState::from_app(app.handle())
+                .and_then(|state| state.get_app_settings())
+            {
+                let _ = commands::apply_window_settings(app.handle(), &settings);
+            }
+            tray::setup(app.handle())?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if tray::should_absorb(window.app_handle()) {
+                    api.prevent_close();
+                    // A tray has already been built successfully, so hide is
+                    // recoverable. Do not let a hide failure destroy the app.
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
-            commands::config_status,
+            commands::status::config_status,
             commands::list_profiles,
+            commands::reset_profile_store,
             commands::create_profile,
             commands::update_profile,
             commands::delete_profile,
+            commands::reorder_profiles,
             commands::import_discovered_profile,
-            commands::get_common,
-            commands::set_common,
-            commands::preview_switch,
-            commands::execute_switch,
-            commands::list_backups,
-            commands::restore_backup,
-            commands::undo_last_switch,
-            commands::backup_diff,
+            commands::common_settings::get_common,
+            commands::common_settings::set_common,
+            commands::common_settings::common_toggles,
+            commands::common_settings::common_choices,
+            commands::common_settings::preview_common,
+            commands::common_settings::apply_common,
+            commands::switching::preview_switch,
+            commands::switching::execute_switch,
+            commands::switching::list_backups,
+            commands::switching::restore_backup,
+            commands::switching::undo_last_switch,
+            commands::switching::backup_diff,
+            commands::switching::open_backup_dir,
             commands::probe_endpoint,
-            commands::lock_status,
-            commands::recover_stale_lock,
+            commands::fetch_provider_models,
+            commands::check_update,
+            commands::status::lock_status,
+            commands::status::recover_stale_lock,
             commands::discover_local,
+            commands::list_sessions,
+            commands::get_session_messages,
+            commands::resume_session,
+            commands::scan_ccswitch,
+            commands::import_ccswitch_profiles,
+            commands::window::window_minimize,
+            commands::window::window_toggle_maximize,
+            commands::window::window_is_maximized,
+            commands::window::window_close,
+            commands::get_app_settings,
+            commands::set_app_settings,
+            commands::window::toggle_devtools,
         ])
-        .run(tauri::generate_context!())
-        .expect("Agent Switchboard 启动失败");
+        .build(context)
+        .expect("Agent Switchboard 启动失败")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                // Tray menu "退出" is the one explicit request allowed to end
+                // the process. Every other exit request stays recoverable.
+                if !tray::take_explicit_exit() && tray::should_absorb(app) {
+                    api.prevent_exit();
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
+            }
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disabling_hardware_acceleration_keeps_wry_defaults_and_adds_the_gpu_flag() {
+        let mut windows = vec![tauri::utils::config::WindowConfig::default()];
+        apply_hardware_acceleration(&mut windows, false);
+
+        assert_eq!(
+            windows[0].additional_browser_args.as_deref(),
+            Some("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu")
+        );
+    }
+
+    #[test]
+    fn enabled_hardware_acceleration_leaves_existing_browser_arguments_unchanged() {
+        let mut windows = vec![tauri::utils::config::WindowConfig::default()];
+        windows[0].additional_browser_args =
+            Some("--autoplay-policy=no-user-gesture-required".to_string());
+
+        apply_hardware_acceleration(&mut windows, true);
+
+        assert_eq!(
+            windows[0].additional_browser_args.as_deref(),
+            Some("--autoplay-policy=no-user-gesture-required")
+        );
+    }
 }

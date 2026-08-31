@@ -5,14 +5,10 @@
 
 use crate::contracts::{
     AppKind, ClaudeModelSettings, CodexModelSettings, CommonConfigPatch, ModelOptions, PatchValue,
-    ProviderDraft, ProviderProfile, RouteMode,
+    ProviderDraft, ProviderProfile,
 };
-use crate::ownership::{is_owned, is_profile_exclusive};
+use crate::ownership::{choice_spec, is_owned, is_profile_exclusive, toggle_spec};
 use thiserror::Error;
-
-pub const CODEX_REASONING_EFFORTS: &[&str] = &["minimal", "low", "medium", "high", "xhigh"];
-pub const CODEX_REASONING_SUMMARIES: &[&str] = &["none", "auto", "concise", "detailed"];
-pub const CODEX_VERBOSITIES: &[&str] = &["low", "medium", "high"];
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ValidationError {
@@ -20,20 +16,14 @@ pub enum ValidationError {
     EmptyName,
     #[error("供应商标识不能为空")]
     EmptyId,
-    #[error("自定义服务模式必须填写服务地址；若想使用官方登录，请将路由模式改为“官方登录”")]
+    #[error("必须填写服务地址；官方登录不再作为供应商档案管理，客户端自身登录即为官方路由")]
     CustomRequiresBaseUrl,
-    #[error("官方登录模式不能设置服务地址；请改用“自定义服务”模式")]
-    OfficialForbidsBaseUrl,
-    #[error("官方登录模式不能设置环境变量名；官方登录凭据由客户端自己管理")]
-    OfficialForbidsEnvKey,
     #[error("base_url 必须是 http(s) URL，当前值为 {0:?}；请填写包含协议头的完整地址")]
     BadBaseUrl(String),
-    #[error("环境变量名 {0:?} 无效；请填写标准环境变量名，例如 OPENAI_API_KEY")]
-    InvalidEnvKey(String),
-    #[error("环境变量名 {0:?} 看起来像凭证值；请填写变量名，而不是密钥")]
-    EnvKeyLooksLikeSecret(String),
-    #[error("Claude Code 的凭据由现有登录或环境管理，供应商配置不能设置环境变量名")]
-    ClaudeEnvKeyUnsupported,
+    #[error("必须填写 API 密钥")]
+    EmptyApiKey,
+    #[error("API 密钥最长 {0} 个字符")]
+    ApiKeyTooLong(usize),
     #[error("供应商所属客户端 {profile_app:?} 与通用配置所属客户端 {patch_app:?} 不一致")]
     AppMismatch {
         profile_app: AppKind,
@@ -44,12 +34,12 @@ pub enum ValidationError {
         options_kind: &'static str,
         app: AppKind,
     },
-    #[error("model_reasoning_effort 必须是 {allowed} 之一，当前值为 {value:?}")]
-    BadReasoningEffort { value: String, allowed: String },
-    #[error("model_reasoning_summary 必须是 {allowed} 之一，当前值为 {value:?}")]
-    BadReasoningSummary { value: String, allowed: String },
-    #[error("model_verbosity 必须是 {allowed} 之一，当前值为 {value:?}")]
-    BadVerbosity { value: String, allowed: String },
+    #[error("键 {key} 的值必须是 {allowed} 之一（或留空移除该行），当前值为 {value:?}")]
+    BadCommonValue {
+        key: String,
+        value: String,
+        allowed: String,
+    },
     #[error("上下文窗口必须是正整数（token 数）")]
     BadContextWindow,
     #[error("availableModels 不能包含空行；请每行填写一个模型标识")]
@@ -62,7 +52,14 @@ pub enum ValidationError {
     EmptyKey,
     #[error("键 {key:?} 的数值必须为有限数")]
     NonFiniteNumber { key: String },
+    #[error("官网地址必须是 http(s) URL，当前值为 {0:?}；请填写包含协议头的完整地址，或留空")]
+    BadWebsiteUrl(String),
+    #[error("备注最长 {0} 个字符")]
+    NotesTooLong(usize),
 }
+
+/// Metadata fields shared by draft and profile; kept short and local-only.
+const MAX_NOTES_LEN: usize = 500;
 
 impl ProviderProfile {
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -71,11 +68,12 @@ impl ProviderProfile {
         }
         validate_profile_fields(ProfileFields {
             app: self.app,
-            mode: self.mode,
             name: &self.name,
             base_url: self.base_url.as_deref(),
-            env_key: self.env_key.as_deref(),
+            api_key: &self.api_key,
             model_options: self.model_options.as_ref(),
+            notes: self.notes.as_deref(),
+            website_url: self.website_url.as_deref(),
         })
     }
 }
@@ -84,73 +82,68 @@ impl ProviderDraft {
     pub fn validate(&self) -> Result<(), ValidationError> {
         validate_profile_fields(ProfileFields {
             app: self.app,
-            mode: self.mode,
             name: &self.name,
             base_url: self.base_url.as_deref(),
-            env_key: self.env_key.as_deref(),
+            api_key: &self.api_key,
             model_options: self.model_options.as_ref(),
+            notes: self.notes.as_deref(),
+            website_url: self.website_url.as_deref(),
         })
     }
 }
 
 struct ProfileFields<'a> {
     app: AppKind,
-    mode: RouteMode,
     name: &'a str,
     base_url: Option<&'a str>,
-    env_key: Option<&'a str>,
+    api_key: &'a str,
     model_options: Option<&'a ModelOptions>,
+    notes: Option<&'a str>,
+    website_url: Option<&'a str>,
 }
 
 fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationError> {
     let ProfileFields {
         app,
-        mode,
         name,
         base_url,
-        env_key,
+        api_key,
         model_options,
+        notes,
+        website_url,
     } = fields;
 
     if name.trim().is_empty() {
         return Err(ValidationError::EmptyName);
     }
-    match mode {
-        RouteMode::Custom => {
-            let Some(url) = base_url else {
-                return Err(ValidationError::CustomRequiresBaseUrl);
-            };
-            let ok = url.starts_with("https://") || url.starts_with("http://");
-            if !ok {
-                return Err(ValidationError::BadBaseUrl(url.to_string()));
-            }
-        }
-        RouteMode::Official => {
-            if base_url.is_some() {
-                return Err(ValidationError::OfficialForbidsBaseUrl);
-            }
-            if env_key.is_some() {
-                return Err(ValidationError::OfficialForbidsEnvKey);
-            }
+    {
+        let Some(url) = base_url else {
+            return Err(ValidationError::CustomRequiresBaseUrl);
+        };
+        let ok = url.starts_with("https://") || url.starts_with("http://");
+        if !ok {
+            return Err(ValidationError::BadBaseUrl(url.to_string()));
         }
     }
-    if let Some(env_key) = env_key {
-        if app == AppKind::Claude {
-            return Err(ValidationError::ClaudeEnvKeyUnsupported);
-        }
-        let looks_like_secret = env_key.contains("sk-") || env_key.len() > 128;
-        if looks_like_secret {
-            return Err(ValidationError::EnvKeyLooksLikeSecret(env_key.to_string()));
-        }
-        let mut chars = env_key.chars();
-        let valid = matches!(chars.next(), Some('_') | Some('A'..='Z') | Some('a'..='z'))
-            && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric());
-        if !valid {
-            return Err(ValidationError::InvalidEnvKey(env_key.to_string()));
-        }
+    if api_key.trim().is_empty() {
+        return Err(ValidationError::EmptyApiKey);
+    }
+    if api_key.chars().count() > 4_096 {
+        return Err(ValidationError::ApiKeyTooLong(4_096));
     }
     if let Some(options) = model_options {
         validate_model_options(app, options)?;
+    }
+    if let Some(notes) = notes {
+        if notes.chars().count() > MAX_NOTES_LEN {
+            return Err(ValidationError::NotesTooLong(MAX_NOTES_LEN));
+        }
+    }
+    if let Some(url) = website_url {
+        let ok = url.starts_with("https://") || url.starts_with("http://");
+        if !ok {
+            return Err(ValidationError::BadWebsiteUrl(url.to_string()));
+        }
     }
     Ok(())
 }
@@ -179,30 +172,6 @@ fn join_allowed(allowed: &[&str]) -> String {
 }
 
 fn validate_codex_settings(settings: &CodexModelSettings) -> Result<(), ValidationError> {
-    if let Some(effort) = settings.reasoning_effort.as_deref() {
-        if !one_of(effort, CODEX_REASONING_EFFORTS) {
-            return Err(ValidationError::BadReasoningEffort {
-                value: effort.to_string(),
-                allowed: join_allowed(CODEX_REASONING_EFFORTS),
-            });
-        }
-    }
-    if let Some(summary) = settings.reasoning_summary.as_deref() {
-        if !one_of(summary, CODEX_REASONING_SUMMARIES) {
-            return Err(ValidationError::BadReasoningSummary {
-                value: summary.to_string(),
-                allowed: join_allowed(CODEX_REASONING_SUMMARIES),
-            });
-        }
-    }
-    if let Some(verbosity) = settings.verbosity.as_deref() {
-        if !one_of(verbosity, CODEX_VERBOSITIES) {
-            return Err(ValidationError::BadVerbosity {
-                value: verbosity.to_string(),
-                allowed: join_allowed(CODEX_VERBOSITIES),
-            });
-        }
-    }
     if let Some(window) = settings.context_window {
         if window == 0 {
             return Err(ValidationError::BadContextWindow);
@@ -237,7 +206,42 @@ impl CommonConfigPatch {
                     key: entry.key.clone(),
                 });
             }
-            if let PatchValue::Number(n) = entry.value {
+            // Catalog keys are value-constrained: a toggle carries exactly its
+            // applied bool, a choice exactly one of its official values. An
+            // absent value (null) removes the line and is always valid.
+            if let Some(value) = &entry.value {
+                if let Some(spec) = choice_spec(self.app, &entry.key) {
+                    let allowed: Vec<&str> =
+                        spec.options.iter().map(|option| option.value).collect();
+                    if let PatchValue::Str(text) = value {
+                        if !one_of(text, &allowed) {
+                            return Err(ValidationError::BadCommonValue {
+                                key: entry.key.clone(),
+                                value: text.clone(),
+                                allowed: join_allowed(&allowed),
+                            });
+                        }
+                    } else {
+                        return Err(ValidationError::BadCommonValue {
+                            key: entry.key.clone(),
+                            value: value.display(),
+                            allowed: join_allowed(&allowed),
+                        });
+                    }
+                } else if let Some(spec) = toggle_spec(self.app, &entry.key) {
+                    match value {
+                        PatchValue::Bool(flag) if *flag == spec.applied => {}
+                        other => {
+                            return Err(ValidationError::BadCommonValue {
+                                key: entry.key.clone(),
+                                value: other.display(),
+                                allowed: spec.applied.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            if let Some(PatchValue::Number(n)) = entry.value {
                 if !n.is_finite() {
                     return Err(ValidationError::NonFiniteNumber {
                         key: entry.key.clone(),
@@ -275,12 +279,13 @@ mod tests {
         ProviderProfile {
             id: "p1".into(),
             app,
-            mode: RouteMode::Custom,
             name: "Relay A".into(),
             model: Some("m-1".into()),
             base_url: Some("https://example.internal/v1".into()),
-            env_key: None,
+            api_key: "test-api-key".into(),
             model_options: None,
+            notes: None,
+            website_url: None,
         }
     }
 
@@ -289,7 +294,7 @@ mod tests {
             app,
             entries: vec![PatchEntry {
                 key: key.into(),
-                value: PatchValue::Bool(true),
+                value: Some(PatchValue::Bool(true)),
             }],
         }
     }
@@ -309,23 +314,19 @@ mod tests {
     }
 
     #[test]
-    fn official_mode_rejects_base_url_and_env_key() {
-        let mut p = profile(AppKind::Codex);
-        p.mode = RouteMode::Official;
-        assert_eq!(p.validate(), Err(ValidationError::OfficialForbidsBaseUrl));
-        p.base_url = None;
-        p.env_key = Some("OPENAI_API_KEY".into());
-        assert_eq!(p.validate(), Err(ValidationError::OfficialForbidsEnvKey));
-        p.env_key = None;
-        assert!(p.validate().is_ok());
-    }
-
-    #[test]
-    fn official_mode_is_valid_for_claude_without_credentials() {
-        let mut p = profile(AppKind::Claude);
-        p.mode = RouteMode::Official;
-        p.base_url = None;
-        assert!(p.validate().is_ok());
+    fn missing_base_url_is_rejected_regardless_of_client() {
+        let mut codex = profile(AppKind::Codex);
+        codex.base_url = None;
+        assert_eq!(
+            codex.validate(),
+            Err(ValidationError::CustomRequiresBaseUrl)
+        );
+        let mut claude = profile(AppKind::Claude);
+        claude.base_url = None;
+        assert_eq!(
+            claude.validate(),
+            Err(ValidationError::CustomRequiresBaseUrl)
+        );
     }
 
     #[test]
@@ -336,20 +337,46 @@ mod tests {
     }
 
     #[test]
-    fn rejects_env_key_that_is_a_secret_value() {
+    fn website_url_must_be_http_or_empty() {
         let mut p = profile(AppKind::Codex);
-        p.env_key = Some("sk-live-9f3bca...".into());
+        p.website_url = Some("https://provider.example".into());
+        assert!(p.validate().is_ok());
+        p.website_url = Some("provider.example".into());
         assert!(matches!(
             p.validate(),
-            Err(ValidationError::EnvKeyLooksLikeSecret(_))
+            Err(ValidationError::BadWebsiteUrl(_))
+        ));
+        p.website_url = None;
+        assert!(p.validate().is_ok());
+    }
+
+    #[test]
+    fn notes_have_a_length_cap() {
+        let mut p = profile(AppKind::Claude);
+        p.notes = Some("短备注".into());
+        assert!(p.validate().is_ok());
+        p.notes = Some("长".repeat(MAX_NOTES_LEN + 1));
+        assert!(matches!(
+            p.validate(),
+            Err(ValidationError::NotesTooLong(_))
         ));
     }
 
     #[test]
-    fn rejects_env_key_for_claude() {
-        let mut p = profile(AppKind::Claude);
-        p.env_key = Some("ANTHROPIC_API_KEY".into());
-        assert_eq!(p.validate(), Err(ValidationError::ClaudeEnvKeyUnsupported));
+    fn rejects_empty_api_key() {
+        let mut p = profile(AppKind::Codex);
+        p.api_key.clear();
+        assert_eq!(p.validate(), Err(ValidationError::EmptyApiKey));
+    }
+
+    #[test]
+    fn accepts_api_keys_for_both_clients() {
+        let mut codex = profile(AppKind::Codex);
+        codex.api_key = "sk-live-codex".into();
+        assert!(codex.validate().is_ok());
+        let mut claude = profile(AppKind::Claude);
+        claude.api_key = "sk-ant-claude".into();
+        assert!(claude.validate().is_ok());
     }
 
     #[test]
@@ -368,35 +395,9 @@ mod tests {
     }
 
     #[test]
-    fn accepts_xhigh_effort_and_rejects_unknown_values() {
-        let mut p = profile(AppKind::Codex);
-        p.model_options = Some(ModelOptions::Codex(CodexModelSettings {
-            reasoning_effort: Some("xhigh".into()),
-            reasoning_summary: Some("concise".into()),
-            verbosity: Some("low".into()),
-            context_window: Some(272_000),
-        }));
-        assert!(p.validate().is_ok());
-
-        p.model_options = Some(ModelOptions::Codex(CodexModelSettings {
-            reasoning_effort: Some("extreme".into()),
-            reasoning_summary: None,
-            verbosity: None,
-            context_window: None,
-        }));
-        assert!(matches!(
-            p.validate(),
-            Err(ValidationError::BadReasoningEffort { .. })
-        ));
-    }
-
-    #[test]
     fn rejects_zero_context_window_and_blank_available_models() {
         let mut p = profile(AppKind::Codex);
         p.model_options = Some(ModelOptions::Codex(CodexModelSettings {
-            reasoning_effort: None,
-            reasoning_summary: None,
-            verbosity: None,
             context_window: Some(0),
         }));
         assert_eq!(p.validate(), Err(ValidationError::BadContextWindow));
@@ -420,7 +421,7 @@ mod tests {
 
     #[test]
     fn rejects_profile_exclusive_patch_keys() {
-        let err = patch(AppKind::Codex, "model_reasoning_effort")
+        let err = patch(AppKind::Codex, "model_context_window")
             .validate()
             .unwrap_err();
         assert!(matches!(err, ValidationError::ProfileExclusiveKey { .. }));
@@ -428,8 +429,88 @@ mod tests {
     }
 
     #[test]
+    fn choice_patch_accepts_catalog_values_and_rejects_unknown_ones() {
+        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
+        entries[0].value = Some(PatchValue::Str("xhigh".into()));
+        assert!(CommonConfigPatch {
+            app: AppKind::Codex,
+            entries
+        }
+        .validate()
+        .is_ok());
+
+        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
+        entries[0].value = Some(PatchValue::Str("extreme".into()));
+        let err = CommonConfigPatch {
+            app: AppKind::Codex,
+            entries,
+        }
+        .validate()
+        .unwrap_err();
+        assert!(matches!(err, ValidationError::BadCommonValue { .. }));
+        assert!(err.to_string().contains("minimal"));
+
+        // A non-string value on a choice key is equally invalid.
+        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
+        entries[0].value = Some(PatchValue::Bool(true));
+        assert!(matches!(
+            CommonConfigPatch {
+                app: AppKind::Codex,
+                entries,
+            }
+            .validate(),
+            Err(ValidationError::BadCommonValue { .. })
+        ));
+
+        // An absent value (null) removes the line and is always valid.
+        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
+        entries[0].value = None;
+        assert!(CommonConfigPatch {
+            app: AppKind::Codex,
+            entries
+        }
+        .validate()
+        .is_ok());
+    }
+
+    #[test]
+    fn toggle_patch_must_carry_exactly_its_applied_value() {
+        let mut entries = patch(AppKind::Claude, "spinnerTipsEnabled").entries;
+        entries[0].value = Some(PatchValue::Bool(false));
+        assert!(CommonConfigPatch {
+            app: AppKind::Claude,
+            entries
+        }
+        .validate()
+        .is_ok());
+
+        let mut entries = patch(AppKind::Claude, "spinnerTipsEnabled").entries;
+        entries[0].value = Some(PatchValue::Bool(true));
+        assert!(matches!(
+            CommonConfigPatch {
+                app: AppKind::Claude,
+                entries,
+            }
+            .validate(),
+            Err(ValidationError::BadCommonValue { .. })
+        ));
+    }
+
+    #[test]
     fn accepts_general_patch_keys() {
         assert!(patch(AppKind::Codex, "disable_response_storage")
+            .validate()
+            .is_ok());
+        // tui.animations carries `false` when checked; the catalog decides.
+        let mut entries = patch(AppKind::Codex, "tui.animations").entries;
+        entries[0].value = Some(PatchValue::Bool(false));
+        assert!(CommonConfigPatch {
+            app: AppKind::Codex,
+            entries
+        }
+        .validate()
+        .is_ok());
+        assert!(patch(AppKind::Claude, "alwaysThinkingEnabled")
             .validate()
             .is_ok());
     }
@@ -439,9 +520,7 @@ mod tests {
         // Claude patches have no general keys left (every owned Claude key is
         // profile-exclusive), so the mismatch is exercised Codex↔Claude with
         // the one valid Codex general key.
-        let mut claude_profile = profile(AppKind::Claude);
-        claude_profile.mode = RouteMode::Official;
-        claude_profile.base_url = None;
+        let claude_profile = profile(AppKind::Claude);
         let err = validate_plan(
             &claude_profile,
             &patch(AppKind::Codex, "disable_response_storage"),

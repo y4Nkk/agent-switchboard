@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { probeEndpoint, type ProbeResult } from "../api/client";
+import { Time } from "./Time";
 
 interface Props {
   url: string | null;
 }
 
-function timeLabel(iso: string): string {
-  return iso.replace("T", " ").replace(/(?:\.\d+)?(?:Z|\+00:00)$/, " 世界协调时");
-}
 
 /**
  * Manual endpoint verification: reachability, HTTP status, latency, and the
@@ -54,13 +52,15 @@ export function ProbePanel({ url }: Props) {
       {error && <p className="asb-warn-text">{error}</p>}
       {result && (
         <div className="asb-kv" aria-label="端点验证结果">
-          <span className="asb-kv-label">
+          <span
+            className={`asb-kv-label ${result.reachable ? "asb-ok-text" : "asb-fail-text"}`}
+          >
             {result.reachable
               ? `可达 · HTTP ${result.status ?? "?"} · ${result.latencyMs ?? "?"} 毫秒`
               : "不可达"}
           </span>
           <span className="asb-kv-value">
-            {result.error ?? timeLabel(result.at)}
+            {result.error ?? <Time iso={result.at} />}
           </span>
         </div>
       )}

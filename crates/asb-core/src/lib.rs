@@ -5,6 +5,7 @@
 //! filesystem. Live-file mutation belongs exclusively to `asb-switch`.
 
 pub mod adapter;
+pub mod ccswitch;
 pub mod contracts;
 pub mod discovery;
 pub mod lock;
@@ -16,11 +17,13 @@ pub mod validate;
 
 pub use discovery::{discover, inspect, DiscoveredFile, DiscoveredState, DiscoveryReport};
 
+pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchRow, CcSwitchSkip};
+
 pub use adapter::{preview, render, route_state, validate_syntax, AdapterError};
 pub use contracts::{
     AppKind, BackupRecord, ChangeKind, ClaudeModelSettings, CodexModelSettings, CommonConfigPatch,
     KeyChange, MatchStatus, ModelOptions, PatchEntry, PatchValue, ProviderDraft, ProviderProfile,
-    RouteMode, RouteState, SwitchLog, SwitchPlan, SwitchPreview,
+    RouteMode, RouteState, SwitchLog, SwitchOp, SwitchPlan, SwitchPreview,
 };
 pub use lock::{classify_lock, LockFileData, LockHolder, LockStatus, PidLiveness};
 pub use redact::{redact, REDACTED};

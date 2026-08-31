@@ -3,7 +3,9 @@
 //! One probe answers exactly one question: does this URL answer HTTP(S)
 //! requests, with which status, and how fast. It never selects or switches
 //! anything. Using WinHTTP keeps the probe free of third-party TLS
-//! dependencies; the system verifier and proxy settings apply.
+//! dependencies; the system verifier and proxy settings apply. The shared
+//! [`http_get`] helper carries that same stack to other outbound reads
+//! (model fetch, update check).
 
 use serde::Serialize;
 use std::time::Instant;
@@ -209,6 +211,291 @@ pub fn probe(url: &str) -> Result<ProbeResult, String> {
     }
 }
 
+/// One WinHTTP GET returning the response status and body text. The agent
+/// string doubles as the required `User-Agent`; callers pass extra request
+/// headers as CRLF-joined lines.
+pub fn http_get(url: &str, headers: &str) -> Result<(u16, String), String> {
+    let parsed = parse_url(url).ok_or_else(|| "请求地址必须是 http(s) URL".to_string())?;
+
+    use windows_sys::Win32::Networking::WinHttp::{
+        WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders,
+        WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetTimeouts,
+        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER,
+        WINHTTP_QUERY_STATUS_CODE,
+    };
+
+    let agent_w = wide("Agent Switchboard");
+    unsafe {
+        let session = WinHttpOpen(
+            agent_w.as_ptr(),
+            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+        );
+        if session.is_null() {
+            return Err(last_error());
+        }
+        let result = (|| {
+            if WinHttpSetTimeouts(session, 5_000, 5_000, 15_000, 15_000) == 0 {
+                return Err(last_error());
+            }
+            let host_w = wide(&parsed.host);
+            let connect = WinHttpConnect(session, host_w.as_ptr(), parsed.port, 0);
+            if connect.is_null() {
+                return Err(last_error());
+            }
+            let outcome = (|| {
+                let flags = if parsed.secure {
+                    WINHTTP_FLAG_SECURE
+                } else {
+                    0
+                };
+                let request = WinHttpOpenRequest(
+                    connect,
+                    wide("GET").as_ptr(),
+                    wide(&parsed.path).as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    flags,
+                );
+                if request.is_null() {
+                    return Err(last_error());
+                }
+                let headers_w = wide(headers);
+                let outcome = (|| {
+                    if WinHttpSendRequest(
+                        request,
+                        headers_w.as_ptr(),
+                        headers_w.len() as u32,
+                        std::ptr::null(),
+                        0,
+                        0,
+                        0,
+                    ) == 0
+                    {
+                        return Err(last_error());
+                    }
+                    if WinHttpReceiveResponse(request, std::ptr::null_mut()) == 0 {
+                        return Err(last_error());
+                    }
+                    let mut status: u32 = 0;
+                    let mut length = std::mem::size_of::<u32>() as u32;
+                    if WinHttpQueryHeaders(
+                        request,
+                        WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        std::ptr::null(),
+                        &mut status as *mut u32 as *mut core::ffi::c_void,
+                        &mut length,
+                        std::ptr::null_mut(),
+                    ) == 0
+                    {
+                        return Err(last_error());
+                    }
+                    let body = read_body(request)?;
+                    Ok((status as u16, String::from_utf8_lossy(&body).into_owned()))
+                })();
+                WinHttpCloseHandle(request);
+                outcome
+            })();
+            WinHttpCloseHandle(connect);
+            outcome
+        })();
+        WinHttpCloseHandle(session);
+        result
+    }
+}
+
+/// Builds the OpenAI-compatible model-list path for a provider base URL:
+/// a base already ending in a `/v{digits}` segment gets `/models` appended,
+/// anything else gets `/v1/models`.
+fn models_path_for(base_url: &str) -> String {
+    let mut path = parse_url(base_url)
+        .map(|parsed| parsed.path)
+        .unwrap_or_else(|| "/".to_string());
+    let trimmed = path.trim_end_matches('/');
+    let versioned = trimmed.rsplit('/').next().is_some_and(|segment| {
+        let digits = segment.strip_prefix('v').unwrap_or("");
+        !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+    });
+    if !path.ends_with('/') {
+        path.push('/');
+    }
+    path.push_str(if versioned { "models" } else { "v1/models" });
+    path
+}
+
+/// Reads the full response body of an open request handle.
+unsafe fn read_body(request: *mut core::ffi::c_void) -> Result<Vec<u8>, String> {
+    use windows_sys::Win32::Networking::WinHttp::{WinHttpQueryDataAvailable, WinHttpReadData};
+    let mut body = Vec::new();
+    loop {
+        let mut available: u32 = 0;
+        if WinHttpQueryDataAvailable(request, &mut available) == 0 {
+            return Err(last_error());
+        }
+        if available == 0 {
+            return Ok(body);
+        }
+        let mut chunk = vec![0u8; available as usize];
+        let mut read: u32 = 0;
+        if WinHttpReadData(request, chunk.as_mut_ptr().cast(), available, &mut read) == 0 {
+            return Err(last_error());
+        }
+        chunk.truncate(read as usize);
+        body.extend_from_slice(&chunk);
+    }
+}
+
+/// Fetches the OpenAI-compatible `GET /v1/models` list from a provider base
+/// URL and returns the model ids in server order, deduplicated. The profile
+/// API key travels only in request headers and is never logged or echoed in
+/// errors. Nothing is cached.
+pub fn fetch_models(base_url: &str, api_key: &str, _source: &str) -> Result<Vec<String>, String> {
+    let parsed = parse_url(base_url).ok_or_else(|| "服务地址必须是 http(s) URL".to_string())?;
+    let path = models_path_for(base_url);
+
+    use windows_sys::Win32::Networking::WinHttp::{
+        WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpSetTimeouts,
+        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+    };
+
+    let agent_w = wide("Agent Switchboard model fetch");
+    unsafe {
+        let session = WinHttpOpen(
+            agent_w.as_ptr(),
+            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+        );
+        if session.is_null() {
+            return Err(last_error());
+        }
+        let result = (|| {
+            if WinHttpSetTimeouts(session, 5_000, 5_000, 15_000, 15_000) == 0 {
+                return Err(last_error());
+            }
+            let host_w = wide(&parsed.host);
+            let connect = WinHttpConnect(session, host_w.as_ptr(), parsed.port, 0);
+            if connect.is_null() {
+                return Err(last_error());
+            }
+            let outcome = (|| {
+                use windows_sys::Win32::Networking::WinHttp::{
+                    WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReceiveResponse,
+                    WinHttpSendRequest, WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER,
+                    WINHTTP_QUERY_STATUS_CODE,
+                };
+                let path_w = wide(&path);
+                let flags = if parsed.secure {
+                    WINHTTP_FLAG_SECURE
+                } else {
+                    0
+                };
+                let request = WinHttpOpenRequest(
+                    connect,
+                    wide("GET").as_ptr(),
+                    path_w.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    flags,
+                );
+                if request.is_null() {
+                    return Err(last_error());
+                }
+                let headers_w = wide(&auth_headers(api_key));
+                let headers_ptr = headers_w.as_ptr();
+                let headers_len = headers_w.len() as u32;
+                let outcome = (|| {
+                    if WinHttpSendRequest(
+                        request,
+                        headers_ptr,
+                        headers_len,
+                        std::ptr::null(),
+                        0,
+                        0,
+                        0,
+                    ) == 0
+                    {
+                        return Err(last_error());
+                    }
+                    if WinHttpReceiveResponse(request, std::ptr::null_mut()) == 0 {
+                        return Err(last_error());
+                    }
+                    let mut status: u32 = 0;
+                    let mut length = std::mem::size_of::<u32>() as u32;
+                    if WinHttpQueryHeaders(
+                        request,
+                        WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        std::ptr::null(),
+                        &mut status as *mut u32 as *mut core::ffi::c_void,
+                        &mut length,
+                        std::ptr::null_mut(),
+                    ) == 0
+                    {
+                        return Err(last_error());
+                    }
+                    if !(200..300).contains(&status) {
+                        if status == 401 || status == 403 {
+                            return Err(format!(
+                                "服务地址拒绝了 API 密钥（HTTP {status}），请确认密钥仍然有效；可手动填写模型名"
+                            ));
+                        }
+                        return Err(format!(
+                            "服务地址返回 HTTP {status}，无法获取模型列表；可手动填写模型名"
+                        ));
+                    }
+                    let body = read_body(request)?;
+                    let text = String::from_utf8_lossy(&body);
+                    parse_model_ids(&text)
+                })();
+                WinHttpCloseHandle(request);
+                outcome
+            })();
+            WinHttpCloseHandle(connect);
+            outcome
+        })();
+        WinHttpCloseHandle(session);
+        result
+    }
+}
+
+/// Builds the credential request headers. `Authorization: Bearer` is the
+/// OpenAI-compatible form, `x-api-key` the Anthropic form; both are sent so
+/// one fetch serves either ecosystem. `anthropic-version` is only required
+/// by the Anthropic API itself and ignored elsewhere. The value must never
+/// be logged or echoed in diagnostics.
+fn auth_headers(credential: &str) -> String {
+    format!(
+        "Authorization: Bearer {credential}\r\nx-api-key: {credential}\r\nanthropic-version: 2023-06-01"
+    )
+}
+
+/// Extracts `data[].id` from an OpenAI-compatible models response.
+fn parse_model_ids(text: &str) -> Result<Vec<String>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(text).map_err(|_| "模型列表响应不是有效 JSON".to_string())?;
+    let data = value
+        .get("data")
+        .and_then(|data| data.as_array())
+        .ok_or_else(|| "模型列表响应缺少 data 数组".to_string())?;
+    let mut ids = Vec::new();
+    for entry in data {
+        if let Some(id) = entry.get("id").and_then(|id| id.as_str()) {
+            if !id.is_empty() && !ids.iter().any(|seen: &String| seen == id) {
+                ids.push(id.to_string());
+            }
+        }
+    }
+    if ids.is_empty() {
+        return Err("模型列表为空".to_string());
+    }
+    Ok(ids)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,5 +531,36 @@ mod tests {
         assert!(head_requires_get(501));
         assert!(!head_requires_get(200));
         assert!(!head_requires_get(404));
+    }
+
+    #[test]
+    fn model_list_paths_follow_the_base_shape() {
+        assert_eq!(models_path_for("https://relay.example"), "/v1/models");
+        assert_eq!(models_path_for("https://relay.example/"), "/v1/models");
+        assert_eq!(models_path_for("https://relay.example/v1"), "/v1/models");
+        assert_eq!(models_path_for("https://relay.example/v2/"), "/v2/models");
+        assert_eq!(
+            models_path_for("https://relay.example/api/v3"),
+            "/api/v3/models"
+        );
+    }
+
+    #[test]
+    fn credential_headers_carry_both_ecosystems() {
+        let headers = auth_headers("sk-test");
+        assert!(headers.contains("Authorization: Bearer sk-test"));
+        assert!(headers.contains("x-api-key: sk-test"));
+        assert!(headers.contains("anthropic-version: 2023-06-01"));
+    }
+
+    #[test]
+    fn model_ids_parse_in_order_and_dedupe() {
+        let ids = parse_model_ids(
+            r#"{"object":"list","data":[{"id":"gpt-5.2"},{"id":"gpt-5.2"},{"id":"claude-x"},{}]}"#,
+        )
+        .expect("ids");
+        assert_eq!(ids, vec!["gpt-5.2".to_string(), "claude-x".to_string()]);
+        assert!(parse_model_ids("[]").is_err());
+        assert!(parse_model_ids("{}").is_err());
     }
 }

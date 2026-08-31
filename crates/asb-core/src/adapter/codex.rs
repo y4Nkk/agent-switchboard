@@ -6,8 +6,8 @@
 
 use crate::adapter::{AdapterError, OverlayEntry};
 use crate::contracts::{
-    ChangeKind, CodexModelSettings, KeyChange, ModelOptions, PatchValue, RouteMode, RouteState,
-    SwitchPlan, SwitchPreview,
+    ChangeKind, CodexModelSettings, CommonConfigPatch, KeyChange, ModelOptions, PatchValue,
+    RouteMode, RouteState, SwitchPlan, SwitchPreview,
 };
 use crate::ownership::is_owned;
 use crate::redact::redact;
@@ -37,9 +37,11 @@ fn parse(text: &str) -> Result<DocumentMut, AdapterError> {
 fn scalar_repr(value: &TomlValue) -> Option<String> {
     match value {
         TomlValue::String(s) => Some(s.value().clone()),
-        TomlValue::Integer(i) => Some(i.to_string()),
-        TomlValue::Float(f) => Some(f.to_string()),
-        TomlValue::Boolean(b) => Some(b.to_string()),
+        // Decoded values only: Display carries the decor (surrounding
+        // whitespace), which would break exact value comparisons.
+        TomlValue::Integer(i) => Some(i.value().to_string()),
+        TomlValue::Float(f) => Some(f.value().to_string()),
+        TomlValue::Boolean(b) => Some(b.value().to_string()),
         _ => None,
     }
 }
@@ -92,72 +94,37 @@ fn to_toml_value(value: PatchValue) -> TomlValue {
     }
 }
 
-fn collect_preserved(table: &dyn TableLike, prefix: &str, out: &mut Vec<String>) {
-    for (key, item) in table.iter() {
-        let path = if prefix.is_empty() {
-            key.to_string()
-        } else {
-            format!("{prefix}.{key}")
-        };
-        if !is_owned(AppKind::Codex, &path) {
-            out.push(path.clone());
-        }
-        if let Some(sub) = item.as_table_like() {
-            collect_preserved(sub, &path, out);
-        }
-    }
-}
-
-/// Builds the overlay entries implied by `plan`.
+/// Builds the overlay entries implied by `plan`. Every profile routes to a
+/// custom endpoint; validation rejects a draft without a base URL.
 fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
     let p = &plan.profile;
-    let mut entries: Vec<(String, OverlayEntry)> = match p.mode {
-        RouteMode::Custom => {
-            // A custom profile always declares a base URL (validation
-            // rejects the draft otherwise).
-            let mut table = vec![
-                (
-                    "model_provider".into(),
-                    OverlayEntry::Set(PatchValue::Str(MANAGED_NAME.into())),
-                ),
-                (
-                    format!("{MANAGED_TABLE}.name"),
-                    OverlayEntry::Set(PatchValue::Str(p.name.clone())),
-                ),
-                (
-                    format!("{MANAGED_TABLE}.wire_api"),
-                    OverlayEntry::Set(PatchValue::Str("responses".into())),
-                ),
-                (
-                    format!("{MANAGED_TABLE}.base_url"),
-                    OverlayEntry::Set(PatchValue::Str(
-                        p.base_url.clone().expect("validated custom base_url"),
-                    )),
-                ),
-                (
-                    format!("{MANAGED_TABLE}.env_key"),
-                    match &p.env_key {
-                        Some(r) => OverlayEntry::Set(PatchValue::Str(r.clone())),
-                        None => OverlayEntry::RemoveIfPresent,
-                    },
-                ),
-            ];
-            table.append(&mut run_parameter_entries(p));
-            table
-        }
-        RouteMode::Official => {
-            // Official routing points Codex back at its built-in provider
-            // and dismantles the managed table entirely.
-            let mut table = vec![
-                (
-                    "model_provider".into(),
-                    OverlayEntry::Set(PatchValue::Str(OFFICIAL_PROVIDER.into())),
-                ),
-                (MANAGED_TABLE.into(), OverlayEntry::RemoveTableIfPresent),
-            ];
-            table.append(&mut run_parameter_entries(p));
-            table
-        }
+    let mut entries: Vec<(String, OverlayEntry)> = {
+        let mut table = vec![
+            (
+                "model_provider".into(),
+                OverlayEntry::Set(PatchValue::Str(MANAGED_NAME.into())),
+            ),
+            (
+                format!("{MANAGED_TABLE}.name"),
+                OverlayEntry::Set(PatchValue::Str(p.name.clone())),
+            ),
+            (
+                format!("{MANAGED_TABLE}.wire_api"),
+                OverlayEntry::Set(PatchValue::Str("responses".into())),
+            ),
+            (
+                format!("{MANAGED_TABLE}.base_url"),
+                OverlayEntry::Set(PatchValue::Str(
+                    p.base_url.clone().expect("validated custom base_url"),
+                )),
+            ),
+            (
+                "experimental_bearer_token".into(),
+                OverlayEntry::Set(PatchValue::Str(p.api_key.clone())),
+            ),
+        ];
+        table.append(&mut run_parameter_entries(p));
+        table
     };
     // Top-level owned keys hold possible host values: absent overlay fields
     // leave them untouched.
@@ -169,40 +136,59 @@ fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
         },
     ));
     for entry in &plan.common.entries {
-        entries.push((entry.key.clone(), OverlayEntry::Set(entry.value.clone())));
+        entries.push((
+            entry.key.clone(),
+            match &entry.value {
+                Some(value) => OverlayEntry::Set(value.clone()),
+                None => OverlayEntry::RemoveIfPresent,
+            },
+        ));
     }
     entries
 }
 
+/// Overlay entries for a general-settings-only apply: exactly the patch's
+/// own lines, with no profile routing.
+pub(crate) fn common_overlay(common: &CommonConfigPatch) -> Vec<(String, OverlayEntry)> {
+    common
+        .entries
+        .iter()
+        .map(|entry| {
+            (
+                entry.key.clone(),
+                match &entry.value {
+                    Some(value) => OverlayEntry::Set(value.clone()),
+                    None => OverlayEntry::RemoveIfPresent,
+                },
+            )
+        })
+        .collect()
+}
+
 /// Codex run parameters declared by the profile's model options. Absent
-/// fields leave existing host values untouched.
+/// fields leave existing host values untouched. Effort, summary, and
+/// verbosity are general settings and never come from a profile.
 fn run_parameter_entries(p: &crate::contracts::ProviderProfile) -> Vec<(String, OverlayEntry)> {
     let Some(ModelOptions::Codex(settings)) = &p.model_options else {
         return vec![];
     };
-    let optional = |key: &str, value: &Option<String>| match value {
-        Some(v) => (
-            key.to_string(),
-            OverlayEntry::Set(PatchValue::Str(v.clone())),
-        ),
-        None => (key.to_string(), OverlayEntry::Leave),
-    };
-    vec![
-        optional("model_reasoning_effort", &settings.reasoning_effort),
-        optional("model_reasoning_summary", &settings.reasoning_summary),
-        optional("model_verbosity", &settings.verbosity),
-        match settings.context_window {
-            Some(tokens) => (
-                "model_context_window".into(),
-                OverlayEntry::Set(PatchValue::Number(tokens as f64)),
-            ),
-            None => ("model_context_window".into(), OverlayEntry::Leave),
-        },
-    ]
+    match settings.context_window {
+        Some(tokens) => vec![(
+            "model_context_window".to_string(),
+            OverlayEntry::Set(PatchValue::Number(tokens as f64)),
+        )],
+        None => vec![],
+    }
 }
 
 pub(crate) fn check_syntax(text: &str) -> Result<(), AdapterError> {
     parse(text).map(|_| ())
+}
+
+/// Textual value at an owned dotted path, for toggle-state reads.
+pub(crate) fn parse_owned_scalar(text: &str, key: &str) -> Result<Option<String>, AdapterError> {
+    let doc = parse(text)?;
+    Ok(item_at(&doc, key).and_then(item_repr))
 }
 
 /// Collects every owned scalar path and its textual value.
@@ -292,14 +278,10 @@ pub fn route_state(text: &str) -> RouteState {
         provider_name: provider.and_then(|table| table_value(table, "name")),
         model: get("model"),
         base_url: provider.and_then(|table| table_value(table, "base_url")),
-        env_key: provider.and_then(|table| table_value(table, "env_key")),
         wire_api: provider
             .and_then(|table| table_value(table, "wire_api"))
             .or_else(|| provider.map(|_| "responses".to_string())),
         codex_model_options: Some(CodexModelSettings {
-            reasoning_effort: get("model_reasoning_effort"),
-            reasoning_summary: get("model_reasoning_summary"),
-            verbosity: get("model_verbosity"),
             context_window: item_at(&doc, "model_context_window")
                 .and_then(|item| item.as_value())
                 .and_then(|value| value.as_integer())
@@ -318,9 +300,17 @@ pub(crate) fn preview(
     plan: &SwitchPlan,
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
+    preview_entries(current, overlay(plan), backup_dir)
+}
+
+pub(crate) fn preview_entries(
+    current: &str,
+    entries: Vec<(String, OverlayEntry)>,
+    backup_dir: &str,
+) -> Result<SwitchPreview, AdapterError> {
     let doc = parse(current)?;
     let mut changes = Vec::new();
-    for (key, entry) in overlay(plan) {
+    for (key, entry) in entries {
         let existing = item_at(&doc, &key).and_then(item_repr);
         match entry {
             OverlayEntry::Set(value) => {
@@ -358,23 +348,25 @@ pub(crate) fn preview(
         }
     }
 
-    let mut preserved = Vec::new();
-    collect_preserved(doc.as_table(), "", &mut preserved);
-    preserved.sort();
-
     Ok(SwitchPreview {
         app: AppKind::Codex,
         target: AppKind::Codex.config_label().to_string(),
         changes,
-        preserved,
         warnings: vec![],
         backup_dir: backup_dir.to_string(),
     })
 }
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
+    render_entries(current, overlay(plan))
+}
+
+pub(crate) fn render_entries(
+    current: &str,
+    entries: Vec<(String, OverlayEntry)>,
+) -> Result<String, AdapterError> {
     let mut doc = parse(current)?;
-    for (key, entry) in overlay(plan) {
+    for (key, entry) in entries {
         match entry {
             OverlayEntry::Set(value) => set_path(&mut doc, &key, value),
             OverlayEntry::Leave => {}
@@ -418,34 +410,24 @@ mod tests {
             profile: ProviderProfile {
                 id: "p2".into(),
                 app: AppKind::Codex,
-                mode: RouteMode::Custom,
                 name: "Relay B".into(),
                 model: Some("gpt-5.2".into()),
                 base_url: Some("https://relay-b.internal/v1".into()),
-                env_key: Some("CODEX_RELAY_B_KEY".into()),
+                api_key: "CODEX_RELAY_B_KEY".into(),
                 model_options: Some(ModelOptions::Codex(CodexModelSettings {
-                    reasoning_effort: Some("high".into()),
-                    reasoning_summary: None,
-                    verbosity: None,
                     context_window: Some(272_000),
                 })),
+                notes: None,
+                website_url: None,
             },
             common: CommonConfigPatch {
                 app: AppKind::Codex,
                 entries: vec![PatchEntry {
                     key: "disable_response_storage".into(),
-                    value: PatchValue::Bool(true),
+                    value: Some(PatchValue::Bool(true)),
                 }],
             },
         }
-    }
-
-    fn plan_official() -> SwitchPlan {
-        let mut plan = plan_b();
-        plan.profile.mode = RouteMode::Official;
-        plan.profile.base_url = None;
-        plan.profile.env_key = None;
-        plan
     }
 
     #[test]
@@ -455,8 +437,84 @@ mod tests {
         assert!(err.line.is_some());
     }
 
+    fn common(entries: Vec<PatchEntry>) -> CommonConfigPatch {
+        CommonConfigPatch {
+            app: AppKind::Codex,
+            entries,
+        }
+    }
+
+    fn toggle(key: &str, value: Option<PatchValue>) -> PatchEntry {
+        PatchEntry {
+            key: key.into(),
+            value,
+        }
+    }
+
     #[test]
-    fn preview_names_changed_keys_preserved_keys_and_backup_target() {
+    fn common_only_render_sets_and_removes_toggle_lines() {
+        let set = crate::adapter::common_render(
+            CODEX_TOML,
+            &common(vec![toggle(
+                "hide_agent_reasoning",
+                Some(PatchValue::Bool(true)),
+            )]),
+        )
+        .unwrap();
+        assert!(set.contains("hide_agent_reasoning = true"));
+        // Host content outside the patch survives untouched.
+        assert!(set.contains("threads = 8"));
+        assert!(set.contains("[model_providers.openai]"));
+
+        let removed = crate::adapter::common_render(
+            &set,
+            &common(vec![toggle("hide_agent_reasoning", None)]),
+        )
+        .unwrap();
+        assert!(!removed.contains("hide_agent_reasoning"));
+        assert!(removed.contains("threads = 8"));
+    }
+
+    #[test]
+    fn common_only_preview_reports_only_patch_changes() {
+        let preview = crate::adapter::common_preview(
+            CODEX_TOML,
+            &common(vec![
+                toggle("disable_response_storage", Some(PatchValue::Bool(true))),
+                toggle("hide_agent_reasoning", None),
+            ]),
+            "F:/backups",
+        )
+        .unwrap();
+        assert_eq!(preview.changes.len(), 1);
+        assert_eq!(preview.changes[0].key, "disable_response_storage");
+        assert_eq!(preview.app, AppKind::Codex);
+    }
+
+    #[test]
+    fn toggle_is_active_reflects_the_line_value() {
+        assert!(crate::adapter::toggle_is_active(
+            AppKind::Codex,
+            "hide_agent_reasoning = true\nthreads = 8\n",
+            "hide_agent_reasoning",
+            true
+        ));
+        assert!(!crate::adapter::toggle_is_active(
+            AppKind::Codex,
+            "threads = 8\n",
+            "hide_agent_reasoning",
+            true
+        ));
+        assert!(!crate::adapter::toggle_is_active(
+            AppKind::Codex,
+            "not toml [",
+            "hide_agent_reasoning",
+            true
+        ));
+    }
+
+    #[test]
+    fn preview_names_changed_keys_and_backup_target() {
         let preview = preview(CODEX_TOML, &plan_b(), "F:/backups").unwrap();
 
         let changed: Vec<&str> = preview.changes.iter().map(|c| c.key.as_str()).collect();
@@ -465,97 +523,36 @@ mod tests {
         // entry.
         assert!(!changed.contains(&"model_provider"));
         assert!(changed.contains(&"model_providers.asb.base_url"));
-        assert!(changed.contains(&"model_reasoning_effort"));
+        assert!(changed.contains(&"model_context_window"));
         assert_eq!(preview.backup_dir, "F:/backups");
         assert_eq!(preview.target, "~/.codex/config.toml");
-
-        for host_key in [
-            "history_persistence",
-            "threads",
-            "model_providers.openai",
-            "model_providers.openai.base_url",
-            "projects",
-        ] {
-            assert!(
-                preview.preserved.contains(&host_key.to_string()),
-                "expected {host_key} to be reported preserved"
-            );
-        }
-        // Managed-table keys are not "preserved": they are ours.
-        assert!(!preview
-            .preserved
-            .iter()
-            .any(|k| k.starts_with("model_providers.asb")));
-    }
-
-    #[test]
-    fn official_plan_routes_to_openai_and_removes_the_managed_table() {
-        let preview = preview(CODEX_TOML, &plan_official(), "/b").unwrap();
-        let removal = preview
-            .changes
-            .iter()
-            .find(|c| c.key == MANAGED_TABLE)
-            .expect("managed table must be removed");
-        assert_eq!(removal.kind, ChangeKind::Remove);
-        let provider = preview
-            .changes
-            .iter()
-            .find(|c| c.key == "model_provider")
-            .expect("model_provider must change");
-        assert_eq!(provider.after.as_deref(), Some("openai"));
-
-        let rendered = render(CODEX_TOML, &plan_official()).unwrap();
-        assert!(rendered.contains("model_provider = \"openai\""));
-        assert!(!rendered.contains("[model_providers.asb]"));
-        assert!(!rendered.contains("relay-a.internal"));
-        assert!(!rendered.contains("ASB_RELAY_A_KEY"));
-        // Host provider table survives.
-        assert!(rendered.contains("[model_providers.openai]"));
-        rendered
-            .parse::<DocumentMut>()
-            .expect("rendered document must be valid TOML");
-    }
-
-    #[test]
-    fn official_render_on_already_official_file_is_a_no_op() {
-        let once = render(CODEX_TOML, &plan_official()).unwrap();
-        let twice = render(&once, &plan_official()).unwrap();
-        assert_eq!(once, twice);
+        // Host keys stay untouched — asserted on the rendered text in
+        // render_preserves_host_content_and_comments.
     }
 
     #[test]
     fn undeclared_run_parameters_leave_host_values_untouched() {
         let mut plan = plan_b();
         plan.profile.model_options = None;
-        let current = "model_reasoning_effort = \"low\"\n";
+        let current = "model_verbosity = \"low\"\n";
         let preview = preview(current, &plan, "/b").unwrap();
-        assert!(!preview
-            .changes
-            .iter()
-            .any(|c| c.key == "model_reasoning_effort"));
+        assert!(!preview.changes.iter().any(|c| c.key == "model_verbosity"));
     }
 
     #[test]
-    fn preview_removes_stale_managed_values_and_redacts_them() {
-        let mut plan = plan_b();
-        plan.profile.env_key = None;
-        let current = CODEX_TOML.replace(
-            "env_key = \"ASB_RELAY_A_KEY\"",
-            "env_key = \"sk-live-0123456789abcdef\"",
-        );
+    fn preview_replaces_bearer_token_and_redacts_it() {
+        let current = format!("{CODEX_TOML}\nexperimental_bearer_token = \"sk-live-old-secret\"\n");
 
-        let preview = preview(&current, &plan, "/b").unwrap();
-        let removal = preview
+        let preview = preview(&current, &plan_b(), "/b").unwrap();
+        let change = preview
             .changes
             .iter()
-            .find(|c| c.key == "model_providers.asb.env_key")
-            .expect("stale env_key must be removed");
-        assert_eq!(removal.kind, ChangeKind::Remove);
-        assert_eq!(removal.before.as_deref(), Some(crate::redact::REDACTED));
-        assert!(removal.after.is_none());
-        // The redacted value never appears anywhere in the preview.
-        let serialized = format!("{preview:?}");
-        assert!(!serialized.contains("sk-live-0123456789abcdef"));
+            .find(|c| c.key == "experimental_bearer_token")
+            .expect("bearer token must be replaced");
+        assert_eq!(change.kind, ChangeKind::Set);
+        assert_eq!(change.before.as_deref(), Some(crate::redact::REDACTED));
+        assert_eq!(change.after.as_deref(), Some(crate::redact::REDACTED));
+        assert!(!format!("{preview:?}").contains("sk-live-old-secret"));
     }
 
     #[test]
@@ -585,12 +582,9 @@ mod tests {
     }
 
     #[test]
-    fn render_removes_stale_managed_keys() {
-        let mut plan = plan_b();
-        plan.profile.env_key = None;
-
-        let rendered = render(CODEX_TOML, &plan).unwrap();
-        assert!(!rendered.contains("ASB_RELAY_A_KEY"));
+    fn render_writes_profile_bearer_token() {
+        let rendered = render(CODEX_TOML, &plan_b()).unwrap();
+        assert!(rendered.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
         // Host provider table survives.
         assert!(rendered.contains("[model_providers.openai]"));
     }
@@ -618,7 +612,6 @@ mod tests {
             state.base_url.as_deref(),
             Some("https://relay-a.internal/v1")
         );
-        assert_eq!(state.env_key.as_deref(), Some("ASB_RELAY_A_KEY"));
         assert!(state.scope_warnings.is_empty());
     }
 

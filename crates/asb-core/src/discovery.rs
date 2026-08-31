@@ -6,8 +6,7 @@
 //! redacted.
 
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, ImportProposal, ModelOptions, ProviderDraft, RouteMode,
-    RouteState,
+    AppKind, ClaudeModelSettings, ImportProposal, ModelOptions, ProviderDraft, RouteState,
 };
 use toml_edit::Item;
 
@@ -143,17 +142,14 @@ fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
     };
     let has_only_supported_keys = provider
         .iter()
-        .all(|(key, _)| matches!(key, "name" | "base_url" | "env_key" | "wire_api"));
+        .all(|(key, _)| matches!(key, "name" | "base_url" | "api_key" | "wire_api"));
     has_only_supported_keys
 }
 
 fn claude_import_is_supported(route: &RouteState) -> bool {
-    route.model.is_some()
-        || route.base_url.is_some()
-        || route.haiku_model.is_some()
-        || route.sonnet_model.is_some()
-        || route.opus_model.is_some()
-        || route.available_models.is_some()
+    // Official login is not a profile kind; only a custom endpoint is
+    // importable. Model tiers alone no longer qualify.
+    route.base_url.is_some()
 }
 
 fn inspect_codex(text: &str) -> (bool, Vec<String>) {
@@ -190,8 +186,11 @@ fn inspect_claude(text: &str) -> (bool, Vec<String>) {
     (managed, warnings)
 }
 
-/// Builds an import proposal from discovered content, if one is possible.
-pub fn import_proposal(file: &DiscoveredFile) -> Option<ImportProposal> {
+/// Builds an import proposal from a discovered file and its locally-read raw
+/// configuration. The API key enters only the returned draft; route state,
+/// warnings and diagnostics never carry its value.
+pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<ImportProposal> {
+    let text = text?;
     let DiscoveredState::Ok {
         route, importable, ..
     } = &file.state
@@ -203,41 +202,47 @@ pub fn import_proposal(file: &DiscoveredFile) -> Option<ImportProposal> {
     }
     match file.app {
         AppKind::Codex => {
-            // A custom profile must declare a base URL; without one there is
-            // nothing switchable to import.
-            route.base_url.as_ref()?;
-            let model_options = route.codex_model_options.clone().and_then(|options| {
-                (options.reasoning_effort.is_some()
-                    || options.reasoning_summary.is_some()
-                    || options.verbosity.is_some()
-                    || options.context_window.is_some())
-                .then_some(ModelOptions::Codex(options))
-            });
+            let doc = text.parse::<toml_edit::DocumentMut>().ok()?;
+            let provider_id = doc
+                .as_table()
+                .get("model_provider")
+                .and_then(Item::as_value)
+                .and_then(|value| value.as_str())?;
+            let key = doc
+                .as_table()
+                .get("experimental_bearer_token")
+                .and_then(Item::as_value)
+                .and_then(|value| value.as_str())?;
+            let model_options = route
+                .codex_model_options
+                .clone()
+                .filter(|options| options.context_window.is_some())
+                .map(ModelOptions::Codex);
             Some(ImportProposal {
                 app: AppKind::Codex,
                 draft: ProviderDraft {
                     app: AppKind::Codex,
-                    mode: RouteMode::Custom,
-                    name: route.provider_name.clone()?,
+                    name: route
+                        .provider_name
+                        .clone()
+                        .unwrap_or_else(|| provider_id.to_string()),
                     model: route.model.clone(),
                     base_url: route.base_url.clone(),
-                    env_key: route.env_key.clone(),
+                    api_key: key.to_string(),
                     model_options,
+                    notes: None,
+                    website_url: None,
                 },
                 basis: "由当前 Codex 自定义供应商配置生成".to_string(),
             })
         }
         AppKind::Claude => {
-            // The mode mirrors what the file actually does today: a custom
-            // endpoint means custom routing, no endpoint means the existing
-            // official login. Model tiers carry over, with the deprecated
-            // small-fast value already promoted to the Haiku tier by
-            // route_state.
-            let mode = if route.base_url.is_some() {
-                RouteMode::Custom
-            } else {
-                RouteMode::Official
-            };
+            let root: serde_json::Value = serde_json::from_str(text).ok()?;
+            let key = root
+                .pointer("/env/ANTHROPIC_AUTH_TOKEN")
+                .or_else(|| root.pointer("/env/ANTHROPIC_API_KEY"))
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())?;
             let has_tiers = route.haiku_model.is_some()
                 || route.sonnet_model.is_some()
                 || route.opus_model.is_some()
@@ -246,11 +251,10 @@ pub fn import_proposal(file: &DiscoveredFile) -> Option<ImportProposal> {
                 app: AppKind::Claude,
                 draft: ProviderDraft {
                     app: AppKind::Claude,
-                    mode,
                     name: "当前 Claude 配置".to_string(),
                     model: route.model.clone(),
                     base_url: route.base_url.clone(),
-                    env_key: None,
+                    api_key: key.to_string(),
                     model_options: has_tiers.then(|| {
                         ModelOptions::Claude(ClaudeModelSettings {
                             haiku_model: route.haiku_model.clone(),
@@ -259,6 +263,8 @@ pub fn import_proposal(file: &DiscoveredFile) -> Option<ImportProposal> {
                             available_models: route.available_models.clone(),
                         })
                     }),
+                    notes: None,
+                    website_url: None,
                 },
                 basis: "由当前 Claude 配置的模型与服务地址生成".to_string(),
             })
@@ -286,12 +292,17 @@ pub fn discover(
     paths: &DiscoveryPaths,
     read: impl Fn(&str) -> Result<Option<String>, String>,
 ) -> DiscoveryReport {
-    let codex = inspect_read(AppKind::Codex, &paths.codex, read(&paths.codex));
-    let claude = inspect_read(AppKind::Claude, &paths.claude, read(&paths.claude));
-    let import_proposals = [&codex, &claude]
-        .into_iter()
-        .filter_map(import_proposal)
-        .collect();
+    let codex_text = read(&paths.codex);
+    let claude_text = read(&paths.claude);
+    let codex = inspect_read(AppKind::Codex, &paths.codex, codex_text.clone());
+    let claude = inspect_read(AppKind::Claude, &paths.claude, claude_text.clone());
+    let import_proposals = [
+        (import_proposal(&codex, codex_text.ok().flatten().as_deref())),
+        (import_proposal(&claude, claude_text.ok().flatten().as_deref())),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     DiscoveryReport {
         codex,
         claude,
@@ -340,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn test_configuration_produces_routes_and_proposals() {
+    fn test_configuration_produces_routes_and_imports_api_keys() {
         let report = discover(
             &DiscoveryPaths {
                 codex: "c".into(),
@@ -360,16 +371,18 @@ mod tests {
         assert!(managed);
         assert_eq!(route.provider_name.as_deref(), Some("中继 A"));
         assert_eq!(route.wire_api.as_deref(), Some("responses"));
-        assert_eq!(report.import_proposals.len(), 2);
+        let codex_proposal = report
+            .import_proposals
+            .iter()
+            .find(|proposal| proposal.app == AppKind::Codex)
+            .expect("codex proposal");
+        assert_eq!(codex_proposal.draft.api_key, "TEST_CODEX_IMPORT_KEY");
         let claude_proposal = report
             .import_proposals
             .iter()
-            .find(|p| p.app == AppKind::Claude)
-            .unwrap();
-        assert_eq!(
-            claude_proposal.draft.model.as_deref(),
-            Some("claude-sonnet-4")
-        );
+            .find(|proposal| proposal.app == AppKind::Claude)
+            .expect("claude proposal");
+        assert_eq!(claude_proposal.draft.api_key, "TEST_CLAUDE_IMPORT_KEY");
     }
 
     #[test]
@@ -389,16 +402,13 @@ mod tests {
 
     #[test]
     fn unsupported_codex_protocol_is_not_imported() {
-        let current = CODEX_TOML.replace(
-            "env_key = \"ASB_RELAY_A_KEY\"\nwire_api = \"responses\"",
-            "env_key = \"ASB_RELAY_A_KEY\"\nwire_api = \"chat\"",
-        );
+        let current = CODEX_TOML.replace("wire_api = \"responses\"", "wire_api = \"chat\"");
         let file = inspect(AppKind::Codex, "c", Some(&current));
         let DiscoveredState::Ok { warnings, .. } = &file.state else {
             panic!("should parse");
         };
         assert!(warnings.iter().any(|w| w.contains("responses")));
-        assert!(import_proposal(&file).is_none());
+        assert!(import_proposal(&file, Some(&current)).is_none());
     }
 
     #[test]
@@ -417,11 +427,12 @@ mod tests {
         };
         assert!(*importable);
         assert_eq!(route.wire_api.as_deref(), Some("responses"));
-        let proposal = import_proposal(&file).expect("must be importable");
+        let proposal = import_proposal(&file, Some(&current)).expect("must be importable");
         let Some(ModelOptions::Codex(options)) = proposal.draft.model_options else {
             panic!("Codex run options should be retained");
         };
-        assert_eq!(options.reasoning_effort.as_deref(), Some("xhigh"));
+        // Effort, summary, and verbosity are general settings now; the
+        // profile keeps only the context window.
         assert_eq!(options.context_window, Some(272000));
     }
 
@@ -445,7 +456,7 @@ mod tests {
         assert!(warnings
             .iter()
             .any(|warning| warning.contains("无法完整表示")));
-        assert!(import_proposal(&file).is_none());
+        assert!(import_proposal(&file, Some(&current)).is_none());
     }
 
     #[test]
@@ -472,21 +483,13 @@ mod tests {
     }
 
     #[test]
-    fn claude_model_tiers_without_a_primary_model_are_importable() {
-        let file = inspect(
-            AppKind::Claude,
-            "s",
-            Some(r#"{"env":{"ANTHROPIC_DEFAULT_HAIKU_MODEL":"claude-haiku-4"}}"#),
-        );
+    fn claude_model_tiers_without_an_endpoint_are_not_importable() {
+        let current = r#"{"env":{"ANTHROPIC_DEFAULT_HAIKU_MODEL":"claude-haiku-4"}}"#;
+        let file = inspect(AppKind::Claude, "s", Some(current));
         let DiscoveredState::Ok { importable, .. } = &file.state else {
             panic!("should parse");
         };
-        assert!(*importable);
-        let proposal = import_proposal(&file).expect("model tier should be imported");
-        assert_eq!(proposal.draft.mode, RouteMode::Official);
-        assert!(matches!(
-            proposal.draft.model_options,
-            Some(ModelOptions::Claude(_))
-        ));
+        assert!(!*importable);
+        assert!(import_proposal(&file, Some(&current)).is_none());
     }
 }

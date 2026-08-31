@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { backupDiff, type BackupRecord, type KeyChange } from "../api/client";
+import { DiffView } from "./DiffView";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { Time } from "./Time";
 
 interface Props {
   records: BackupRecord[];
@@ -18,21 +20,12 @@ function clientLabel(app: string): string {
   return app === "codex" ? "Codex" : "Claude";
 }
 
-function timeLabel(iso: string): string {
-  return iso.replace("T", " ").replace(/(?:\.\d+)?(?:Z|\+00:00)$/, " 世界协调时");
-}
-
-function changeLine(before: string | null, after: string | null): string {
-  const from = before ?? "（无）";
-  const to = after ?? "移除";
-  return `${from} → ${to}`;
-}
-
 /** One backup's owned-key difference against the live file. */
 function DiffRow({ record }: { record: BackupRecord }) {
   const [changes, setChanges] = useState<KeyChange[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   const requestVersion = useRef(0);
 
   useEffect(() => {
@@ -40,10 +33,17 @@ function DiffRow({ record }: { record: BackupRecord }) {
     setChanges(null);
     setError(null);
     setBusy(false);
+    setOpen(false);
   }, [record]);
 
   const run = async () => {
-    if (changes || busy) return;
+    if (busy) return;
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (changes) return;
     const version = requestVersion.current;
     setBusy(true);
     setError(null);
@@ -65,21 +65,14 @@ function DiffRow({ record }: { record: BackupRecord }) {
         type="button"
         className="asb-btn-secondary"
         disabled={busy}
-        aria-expanded={changes !== null}
+        aria-expanded={open}
         onClick={run}
       >
-        差异
+        查看差异
       </button>
-      {error && <p className="asb-warn-text">{error}</p>}
-      {changes !== null && (changes.length > 0 ? (
-        <ul className="asb-diff" aria-label="当前文件与备份的差异">
-          {changes.map((change) => (
-            <li key={change.key} className="asb-diff-row">
-              <span className="asb-diff-key">{change.key}</span>
-              <span className="asb-diff-value">{changeLine(change.before, change.after)}</span>
-            </li>
-          ))}
-        </ul>
+      {open && error && <p className="asb-warn-text">{error}</p>}
+      {open && changes !== null && (changes.length > 0 ? (
+        <DiffView changes={changes} label="当前文件与备份的差异" />
       ) : (
         <p className="asb-empty">与当前文件一致</p>
       ))}
@@ -110,7 +103,9 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
         <tbody>
           {records.map((record) => (
             <tr key={record.id}>
-              <td className="asb-code">{timeLabel(record.createdAt)}</td>
+              <td className="asb-code">
+                <Time iso={record.createdAt} />
+              </td>
               <td>{clientLabel(record.app)}</td>
               <td>{reasonLabel(record.reason)}</td>
               <td className="asb-code">{record.contentHash.slice(0, 12)}</td>
@@ -135,7 +130,9 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
         <ConfirmSheet
           title="恢复备份"
           details={[
-            `时间 ${timeLabel(pending.createdAt)}`,
+            <>
+              时间 <Time iso={pending.createdAt} />
+            </>,
             `客户端 ${clientLabel(pending.app)}`,
             `内容哈希 ${pending.contentHash.slice(0, 12)}`,
             "当前内容会先另行备份，恢复本身可撤销。",

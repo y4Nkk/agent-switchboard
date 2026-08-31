@@ -11,17 +11,16 @@ history_persistence = "save-all"
 threads = 8
 model = "gpt-5.1"
 model_provider = "asb"
+experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
 
 [model_providers.openai]
 name = "OpenAI"
 base_url = "https://api.openai.com/v1"
-env_key = "OPENAI_API_KEY"
 wire_api = "responses"
 
 [model_providers.asb]
 name = "中继 A"
 base_url = "https://relay-a.internal/v1"
-env_key = "ASB_RELAY_A_KEY"
 wire_api = "responses"
 
 [projects."F:\\work\\sample"]
@@ -43,6 +42,7 @@ pub const CLAUDE_JSON: &str = r#"{
   },
   "env": {
     "ANTHROPIC_BASE_URL": "https://relay-a.internal",
+    "ANTHROPIC_AUTH_TOKEN": "TEST_CLAUDE_IMPORT_KEY",
     "ANTHROPIC_MODEL": "claude-sonnet-4",
     "ANTHROPIC_SMALL_FAST_MODEL": "claude-3-5-haiku-latest"
   },

@@ -9,7 +9,7 @@
 pub mod claude;
 pub mod codex;
 
-use crate::contracts::{AppKind, SwitchPlan, SwitchPreview};
+use crate::contracts::{AppKind, PatchValue, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
 
 /// An adapter failure with location hints, safe to show in the UI.
@@ -90,6 +90,66 @@ pub fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> 
     match plan.app {
         AppKind::Codex => codex::render(current, plan),
         AppKind::Claude => claude::render(current, plan),
+    }
+}
+
+/// Computes the preview for a general-settings-only apply: the patch's own
+/// lines merged into `current`, with no profile routing.
+pub fn common_preview(
+    current: &str,
+    common: &crate::contracts::CommonConfigPatch,
+    backup_dir: &str,
+) -> Result<SwitchPreview, AdapterError> {
+    common.validate().map_err(|e| AdapterError {
+        message: scrub_message(e.to_string()),
+        line: None,
+    })?;
+    match common.app {
+        AppKind::Codex => {
+            codex::preview_entries(current, codex::common_overlay(common), backup_dir)
+        }
+        AppKind::Claude => {
+            let (entries, warnings) = claude::common_overlay(common);
+            claude::preview_entries(current, entries, warnings, backup_dir)
+        }
+    }
+}
+
+/// Renders the candidate file text for a general-settings-only apply.
+pub fn common_render(
+    current: &str,
+    common: &crate::contracts::CommonConfigPatch,
+) -> Result<String, AdapterError> {
+    common.validate().map_err(|e| AdapterError {
+        message: scrub_message(e.to_string()),
+        line: None,
+    })?;
+    match common.app {
+        AppKind::Codex => codex::render_entries(current, codex::common_overlay(common)),
+        AppKind::Claude => {
+            let (entries, _) = claude::common_overlay(common);
+            claude::render_entries(current, entries)
+        }
+    }
+}
+
+/// Whether `text` currently carries the toggle's applied line. Unparseable
+/// text and non-matching values both count as inactive.
+pub fn toggle_is_active(app: AppKind, text: &str, key: &str, applied: bool) -> bool {
+    let expected = PatchValue::Bool(applied).display();
+    let found = match app {
+        AppKind::Codex => codex::parse_owned_scalar(text, key),
+        AppKind::Claude => claude::parse_owned_scalar(text, key),
+    };
+    found.is_ok_and(|value| value.as_deref() == Some(expected.as_str()))
+}
+
+/// Textual value at an owned dotted path, for settings rows that read the
+/// live file instead of matching one expected value.
+pub fn owned_scalar(app: AppKind, text: &str, key: &str) -> Result<Option<String>, AdapterError> {
+    match app {
+        AppKind::Codex => codex::parse_owned_scalar(text, key),
+        AppKind::Claude => claude::parse_owned_scalar(text, key),
     }
 }
 

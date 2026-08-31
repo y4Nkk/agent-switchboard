@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { fetchProviderModels } from "../api/client";
 import type {
   AppKind,
   CodexModelSettings,
@@ -7,7 +8,10 @@ import type {
   ProviderDraft,
   ProviderProfile,
 } from "../api/client";
+import { Input } from "./Input";
 import { ProbePanel } from "./ProbePanel";
+import { Select } from "./Select";
+import { Textarea } from "./Textarea";
 
 interface Props {
   profile: ProviderProfile | null;
@@ -17,45 +21,39 @@ interface Props {
   onCancel: () => void;
 }
 
-const CODEX_EFFORTS = [
-  { value: "minimal", label: "极低" },
-  { value: "low", label: "低" },
-  { value: "medium", label: "中" },
-  { value: "high", label: "高" },
-  { value: "xhigh", label: "极高" },
-];
-const CODEX_SUMMARIES = [
-  { value: "none", label: "不生成" },
-  { value: "auto", label: "自动" },
-  { value: "concise", label: "简洁" },
-  { value: "detailed", label: "详细" },
-];
-const CODEX_VERBOSITIES = [
-  { value: "low", label: "低" },
-  { value: "medium", label: "中" },
-  { value: "high", label: "高" },
-];
+// Reasoning effort, summary, and verbosity live on the general-settings
+// page, not on profiles.
+
+// Radix rejects empty-string option values, so the picker's "no model"
+// choice uses this sentinel; it maps back to null on change.
+const MODEL_NONE = "__none__";
+const MODEL_PLACEHOLDER_LABEL = "（从获取列表选择）";
 
 function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): ProviderDraft {
+  // The editor only produces custom-endpoint profiles (user decision
+  // 2026-08-28); official login is not a profile kind at all now. A legacy
+  // official profile converts to a custom one on save.
   if (profile) {
     return {
       app: profile.app,
-      mode: profile.mode,
       name: profile.name,
       model: profile.model,
       baseUrl: profile.baseUrl,
-      envKey: profile.envKey,
+      apiKey: profile.apiKey,
       modelOptions: profile.modelOptions,
+      notes: profile.notes ?? null,
+      websiteUrl: profile.websiteUrl ?? null,
     };
   }
   return {
     app: initialApp,
-    mode: "custom",
     name: "",
     model: null,
     baseUrl: null,
-    envKey: null,
+    apiKey: "",
     modelOptions: null,
+    notes: null,
+    websiteUrl: null,
   };
 }
 
@@ -69,9 +67,7 @@ function codexOptions(
   patch: Partial<CodexModelSettings>,
 ): ModelOptions {
   const base: CodexModelSettings =
-    current?.kind === "codex"
-      ? current
-      : { reasoningEffort: null, reasoningSummary: null, verbosity: null, contextWindow: null };
+    current?.kind === "codex" ? current : { contextWindow: null };
   return { kind: "codex", ...base, ...patch };
 }
 
@@ -87,26 +83,47 @@ function claudeOptions(
 }
 
 function codexOptionsAreEmpty(options: ModelOptions | null): boolean {
-  return (
-    !options ||
-    (options.kind === "codex" &&
-      options.reasoningEffort === null &&
-      options.reasoningSummary === null &&
-      options.verbosity === null &&
-      options.contextWindow === null)
-  );
+  return !options || (options.kind === "codex" && options.contextWindow === null);
 }
 
 /** The local profile editor; it never edits client configuration directly. */
 export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: Props) {
   const [draft, setDraft] = useState<ProviderDraft>(() => draftFrom(profile, initialApp));
+  const [models, setModels] = useState<string[] | null>(null);
+  const [modelsBusy, setModelsBusy] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const modelsVersion = useRef(0);
+  const baseUrl = draft.baseUrl?.trim() ?? "";
 
   useEffect(() => {
     setDraft(draftFrom(profile, initialApp));
   }, [profile?.id, initialApp]);
 
+  useEffect(() => {
+    modelsVersion.current += 1;
+    setModels(null);
+    setModelsError(null);
+    setModelsBusy(false);
+  }, [baseUrl]);
+
+  const fetchModels = async () => {
+    if (modelsBusy || !baseUrl) return;
+    const version = modelsVersion.current;
+    setModelsBusy(true);
+    setModelsError(null);
+    try {
+      const ids = await fetchProviderModels(baseUrl, draft.apiKey);
+      if (modelsVersion.current === version) setModels(ids);
+    } catch (caught) {
+      if (modelsVersion.current === version) {
+        setModelsError((caught as { message?: string }).message ?? "无法获取模型列表");
+      }
+    } finally {
+      if (modelsVersion.current === version) setModelsBusy(false);
+    }
+  };
+
   const codex = draft.app === "codex";
-  const custom = draft.mode === "custom";
   const codexSettings = draft.modelOptions?.kind === "codex" ? draft.modelOptions : null;
   const claudeSettings = draft.modelOptions?.kind === "claude" ? draft.modelOptions : null;
 
@@ -121,187 +138,133 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           ...draft,
           name: draft.name.trim(),
           model: optional(draft.model ?? ""),
-          baseUrl: custom ? optional(draft.baseUrl ?? "") : null,
-          envKey: codex && custom ? optional(draft.envKey ?? "") : null,
+          baseUrl: optional(draft.baseUrl ?? ""),
+          apiKey: draft.apiKey.trim(),
+          notes: optional(draft.notes ?? ""),
+          websiteUrl: optional(draft.websiteUrl ?? ""),
           modelOptions,
         });
       }}
     >
-      <fieldset className="asb-fieldset">
-        <legend>路由模式</legend>
-        <div className="asb-radio-row" role="radiogroup" aria-label="路由模式">
-          <label className="asb-field-check">
-            <input
-              type="radio"
-              name="asb-mode"
-              checked={draft.mode === "custom"}
-              disabled={busy}
-              onChange={() =>
-                setDraft((current) => ({
-                  ...current,
-                  mode: "custom",
-                  envKey: current.app === "codex" ? current.envKey : null,
-                }))
-              }
-            />
-            <span>自定义服务</span>
-          </label>
-          <label className="asb-field-check">
-            <input
-              type="radio"
-              name="asb-mode"
-              checked={draft.mode === "official"}
-              disabled={busy}
-              onChange={() =>
-                setDraft((current) => ({ ...current, mode: "official", baseUrl: null, envKey: null }))
-              }
-            />
-            <span>官方登录</span>
-          </label>
-        </div>
-      </fieldset>
-
       <label className="asb-field">
         <span>客户端</span>
-        <select
-          className="asb-input"
+        <Select
+          ariaLabel="客户端"
           value={draft.app}
+          options={[
+            { value: "codex", label: "Codex" },
+            { value: "claude", label: "Claude" },
+          ]}
           disabled={Boolean(profile) || busy}
-          onChange={(event) => {
-            const app = event.target.value as AppKind;
+          onChange={(app) => {
             setDraft((current) => ({
               ...current,
-              app,
-              envKey: app === "codex" ? current.envKey : null,
+              app: app as AppKind,
               modelOptions: null,
             }));
           }}
-        >
-          <option value="codex">Codex</option>
-          <option value="claude">Claude</option>
-        </select>
+        />
       </label>
       <label className="asb-field">
         <span>名称</span>
-        <input
-          className="asb-input"
+        <Input
           value={draft.name}
           required
           disabled={busy}
           onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
         />
       </label>
-      {custom && (
-        <label className="asb-field">
-          <span>服务地址</span>
-          <input
-            className="asb-input"
-            type="url"
-            required
-            value={draft.baseUrl ?? ""}
-            disabled={busy}
-            onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))}
-          />
-        </label>
-      )}
       <label className="asb-field">
-        <span>主模型</span>
-        <input
-          className="asb-input"
-          value={draft.model ?? ""}
+        <span>官网地址</span>
+        <Input
+          type="url"
+          value={draft.websiteUrl ?? ""}
           disabled={busy}
-          placeholder={custom ? "（可选）" : "（可选）"}
-          onChange={(event) => setDraft((current) => ({ ...current, model: event.target.value }))}
+          placeholder="（可选）"
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, websiteUrl: event.target.value }))
+          }
         />
       </label>
-      {codex && custom && (
-        <label className="asb-field">
-          <span>环境变量名</span>
-          <input
-            className="asb-input asb-code"
-            value={draft.envKey ?? ""}
-            disabled={busy}
-            onChange={(event) => setDraft((current) => ({ ...current, envKey: event.target.value }))}
-          />
-        </label>
-      )}
+      <label className="asb-field">
+        <span>备注</span>
+        <Textarea
+          rows={2}
+          value={draft.notes ?? ""}
+          disabled={busy}
+          placeholder="（可选，仅保存在本应用）"
+          onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+        />
+      </label>
+      <label className="asb-field">
+        <span>服务地址</span>
+        <Input
+          type="url"
+          required
+          value={draft.baseUrl ?? ""}
+          disabled={busy}
+          onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))}
+        />
+      </label>
+      <div className="asb-field">
+        <span>主模型</span>
+        <Input
+          aria-label="主模型"
+          value={draft.model ?? ""}
+          disabled={busy}
+          placeholder="（可选）"
+          onChange={(event) => setDraft((current) => ({ ...current, model: event.target.value }))}
+        />
+        <div className="asb-field-actions">
+          <button
+            type="button"
+            className="asb-btn-secondary"
+            disabled={busy || modelsBusy || !baseUrl}
+            onClick={() => void fetchModels()}
+          >
+            {modelsBusy ? "获取中…" : "获取模型"}
+          </button>
+          {modelsError && <span className="asb-warn-text">{modelsError}</span>}
+          {models && (
+            <Select
+              ariaLabel="选择模型"
+              value={draft.model}
+              placeholder={MODEL_PLACEHOLDER_LABEL}
+              options={[
+                { value: MODEL_NONE, label: MODEL_PLACEHOLDER_LABEL },
+                ...models.map((id) => ({ value: id, label: id })),
+              ]}
+              disabled={busy}
+              onChange={(model) =>
+                setDraft((current) => ({
+                  ...current,
+                  model: model === MODEL_NONE ? null : model,
+                }))
+              }
+            />
+          )}
+        </div>
+      </div>
+      <label className="asb-field">
+        <span>API 密钥</span>
+        <Input
+          type="password"
+          required
+          value={draft.apiKey}
+          disabled={busy}
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, apiKey: event.target.value }))
+          }
+        />
+      </label>
 
       {codex && (
         <fieldset className="asb-fieldset">
           <legend>模型运行参数</legend>
           <label className="asb-field">
-            <span className="asb-kv-label">推理强度</span>
-            <select
-              className="asb-input"
-              value={codexSettings?.reasoningEffort ?? ""}
-              disabled={busy}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  modelOptions: codexOptions(current.modelOptions, {
-                    reasoningEffort: event.target.value || null,
-                  }),
-                }))
-              }
-            >
-              <option value="">（不设置）</option>
-              {CODEX_EFFORTS.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="asb-field">
-            <span className="asb-kv-label">推理摘要</span>
-            <select
-              className="asb-input"
-              value={codexSettings?.reasoningSummary ?? ""}
-              disabled={busy}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  modelOptions: codexOptions(current.modelOptions, {
-                    reasoningSummary: event.target.value || null,
-                  }),
-                }))
-              }
-            >
-              <option value="">（不设置）</option>
-              {CODEX_SUMMARIES.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="asb-field">
-            <span className="asb-kv-label">输出详细程度</span>
-            <select
-              className="asb-input"
-              value={codexSettings?.verbosity ?? ""}
-              disabled={busy}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  modelOptions: codexOptions(current.modelOptions, {
-                    verbosity: event.target.value || null,
-                  }),
-                }))
-              }
-            >
-              <option value="">（不设置）</option>
-              {CODEX_VERBOSITIES.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="asb-field">
             <span className="asb-kv-label">上下文窗口</span>
-            <input
-              className="asb-input asb-code"
+            <Input
+              code
               type="number"
               min={1}
               value={codexSettings?.contextWindow ?? ""}
@@ -324,8 +287,8 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           <legend>模型映射</legend>
           <label className="asb-field">
             <span>Haiku 档</span>
-            <input
-              className="asb-input asb-code"
+            <Input
+              code
               value={claudeSettings?.haikuModel ?? ""}
               disabled={busy}
               onChange={(event) =>
@@ -340,8 +303,8 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           </label>
           <label className="asb-field">
             <span>Sonnet 档</span>
-            <input
-              className="asb-input asb-code"
+            <Input
+              code
               value={claudeSettings?.sonnetModel ?? ""}
               disabled={busy}
               onChange={(event) =>
@@ -356,8 +319,8 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           </label>
           <label className="asb-field">
             <span>Opus 档</span>
-            <input
-              className="asb-input asb-code"
+            <Input
+              code
               value={claudeSettings?.opusModel ?? ""}
               disabled={busy}
               onChange={(event) =>
@@ -372,8 +335,8 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           </label>
           <label className="asb-field">
             <span>可选模型列表（每行一个）</span>
-            <textarea
-              className="asb-input asb-code asb-textarea"
+            <Textarea
+              code
               rows={3}
               value={(claudeSettings?.availableModels ?? []).join("\n")}
               disabled={busy}
@@ -396,7 +359,7 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
         </fieldset>
       )}
 
-      {custom && <ProbePanel url={draft.baseUrl?.trim() || null} />}
+      <ProbePanel url={draft.baseUrl?.trim() || null} />
 
       <div className="asb-form-actions">
         <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onCancel}>

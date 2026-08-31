@@ -59,9 +59,31 @@ describe("BackupHistory", () => {
     const user = userEvent.setup();
     render(<BackupHistory records={records} busy={false} onRestore={() => {}} />);
 
-    await user.click(screen.getAllByRole("button", { name: "差异" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "查看差异" })[0]);
     await waitFor(() => expect(diffSpy).toHaveBeenCalledWith("abc123-20260826"));
-    expect(await screen.findByText(/gpt-5\.1 → gpt-5\.2/)).toBeInTheDocument();
+    expect(await screen.findByText("gpt-5.1")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5.2")).toBeInTheDocument();
+  });
+
+  it("collapses the difference on a second click and reuses the cached result", async () => {
+    // vitest 4 reuses the existing spy from the earlier test, so clear its
+    // call log before asserting on counts.
+    const diffSpy = vi.spyOn(client, "backupDiff").mockClear().mockResolvedValue([
+      { key: "model", kind: "set", before: "gpt-5.1", after: "gpt-5.2" },
+    ]);
+    const user = userEvent.setup();
+    render(<BackupHistory records={records} busy={false} onRestore={() => {}} />);
+
+    const toggle = screen.getAllByRole("button", { name: "查看差异" })[0];
+    await user.click(toggle);
+    expect(await screen.findByText("gpt-5.2")).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(screen.queryByText("gpt-5.2")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(await screen.findByText("gpt-5.2")).toBeInTheDocument();
+    expect(diffSpy).toHaveBeenCalledTimes(1);
   });
 
   it("reports when a backup matches the live file", async () => {
@@ -69,7 +91,7 @@ describe("BackupHistory", () => {
     const user = userEvent.setup();
     render(<BackupHistory records={records} busy={false} onRestore={() => {}} />);
 
-    await user.click(screen.getAllByRole("button", { name: "差异" })[1]);
+    await user.click(screen.getAllByRole("button", { name: "查看差异" })[1]);
     expect(await screen.findByText("与当前文件一致")).toBeInTheDocument();
   });
 

@@ -17,6 +17,12 @@ tauri-build = { version = "2", features = [] }
 asb-core = { path = "../crates/asb-core" }
 asb-switch = { path = "../crates/asb-switch" }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Resolves the app-data directory before Tauri creates its first WebView.
+# This is the same platform resolver Tauri uses for `app_data_dir`.
+dirs = "6"
+# Read-only access to the CC Switch SQLite database. `bundled` compiles
+# libsqlite3-sys with the system cc (scoop gcc on this windows-gnu host).
+rusqlite = { version = "0.32", features = ["bundled"], default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # `common-controls-v6` stays off: it only embeds the manifest into bins, and
@@ -25,11 +31,17 @@ tauri = { version = "2", default-features = false, features = [
     "wry",
     "compression",
     "dynamic-acl",
+    "devtools",
+    "tray-icon",
 ] }
+# Opens provider service URLs in the system browser. wry silently blocks
+# `target=_blank` new-window requests, so external links must go through it.
+tauri-plugin-opener = "2"
 uuid = { version = "1", features = ["v4"] }
-windows-sys = { version = "0.60", features = [
+windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Networking_WinHttp",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]

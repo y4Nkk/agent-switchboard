@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 interface Props {
   title: string;
-  details: string[];
+  details: ReactNode[];
   confirmLabel: string;
   destructive?: boolean;
   onConfirm: () => void;
@@ -60,8 +60,8 @@ export function ConfirmSheet({
       >
         <h2 className="asb-panel-title">{title}</h2>
         <ul className="asb-sheet-details">
-          {details.map((detail) => (
-            <li key={detail}>{detail}</li>
+          {details.map((detail, index) => (
+            <li key={index}>{detail}</li>
           ))}
         </ul>
         <div className="asb-sheet-actions">

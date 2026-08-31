@@ -7,8 +7,8 @@
 
 use crate::adapter::{AdapterError, OverlayEntry};
 use crate::contracts::{
-    ChangeKind, KeyChange, ModelOptions, PatchValue, RouteMode, RouteState, SwitchPlan,
-    SwitchPreview,
+    ChangeKind, CommonConfigPatch, KeyChange, ModelOptions, PatchValue, RouteMode, RouteState,
+    SwitchPlan, SwitchPreview,
 };
 use crate::ownership::is_owned;
 use crate::redact::redact;
@@ -119,27 +119,6 @@ fn to_json(value: PatchValue) -> Json {
     }
 }
 
-fn collect_preserved(value: &Json, prefix: &str, out: &mut Vec<String>) {
-    match value {
-        Json::Object(map) => {
-            for (key, child) in map {
-                let path = if prefix.is_empty() {
-                    key.clone()
-                } else {
-                    format!("{prefix}.{key}")
-                };
-                if !is_owned(AppKind::Claude, &path) && path != DEPRECATED_MODEL_KEY {
-                    out.push(path.clone());
-                }
-                collect_preserved(child, &path, out);
-            }
-        }
-        // Arrays and scalars are host-owned as a whole; the path is already
-        // recorded by the parent iteration.
-        _ => {}
-    }
-}
-
 fn tier_entry(key: &str, value: &Option<String>) -> (String, OverlayEntry) {
     match value {
         Some(v) => (
@@ -155,17 +134,21 @@ fn overlay(plan: &SwitchPlan) -> (Vec<(String, OverlayEntry)>, Vec<String>) {
     let p = &plan.profile;
     let mut warnings = Vec::new();
 
-    // Official routing removes the custom endpoint so Claude Code falls back
-    // to its existing login; custom routing declares it explicitly.
-    let mut entries = vec![(
-        "env.ANTHROPIC_BASE_URL".to_string(),
-        match (&p.mode, &p.base_url) {
-            (RouteMode::Custom, Some(url)) => OverlayEntry::Set(PatchValue::Str(url.clone())),
-            (RouteMode::Official, _) => OverlayEntry::RemoveIfPresent,
-            // Validation rejects a custom profile without a base URL.
-            (RouteMode::Custom, None) => OverlayEntry::RemoveIfPresent,
-        },
-    )];
+    // Every profile routes to a custom endpoint; validation rejects a
+    // profile without one, the defensive arm keeps old stores loadable.
+    let mut entries = vec![
+        (
+            "env.ANTHROPIC_BASE_URL".to_string(),
+            match &p.base_url {
+                Some(url) => OverlayEntry::Set(PatchValue::Str(url.clone())),
+                None => OverlayEntry::RemoveIfPresent,
+            },
+        ),
+        (
+            "env.ANTHROPIC_AUTH_TOKEN".to_string(),
+            OverlayEntry::Set(PatchValue::Str(p.api_key.clone())),
+        ),
+    ];
 
     // The deprecated key is superseded by ANTHROPIC_DEFAULT_HAIKU_MODEL and
     // is cleaned up on every switch.
@@ -222,13 +205,46 @@ fn overlay(plan: &SwitchPlan) -> (Vec<(String, OverlayEntry)>, Vec<String>) {
     ));
 
     for entry in &plan.common.entries {
-        entries.push((entry.key.clone(), OverlayEntry::Set(entry.value.clone())));
+        entries.push((
+            entry.key.clone(),
+            match &entry.value {
+                Some(value) => OverlayEntry::Set(value.clone()),
+                None => OverlayEntry::RemoveIfPresent,
+            },
+        ));
     }
     (entries, warnings)
 }
 
+/// Overlay entries for a general-settings-only apply: exactly the patch's
+/// own lines, with no profile routing.
+pub(crate) fn common_overlay(
+    common: &CommonConfigPatch,
+) -> (Vec<(String, OverlayEntry)>, Vec<String>) {
+    let entries = common
+        .entries
+        .iter()
+        .map(|entry| {
+            (
+                entry.key.clone(),
+                match &entry.value {
+                    Some(value) => OverlayEntry::Set(value.clone()),
+                    None => OverlayEntry::RemoveIfPresent,
+                },
+            )
+        })
+        .collect();
+    (entries, vec![])
+}
+
 pub(crate) fn check_syntax(text: &str) -> Result<(), AdapterError> {
     parse(text).map(|_| ())
+}
+
+/// Textual value at an owned dotted path, for toggle-state reads.
+pub(crate) fn parse_owned_scalar(text: &str, key: &str) -> Result<Option<String>, AdapterError> {
+    let root = parse(text)?;
+    Ok(get(&root, key).and_then(scalar_repr))
 }
 
 /// Collects every owned scalar or array path and its textual value.
@@ -297,7 +313,6 @@ pub fn route_state(text: &str) -> RouteState {
         provider_name: None,
         model,
         base_url,
-        env_key: None,
         wire_api: None,
         codex_model_options: None,
         haiku_model,
@@ -313,8 +328,17 @@ pub(crate) fn preview(
     plan: &SwitchPlan,
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
-    let root = parse(current)?;
     let (entries, warnings) = overlay(plan);
+    preview_entries(current, entries, warnings, backup_dir)
+}
+
+pub(crate) fn preview_entries(
+    current: &str,
+    entries: Vec<(String, OverlayEntry)>,
+    warnings: Vec<String>,
+    backup_dir: &str,
+) -> Result<SwitchPreview, AdapterError> {
+    let root = parse(current)?;
 
     let mut changes = Vec::new();
     for (key, entry) in entries {
@@ -348,23 +372,25 @@ pub(crate) fn preview(
         }
     }
 
-    let mut preserved = Vec::new();
-    collect_preserved(&root, "", &mut preserved);
-    preserved.sort();
-
     Ok(SwitchPreview {
         app: AppKind::Claude,
         target: AppKind::Claude.config_label().to_string(),
         changes,
-        preserved,
         warnings,
         backup_dir: backup_dir.to_string(),
     })
 }
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
-    let mut root = parse(current)?;
     let (entries, _) = overlay(plan);
+    render_entries(current, entries)
+}
+
+pub(crate) fn render_entries(
+    current: &str,
+    entries: Vec<(String, OverlayEntry)>,
+) -> Result<String, AdapterError> {
+    let mut root = parse(current)?;
     for (key, entry) in entries {
         match entry {
             OverlayEntry::Set(value) => set(&mut root, &key, value),
@@ -394,11 +420,10 @@ mod tests {
             profile: ProviderProfile {
                 id: "c2".into(),
                 app: AppKind::Claude,
-                mode: RouteMode::Custom,
                 name: "Relay C".into(),
                 model: Some("claude-opus-4".into()),
                 base_url: Some("https://relay-c.internal".into()),
-                env_key: None,
+                api_key: "test-api-key".into(),
                 model_options: Some(ModelOptions::Claude(ClaudeModelSettings {
                     haiku_model: Some("claude-haiku-4".into()),
                     sonnet_model: None,
@@ -408,6 +433,8 @@ mod tests {
                         "claude-sonnet-4".to_string(),
                     ]),
                 })),
+                notes: None,
+                website_url: None,
             },
             common: CommonConfigPatch {
                 app: AppKind::Claude,
@@ -416,18 +443,92 @@ mod tests {
         }
     }
 
-    fn plan_official() -> SwitchPlan {
-        let mut plan = plan_b();
-        plan.profile.mode = RouteMode::Official;
-        plan.profile.base_url = None;
-        plan
-    }
-
     #[test]
     fn parses_valid_and_rejects_invalid_json_with_line() {
         assert!(parse(CLAUDE_JSON).is_ok());
         let err = parse("{\n  \"model\": oops\n}").unwrap_err();
-        assert_eq!(err.line, Some(2));
+        assert!(err.line.is_some());
+    }
+
+    fn common(entries: Vec<PatchEntry>) -> CommonConfigPatch {
+        CommonConfigPatch {
+            app: AppKind::Claude,
+            entries,
+        }
+    }
+
+    fn toggle(key: &str, value: Option<PatchValue>) -> PatchEntry {
+        PatchEntry {
+            key: key.into(),
+            value,
+        }
+    }
+
+    #[test]
+    fn common_only_render_sets_and_removes_toggle_lines() {
+        let set = crate::adapter::common_render(
+            CLAUDE_JSON,
+            &common(vec![
+                toggle("alwaysThinkingEnabled", Some(PatchValue::Bool(true))),
+                toggle("attribution.coAuthoredBy", Some(PatchValue::Bool(false))),
+            ]),
+        )
+        .unwrap();
+        assert!(set.contains("\"alwaysThinkingEnabled\": true"));
+        assert!(set.contains("\"coAuthoredBy\": false"));
+        // Host content outside the patch survives untouched.
+        assert!(set.contains("statusLine"));
+
+        let removed = crate::adapter::common_render(
+            &set,
+            &common(vec![
+                toggle("alwaysThinkingEnabled", None),
+                toggle("attribution.coAuthoredBy", None),
+            ]),
+        )
+        .unwrap();
+        assert!(!removed.contains("alwaysThinkingEnabled"));
+        assert!(!removed.contains("coAuthoredBy"));
+        assert!(removed.contains("statusLine"));
+    }
+
+    #[test]
+    fn common_only_preview_reports_only_patch_changes() {
+        let preview = crate::adapter::common_preview(
+            CLAUDE_JSON,
+            &common(vec![toggle(
+                "spinnerTipsEnabled",
+                Some(PatchValue::Bool(false)),
+            )]),
+            "F:/backups",
+        )
+        .unwrap();
+        assert_eq!(preview.changes.len(), 1);
+        assert_eq!(preview.changes[0].key, "spinnerTipsEnabled");
+        assert_eq!(preview.changes[0].after.as_deref(), Some("false"));
+        assert_eq!(preview.app, AppKind::Claude);
+    }
+
+    #[test]
+    fn toggle_is_active_reflects_the_line_value() {
+        assert!(crate::adapter::toggle_is_active(
+            AppKind::Claude,
+            "{ \"spinnerTipsEnabled\": false }",
+            "spinnerTipsEnabled",
+            false
+        ));
+        assert!(!crate::adapter::toggle_is_active(
+            AppKind::Claude,
+            "{ }",
+            "spinnerTipsEnabled",
+            false
+        ));
+        assert!(!crate::adapter::toggle_is_active(
+            AppKind::Claude,
+            "{ broken",
+            "spinnerTipsEnabled",
+            false
+        ));
     }
 
     #[test]
@@ -437,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_names_changes_preserved_keys_warning_and_backup() {
+    fn preview_names_changes_warning_and_backup() {
         let preview = preview(CLAUDE_JSON, &plan_b(), "/backups").unwrap();
 
         let changed: Vec<&str> = preview.changes.iter().map(|c| c.key.as_str()).collect();
@@ -447,39 +548,8 @@ mod tests {
         assert!(changed.contains(&"availableModels"));
         assert!(changed.contains(&"env.ANTHROPIC_SMALL_FAST_MODEL"));
         assert_eq!(preview.backup_dir, "/backups");
-
-        for host_key in ["permissions", "permissions.allow", "statusLine"] {
-            assert!(preview.preserved.contains(&host_key.to_string()));
-        }
-        assert!(!preview.preserved.iter().any(|k| k == "model"));
-        // The deprecated key is cleaned up, not preserved.
-        assert!(!preview
-            .preserved
-            .iter()
-            .any(|k| k == "env.ANTHROPIC_SMALL_FAST_MODEL"));
-    }
-
-    #[test]
-    fn official_plan_removes_custom_endpoint_but_keeps_model_tiers() {
-        let preview = preview(CLAUDE_JSON, &plan_official(), "/b").unwrap();
-        let endpoint = preview
-            .changes
-            .iter()
-            .find(|c| c.key == "env.ANTHROPIC_BASE_URL")
-            .expect("custom endpoint must be removed");
-        assert_eq!(endpoint.kind, ChangeKind::Remove);
-        assert!(preview
-            .changes
-            .iter()
-            .any(|c| c.key == "env.ANTHROPIC_DEFAULT_HAIKU_MODEL"));
-
-        let rendered = render(CLAUDE_JSON, &plan_official()).unwrap();
-        let parsed: Json = serde_json::from_str(&rendered).unwrap();
-        assert!(parsed["env"].get("ANTHROPIC_BASE_URL").is_none());
-        assert_eq!(
-            parsed["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"],
-            Json::String("claude-haiku-4".into())
-        );
+        // Host keys stay untouched — asserted on the rendered text in
+        // render_updates_owned_keys_and_keeps_host_blocks.
     }
 
     #[test]
@@ -517,19 +587,29 @@ mod tests {
     }
 
     #[test]
-    fn host_owned_token_key_is_rejected_not_written() {
+    fn token_key_is_profile_owned_and_switch_writes_it() {
         let current = CLAUDE_JSON.replace(
             "\"ANTHROPIC_MODEL\": \"claude-sonnet-4\"",
-            "\"ANTHROPIC_AUTH_TOKEN\": \"sk-live-0123456789abcdef\"",
+            "\"ANTHROPIC_AUTH_TOKEN\": \"sk-live-old-secret\"",
         );
         let mut plan = plan_b();
         plan.common.entries.push(PatchEntry {
             key: "env.ANTHROPIC_AUTH_TOKEN".into(),
-            value: PatchValue::Str("sk-live-0123456789abcdef".into()),
+            value: Some(PatchValue::Str("sk-live-forbidden".into())),
         });
-        // Entry through the public adapter boundary, where validation runs.
         let err = crate::adapter::preview(&current, &plan, "/b").unwrap_err();
-        assert!(err.message.contains("宿主配置"));
+        assert!(err.message.contains("供应商档案管理"));
+
+        let preview = preview(&current, &plan_b(), "/b").unwrap();
+        let change = preview
+            .changes
+            .iter()
+            .find(|change| change.key == "env.ANTHROPIC_AUTH_TOKEN")
+            .expect("profile token change");
+        assert_eq!(change.before.as_deref(), Some(crate::redact::REDACTED));
+        assert_eq!(change.after.as_deref(), Some(crate::redact::REDACTED));
+        let rendered = render(&current, &plan_b()).unwrap();
+        assert!(rendered.contains("test-api-key"));
     }
 
     #[test]

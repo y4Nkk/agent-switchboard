@@ -6,9 +6,13 @@
 //! replacement → post-write verification → lock release. Any failure after
 //! the file has been replaced restores the immediately preceding backup.
 
+use crate::display::display_content;
 use crate::io::SwitchIo;
 use crate::lockfile::{self, AcquireOutcome};
-use asb_core::{adapter, AdapterError, BackupRecord, LockStatus, SwitchPlan, SwitchPreview};
+use crate::restore::restore_backup_content;
+use asb_core::{
+    adapter, AdapterError, AppKind, BackupRecord, LockStatus, SwitchPlan, SwitchPreview,
+};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::ErrorKind;
@@ -21,9 +25,12 @@ pub const PROCESS_NAME: &str = "agent-switchboard";
 pub struct FilePreview {
     pub preview: SwitchPreview,
     pub content_hash: String,
-    /// Hash of the exact candidate shown to the user. Execution refuses a
-    /// plan whose rendering changed after this preview.
+    /// Hash of the exact private candidate used for execution. Execution
+    /// refuses a plan whose original rendering changed after this preview.
     pub rendered_hash: String,
+    /// Redacted candidate file text for the pretty-printed UI view. The
+    /// executor keeps the original candidate private for hashing and writes.
+    pub content: String,
 }
 
 /// What happened to the live file after a failure.
@@ -163,17 +170,70 @@ pub struct SwitchRequest<'a> {
     pub expected_rendered_hash: &'a str,
 }
 
-fn empty_configuration(app: asb_core::AppKind) -> &'static str {
-    match app {
-        asb_core::AppKind::Codex => "",
-        asb_core::AppKind::Claude => "{}",
+pub struct CommonRequest<'a> {
+    pub target: &'a Path,
+    pub app: AppKind,
+    pub common: &'a asb_core::CommonConfigPatch,
+    pub backup_dir: &'a Path,
+    /// Hash captured when the toggle change was computed; a mismatch blocks
+    /// the write.
+    pub expected_hash: &'a str,
+    /// Hash of the candidate file shown in the preview.
+    pub expected_rendered_hash: &'a str,
+}
+
+/// One pending overlay write: either a full profile switch or a
+/// general-settings-only apply. The transaction below treats both alike.
+enum Job<'a> {
+    Switch(&'a SwitchPlan),
+    Common {
+        app: AppKind,
+        common: &'a asb_core::CommonConfigPatch,
+    },
+}
+
+impl Job<'_> {
+    fn app(&self) -> AppKind {
+        match self {
+            Job::Switch(plan) => plan.app,
+            Job::Common { app, .. } => *app,
+        }
+    }
+
+    /// Reason recorded on the pre-write backup for this kind of write.
+    fn backup_reason(&self) -> &'static str {
+        match self {
+            Job::Switch(_) => "switch",
+            Job::Common { .. } => "common-settings",
+        }
+    }
+
+    fn preview(&self, current: &str, backup_dir: &str) -> Result<SwitchPreview, AdapterError> {
+        match self {
+            Job::Switch(plan) => adapter::preview(current, plan, backup_dir),
+            Job::Common { common, .. } => adapter::common_preview(current, common, backup_dir),
+        }
+    }
+
+    fn render(&self, current: &str) -> Result<String, AdapterError> {
+        match self {
+            Job::Switch(plan) => adapter::render(current, plan),
+            Job::Common { common, .. } => adapter::common_render(current, common),
+        }
     }
 }
 
-fn read_current_or_empty<Io: SwitchIo>(
+fn empty_configuration(app: AppKind) -> &'static str {
+    match app {
+        AppKind::Codex => "",
+        AppKind::Claude => "{}",
+    }
+}
+
+pub(crate) fn read_current_or_empty<Io: SwitchIo>(
     io: &Io,
     target: &Path,
-    app: asb_core::AppKind,
+    app: AppKind,
 ) -> Result<(String, bool), std::io::Error> {
     match io.read_file(target) {
         Ok(text) => Ok((text, true)),
@@ -184,11 +244,11 @@ fn read_current_or_empty<Io: SwitchIo>(
     }
 }
 
-fn metadata_path(backup_path: &Path) -> PathBuf {
+pub(crate) fn metadata_path(backup_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.meta.json", backup_path.to_string_lossy()))
 }
 
-fn write_backup_metadata<Io: SwitchIo>(
+pub(crate) fn write_backup_metadata<Io: SwitchIo>(
     io: &Io,
     record: &BackupRecord,
     stage: &'static str,
@@ -210,22 +270,49 @@ pub fn read_preview<Io: SwitchIo>(
     plan: &SwitchPlan,
     backup_dir: &str,
 ) -> Result<FilePreview, SwitchError> {
+    read_preview_for(io, target, &Job::Switch(plan), backup_dir)
+}
+
+/// Same as [`read_preview`] for a general-settings-only apply.
+pub fn read_common_preview<Io: SwitchIo>(
+    io: &Io,
+    req: &CommonRequest,
+) -> Result<FilePreview, SwitchError> {
+    read_preview_for(
+        io,
+        req.target,
+        &Job::Common {
+            app: req.app,
+            common: req.common,
+        },
+        &req.backup_dir.to_string_lossy(),
+    )
+}
+
+fn read_preview_for<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    job: &Job,
+    backup_dir: &str,
+) -> Result<FilePreview, SwitchError> {
     let (current, target_existed) =
-        read_current_or_empty(io, target, plan.app).map_err(|e| SwitchError::ReadCurrent {
+        read_current_or_empty(io, target, job.app()).map_err(|e| SwitchError::ReadCurrent {
             message: e.to_string(),
         })?;
     let content_hash = sha256_hex(&current);
-    let mut preview = adapter::preview(&current, plan, backup_dir).map_err(plan_rejected)?;
+    let mut preview = job.preview(&current, backup_dir).map_err(plan_rejected)?;
     if !target_existed {
         preview
             .warnings
             .push("配置文件尚不存在，确认后将创建新的用户级配置".to_string());
     }
-    let rendered_hash = sha256_hex(&adapter::render(&current, plan).map_err(plan_rejected)?);
+    let rendered = job.render(&current).map_err(plan_rejected)?;
+    let rendered_hash = sha256_hex(&rendered);
     Ok(FilePreview {
         preview,
         content_hash,
         rendered_hash,
+        content: display_content(job.app(), &rendered),
     })
 }
 
@@ -236,7 +323,7 @@ fn plan_rejected(e: AdapterError) -> SwitchError {
     }
 }
 
-fn timestamp_name<Io: SwitchIo>(io: &Io) -> String {
+pub(crate) fn timestamp_name<Io: SwitchIo>(io: &Io) -> String {
     io.now_rfc3339()
         .chars()
         .filter(|c| c.is_ascii_digit())
@@ -246,264 +333,43 @@ fn timestamp_name<Io: SwitchIo>(io: &Io) -> String {
 
 /// Executes one switch transactionally. All exit paths release the lock.
 pub fn execute<Io: SwitchIo>(io: &Io, req: &SwitchRequest) -> Result<SwitchOutcome, SwitchError> {
-    if let Some(parent) = req.target.parent() {
-        io.ensure_dir(parent)
-            .map_err(|error| SwitchError::CommitFailed {
-                stage: "target-dir",
-                message: error.to_string(),
-                recovery: RecoveryOutcome::NotNeeded,
-            })?;
-    }
-    match lockfile::acquire(io, req.target, PROCESS_NAME) {
-        AcquireOutcome::Acquired => {}
-        AcquireOutcome::Busy(status) => return Err(SwitchError::BlockedByLock { status }),
-    }
-    execute_locked(io, req)
+    execute_job(
+        io,
+        req.target,
+        req.backup_dir,
+        req.expected_hash,
+        req.expected_rendered_hash,
+        &Job::Switch(req.plan),
+    )
 }
 
-fn execute_locked<Io: SwitchIo>(
+/// Executes a general-settings-only apply through the same transaction:
+/// lock → hash check → preview → render → backup → atomic replace → verify.
+pub fn execute_common<Io: SwitchIo>(
     io: &Io,
-    req: &SwitchRequest,
+    req: &CommonRequest,
 ) -> Result<SwitchOutcome, SwitchError> {
-    let finish = |result| {
-        lockfile::release(io, req.target);
-        result
-    };
-
-    let (current, target_existed) = match read_current_or_empty(io, req.target, req.plan.app) {
-        Ok(current) => current,
-        Err(e) => {
-            return finish(Err(SwitchError::ReadCurrent {
-                message: e.to_string(),
-            }));
-        }
-    };
-    let found_hash = sha256_hex(&current);
-    if found_hash != req.expected_hash {
-        return finish(Err(SwitchError::ExternalChange {
-            expected_hash: req.expected_hash.to_string(),
-            found_hash,
-        }));
-    }
-
-    let backup_dir_label = req.backup_dir.to_string_lossy().to_string();
-    let preview = match adapter::preview(&current, req.plan, &backup_dir_label) {
-        Ok(p) => p,
-        Err(e) => return finish(Err(plan_rejected(e))),
-    };
-    let rendered = match adapter::render(&current, req.plan) {
-        Ok(r) => r,
-        Err(e) => return finish(Err(plan_rejected(e))),
-    };
-    if sha256_hex(&rendered) != req.expected_rendered_hash {
-        return finish(Err(SwitchError::PlanChanged));
-    }
-
-    // Re-check immediately before mutation: the file must still hash to the
-    // previewed state.
-    match read_current_or_empty(io, req.target, req.plan.app) {
-        Ok((text, _)) => {
-            let found = sha256_hex(&text);
-            if found != req.expected_hash {
-                return finish(Err(SwitchError::ExternalChange {
-                    expected_hash: req.expected_hash.to_string(),
-                    found_hash: found,
-                }));
-            }
-        }
-        Err(e) => {
-            return finish(Err(SwitchError::ReadCurrent {
-                message: e.to_string(),
-            }));
-        }
-    }
-
-    if let Err(e) = io.ensure_dir(req.backup_dir) {
-        return finish(Err(SwitchError::CommitFailed {
-            stage: "backup-dir",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        }));
-    }
-
-    let ts = timestamp_name(io);
-    let file_name = req
-        .target
-        .file_name()
-        .expect("target has a file name")
-        .to_string_lossy()
-        .to_string();
-    let backup_path = req.backup_dir.join(format!("{file_name}.{ts}.bak"));
-    let created_at = io.now_rfc3339();
-    if let Err(e) = io.write_new_file(&backup_path, &current) {
-        return finish(Err(SwitchError::CommitFailed {
-            stage: "backup",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        }));
-    }
-    let backup = BackupRecord {
-        id: format!("{}-{ts}", &found_hash[..12.min(found_hash.len())]),
-        app: req.plan.app,
-        target_path: req.target.to_string_lossy().to_string(),
-        backup_path: backup_path.to_string_lossy().to_string(),
-        created_at,
-        content_hash: found_hash.clone(),
-        target_existed,
-        reason: "switch".to_string(),
-    };
-    if let Err(error) = write_backup_metadata(io, &backup, "backup-meta") {
-        return finish(Err(error));
-    }
-
-    let temp_path =
-        req.target
-            .with_file_name(format!("{}.{}.asb-tmp", file_name, std::process::id()));
-    if let Err(e) = io.write_new_file(&temp_path, &rendered) {
-        return finish(Err(SwitchError::CommitFailed {
-            stage: "temp-write",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        }));
-    }
-
-    if let Err(e) = adapter::validate_syntax(req.plan.app, &rendered) {
-        let _ = io.remove(&temp_path);
-        return finish(Err(SwitchError::CommitFailed {
-            stage: "temp-validate",
-            message: format!("临时文件校验失败: {e}"),
-            recovery: RecoveryOutcome::NotNeeded,
-        }));
-    }
-
-    if let Err(e) = io.rename_replace(&temp_path, req.target) {
-        let _ = io.remove(&temp_path);
-        return finish(Err(SwitchError::CommitFailed {
-            stage: "atomic-replace",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        }));
-    }
-
-    // Post-write verification: the live file must equal the rendered
-    // candidate and parse cleanly. Otherwise restore the backup.
-    let verified = match io.read_file(req.target) {
-        Ok(text) => text == rendered && adapter::validate_syntax(req.plan.app, &text).is_ok(),
-        Err(_) => false,
-    };
-    if !verified {
-        let recovery = restore_backup_content(io, req.target, &backup);
-        return finish(Err(SwitchError::CommitFailed {
-            stage: "post-verify",
-            message: "替换后校验失败".to_string(),
-            recovery,
-        }));
-    }
-
-    finish(Ok(SwitchOutcome {
-        lock: LockStatus::Free,
-        acquired_at: backup.created_at.clone(),
-        changed: vec![req.target.to_string_lossy().to_string()],
-        warnings: preview.warnings.clone(),
-        backup,
-        preview,
-        recovery: RecoveryOutcome::NotNeeded,
-        final_hash: sha256_hex(&rendered),
-    }))
+    execute_job(
+        io,
+        req.target,
+        req.backup_dir,
+        req.expected_hash,
+        req.expected_rendered_hash,
+        &Job::Common {
+            app: req.app,
+            common: req.common,
+        },
+    )
 }
 
-fn restore_backup_content<Io: SwitchIo>(
+fn execute_job<Io: SwitchIo>(
     io: &Io,
     target: &Path,
-    backup: &BackupRecord,
-) -> RecoveryOutcome {
-    let backup_path = Path::new(&backup.backup_path);
-    let Ok(content) = io.read_file(backup_path) else {
-        return RecoveryOutcome::RestoreFailed {
-            reason: "备份文件不可读".to_string(),
-            backup_path: backup.backup_path.clone(),
-        };
-    };
-    if sha256_hex(&content) != backup.content_hash {
-        return RecoveryOutcome::RestoreFailed {
-            reason: "备份内容与记录哈希不符".to_string(),
-            backup_path: backup.backup_path.clone(),
-        };
-    }
-    if !backup.target_existed {
-        if let Err(error) = io.remove(target) {
-            if error.kind() != ErrorKind::NotFound {
-                return RecoveryOutcome::RestoreFailed {
-                    reason: format!("移除配置文件失败: {error}"),
-                    backup_path: backup.backup_path.clone(),
-                };
-            }
-        }
-        return match io.read_file(target) {
-            Err(error) if error.kind() == ErrorKind::NotFound => RecoveryOutcome::Restored {
-                backup: backup.clone(),
-            },
-            Ok(_) => RecoveryOutcome::RestoreFailed {
-                reason: "移除配置文件后仍可读取内容".to_string(),
-                backup_path: backup.backup_path.clone(),
-            },
-            Err(error) => RecoveryOutcome::RestoreFailed {
-                reason: format!("移除后无法确认配置文件状态: {error}"),
-                backup_path: backup.backup_path.clone(),
-            },
-        };
-    }
-    let file_name = target
-        .file_name()
-        .expect("target has a file name")
-        .to_string_lossy()
-        .to_string();
-    let temp = target.with_file_name(format!("{file_name}.{}.asb-restore", std::process::id()));
-    if let Err(e) = io.write_new_file(&temp, &content) {
-        return RecoveryOutcome::RestoreFailed {
-            reason: format!("恢复临时文件写入失败: {e}"),
-            backup_path: backup.backup_path.clone(),
-        };
-    }
-    if let Err(e) = io.rename_replace(&temp, target) {
-        let _ = io.remove(&temp);
-        return RecoveryOutcome::RestoreFailed {
-            reason: format!("恢复替换失败: {e}"),
-            backup_path: backup.backup_path.clone(),
-        };
-    }
-    match io.read_file(target) {
-        Ok(restored) if sha256_hex(&restored) == backup.content_hash => RecoveryOutcome::Restored {
-            backup: backup.clone(),
-        },
-        Ok(_) => RecoveryOutcome::RestoreFailed {
-            reason: "恢复后校验失败".to_string(),
-            backup_path: backup.backup_path.clone(),
-        },
-        Err(e) => RecoveryOutcome::RestoreFailed {
-            reason: format!("恢复后读取失败: {e}"),
-            backup_path: backup.backup_path.clone(),
-        },
-    }
-}
-
-/// Public restore operation: puts a recorded backup back over its target,
-/// taking the lock and backing up the current content first.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RestoreOutcome {
-    pub pre_restore_backup: BackupRecord,
-    pub restored_hash: String,
-    /// Warnings added by the desktop command after the configuration write
-    /// succeeds, such as an unavailable local audit store.
-    pub warnings: Vec<String>,
-}
-
-pub fn restore<Io: SwitchIo>(
-    io: &Io,
-    backup: &BackupRecord,
-    target: &Path,
-) -> Result<RestoreOutcome, SwitchError> {
+    backup_dir: &Path,
+    expected_hash: &str,
+    expected_rendered_hash: &str,
+    job: &Job,
+) -> Result<SwitchOutcome, SwitchError> {
     if let Some(parent) = target.parent() {
         io.ensure_dir(parent)
             .map_err(|error| SwitchError::CommitFailed {
@@ -516,128 +382,215 @@ pub fn restore<Io: SwitchIo>(
         AcquireOutcome::Acquired => {}
         AcquireOutcome::Busy(status) => return Err(SwitchError::BlockedByLock { status }),
     }
-    let result = (|| {
-        let backup_path = Path::new(&backup.backup_path);
-        let content = io
-            .read_file(backup_path)
-            .map_err(|e| SwitchError::ReadCurrent {
-                message: format!("备份文件不可读: {e}"),
-            })?;
-        let restored_hash = sha256_hex(&content);
-        if restored_hash != backup.content_hash {
-            return Err(SwitchError::ExternalChange {
-                expected_hash: backup.content_hash.clone(),
-                found_hash: restored_hash,
-            });
-        }
-
-        // Snapshot whatever is live right now so the restore itself is
-        // reversible.
-        let (current, target_existed) =
-            read_current_or_empty(io, target, backup.app).map_err(|e| {
-                SwitchError::ReadCurrent {
-                    message: e.to_string(),
-                }
-            })?;
-        let backup_dir = backup_path.parent().expect("backup has a parent dir");
-        let ts = timestamp_name(io);
-        let file_name = target
-            .file_name()
-            .expect("target has a file name")
-            .to_string_lossy()
-            .to_string();
-        let pre_path = backup_dir.join(format!("{file_name}.{ts}.prerestore.bak"));
-        let pre_record = BackupRecord {
-            id: format!("prerestore-{ts}"),
-            app: backup.app,
-            target_path: target.to_string_lossy().to_string(),
-            backup_path: pre_path.to_string_lossy().to_string(),
-            created_at: io.now_rfc3339(),
-            content_hash: sha256_hex(&current),
-            target_existed,
-            reason: "restore-precheck".to_string(),
-        };
-        io.write_new_file(&pre_path, &current)
-            .map_err(|e| SwitchError::CommitFailed {
-                stage: "restore-precheck",
-                message: e.to_string(),
-                recovery: RecoveryOutcome::NotNeeded,
-            })?;
-        write_backup_metadata(io, &pre_record, "restore-meta")?;
-
-        if backup.target_existed {
-            let temp =
-                target.with_file_name(format!("{file_name}.{}.asb-restore", std::process::id()));
-            io.write_new_file(&temp, &content)
-                .map_err(|e| SwitchError::CommitFailed {
-                    stage: "restore-write",
-                    message: e.to_string(),
-                    recovery: RecoveryOutcome::NotNeeded,
-                })?;
-            io.rename_replace(&temp, target).map_err(|e| {
-                let _ = io.remove(&temp);
-                SwitchError::CommitFailed {
-                    stage: "restore-replace",
-                    message: e.to_string(),
-                    recovery: RecoveryOutcome::NotNeeded,
-                }
-            })?;
-        } else if target_existed {
-            io.remove(target).map_err(|e| SwitchError::CommitFailed {
-                stage: "restore-replace",
-                message: e.to_string(),
-                recovery: RecoveryOutcome::NotNeeded,
-            })?;
-        }
-
-        let restored = match io.read_file(target) {
-            Ok(text) => backup.target_existed && sha256_hex(&text) == restored_hash,
-            Err(error) if error.kind() == ErrorKind::NotFound => !backup.target_existed,
-            Err(_) => false,
-        };
-        if restored {
-            Ok(RestoreOutcome {
-                pre_restore_backup: pre_record,
-                restored_hash,
-                warnings: vec![],
-            })
-        } else {
-            let recovery = restore_backup_content(io, target, &pre_record);
-            Err(SwitchError::CommitFailed {
-                stage: "restore-verify",
-                message: "恢复后校验失败".to_string(),
-                recovery,
-            })
-        }
-    })();
-    lockfile::release(io, target);
-    result
+    execute_locked(
+        io,
+        target,
+        backup_dir,
+        expected_hash,
+        expected_rendered_hash,
+        job,
+    )
 }
 
-/// Lists backup records for one target from the sidecar metadata files.
-pub fn list_backups<Io: SwitchIo>(io: &Io, backup_dir: &Path) -> Vec<BackupRecord> {
-    let mut records = Vec::new();
-    let Ok(entries) = io.list_dir(backup_dir) else {
-        return records;
-    };
-    let mut paths: Vec<PathBuf> = entries
-        .into_iter()
-        .filter(|p| p.to_string_lossy().ends_with(".meta.json"))
-        .collect();
-    paths.sort();
-    for path in paths {
-        if let Ok(text) = io.read_file(&path) {
-            if let Ok(record) = serde_json::from_str::<BackupRecord>(&text) {
-                // The record must describe the sidecar that carried it. A
-                // hand-written metadata file cannot redirect a restore to an
-                // arbitrary path outside this backup directory.
-                if metadata_path(Path::new(&record.backup_path)) == path {
-                    records.push(record);
-                }
-            }
-        }
+/// Reads the live file and refuses to continue when its hash no longer
+/// matches the previewed state. Returns the text, whether the target
+/// existed, and the verified hash.
+fn read_unchanged_current<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    app: AppKind,
+    expected_hash: &str,
+) -> Result<(String, bool, String), SwitchError> {
+    let (current, target_existed) =
+        read_current_or_empty(io, target, app).map_err(|e| SwitchError::ReadCurrent {
+            message: e.to_string(),
+        })?;
+    let found_hash = sha256_hex(&current);
+    if found_hash != expected_hash {
+        return Err(SwitchError::ExternalChange {
+            expected_hash: expected_hash.to_string(),
+            found_hash,
+        });
     }
-    records
+    Ok((current, target_existed, found_hash))
+}
+
+/// Produces the preview and the exact private candidate rendering, refusing
+/// a plan whose rendering changed after the user saw the preview.
+fn plan_candidate(
+    job: &Job,
+    current: &str,
+    backup_dir: &str,
+    expected_rendered_hash: &str,
+) -> Result<(SwitchPreview, String), SwitchError> {
+    let preview = job.preview(current, backup_dir).map_err(plan_rejected)?;
+    let rendered = job.render(current).map_err(plan_rejected)?;
+    if sha256_hex(&rendered) != expected_rendered_hash {
+        return Err(SwitchError::PlanChanged);
+    }
+    Ok((preview, rendered))
+}
+
+/// Snapshots the current content as the pre-write backup, sidecar metadata
+/// included.
+fn back_up_current<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    backup_dir: &Path,
+    current: &str,
+    found_hash: &str,
+    target_existed: bool,
+    job: &Job,
+) -> Result<BackupRecord, SwitchError> {
+    io.ensure_dir(backup_dir)
+        .map_err(|e| SwitchError::CommitFailed {
+            stage: "backup-dir",
+            message: e.to_string(),
+            recovery: RecoveryOutcome::NotNeeded,
+        })?;
+    let ts = timestamp_name(io);
+    let file_name = target
+        .file_name()
+        .expect("target has a file name")
+        .to_string_lossy()
+        .to_string();
+    let backup_path = backup_dir.join(format!("{file_name}.{ts}.bak"));
+    let created_at = io.now_rfc3339();
+    io.write_new_file(&backup_path, current)
+        .map_err(|e| SwitchError::CommitFailed {
+            stage: "backup",
+            message: e.to_string(),
+            recovery: RecoveryOutcome::NotNeeded,
+        })?;
+    let backup = BackupRecord {
+        id: format!("{}-{ts}", &found_hash[..12.min(found_hash.len())]),
+        app: job.app(),
+        target_path: target.to_string_lossy().to_string(),
+        backup_path: backup_path.to_string_lossy().to_string(),
+        created_at,
+        content_hash: found_hash.to_string(),
+        target_existed,
+        reason: job.backup_reason().to_string(),
+    };
+    write_backup_metadata(io, &backup, "backup-meta")?;
+    Ok(backup)
+}
+
+/// Writes the rendered candidate: temporary file → syntax validation →
+/// atomic replacement → post-write verification. A failed stage after the
+/// replacement restores the just-created backup.
+fn commit_rendered<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    app: AppKind,
+    rendered: &str,
+    backup: &BackupRecord,
+) -> Result<(), SwitchError> {
+    let file_name = target
+        .file_name()
+        .expect("target has a file name")
+        .to_string_lossy()
+        .to_string();
+    let temp_path = target.with_file_name(format!("{}.{}.asb-tmp", file_name, std::process::id()));
+    io.write_new_file(&temp_path, rendered)
+        .map_err(|e| SwitchError::CommitFailed {
+            stage: "temp-write",
+            message: e.to_string(),
+            recovery: RecoveryOutcome::NotNeeded,
+        })?;
+
+    if let Err(e) = adapter::validate_syntax(app, rendered) {
+        let _ = io.remove(&temp_path);
+        return Err(SwitchError::CommitFailed {
+            stage: "temp-validate",
+            message: format!("临时文件校验失败: {e}"),
+            recovery: RecoveryOutcome::NotNeeded,
+        });
+    }
+
+    if let Err(e) = io.rename_replace(&temp_path, target) {
+        let _ = io.remove(&temp_path);
+        return Err(SwitchError::CommitFailed {
+            stage: "atomic-replace",
+            message: e.to_string(),
+            recovery: RecoveryOutcome::NotNeeded,
+        });
+    }
+
+    // Post-write verification: the live file must equal the rendered
+    // candidate and parse cleanly. Otherwise restore the backup.
+    let verified = match io.read_file(target) {
+        Ok(text) => text == rendered && adapter::validate_syntax(app, &text).is_ok(),
+        Err(_) => false,
+    };
+    if !verified {
+        let recovery = restore_backup_content(io, target, backup);
+        return Err(SwitchError::CommitFailed {
+            stage: "post-verify",
+            message: "替换后校验失败".to_string(),
+            recovery,
+        });
+    }
+    Ok(())
+}
+
+/// The locked body of one transaction: verify → plan → re-verify → backup →
+/// commit. Every exit path releases the lock through `finish`.
+fn execute_locked<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    backup_dir: &Path,
+    expected_hash: &str,
+    expected_rendered_hash: &str,
+    job: &Job,
+) -> Result<SwitchOutcome, SwitchError> {
+    let finish = |result| {
+        lockfile::release(io, target);
+        result
+    };
+
+    let (current, target_existed, found_hash) =
+        match read_unchanged_current(io, target, job.app(), expected_hash) {
+            Ok(verified) => verified,
+            Err(error) => return finish(Err(error)),
+        };
+    let backup_dir_label = backup_dir.to_string_lossy().to_string();
+    let (preview, rendered) =
+        match plan_candidate(job, &current, &backup_dir_label, expected_rendered_hash) {
+            Ok(candidate) => candidate,
+            Err(error) => return finish(Err(error)),
+        };
+    // Re-check immediately before mutation: the file must still hash to the
+    // previewed state.
+    if let Err(error) = read_unchanged_current(io, target, job.app(), expected_hash) {
+        return finish(Err(error));
+    }
+    let backup = match back_up_current(
+        io,
+        target,
+        backup_dir,
+        &current,
+        &found_hash,
+        target_existed,
+        job,
+    ) {
+        Ok(backup) => backup,
+        Err(error) => return finish(Err(error)),
+    };
+    if let Err(error) = commit_rendered(io, target, job.app(), &rendered, &backup) {
+        return finish(Err(error));
+    }
+
+    finish(Ok(SwitchOutcome {
+        lock: LockStatus::Free,
+        acquired_at: backup.created_at.clone(),
+        changed: vec![target.to_string_lossy().to_string()],
+        warnings: preview.warnings.clone(),
+        backup,
+        preview,
+        recovery: RecoveryOutcome::NotNeeded,
+        final_hash: sha256_hex(&rendered),
+    }))
 }
 
 #[cfg(test)]

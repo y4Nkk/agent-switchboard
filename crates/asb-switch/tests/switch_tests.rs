@@ -2,7 +2,7 @@
 //! directories; no real user configuration is ever touched.
 
 use asb_core::contracts::{
-    AppKind, CommonConfigPatch, PatchEntry, PatchValue, ProviderProfile, RouteMode, SwitchPlan,
+    AppKind, CommonConfigPatch, PatchEntry, PatchValue, ProviderProfile, SwitchPlan,
 };
 use asb_core::test_support::{CLAUDE_JSON, CODEX_TOML};
 use asb_switch::io::{FsIo, SwitchIo};
@@ -19,18 +19,19 @@ fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> SwitchPlan
         profile: ProviderProfile {
             id: format!("id-{name}"),
             app: AppKind::Codex,
-            mode: RouteMode::Custom,
             name: name.into(),
             model: Some(model.into()),
             base_url: Some(base_url.into()),
-            env_key: Some(cred.into()),
+            api_key: cred.into(),
             model_options: None,
+            notes: None,
+            website_url: None,
         },
         common: CommonConfigPatch {
             app: AppKind::Codex,
             entries: vec![PatchEntry {
                 key: "disable_response_storage".into(),
-                value: PatchValue::Bool(true),
+                value: Some(PatchValue::Bool(true)),
             }],
         },
     }
@@ -42,12 +43,13 @@ fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
         profile: ProviderProfile {
             id: format!("id-{name}"),
             app: AppKind::Claude,
-            mode: RouteMode::Custom,
             name: name.into(),
             model: Some(model.into()),
             base_url: Some(base_url.into()),
-            env_key: None,
+            api_key: "test-api-key".into(),
             model_options: None,
+            notes: None,
+            website_url: None,
         },
         common: CommonConfigPatch {
             app: AppKind::Claude,
@@ -196,6 +198,12 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
     assert_eq!(outcome.changed, vec![target.to_string_lossy().to_string()]);
     assert!(outcome.backup.content_hash == sha256_hex(&original));
     let switched = fs::read_to_string(&target).unwrap();
+    // The UI receives only a redacted candidate; the executor hashes and
+    // writes its private original rendering.
+    assert_ne!(switched, fp.content);
+    assert!(fp.content.contains("••••••••"));
+    assert!(!fp.content.contains("CODEX_RELAY_B_KEY"));
+    assert!(switched.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
     assert!(switched.contains("https://relay-b.internal/v1"));
     for host in [
         "threads = 8",
@@ -212,20 +220,20 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
 }
 
 #[test]
-fn claude_switch_round_trips_and_never_writes_credentials() {
+fn claude_switch_round_trips_with_a_redacted_preview() {
     let (_dir, target, backup_dir) = setup(AppKind::Claude, CLAUDE_JSON);
     let io = FsIo;
     let plan = claude_plan("Relay C", "https://relay-c.internal", "claude-opus-4");
 
     let fp = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
-    assert_eq!(
-        fp.preview
-            .changes
-            .iter()
-            .filter(|c| c.key.contains("TOKEN"))
-            .count(),
-        0
-    );
+    let token_change = fp
+        .preview
+        .changes
+        .iter()
+        .find(|change| change.key == "env.ANTHROPIC_AUTH_TOKEN")
+        .expect("profile token change");
+    assert_eq!(token_change.after.as_deref(), Some("••••••••"));
+    assert!(!fp.content.contains("test-api-key"));
     execute(
         &io,
         &asb_switch::SwitchRequest {
@@ -242,7 +250,7 @@ fn claude_switch_round_trips_and_never_writes_credentials() {
     assert!(text.contains("https://relay-c.internal"));
     assert!(text.contains("claude-opus-4"));
     assert!(text.contains("Bash(npm run test:*)"));
-    assert!(!text.to_ascii_lowercase().contains("sk-"));
+    assert!(text.contains("\"ANTHROPIC_AUTH_TOKEN\": \"test-api-key\""));
 }
 
 #[test]
@@ -707,4 +715,135 @@ fn backup_listing_ignores_metadata_that_points_outside_its_sidecar() {
     .unwrap();
 
     assert!(asb_switch::list_backups(&io, &backup_dir).is_empty());
+}
+
+fn codex_common(entries: Vec<PatchEntry>) -> CommonConfigPatch {
+    CommonConfigPatch {
+        app: AppKind::Codex,
+        entries,
+    }
+}
+
+#[test]
+fn common_apply_sets_and_removes_toggle_lines_transactionally() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FsIo;
+    let set_patch = codex_common(vec![PatchEntry {
+        key: "hide_agent_reasoning".into(),
+        value: Some(PatchValue::Bool(true)),
+    }]);
+
+    let preview = asb_switch::read_common_preview(
+        &io,
+        &asb_switch::CommonRequest {
+            target: &target,
+            app: AppKind::Codex,
+            common: &set_patch,
+            backup_dir: &backup_dir,
+            expected_hash: "",
+            expected_rendered_hash: "",
+        },
+    )
+    .unwrap();
+    let outcome = asb_switch::execute_common(
+        &io,
+        &asb_switch::CommonRequest {
+            target: &target,
+            app: AppKind::Codex,
+            common: &set_patch,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+
+    let text = fs::read_to_string(&target).unwrap();
+    assert!(text.contains("hide_agent_reasoning = true"));
+    // Host content outside the patch survives untouched.
+    assert!(text.contains("threads = 8"));
+    assert!(text.contains("[model_providers.openai]"));
+    assert!(Path::new(&format!("{}.meta.json", outcome.backup.backup_path)).exists());
+
+    let remove_patch = codex_common(vec![PatchEntry {
+        key: "hide_agent_reasoning".into(),
+        value: None,
+    }]);
+    let preview = asb_switch::read_common_preview(
+        &io,
+        &asb_switch::CommonRequest {
+            target: &target,
+            app: AppKind::Codex,
+            common: &remove_patch,
+            backup_dir: &backup_dir,
+            expected_hash: "",
+            expected_rendered_hash: "",
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        preview.preview.changes[0].kind,
+        asb_core::ChangeKind::Remove
+    );
+    asb_switch::execute_common(
+        &io,
+        &asb_switch::CommonRequest {
+            target: &target,
+            app: AppKind::Codex,
+            common: &remove_patch,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+    let text = fs::read_to_string(&target).unwrap();
+    assert!(!text.contains("hide_agent_reasoning"));
+    assert!(text.contains("threads = 8"));
+}
+
+#[test]
+fn common_apply_refuses_files_changed_after_the_toggle_was_read() {
+    let (_dir, target, backup_dir) = setup(AppKind::Claude, CLAUDE_JSON);
+    let io = FsIo;
+    let patch = CommonConfigPatch {
+        app: AppKind::Claude,
+        entries: vec![PatchEntry {
+            key: "alwaysThinkingEnabled".into(),
+            value: Some(PatchValue::Bool(true)),
+        }],
+    };
+    let preview = asb_switch::read_common_preview(
+        &io,
+        &asb_switch::CommonRequest {
+            target: &target,
+            app: AppKind::Claude,
+            common: &patch,
+            backup_dir: &backup_dir,
+            expected_hash: "",
+            expected_rendered_hash: "",
+        },
+    )
+    .unwrap();
+
+    // The user edits settings.json after the toggle state was read.
+    fs::write(&target, "{ \"spinnerTipsEnabled\": true }").unwrap();
+
+    let error = asb_switch::execute_common(
+        &io,
+        &asb_switch::CommonRequest {
+            target: &target,
+            app: AppKind::Claude,
+            common: &patch,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(error, SwitchError::ExternalChange { .. }));
+    assert_eq!(
+        fs::read_to_string(&target).unwrap(),
+        "{ \"spinnerTipsEnabled\": true }"
+    );
 }

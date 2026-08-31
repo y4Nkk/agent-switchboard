@@ -35,16 +35,11 @@ pub enum RouteMode {
 }
 
 /// Codex model run parameters owned by one profile. Absent fields leave any
-/// existing host value untouched.
+/// existing host value untouched. Reasoning effort, summary, and verbosity
+/// are general settings owned by the settings page, not profile fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexModelSettings {
-    /// One of minimal | low | medium | high | xhigh.
-    pub reasoning_effort: Option<String>,
-    /// One of none | auto | concise | detailed.
-    pub reasoning_summary: Option<String>,
-    /// One of low | medium | high.
-    pub verbosity: Option<String>,
     /// Optional model context window in tokens.
     pub context_window: Option<u64>,
 }
@@ -71,37 +66,77 @@ pub enum ModelOptions {
 }
 
 /// A provider profile. It is a small overlay, never a full copy of a user's
-/// configuration file. For Codex, `env_key` is the name of the environment
-/// variable declared in the managed provider table. It is never a secret
-/// value. Claude Code credentials remain owned by its existing login and
-/// environment.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+/// configuration file. The profile owns the API key used for its configured
+/// endpoint and persists it in the application-owned profile store.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderProfile {
     pub id: String,
     pub app: AppKind,
-    pub mode: RouteMode,
     pub name: String,
     pub model: Option<String>,
     pub base_url: Option<String>,
-    pub env_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
+    /// Local-only note; never written into any client configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// Provider homepage, used for navigation only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub website_url: Option<String>,
 }
 
 /// Editable provider fields. The application assigns the stable profile id
-/// when a draft is persisted.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+/// when a draft is persisted. Every profile routes to a custom endpoint;
+/// official login is not a profile kind (user decision 2026-08-28).
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderDraft {
     pub app: AppKind,
-    pub mode: RouteMode,
     pub name: String,
-    pub model: Option<String>,
     pub base_url: Option<String>,
-    pub env_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: String,
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub website_url: Option<String>,
+}
+
+impl std::fmt::Debug for ProviderProfile {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProviderProfile")
+            .field("id", &self.id)
+            .field("app", &self.app)
+            .field("name", &self.name)
+            .field("model", &self.model)
+            .field("base_url", &self.base_url)
+            .field("api_key", &crate::redact::REDACTED)
+            .field("model_options", &self.model_options)
+            .field("notes", &self.notes)
+            .field("website_url", &self.website_url)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for ProviderDraft {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProviderDraft")
+            .field("app", &self.app)
+            .field("name", &self.name)
+            .field("base_url", &self.base_url)
+            .field("api_key", &crate::redact::REDACTED)
+            .field("model", &self.model)
+            .field("model_options", &self.model_options)
+            .field("notes", &self.notes)
+            .field("website_url", &self.website_url)
+            .finish()
+    }
 }
 
 impl ProviderProfile {
@@ -109,12 +144,13 @@ impl ProviderProfile {
         Self {
             id,
             app: draft.app,
-            mode: draft.mode,
             name: draft.name,
             model: draft.model,
             base_url: draft.base_url,
-            env_key: draft.env_key,
+            api_key: draft.api_key,
             model_options: draft.model_options,
+            notes: draft.notes,
+            website_url: draft.website_url,
         }
     }
 }
@@ -152,10 +188,12 @@ impl PatchValue {
 }
 
 /// One app-owned key/value pair inside a general-configuration overlay.
+/// `value: None` removes the key's line from the target file; `Some(value)`
+/// writes the line.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PatchEntry {
     pub key: String,
-    pub value: PatchValue,
+    pub value: Option<PatchValue>,
 }
 
 /// General configuration overlay for one client. Only app-owned keys may
@@ -202,8 +240,6 @@ pub struct SwitchPreview {
     /// replaces it with the resolved local path before returning it to the UI.
     pub target: String,
     pub changes: Vec<KeyChange>,
-    /// Host-owned keys present in the file that will remain untouched.
-    pub preserved: Vec<String>,
     pub warnings: Vec<String>,
     /// Directory where the pre-switch backup will be written.
     pub backup_dir: String,
@@ -244,8 +280,6 @@ pub struct RouteState {
     pub provider_name: Option<String>,
     pub model: Option<String>,
     pub base_url: Option<String>,
-    /// Codex custom provider environment-variable name, never its value.
-    pub env_key: Option<String>,
     /// Codex custom provider protocol, used to determine whether an import
     /// can be rendered by the current adapter.
     pub wire_api: Option<String>,
@@ -264,13 +298,24 @@ pub struct RouteState {
     pub scope_warnings: Vec<String>,
 }
 
+/// What kind of write produced a switch-log record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SwitchOp {
+    /// A profile switch.
+    Switch,
+    /// Applying the general-configuration overlay on its own.
+    CommonSettings,
+}
+
 /// One recorded completed switch or restore. The log is the app's own record;
 /// it never contains secrets.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SwitchLog {
     pub app: AppKind,
-    /// Profile switched to; None when the entry records a restore.
+    /// Profile switched to; None when the entry records a restore or a
+    /// general-settings write.
     pub profile_id: Option<String>,
     pub profile_name: Option<String>,
     /// SHA-256 hex digest of the file content after the operation.
@@ -279,6 +324,8 @@ pub struct SwitchLog {
     pub backup_id: String,
     /// RFC 3339 UTC timestamp.
     pub at: String,
+    /// Which write path produced this record.
+    pub operation: SwitchOp,
 }
 
 /// Whether the current file content still matches one current profile, a
@@ -300,6 +347,10 @@ pub enum MatchStatus {
     /// not a provider match and must not activate a profile row.
     #[serde(rename_all = "camelCase")]
     RestoredBackup { at: String },
+    /// Content equals the last general-settings write. No provider routing
+    /// claim is implied.
+    #[serde(rename_all = "camelCase")]
+    MatchesSettings { at: String },
     /// The app switched this file before, but the content now matches neither
     /// the last switch record nor any profile.
     #[serde(rename_all = "camelCase")]

@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -61,3 +61,16 @@ jobs:
           path: target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
           retention-days: 30
+
+      # 推送 v* 标签时，把 NSIS 安装包发布为正式 GitHub Release（非草稿、
+      # 非预发布），应用内「检查更新」读取的 releases/latest 由它提供。
+      - name: 发布 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $setup = Get-ChildItem "target/release/bundle/nsis/*-setup.exe" |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          gh release create $env:GITHUB_REF_NAME $setup.FullName `
+            --title $env:GITHUB_REF_NAME --generate-notes

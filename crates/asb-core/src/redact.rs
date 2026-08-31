@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn token_shaped_values_redact_even_under_ordinary_keys() {
         assert_eq!(
-            redact("model_providers.asb.env_key", "sk-live-0123456789abcdef"),
+            redact("model_providers.asb.api_key", "sk-live-0123456789abcdef"),
             REDACTED
         );
         let long_key = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";

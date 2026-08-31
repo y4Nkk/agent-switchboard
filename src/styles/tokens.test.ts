@@ -34,4 +34,12 @@ describe("token ownership", () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  it("supports explicit theme and motion overrides without a second stylesheet owner", () => {
+    const tokens = readFileSync(join(srcRoot, tokenOwner), "utf8");
+    expect(tokens).toContain(':root:not([data-theme="light"])');
+    expect(tokens).toContain(':root[data-theme="dark"]');
+    expect(tokens).toContain(':root[data-motion="reduce"]');
+    expect(tokens).toContain('--asb-motion-fast: 0ms');
+  });
 });

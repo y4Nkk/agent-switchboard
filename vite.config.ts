@@ -17,5 +17,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // timeLabel renders in the machine timezone; pin it so local-time
+    // assertions are identical on dev machines (UTC+8) and CI runners (UTC).
+    env: { TZ: "Asia/Shanghai" },
   },
 });

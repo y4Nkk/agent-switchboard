@@ -5,388 +5,135 @@
 //! Claude Code configuration paths are resolved separately and are not
 //! created by this module.
 
-use asb_core::ownership::is_profile_exclusive;
-use asb_core::{
-    AppKind, ClaudeModelSettings, CodexModelSettings, CommonConfigPatch, ModelOptions, PatchEntry,
-    PatchValue, ProviderDraft, ProviderProfile, RouteMode, SwitchLog,
-};
-use std::collections::HashSet;
+use asb_core::{AppKind, CommonConfigPatch, ProviderDraft, ProviderProfile, SwitchLog};
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+/// App-runtime preference: controls what a user-visible close request does.
+/// It never belongs to Codex or Claude Code configuration files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum CloseBehavior {
+    HideToTray,
+    Exit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ThemePreference {
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MotionPreference {
+    System,
+    Reduce,
+}
+
+/// Application-owned desktop preferences, stored separately from profile data.
+/// This is a strict complete contract. The only migration is the exact
+/// immediately previous complete shape, which is atomically rewritten with
+/// hardware acceleration enabled to preserve the prior runtime behavior.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AppSettings {
+    pub close_behavior: CloseBehavior,
+    pub theme: ThemePreference,
+    pub motion: MotionPreference,
+    pub always_on_top: bool,
+    pub hardware_acceleration: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            close_behavior: CloseBehavior::HideToTray,
+            theme: ThemePreference::System,
+            motion: MotionPreference::System,
+            always_on_top: false,
+            hardware_acceleration: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProfileStore {
     pub profiles: Vec<ProviderProfile>,
     pub common: Vec<CommonConfigPatch>,
-    #[serde(default)]
     pub switch_log: Vec<SwitchLog>,
-}
-
-/// Loose on-disk shape used only by the one-time store migration: profiles
-/// written before explicit routing modes existed have no `mode`, and general
-/// overlays may still carry keys that now belong to profiles.
-#[derive(Debug, Default, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredStore {
-    #[serde(default)]
-    profiles: Vec<StoredProfile>,
-    #[serde(default)]
-    common: Vec<StoredCommon>,
-    #[serde(default)]
-    switch_log: Vec<SwitchLog>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredProfile {
-    id: String,
-    app: AppKind,
-    #[serde(default)]
-    mode: Option<RouteMode>,
-    name: String,
-    #[serde(default)]
-    model: Option<String>,
-    #[serde(default)]
-    base_url: Option<String>,
-    #[serde(default)]
-    env_key: Option<String>,
-    #[serde(default)]
-    model_options: Option<ModelOptions>,
-    #[serde(default)]
-    credential_ref: Option<String>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredCommon {
-    app: AppKind,
-    #[serde(default)]
-    entries: Vec<PatchEntry>,
-}
-
-/// The deprecated Claude model key, removed from general overlays for good.
-const DEPRECATED_COMMON_KEY: &str = "env.ANTHROPIC_SMALL_FAST_MODEL";
-
-fn empty_codex_settings() -> CodexModelSettings {
-    CodexModelSettings {
-        reasoning_effort: None,
-        reasoning_summary: None,
-        verbosity: None,
-        context_window: None,
-    }
-}
-
-fn empty_claude_settings() -> ClaudeModelSettings {
-    ClaudeModelSettings {
-        haiku_model: None,
-        sonnet_model: None,
-        opus_model: None,
-        available_models: None,
-    }
-}
-
-fn required_string(entry: &PatchEntry) -> Result<String, String> {
-    match &entry.value {
-        PatchValue::Str(value) => Ok(value.clone()),
-        _ => Err(format!(
-            "旧通用配置的 {} 必须是文本，无法安全迁移",
-            entry.key
-        )),
-    }
-}
-
-fn required_positive_integer(entry: &PatchEntry) -> Result<u64, String> {
-    match entry.value {
-        PatchValue::Number(value)
-            if value.is_finite()
-                && value > 0.0
-                && value.fract() == 0.0
-                && value <= u64::MAX as f64 =>
-        {
-            Ok(value as u64)
-        }
-        _ => Err(format!(
-            "旧通用配置的 {} 必须是正整数，无法安全迁移",
-            entry.key
-        )),
-    }
-}
-
-fn required_string_list(entry: &PatchEntry) -> Result<Vec<String>, String> {
-    match &entry.value {
-        PatchValue::Array(items) => items
-            .iter()
-            .map(|item| match item {
-                PatchValue::Str(value) if !value.trim().is_empty() => Ok(value.clone()),
-                _ => Err(format!(
-                    "旧通用配置的 {} 必须是非空文本列表，无法安全迁移",
-                    entry.key
-                )),
-            })
-            .collect(),
-        _ => Err(format!(
-            "旧通用配置的 {} 必须是文本列表，无法安全迁移",
-            entry.key
-        )),
-    }
-}
-
-fn codex_settings(profile: &mut ProviderProfile) -> Result<&mut CodexModelSettings, String> {
-    if profile.model_options.is_none() {
-        profile.model_options = Some(ModelOptions::Codex(empty_codex_settings()));
-    }
-    match profile.model_options.as_mut() {
-        Some(ModelOptions::Codex(settings)) => Ok(settings),
-        Some(ModelOptions::Claude(_)) => {
-            Err("旧 Codex 档案的模型选项类型不一致，无法安全迁移".to_string())
-        }
-        None => unreachable!("Codex model options were initialized"),
-    }
-}
-
-fn claude_settings(profile: &mut ProviderProfile) -> Result<&mut ClaudeModelSettings, String> {
-    if profile.model_options.is_none() {
-        profile.model_options = Some(ModelOptions::Claude(empty_claude_settings()));
-    }
-    match profile.model_options.as_mut() {
-        Some(ModelOptions::Claude(settings)) => Ok(settings),
-        Some(ModelOptions::Codex(_)) => {
-            Err("旧 Claude 档案的模型选项类型不一致，无法安全迁移".to_string())
-        }
-        None => unreachable!("Claude model options were initialized"),
-    }
-}
-
-fn migrate_codex_entries(
-    profile: &mut ProviderProfile,
-    entries: &[PatchEntry],
-) -> Result<(), String> {
-    for entry in entries {
-        match entry.key.as_str() {
-            "model" => profile.model = Some(required_string(entry)?),
-            "model_provider" => match required_string(entry)?.as_str() {
-                "openai" => {
-                    profile.mode = RouteMode::Official;
-                    profile.base_url = None;
-                    profile.env_key = None;
-                }
-                "asb" if profile.mode == RouteMode::Custom => {}
-                "asb" => {
-                    return Err(
-                        "旧通用配置指定了自定义 Codex 服务，但档案缺少服务地址，无法安全迁移"
-                            .to_string(),
-                    )
-                }
-                _ => {
-                    return Err(
-                        "旧通用配置指定了当前版本无法表示的 Codex 服务，无法安全迁移".to_string(),
-                    )
-                }
-            },
-            "model_reasoning_effort" => {
-                codex_settings(profile)?.reasoning_effort = Some(required_string(entry)?);
-            }
-            "model_reasoning_summary" => {
-                codex_settings(profile)?.reasoning_summary = Some(required_string(entry)?);
-            }
-            "model_verbosity" => {
-                codex_settings(profile)?.verbosity = Some(required_string(entry)?);
-            }
-            "model_context_window" => {
-                codex_settings(profile)?.context_window = Some(required_positive_integer(entry)?);
-            }
-            "model_providers.asb"
-            | "model_providers.asb.base_url"
-            | "model_providers.asb.env_key"
-            | "model_providers.asb.wire_api"
-            | "model_providers.asb.name" => {
-                return Err(
-                    "旧通用配置包含 Codex 服务表，无法确认其与哪个档案对应，已停止迁移以保留原数据"
-                        .to_string(),
-                )
-            }
-            key if key.starts_with("model_providers.asb.") => {
-                return Err(
-                    "旧通用配置包含 Codex 服务表，无法确认其与哪个档案对应，已停止迁移以保留原数据"
-                        .to_string(),
-                )
-            }
-            _ => return Err(format!("旧 Codex 通用配置包含无法迁移的键 {}", entry.key)),
-        }
-    }
-    Ok(())
-}
-
-fn migrate_claude_entries(
-    profile: &mut ProviderProfile,
-    entries: &[PatchEntry],
-) -> Result<(), String> {
-    let mut top_level_model = None;
-    let mut environment_model = None;
-
-    for entry in entries {
-        match entry.key.as_str() {
-            "model" => top_level_model = Some(required_string(entry)?),
-            "env.ANTHROPIC_MODEL" => environment_model = Some(required_string(entry)?),
-            "env.ANTHROPIC_BASE_URL" => {
-                profile.mode = RouteMode::Custom;
-                profile.base_url = Some(required_string(entry)?);
-                profile.env_key = None;
-            }
-            "env.ANTHROPIC_DEFAULT_HAIKU_MODEL" | DEPRECATED_COMMON_KEY => {
-                claude_settings(profile)?.haiku_model = Some(required_string(entry)?);
-            }
-            "env.ANTHROPIC_DEFAULT_SONNET_MODEL" => {
-                claude_settings(profile)?.sonnet_model = Some(required_string(entry)?);
-            }
-            "env.ANTHROPIC_DEFAULT_OPUS_MODEL" => {
-                claude_settings(profile)?.opus_model = Some(required_string(entry)?);
-            }
-            "availableModels" => {
-                claude_settings(profile)?.available_models = Some(required_string_list(entry)?);
-            }
-            _ => return Err(format!("旧 Claude 通用配置包含无法迁移的键 {}", entry.key)),
-        }
-    }
-
-    // Claude Code gives env.ANTHROPIC_MODEL precedence over model. Preserve
-    // the effective route while moving it to the profile-owned primary model.
-    if let Some(model) = environment_model.or(top_level_model) {
-        profile.model = Some(model);
-    }
-    Ok(())
-}
-
-fn validate_store(store: &ProfileStore) -> Result<(), String> {
-    let mut profile_ids = HashSet::new();
-    for profile in &store.profiles {
-        if !profile_ids.insert(&profile.id) {
-            return Err("供应商存储包含重复档案标识".to_string());
-        }
-        profile
-            .validate()
-            .map_err(|error| format!("供应商存储包含无效档案：{error}"))?;
-    }
-
-    let mut common_apps = HashSet::new();
-    for patch in &store.common {
-        if !common_apps.insert(patch.app) {
-            return Err("供应商存储包含同一客户端的重复通用配置".to_string());
-        }
-        patch
-            .validate()
-            .map_err(|error| format!("供应商存储包含无效通用配置：{error}"))?;
-    }
-    Ok(())
-}
-
-fn migrate_store(stored: StoredStore) -> Result<(ProfileStore, bool), String> {
-    let mut changed = false;
-
-    let mut profiles = Vec::with_capacity(stored.profiles.len());
-    for profile in stored.profiles {
-        if profile
-            .credential_ref
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            return Err(
-                "旧供应商档案包含已弃用的凭据引用，应用拒绝自动迁移以避免丢失数据".to_string(),
-            );
-        }
-        let (mode, env_key) = match profile.mode {
-            Some(mode) => (mode, profile.env_key),
-            None => {
-                changed = true;
-                // Before explicit modes, an empty address meant the official
-                // endpoint; anything else was custom.
-                match profile.base_url.is_some() {
-                    true => (RouteMode::Custom, profile.env_key),
-                    false => (RouteMode::Official, None),
-                }
-            }
-        };
-        profiles.push(ProviderProfile {
-            id: profile.id,
-            app: profile.app,
-            mode,
-            name: profile.name,
-            model: profile.model,
-            base_url: profile.base_url,
-            env_key,
-            model_options: profile.model_options,
-        });
-    }
-
-    let mut common = Vec::with_capacity(stored.common.len());
-    for patch in stored.common {
-        let (profile_entries, entries): (Vec<_>, Vec<_>) =
-            patch.entries.into_iter().partition(|entry| {
-                entry.key == DEPRECATED_COMMON_KEY || is_profile_exclusive(&entry.key)
-            });
-
-        if !profile_entries.is_empty() {
-            let mut matching_profiles = profiles
-                .iter_mut()
-                .filter(|profile| profile.app == patch.app);
-            let Some(first) = matching_profiles.next() else {
-                return Err(
-                    "旧通用配置包含档案级设置，但没有对应供应商档案，已停止迁移以保留原数据"
-                        .to_string(),
-                );
-            };
-            match patch.app {
-                AppKind::Codex => migrate_codex_entries(first, &profile_entries)?,
-                AppKind::Claude => migrate_claude_entries(first, &profile_entries)?,
-            }
-            for profile in matching_profiles {
-                match patch.app {
-                    AppKind::Codex => migrate_codex_entries(profile, &profile_entries)?,
-                    AppKind::Claude => migrate_claude_entries(profile, &profile_entries)?,
-                }
-            }
-            changed = true;
-        }
-
-        let migrated_patch = CommonConfigPatch {
-            app: patch.app,
-            entries,
-        };
-        migrated_patch
-            .validate()
-            .map_err(|error| format!("旧通用配置无法迁移：{error}"))?;
-        common.push(migrated_patch);
-    }
-
-    let store = ProfileStore {
-        profiles,
-        common,
-        switch_log: stored.switch_log,
-    };
-    validate_store(&store)?;
-    Ok((store, changed))
 }
 
 pub struct LocalState {
     root: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileStoreError {
+    Unreadable,
+    Unsupported,
+}
+
+impl std::fmt::Display for ProfileStoreError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unreadable => formatter.write_str("供应商存储不可读"),
+            Self::Unsupported => formatter
+                .write_str("供应商存储格式无效或来自已不受支持的旧版本；请重新创建供应商档案"),
+        }
+    }
+}
+
+fn validate_store(store: &ProfileStore) -> Result<(), ProfileStoreError> {
+    for profile in &store.profiles {
+        profile
+            .validate()
+            .map_err(|_| ProfileStoreError::Unsupported)?;
+    }
+    for patch in &store.common {
+        patch
+            .validate()
+            .map_err(|_| ProfileStoreError::Unsupported)?;
+    }
+    Ok(())
+}
+
+fn same_profile(profile: &ProviderProfile, draft: &ProviderDraft) -> bool {
+    profile.app == draft.app
+        && profile.name == draft.name
+        && profile.model == draft.model
+        && profile.base_url == draft.base_url
+        && profile.api_key == draft.api_key
+        && profile.model_options == draft.model_options
+}
+
 impl LocalState {
     pub fn from_app(app: &tauri::AppHandle) -> Result<Self, String> {
         use tauri::Manager;
 
-        let root = app
+        let app_data_dir = app
             .path()
             .app_data_dir()
-            .map_err(|_| "无法定位应用数据目录".to_string())?
-            .join("state");
-        Ok(Self { root })
+            .map_err(|_| "无法定位应用数据目录".to_string())?;
+        Ok(Self::from_app_data_dir(app_data_dir))
+    }
+
+    /// Resolves the same app-data location Tauri uses before an AppHandle
+    /// exists, so startup-only WebView preferences can be read in time.
+    pub(crate) fn from_startup_identifier(identifier: &str) -> Result<Self, String> {
+        let app_data_dir = dirs::data_dir()
+            .ok_or_else(|| "无法定位应用数据目录".to_string())?
+            .join(identifier);
+        Ok(Self::from_app_data_dir(app_data_dir))
     }
 
     #[cfg(test)]
-    fn from_root(root: PathBuf) -> Self {
+    pub(crate) fn from_root(root: PathBuf) -> Self {
         Self { root }
     }
 
@@ -405,33 +152,32 @@ impl LocalState {
         self.root.join("backups")
     }
 
-    pub fn load_store(&self) -> Result<ProfileStore, String> {
+    pub fn load_store(&self) -> Result<ProfileStore, ProfileStoreError> {
         let path = self.store_path();
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(ProfileStore::default());
             }
-            Err(_) => return Err("供应商存储不可读".to_string()),
+            Err(_) => return Err(ProfileStoreError::Unreadable),
         };
-        let stored: StoredStore =
-            serde_json::from_str(&text).map_err(|_| "供应商存储格式无效".to_string())?;
-        let (store, changed) = migrate_store(stored)?;
-        // The migration is one-way: the migrated shape is written back the
-        // first time it is seen so the old keys never return.
-        if changed {
-            self.save_store(&store)?;
-        }
+        let store: ProfileStore =
+            serde_json::from_str(&text).map_err(|_| ProfileStoreError::Unsupported)?;
+        validate_store(&store)?;
         Ok(store)
     }
 
-    pub fn list_profiles(&self) -> Result<Vec<ProviderProfile>, String> {
+    pub fn reset_profile_store(&self) -> Result<(), String> {
+        self.save_store(&ProfileStore::default())
+    }
+
+    pub fn list_profiles(&self) -> Result<Vec<ProviderProfile>, ProfileStoreError> {
         Ok(self.load_store()?.profiles)
     }
 
     pub fn create_profile(&self, draft: ProviderDraft) -> Result<ProviderProfile, String> {
         draft.validate().map_err(|error| error.to_string())?;
-        let mut store = self.load_store()?;
+        let mut store = self.load_store().map_err(|error| error.to_string())?;
         let profile = ProviderProfile::from_draft(Uuid::new_v4().to_string(), draft);
         store.profiles.push(profile.clone());
         self.save_store(&store)?;
@@ -444,7 +190,7 @@ impl LocalState {
         draft: ProviderDraft,
     ) -> Result<ProviderProfile, String> {
         draft.validate().map_err(|error| error.to_string())?;
-        let mut store = self.load_store()?;
+        let mut store = self.load_store().map_err(|error| error.to_string())?;
         let index = store
             .profiles
             .iter()
@@ -460,7 +206,7 @@ impl LocalState {
     }
 
     pub fn delete_profile(&self, profile_id: &str) -> Result<(), String> {
-        let mut store = self.load_store()?;
+        let mut store = self.load_store().map_err(|error| error.to_string())?;
         let original_len = store.profiles.len();
         store.profiles.retain(|profile| profile.id != profile_id);
         if store.profiles.len() == original_len {
@@ -469,18 +215,59 @@ impl LocalState {
         self.save_store(&store)
     }
 
+    /// Rewrites one client's slice of the profiles vector to match
+    /// `ordered_ids`. The vector is the single owner of display order;
+    /// profiles of the other client keep their absolute positions.
+    pub fn reorder_profiles(
+        &self,
+        app: AppKind,
+        ordered_ids: &[String],
+    ) -> Result<Vec<ProviderProfile>, String> {
+        let mut store = self.load_store().map_err(|error| error.to_string())?;
+        let ordered: Vec<ProviderProfile> = ordered_ids
+            .iter()
+            .map(|id| {
+                store
+                    .profiles
+                    .iter()
+                    .find(|profile| profile.id == *id && profile.app == app)
+                    .cloned()
+                    .ok_or_else(|| format!("排序清单包含不属于该客户端的供应商：{id}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let unique: HashSet<&str> = ordered_ids.iter().map(String::as_str).collect();
+        let app_count = store
+            .profiles
+            .iter()
+            .filter(|profile| profile.app == app)
+            .count();
+        if unique.len() != ordered_ids.len() || ordered.len() != app_count {
+            return Err("排序清单必须覆盖该客户端的全部供应商且不得重复".to_string());
+        }
+        let mut queue: VecDeque<ProviderProfile> = ordered.into();
+        let mut reordered = Vec::with_capacity(store.profiles.len());
+        for profile in store.profiles.iter() {
+            if profile.app == app {
+                if let Some(moved) = queue.pop_front() {
+                    reordered.push(moved);
+                }
+            } else {
+                reordered.push(profile.clone());
+            }
+        }
+        store.profiles = reordered;
+        self.save_store(&store)?;
+        Ok(store.profiles)
+    }
+
     pub fn import_profile(&self, draft: ProviderDraft) -> Result<ProviderProfile, String> {
         draft.validate().map_err(|error| error.to_string())?;
-        let mut store = self.load_store()?;
-        if let Some(existing) = store.profiles.iter().find(|profile| {
-            profile.app == draft.app
-                && profile.mode == draft.mode
-                && profile.name == draft.name
-                && profile.model == draft.model
-                && profile.base_url == draft.base_url
-                && profile.env_key == draft.env_key
-                && profile.model_options == draft.model_options
-        }) {
+        let mut store = self.load_store().map_err(|error| error.to_string())?;
+        if let Some(existing) = store
+            .profiles
+            .iter()
+            .find(|profile| same_profile(profile, &draft))
+        {
             return Ok(existing.clone());
         }
         let profile = ProviderProfile::from_draft(Uuid::new_v4().to_string(), draft);
@@ -489,17 +276,26 @@ impl LocalState {
         Ok(profile)
     }
 
+    /// Whether an exactly equal profile already exists (scan-side view of the
+    /// import dedup rule).
+    pub fn profile_exists(&self, draft: &ProviderDraft) -> bool {
+        match self.load_store() {
+            Ok(store) => store.profiles.iter().any(|p| same_profile(p, draft)),
+            Err(_) => false,
+        }
+    }
+
     /// Appends one completed switch or restore to the log and keeps the file
     /// in sync.
     pub fn record_switch(&self, entry: SwitchLog) -> Result<(), String> {
-        let mut store = self.load_store()?;
+        let mut store = self.load_store().map_err(|error| error.to_string())?;
         store.switch_log.push(entry);
         self.save_store(&store)
     }
 
     /// The most recent log entry for one client, if the app ever completed a
     /// switch or restore for it.
-    pub fn latest_switch(&self, app: AppKind) -> Result<Option<SwitchLog>, String> {
+    pub fn latest_switch(&self, app: AppKind) -> Result<Option<SwitchLog>, ProfileStoreError> {
         Ok(self
             .load_store()?
             .switch_log
@@ -509,14 +305,15 @@ impl LocalState {
     }
 
     pub fn find_profile(&self, profile_id: &str) -> Result<ProviderProfile, String> {
-        self.load_store()?
+        self.load_store()
+            .map_err(|error| error.to_string())?
             .profiles
             .into_iter()
             .find(|profile| profile.id == profile_id)
             .ok_or_else(|| "供应商不存在".to_string())
     }
 
-    pub fn get_common(&self, app: AppKind) -> Result<CommonConfigPatch, String> {
+    pub fn get_common(&self, app: AppKind) -> Result<CommonConfigPatch, ProfileStoreError> {
         Ok(self
             .load_store()?
             .common
@@ -533,10 +330,51 @@ impl LocalState {
             return Err("通用配置所属客户端不一致".to_string());
         }
         patch.validate().map_err(|error| error.to_string())?;
-        let mut store = self.load_store()?;
+        let mut store = self.load_store().map_err(|error| error.to_string())?;
         store.common.retain(|current| current.app != app);
         store.common.push(patch);
         self.save_store(&store)
+    }
+
+    pub fn get_app_settings(&self) -> Result<AppSettings, String> {
+        match fs::read_to_string(self.settings_path()) {
+            Ok(text) => match serde_json::from_str(&text) {
+                Ok(settings) => Ok(settings),
+                Err(_) => {
+                    let settings = migrate_previous_app_settings(&text)?;
+                    self.set_app_settings(&settings)
+                        .map_err(|_| "应用设置升级失败".to_string())?;
+                    Ok(settings)
+                }
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(AppSettings::default())
+            }
+            Err(_) => Err("应用设置不可读".to_string()),
+        }
+    }
+
+    pub fn set_app_settings(&self, settings: &AppSettings) -> Result<(), String> {
+        let content =
+            serde_json::to_string_pretty(settings).map_err(|_| "应用设置序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self.root.join(format!("settings.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content).map_err(|_| "无法写入应用设置临时文件".to_string())?;
+        if fs::rename(&temporary, self.settings_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存应用设置".to_string());
+        }
+        Ok(())
+    }
+
+    fn settings_path(&self) -> PathBuf {
+        self.root.join("settings.json")
+    }
+
+    fn from_app_data_dir(app_data_dir: PathBuf) -> Self {
+        Self {
+            root: app_data_dir.join("state"),
+        }
     }
 
     fn store_path(&self) -> PathBuf {
@@ -558,6 +396,26 @@ impl LocalState {
     }
 }
 
+fn migrate_previous_app_settings(text: &str) -> Result<AppSettings, String> {
+    let mut fields = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(text)
+        .map_err(|_| "应用设置格式无效".to_string())?;
+    let previous_fields = ["closeBehavior", "theme", "motion", "alwaysOnTop"];
+    if fields.len() != previous_fields.len()
+        || !previous_fields
+            .iter()
+            .all(|field| fields.contains_key(*field))
+    {
+        return Err("应用设置格式无效".to_string());
+    }
+
+    fields.insert(
+        "hardwareAcceleration".to_string(),
+        serde_json::Value::Bool(true),
+    );
+    serde_json::from_value(serde_json::Value::Object(fields))
+        .map_err(|_| "应用设置格式无效".to_string())
+}
+
 fn target_in_home(home: &Path, app: AppKind) -> PathBuf {
     match app {
         AppKind::Codex => home.join(".codex").join("config.toml"),
@@ -568,17 +426,18 @@ fn target_in_home(home: &Path, app: AppKind) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asb_core::PatchValue;
+    use asb_core::{PatchEntry, PatchValue};
 
     fn codex_draft(name: &str) -> ProviderDraft {
         ProviderDraft {
             app: AppKind::Codex,
-            mode: RouteMode::Custom,
             name: name.to_string(),
             model: Some("gpt-5.3-codex".to_string()),
             base_url: Some("https://gateway.example/v1".to_string()),
-            env_key: Some("OPENAI_API_KEY".to_string()),
+            api_key: "OPENAI_API_KEY".to_string(),
             model_options: None,
+            notes: None,
+            website_url: None,
         }
     }
 
@@ -594,6 +453,149 @@ mod tests {
         assert!(!state.store_path().exists());
         let target = target_in_home(&directory.path().join("home"), AppKind::Codex);
         assert!(!target.exists());
+    }
+
+    #[test]
+    fn legacy_env_key_store_is_rejected_without_rewriting_it() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        let legacy = r#"{"profiles":[{"id":"old","app":"codex","name":"旧档案","baseUrl":"https://relay.example/v1","envKey":"OPENAI_API_KEY","model":null,"modelOptions":null}],"common":[],"switchLog":[]}"#;
+        fs::write(state.store_path(), legacy).expect("write legacy store");
+
+        let error = state.load_store().expect_err("old schema must fail");
+        assert_eq!(error, ProfileStoreError::Unsupported);
+        assert_eq!(fs::read_to_string(state.store_path()).unwrap(), legacy);
+    }
+
+    #[test]
+    fn reset_profile_store_replaces_unsupported_data_with_current_empty_store() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        fs::write(
+            state.store_path(),
+            br#"{"profiles":[{"envKey":"OLD_KEY"}]}"#,
+        )
+        .expect("write unsupported store");
+        state.reset_profile_store().expect("reset store");
+
+        assert_eq!(
+            state.load_store().expect("current store"),
+            ProfileStore::default()
+        );
+        assert!(fs::read_to_string(state.store_path())
+            .expect("read reset store")
+            .contains("\"profiles\": []"));
+    }
+
+    #[test]
+    fn incomplete_store_shapes_are_unsupported_not_silently_defaulted() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+
+        fs::write(state.store_path(), br#"{"profiles":[],"common":[]}"#)
+            .expect("write store without a switch log");
+        assert_eq!(
+            state.load_store().expect_err("missing switchLog must fail"),
+            ProfileStoreError::Unsupported
+        );
+
+        fs::write(
+            state.store_path(),
+            br#"{"profiles":[],"common":[],"switchLog":[{"app":"codex","profileId":null,"profileName":null,"contentHash":"h","backupId":"b","at":"2026-08-28T08:00:00Z"}]}"#,
+        )
+        .expect("write log entry without an operation");
+        assert_eq!(
+            state.load_store().expect_err("missing operation must fail"),
+            ProfileStoreError::Unsupported
+        );
+    }
+
+    #[test]
+    fn app_settings_default_without_creating_a_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+
+        assert_eq!(
+            state.get_app_settings().expect("default settings"),
+            AppSettings::default()
+        );
+        assert!(!state.settings_path().exists());
+    }
+
+    #[test]
+    fn app_settings_persist_as_the_current_contract_only() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let root = directory.path().join("state");
+        let state = LocalState::from_root(root.clone());
+        let expected = AppSettings {
+            close_behavior: CloseBehavior::Exit,
+            theme: ThemePreference::Dark,
+            motion: MotionPreference::Reduce,
+            always_on_top: true,
+            hardware_acceleration: false,
+        };
+
+        state.set_app_settings(&expected).expect("save settings");
+        let reopened = LocalState::from_root(root);
+        assert_eq!(
+            reopened.get_app_settings().expect("read settings"),
+            expected
+        );
+        let written = fs::read_to_string(reopened.settings_path()).expect("read settings text");
+        assert_eq!(
+            written,
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false\n}"
+        );
+        assert!(!reopened.store_path().exists());
+        assert!(!reopened.backup_dir().exists());
+    }
+
+    #[test]
+    fn previous_complete_app_settings_are_migrated_once_to_the_current_contract() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        fs::write(
+            state.settings_path(),
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true\n}",
+        )
+        .expect("write previous settings");
+
+        assert_eq!(
+            state.get_app_settings().expect("migrate settings"),
+            AppSettings {
+                close_behavior: CloseBehavior::Exit,
+                theme: ThemePreference::Dark,
+                motion: MotionPreference::Reduce,
+                always_on_top: true,
+                hardware_acceleration: true,
+            }
+        );
+        assert_eq!(
+            fs::read_to_string(state.settings_path()).expect("read migrated settings"),
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": true\n}"
+        );
+    }
+
+    #[test]
+    fn app_settings_reject_incomplete_unknown_and_invalid_shapes() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+
+        for invalid in [
+            // Previous incomplete settings shape: no compatibility path.
+            "{\"closeBehavior\":\"hideToTray\"}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"legacy\":true}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"sepia\",\"motion\":\"system\",\"alwaysOnTop\":false}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":\"false\"}",
+        ] {
+            fs::write(state.settings_path(), invalid).expect("write invalid settings");
+            assert_eq!(state.get_app_settings().unwrap_err(), "应用设置格式无效");
+        }
     }
 
     #[test]
@@ -613,7 +615,7 @@ mod tests {
                     app: AppKind::Codex,
                     entries: vec![PatchEntry {
                         key: "disable_response_storage".to_string(),
-                        value: PatchValue::Bool(true),
+                        value: Some(PatchValue::Bool(true)),
                     }],
                 },
             )
@@ -631,7 +633,7 @@ mod tests {
                 .entries,
             vec![PatchEntry {
                 key: "disable_response_storage".to_string(),
-                value: PatchValue::Bool(true),
+                value: Some(PatchValue::Bool(true)),
             }]
         );
     }
@@ -653,6 +655,101 @@ mod tests {
     }
 
     #[test]
+    fn reorder_moves_one_clients_profiles_and_keeps_the_other_in_place() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        let codex_a = state
+            .create_profile(codex_draft("网关 A"))
+            .expect("create codex A");
+        let claude = state
+            .create_profile(ProviderDraft {
+                app: AppKind::Claude,
+                name: "Claude 中继".to_string(),
+                model: None,
+                base_url: Some("https://claude-relay.example/v1".to_string()),
+                api_key: "test-api-key".into(),
+                model_options: None,
+                notes: None,
+                website_url: None,
+            })
+            .expect("create claude");
+        let codex_b = state
+            .create_profile(codex_draft("网关 B"))
+            .expect("create codex B");
+        let codex_c = state
+            .create_profile(codex_draft("网关 C"))
+            .expect("create codex C");
+
+        let reordered = state
+            .reorder_profiles(
+                AppKind::Codex,
+                &[codex_b.id.clone(), codex_a.id.clone(), codex_c.id.clone()],
+            )
+            .expect("reorder codex");
+
+        let ids: Vec<&str> = reordered.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec![
+                codex_b.id.as_str(),
+                claude.id.as_str(),
+                codex_a.id.as_str(),
+                codex_c.id.as_str()
+            ]
+        );
+        assert_eq!(
+            LocalState::from_root(directory.path().join("state"))
+                .list_profiles()
+                .expect("reopen"),
+            reordered
+        );
+    }
+
+    #[test]
+    fn reorder_rejects_foreign_missing_and_duplicate_ids() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        let codex_a = state
+            .create_profile(codex_draft("网关 A"))
+            .expect("create codex A");
+        let codex_b = state
+            .create_profile(codex_draft("网关 B"))
+            .expect("create codex B");
+        let claude = state
+            .create_profile(ProviderDraft {
+                app: AppKind::Claude,
+                name: "Claude 中继".to_string(),
+                model: None,
+                base_url: Some("https://claude-relay.example/v1".to_string()),
+                api_key: "test-api-key".into(),
+                model_options: None,
+                notes: None,
+                website_url: None,
+            })
+            .expect("create claude");
+
+        let foreign = state
+            .reorder_profiles(AppKind::Codex, &[claude.id.clone()])
+            .expect_err("foreign id must be rejected");
+        assert!(foreign.contains("不属于该客户端"));
+        let missing = state
+            .reorder_profiles(AppKind::Codex, &[codex_a.id.clone()])
+            .expect_err("incomplete list must be rejected");
+        assert!(missing.contains("一一对应") || missing.contains("不得重复"));
+        let duplicate = state
+            .reorder_profiles(AppKind::Codex, &[codex_a.id.clone(), codex_a.id.clone()])
+            .expect_err("duplicate id must be rejected");
+        assert!(duplicate.contains("不得重复"));
+
+        let unchanged = state.list_profiles().expect("list profiles");
+        let ids: Vec<&str> = unchanged.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec![codex_a.id.as_str(), codex_b.id.as_str(), claude.id.as_str()]
+        );
+    }
+
+    #[test]
     fn switch_log_records_and_returns_the_latest_entry_per_app() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = LocalState::from_root(directory.path().join("state"));
@@ -664,6 +761,7 @@ mod tests {
                 content_hash: "hash-a".into(),
                 backup_id: "b1".into(),
                 at: "2026-08-26T08:00:00Z".into(),
+                operation: asb_core::SwitchOp::Switch,
             })
             .expect("record first");
         state
@@ -674,6 +772,7 @@ mod tests {
                 content_hash: "hash-b".into(),
                 backup_id: "b2".into(),
                 at: "2026-08-26T09:00:00Z".into(),
+                operation: asb_core::SwitchOp::Switch,
             })
             .expect("record second");
 
@@ -686,146 +785,5 @@ mod tests {
             .latest_switch(AppKind::Claude)
             .expect("latest switch")
             .is_none());
-    }
-
-    #[test]
-    fn legacy_store_moves_profile_settings_without_losing_effective_values() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        let root = directory.path().join("state");
-        fs::create_dir_all(&root).expect("create state dir");
-        // Store shape from before explicit routing modes: no `mode`, a
-        // deprecated Claude model key, and general keys that now belong to
-        // profiles.
-        let legacy = r#"{
-  "profiles": [
-    { "id": "p1", "app": "codex", "name": "旧网关", "model": "gpt-5", "baseUrl": "https://old.internal/v1", "envKey": "OLD_KEY" },
-    { "id": "p3", "app": "codex", "name": "第二网关", "model": "gpt-4", "baseUrl": "https://second.internal/v1", "envKey": "SECOND_KEY" },
-    { "id": "p2", "app": "claude", "name": "旧 Claude", "model": "claude-sonnet-4", "baseUrl": null, "envKey": null }
-  ],
-  "common": [
-    { "app": "claude", "entries": [
-      { "key": "env.ANTHROPIC_SMALL_FAST_MODEL", "value": "claude-3-5-haiku-latest" },
-      { "key": "model", "value": "claude-sonnet-4" },
-      { "key": "env.ANTHROPIC_MODEL", "value": "claude-opus-4" },
-      { "key": "env.ANTHROPIC_DEFAULT_SONNET_MODEL", "value": "claude-sonnet-4" },
-      { "key": "availableModels", "value": ["claude-haiku-4", "claude-opus-4"] }
-    ] },
-    { "app": "codex", "entries": [
-      { "key": "model", "value": "gpt-5.4" },
-      { "key": "model_reasoning_effort", "value": "high" },
-      { "key": "model_reasoning_summary", "value": "concise" },
-      { "key": "model_verbosity", "value": "low" },
-      { "key": "model_context_window", "value": 272000 },
-      { "key": "disable_response_storage", "value": true }
-    ] }
-  ]
-}"#;
-        fs::write(root.join("profiles.json"), legacy).expect("write legacy store");
-
-        let state = LocalState::from_root(root.clone());
-        let store = state.load_store().expect("migrated store");
-
-        let codex = store
-            .profiles
-            .iter()
-            .find(|p| p.id == "p1")
-            .expect("codex profile");
-        assert_eq!(codex.mode, RouteMode::Custom);
-        assert_eq!(codex.model.as_deref(), Some("gpt-5.4"));
-        assert_eq!(
-            codex.model_options,
-            Some(ModelOptions::Codex(CodexModelSettings {
-                reasoning_effort: Some("high".to_string()),
-                reasoning_summary: Some("concise".to_string()),
-                verbosity: Some("low".to_string()),
-                context_window: Some(272_000),
-            }))
-        );
-        let second_codex = store
-            .profiles
-            .iter()
-            .find(|p| p.id == "p3")
-            .expect("second codex profile");
-        assert_eq!(second_codex.model, codex.model);
-        assert_eq!(second_codex.model_options, codex.model_options);
-        let claude = store
-            .profiles
-            .iter()
-            .find(|p| p.id == "p2")
-            .expect("claude profile");
-        assert_eq!(claude.mode, RouteMode::Official);
-        // ANTHROPIC_MODEL was the actual old runtime override, so it wins
-        // over the old top-level `model` during migration.
-        assert_eq!(claude.model.as_deref(), Some("claude-opus-4"));
-        assert_eq!(
-            claude.model_options,
-            Some(ModelOptions::Claude(ClaudeModelSettings {
-                haiku_model: Some("claude-3-5-haiku-latest".to_string()),
-                sonnet_model: Some("claude-sonnet-4".to_string()),
-                opus_model: None,
-                available_models: Some(vec![
-                    "claude-haiku-4".to_string(),
-                    "claude-opus-4".to_string(),
-                ]),
-            }))
-        );
-
-        // Model keys no longer belong in general overlays; their old values
-        // now live in every corresponding supplier profile.
-        let claude_common = store
-            .common
-            .iter()
-            .find(|c| c.app == AppKind::Claude)
-            .expect("claude common");
-        assert!(claude_common.entries.is_empty());
-        let codex_common = store
-            .common
-            .iter()
-            .find(|c| c.app == AppKind::Codex)
-            .expect("codex common");
-        assert_eq!(
-            codex_common.entries,
-            vec![PatchEntry {
-                key: "disable_response_storage".to_string(),
-                value: PatchValue::Bool(true),
-            }]
-        );
-
-        // The migrated shape was written back; a second load changes nothing.
-        let rewritten = fs::read_to_string(root.join("profiles.json")).expect("read back");
-        assert!(rewritten.contains("\"mode\": \"custom\""));
-        assert!(!rewritten.contains("ANTHROPIC_SMALL_FAST_MODEL"));
-        let again = state.load_store().expect("second load");
-        assert_eq!(again, store);
-    }
-
-    #[test]
-    fn legacy_credential_reference_stops_migration_without_rewriting_the_store() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        let root = directory.path().join("state");
-        fs::create_dir_all(&root).expect("create state dir");
-        let legacy = r#"{
-  "profiles": [
-    {
-      "id": "p1",
-      "app": "codex",
-      "name": "旧网关",
-      "baseUrl": "https://old.internal/v1",
-      "envKey": "OLD_KEY",
-      "credentialRef": "legacy-reference"
-    }
-  ]
-}"#;
-        let path = root.join("profiles.json");
-        fs::write(&path, legacy).expect("write legacy store");
-
-        let state = LocalState::from_root(root);
-        let error = state
-            .load_store()
-            .expect_err("must not strip credential reference");
-        assert!(error.contains("凭据引用"));
-        assert!(fs::read_to_string(path)
-            .expect("read original store")
-            .contains("credentialRef"));
     }
 }

@@ -15,7 +15,7 @@ function route(
     providerName: name,
     model,
     baseUrl: mode === "custom" ? "https://relay.internal" : null,
-    envKey: null,
+    apiKey: "test-api-key",
     wireApi: app === "codex" ? "responses" : null,
     codexModelOptions: null,
     haikuModel: null,
@@ -27,7 +27,7 @@ function route(
 }
 
 describe("DualRelay", () => {
-  it("shows both client lanes with text state, not color alone", () => {
+  it("shows both client cards with text state, not color alone", () => {
     render(
       <DualRelay
         routes={{ codex: route("codex", "中继 A", "gpt-5.1"), claude: null }}
@@ -41,8 +41,14 @@ describe("DualRelay", () => {
 
     expect(screen.getByText("Codex")).toBeInTheDocument();
     expect(screen.getByText("Claude")).toBeInTheDocument();
-    expect(screen.getByText("中继 A · gpt-5.1")).toBeInTheDocument();
-    expect(screen.getByText("未加载")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "当前路由" })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Codex 路由" })).toHaveTextContent("中继 A");
+    expect(screen.getByText("gpt-5.1")).toBeInTheDocument();
+    expect(screen.getByText("relay.internal")).toBeInTheDocument();
+    expect(screen.getAllByText("未加载").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("已启用").length).toBe(1);
+    expect(document.querySelectorAll(".asb-route-card.is-on .asb-card-particle-canvas").length).toBe(1);
+    expect(document.querySelectorAll(".asb-route-card:not(.is-on) .asb-card-particle-canvas").length).toBe(1);
   });
 
   it("names the routing mode when no provider name is available", () => {
@@ -60,7 +66,7 @@ describe("DualRelay", () => {
       />,
     );
     expect(screen.getByText("自定义服务")).toBeInTheDocument();
-    expect(screen.getByText("官方登录")).toBeInTheDocument();
+    expect(screen.getAllByText("官方登录").length).toBeGreaterThan(0);
   });
 
   it("keeps switch actions disabled until a profile is selected", () => {

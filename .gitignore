@@ -2,5 +2,8 @@ node_modules/
 dist/
 src-tauri/target/
 target/
+target-*/
+.zcode/
+.playwright-mcp/
 *.log
 .DS_Store
