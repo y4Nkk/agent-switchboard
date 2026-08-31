@@ -4,24 +4,15 @@
 //! credentials or private endpoints, and deliberately include host-owned
 //! fields so tests prove unknown keys survive a switch untouched.
 
-/// Codex `config.toml` test sample: host-owned top-level keys, a host-owned
-/// provider table, comments, and the app-managed `model_providers.asb` table.
+/// Codex `config.toml` test sample: host-owned top-level keys, comments, and
+/// the built-in OpenAI provider with an explicit custom base URL.
 pub const CODEX_TOML: &str = r#"# host-owned Codex configuration (test sample)
 history_persistence = "save-all"
 threads = 8
 model = "gpt-5.1"
-model_provider = "asb"
+model_provider = "openai"
+openai_base_url = "https://relay-a.internal/v1"
 experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
-
-[model_providers.openai]
-name = "OpenAI"
-base_url = "https://api.openai.com/v1"
-wire_api = "responses"
-
-[model_providers.asb]
-name = "中继 A"
-base_url = "https://relay-a.internal/v1"
-wire_api = "responses"
 
 [projects."F:\\work\\sample"]
 trusted = true
@@ -72,7 +63,7 @@ mod tests {
     #[test]
     fn samples_contain_host_owned_fields() {
         assert!(CODEX_TOML.contains("threads"));
-        assert!(CODEX_TOML.contains("[model_providers.openai]"));
+        assert!(CODEX_TOML.contains("[projects."));
         assert!(CLAUDE_JSON.contains("permissions"));
         assert!(CLAUDE_JSON.contains("statusLine"));
     }

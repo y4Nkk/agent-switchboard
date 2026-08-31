@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn secret_keys_render_a_stable_token() {
         assert_eq!(redact("env.ANTHROPIC_AUTH_TOKEN", "sk-live-abc"), REDACTED);
-        assert_eq!(redact("model_providers.asb.api_key", "zzz"), REDACTED);
+        assert_eq!(redact("experimental_bearer_token", "zzz"), REDACTED);
         // The token is stable across calls so diffs do not flicker.
         assert_eq!(redact("api_key", "a"), redact("api_key", "b"));
     }
@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn token_shaped_values_redact_even_under_ordinary_keys() {
         assert_eq!(
-            redact("model_providers.asb.api_key", "sk-live-0123456789abcdef"),
+            redact("experimental_bearer_token", "sk-live-0123456789abcdef"),
             REDACTED
         );
         let long_key = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";

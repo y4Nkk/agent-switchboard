@@ -8,6 +8,14 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    open: false,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:1422",
+        changeOrigin: false,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
   },
   build: {
     target: "es2022",

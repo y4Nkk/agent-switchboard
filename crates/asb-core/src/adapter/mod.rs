@@ -55,12 +55,8 @@ pub enum OverlayEntry {
     Set(crate::contracts::PatchValue),
     /// Leave whatever is currently there untouched.
     Leave,
-    /// Remove the key if it currently exists (only valid for keys the app
-    /// manages exclusively, such as the `model_providers.asb` table).
+    /// Remove the key if it currently exists.
     RemoveIfPresent,
-    /// Remove the whole table at this path if it currently exists (used to
-    /// dismantle the managed provider table when routing back to official).
-    RemoveTableIfPresent,
 }
 
 /// Computes the preview for `plan` against `current` file text, using the

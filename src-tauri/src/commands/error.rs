@@ -4,8 +4,10 @@
 //! a stable code plus a scrubbed, user-readable message.
 
 use crate::local_state::{LocalState, ProfileStoreError};
+use crate::runtime_log::{self, RuntimeLogAction};
 use asb_core::adapter;
 use serde::Serialize;
+use std::future::Future;
 use tauri::AppHandle;
 
 /// Structured command error surfaced to the UI as a typed object.
@@ -63,6 +65,21 @@ where
     tauri::async_runtime::spawn_blocking(task)
         .await
         .map_err(|_| CommandError::new("task-interrupted", "后台任务已中断".to_string()))?
+}
+
+/// Records the result of one explicit application action without allowing a
+/// diagnostic-write failure to affect that action's result. Read-only polling
+/// commands deliberately do not use this wrapper.
+pub(crate) async fn observe<T, F>(action: RuntimeLogAction, operation: F) -> Result<T, CommandError>
+where
+    F: Future<Output = Result<T, CommandError>>,
+{
+    let result = operation.await;
+    match &result {
+        Ok(_) => runtime_log::record_success(action),
+        Err(error) => runtime_log::record_failure(action, error.code),
+    }
+    result
 }
 
 pub(crate) fn require_write_confirmation(

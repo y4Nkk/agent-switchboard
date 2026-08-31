@@ -1,10 +1,17 @@
 mod ccswitch_source;
+mod cloud_backup;
+mod codex_reset;
 mod commands;
+#[cfg(debug_assertions)]
+mod dev_api;
+mod fonts;
 mod local_state;
 mod probe;
+mod runtime_log;
 mod session_manager;
 mod tray;
 mod update;
+mod usage_query;
 
 pub use commands::local_config_paths;
 
@@ -57,6 +64,7 @@ pub fn run() {
     configure_hardware_acceleration(&mut context);
 
     tauri::Builder::default()
+        .plugin(runtime_log::plugin())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // A malformed settings file is rejected by the typed settings
@@ -65,9 +73,20 @@ pub fn run() {
             if let Ok(settings) = local_state::LocalState::from_app(app.handle())
                 .and_then(|state| state.get_app_settings())
             {
+                runtime_log::set_level(settings.runtime_log_level);
                 let _ = commands::apply_window_settings(app.handle(), &settings);
             }
             tray::setup(app.handle())?;
+            runtime_log::record_started();
+            #[cfg(debug_assertions)]
+            if std::env::var_os("ASB_WEB_DEVELOPMENT").is_some() {
+                dev_api::start(app.handle().clone()).map_err(std::io::Error::other)?;
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+                use tauri_plugin_opener::OpenerExt;
+                let _ = app.opener().open_url("http://localhost:1420", None::<&str>);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -98,16 +117,28 @@ pub fn run() {
             commands::common_settings::common_choices,
             commands::common_settings::preview_common,
             commands::common_settings::apply_common,
+            commands::prompt_management::get_global_prompt_document,
+            commands::prompt_management::save_global_prompt_document,
             commands::switching::preview_switch,
             commands::switching::execute_switch,
             commands::switching::list_backups,
+            commands::runtime_log::list_runtime_logs,
+            commands::runtime_log::open_runtime_log_dir,
             commands::switching::restore_backup,
             commands::switching::undo_last_switch,
             commands::switching::backup_diff,
             commands::switching::open_backup_dir,
+            commands::cloud_backup::get_cloud_backup_settings,
+            commands::cloud_backup::set_cloud_backup_settings,
+            commands::cloud_backup::cloud_backup_setup_sql,
+            commands::cloud_backup::upload_cloud_backup,
+            commands::cloud_backup::restore_cloud_backup,
             commands::probe_endpoint,
+            commands::test_usage_query,
             commands::fetch_provider_models,
             commands::check_update,
+            commands::get_cached_codex_reset_status,
+            commands::check_codex_reset_status,
             commands::status::lock_status,
             commands::status::recover_stale_lock,
             commands::discover_local,
@@ -122,6 +153,7 @@ pub fn run() {
             commands::window::window_close,
             commands::get_app_settings,
             commands::set_app_settings,
+            commands::list_system_fonts,
             commands::window::toggle_devtools,
         ])
         .build(context)

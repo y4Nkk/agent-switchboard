@@ -1,15 +1,14 @@
-import { useRef, useState, type ReactNode } from "react";
-import {
-  listSessions,
-  type AppKind,
-  type ConfigFileStatus,
-  type LockStatus,
-  type MatchStatus,
-  type ProviderProfile,
-  type RouteState,
-  type SessionScan,
+import type { ReactNode } from "react";
+import type {
+  AppKind,
+  ConfigFileStatus,
+  LockStatus,
+  MatchStatus,
+  ProviderProfile,
+  RouteState,
 } from "../api/client";
 import { ClientLogo } from "../components/ClientLogo";
+import { CodexResetPanel } from "../components/CodexResetPanel";
 import { DualRelay } from "../components/DualRelay";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
@@ -26,7 +25,6 @@ interface OverviewPageProps {
   onRequestSwitch: () => void;
   onRefresh: () => void;
   onRecoverLock: (app: AppKind) => void;
-  onOpenSessions: () => void;
 }
 
 function routesFrom(statuses: ConfigFileStatus[]): {
@@ -187,122 +185,6 @@ function ConfigStatusCard({
   );
 }
 
-const SESSION_APPS: readonly AppKind[] = ["codex", "claude"];
-
-function latestSessionActivity(scan: SessionScan, app: AppKind): string | null {
-  let latest: string | null = null;
-  let latestTimestamp = Number.NEGATIVE_INFINITY;
-
-  for (const session of scan.sessions) {
-    if (session.app !== app || session.lastActiveAt === null) continue;
-    const timestamp = Date.parse(session.lastActiveAt);
-    if (Number.isNaN(timestamp) || timestamp <= latestTimestamp) continue;
-    latest = session.lastActiveAt;
-    latestTimestamp = timestamp;
-  }
-
-  return latest;
-}
-
-function sessionScanErrorMessage(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
-}
-
-function LocalSessionRow({ app, scan }: { app: AppKind; scan: SessionScan }) {
-  const count = scan.sessions.filter((session) => session.app === app).length;
-  const latest = latestSessionActivity(scan, app);
-  const issues = scan.issues.filter((issue) => issue.app === app);
-
-  return (
-    <article className="asb-session-overview-row" aria-label={`${clientName(app)} 本机会话`}>
-      <header className="asb-session-overview-client">
-        <ClientLogo app={app} className="asb-session-overview-logo" />
-        <h3>{clientName(app)}</h3>
-      </header>
-      <dl className="asb-session-overview-values">
-        <div>
-          <dt>已发现</dt>
-          <dd>{count} 个本机会话</dd>
-        </div>
-        <div>
-          <dt>最近文件更新</dt>
-          <dd>{latest ? <Time iso={latest} /> : "没有可读取的记录"}</dd>
-        </div>
-      </dl>
-      {issues.length > 0 && (
-        <ul className="asb-session-overview-issues" aria-label={`${clientName(app)} 会话扫描提示`}>
-          {issues.map((issue) => (
-            <li key={`${issue.app}-${issue.message}`} className="asb-warn-text">
-              {issue.message}
-            </li>
-          ))}
-        </ul>
-      )}
-    </article>
-  );
-}
-
-/** An explicit, read-only overview of local session file metadata. */
-function LocalSessionsOverview({ onOpenSessions }: { onOpenSessions: () => void }) {
-  const [scan, setScan] = useState<SessionScan | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const requestRef = useRef<Promise<SessionScan> | null>(null);
-
-  const readSessions = async () => {
-    if (requestRef.current !== null) return;
-
-    setLoading(true);
-    setScanError(null);
-    const request = Promise.resolve().then(() => listSessions());
-    requestRef.current = request;
-
-    try {
-      setScan(await request);
-    } catch (reason) {
-      setScan(null);
-      setScanError(sessionScanErrorMessage(reason));
-    } finally {
-      if (requestRef.current === request) requestRef.current = null;
-      setLoading(false);
-    }
-  };
-
-  return (
-    <section className="asb-panel asb-session-overview" aria-label="本机会话">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">本机会话</h2>
-        <div className="asb-panel-actions">
-          <button type="button" className="asb-btn-secondary" onClick={onOpenSessions}>
-            查看会话
-          </button>
-          <button
-            type="button"
-            className="asb-btn-secondary"
-            disabled={loading}
-            onClick={() => void readSessions()}
-          >
-            {loading ? "读取中…" : scan === null ? "读取本机会话" : "刷新本机会话"}
-          </button>
-        </div>
-      </div>
-      {loading && scan === null && <p className="asb-empty" role="status">正在读取本机会话</p>}
-      {scan === null && !loading && scanError === null && <p className="asb-empty">尚未读取本机会话</p>}
-      {scanError && <p className="asb-warn-text" role="alert">无法读取本机会话：{scanError}</p>}
-      {scan !== null && (
-        <>
-          <div className="asb-session-overview-list">
-            {SESSION_APPS.map((app) => (
-              <LocalSessionRow key={app} app={app} scan={scan} />
-            ))}
-          </div>
-          <p className="asb-session-overview-note">时间取本地会话文件的最后修改时间。</p>
-        </>
-      )}
-    </section>
-  );
-}
-
 /** Overview: the dual-client relay plus per-client configuration status. */
 export function OverviewPage({
   statuses,
@@ -315,7 +197,6 @@ export function OverviewPage({
   onRequestSwitch,
   onRefresh,
   onRecoverLock,
-  onOpenSessions,
 }: OverviewPageProps) {
   return (
     <>
@@ -349,7 +230,7 @@ export function OverviewPage({
         </div>
         {statuses === null && <p className="asb-empty">加载中</p>}
       </section>
-      <LocalSessionsOverview onOpenSessions={onOpenSessions} />
+      <CodexResetPanel />
     </>
   );
 }

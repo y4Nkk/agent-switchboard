@@ -11,6 +11,7 @@ use crate::contracts::AppKind;
 pub const CODEX_OWNED_KEYS: &[&str] = &[
     "model",
     "model_provider",
+    "openai_base_url",
     "model_reasoning_effort",
     "model_reasoning_summary",
     "model_verbosity",
@@ -72,6 +73,8 @@ pub const CLAUDE_OWNED_KEYS: &[&str] = &[
 pub const PROFILE_EXCLUSIVE_KEYS: &[&str] = &[
     "model",
     "model_provider",
+    "openai_base_url",
+    "experimental_bearer_token",
     "model_context_window",
     "availableModels",
     "env.ANTHROPIC_BASE_URL",
@@ -81,10 +84,6 @@ pub const PROFILE_EXCLUSIVE_KEYS: &[&str] = &[
     "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
     "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
 ];
-
-/// Key prefixes owned by the app. Codex manages exactly one provider table,
-/// `model_providers.asb`; every other `model_providers.*` table is host-owned.
-pub const CODEX_OWNED_PREFIXES: &[&str] = &["model_providers.asb."];
 
 /// One checkbox-able general setting from the client's official
 /// configuration reference. `applied` is the value the checked line carries;
@@ -590,21 +589,16 @@ pub fn toggle_spec(app: AppKind, key: &str) -> Option<&'static ToggleSpec> {
 
 /// Returns true when `key` is app-owned for `app`.
 pub fn is_owned(app: AppKind, key: &str) -> bool {
-    let (keys, prefixes) = match app {
-        AppKind::Codex => (CODEX_OWNED_KEYS, CODEX_OWNED_PREFIXES),
-        AppKind::Claude => (CLAUDE_OWNED_KEYS, &[] as &[&str]),
+    let keys = match app {
+        AppKind::Codex => CODEX_OWNED_KEYS,
+        AppKind::Claude => CLAUDE_OWNED_KEYS,
     };
     keys.contains(&key)
-        || prefixes
-            .iter()
-            .any(|p| key.starts_with(p) || key == p.trim_end_matches('.'))
 }
 
 /// Returns true when `key` may only be set through a provider profile.
 pub fn is_profile_exclusive(key: &str) -> bool {
     PROFILE_EXCLUSIVE_KEYS.contains(&key)
-        || key == "model_providers.asb"
-        || key.starts_with("model_providers.asb.")
 }
 
 #[cfg(test)]
@@ -682,13 +676,12 @@ mod tests {
     }
 
     #[test]
-    fn codex_top_level_and_managed_table_are_owned() {
+    fn codex_top_level_routing_keys_are_owned() {
         assert!(is_owned(AppKind::Codex, "model"));
         assert!(is_owned(AppKind::Codex, "model_provider"));
+        assert!(is_owned(AppKind::Codex, "openai_base_url"));
         assert!(is_owned(AppKind::Codex, "model_reasoning_effort"));
         assert!(is_owned(AppKind::Codex, "model_context_window"));
-        assert!(is_owned(AppKind::Codex, "model_providers.asb"));
-        assert!(is_owned(AppKind::Codex, "model_providers.asb.base_url"));
     }
 
     #[test]
@@ -724,8 +717,9 @@ mod tests {
     #[test]
     fn profile_exclusive_keys_never_appear_in_general_patches() {
         assert!(is_profile_exclusive("model"));
+        assert!(is_profile_exclusive("openai_base_url"));
+        assert!(is_profile_exclusive("experimental_bearer_token"));
         assert!(is_profile_exclusive("env.ANTHROPIC_BASE_URL"));
-        assert!(is_profile_exclusive("model_providers.asb.base_url"));
         assert!(!is_profile_exclusive("disable_response_storage"));
     }
 }

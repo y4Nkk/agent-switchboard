@@ -10,17 +10,90 @@
 use serde::Serialize;
 use std::time::Instant;
 
+/// Outcome grade of one manual probe, ported from the CC Switch reachability
+/// pattern: any HTTP answer proves reachability, latency above the threshold
+/// grades as slow, only network-level failures (DNS / refused / TLS / timeout)
+/// grade as unreachable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProbeGrade {
+    Ok,
+    Slow,
+    Unreachable,
+}
+
+/// Reachability degrades to "slow" past this TTFB, mirroring the reference
+/// 6000 ms scale: probes answer in well under a second, so only genuinely
+/// slow paths get flagged.
+const SLOW_THRESHOLD_MS: u64 = 6_000;
+
+fn grade_for(latency_ms: u64) -> ProbeGrade {
+    if latency_ms > SLOW_THRESHOLD_MS {
+        ProbeGrade::Slow
+    } else {
+        ProbeGrade::Ok
+    }
+}
+
 /// Result of one manual endpoint probe, surfaced to the UI as-is.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProbeResult {
-    pub url: String,
-    pub reachable: bool,
+    pub grade: ProbeGrade,
     pub status: Option<u16>,
     pub latency_ms: Option<u64>,
     pub error: Option<String>,
     /// RFC 3339 UTC timestamp of the probe.
     pub at: String,
+}
+
+/// A failed WinHTTP call, keeping the error code so retry decisions can
+/// distinguish timeout-class jitter from immediate failures.
+#[derive(Debug, PartialEq)]
+struct ProbeError {
+    code: u32,
+    message: String,
+}
+
+impl ProbeError {
+    fn is_timeout(&self) -> bool {
+        self.code == windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_TIMEOUT
+    }
+}
+
+/// Maps a WinHTTP last-error code to the failure class the user can act on.
+fn failure_message(code: u32) -> &'static str {
+    use windows_sys::Win32::Networking::WinHttp::{
+        ERROR_WINHTTP_CANNOT_CONNECT, ERROR_WINHTTP_NAME_NOT_RESOLVED,
+        ERROR_WINHTTP_SECURE_CHANNEL_ERROR, ERROR_WINHTTP_TIMEOUT,
+    };
+    match code {
+        ERROR_WINHTTP_NAME_NOT_RESOLVED => "域名解析失败（DNS）",
+        ERROR_WINHTTP_TIMEOUT => "连接超时",
+        ERROR_WINHTTP_CANNOT_CONNECT => "连接被拒绝",
+        ERROR_WINHTTP_SECURE_CHANNEL_ERROR => "TLS 握手失败",
+        _ => "网络请求失败",
+    }
+}
+
+unsafe fn winhttp_failure() -> ProbeError {
+    let code = windows_sys::Win32::Foundation::GetLastError();
+    ProbeError {
+        code,
+        message: failure_message(code).to_string(),
+    }
+}
+
+/// Probe retry policy, separated from the WinHTTP layer for testing:
+/// timeout-class failures get exactly one retry (network jitter), immediate
+/// failures such as refused connections or DNS errors fail fast.
+fn probe_with_retries(
+    mut attempt: impl FnMut() -> Result<u16, ProbeError>,
+) -> Result<u16, ProbeError> {
+    match attempt() {
+        Err(failure) if failure.is_timeout() => attempt(),
+        first => first,
+    }
 }
 
 struct ParsedUrl {
@@ -85,17 +158,14 @@ unsafe fn last_error() -> String {
     "系统网络请求失败".to_string()
 }
 
-fn head_requires_get(status: u16) -> bool {
-    matches!(status, 405 | 501)
-}
-
-/// Sends one request with `verb` and returns the HTTP status code.
+/// Sends one GET and returns the HTTP status code; the response body is never
+/// read, so returning here means the endpoint answered.
 unsafe fn request_status(
     connect: *mut core::ffi::c_void,
     verb: &str,
     path: &str,
     secure: bool,
-) -> Result<u16, String> {
+) -> Result<u16, ProbeError> {
     use windows_sys::Win32::Networking::WinHttp::{
         WinHttpCloseHandle, WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReceiveResponse,
         WinHttpSendRequest, WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER,
@@ -115,14 +185,14 @@ unsafe fn request_status(
         flags,
     );
     if request.is_null() {
-        return Err(last_error());
+        return Err(winhttp_failure());
     }
     let outcome = (|| {
         if WinHttpSendRequest(request, std::ptr::null(), 0, std::ptr::null(), 0, 0, 0) == 0 {
-            return Err(last_error());
+            return Err(winhttp_failure());
         }
         if WinHttpReceiveResponse(request, std::ptr::null_mut()) == 0 {
-            return Err(last_error());
+            return Err(winhttp_failure());
         }
         let mut status: u32 = 0;
         let mut length = std::mem::size_of::<u32>() as u32;
@@ -135,7 +205,7 @@ unsafe fn request_status(
             std::ptr::null_mut(),
         );
         if queried == 0 {
-            return Err(last_error());
+            return Err(winhttp_failure());
         }
         Ok(status as u16)
     })();
@@ -143,8 +213,10 @@ unsafe fn request_status(
     outcome
 }
 
-/// Probes one URL with HEAD, falling back to GET when the endpoint rejects
-/// HEAD. Any HTTP answer counts as reachable, whatever the status says.
+/// Probes one URL for reachability. Any HTTP answer counts — the status code
+/// (200/4xx/5xx alike) only proves the endpoint is alive; the probe sends no
+/// model request and carries no credential, so it never validates
+/// authentication or model configuration.
 pub fn probe(url: &str) -> Result<ProbeResult, String> {
     let parsed = parse_url(url).ok_or_else(|| "端点必须是 http(s) URL".to_string())?;
     let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -164,57 +236,53 @@ pub fn probe(url: &str) -> Result<ProbeResult, String> {
             0,
         );
         if session.is_null() {
-            return Err(last_error());
+            return Err("系统网络组件初始化失败".to_string());
         }
         let result = (|| {
             if WinHttpSetTimeouts(session, 5_000, 5_000, 10_000, 10_000) == 0 {
-                return Err(last_error());
+                return Err("系统网络组件配置失败".to_string());
             }
             let host_w = wide(&parsed.host);
             let connect = WinHttpConnect(session, host_w.as_ptr(), parsed.port, 0);
             if connect.is_null() {
-                return Err(last_error());
+                return Err("无法建立网络连接".to_string());
             }
             let started = Instant::now();
-            let status = match request_status(connect, "HEAD", &parsed.path, parsed.secure) {
-                Ok(status) if head_requires_get(status) => {
-                    // Some gateways reject HEAD outright; GET still proves
-                    // reachability and TLS.
-                    request_status(connect, "GET", &parsed.path, parsed.secure)
-                }
-                Ok(status) => Ok(status),
-                Err(_) => request_status(connect, "GET", &parsed.path, parsed.secure),
-            };
+            let outcome =
+                probe_with_retries(|| request_status(connect, "GET", &parsed.path, parsed.secure));
             let latency_ms = Some(started.elapsed().as_millis() as u64);
             WinHttpCloseHandle(connect);
-            match status {
-                Ok(status) => Ok(ProbeResult {
-                    url: url.to_string(),
-                    reachable: true,
+            Ok(match outcome {
+                Ok(status) => ProbeResult {
+                    grade: grade_for(latency_ms.unwrap_or(0)),
                     status: Some(status),
                     latency_ms,
                     error: None,
                     at,
-                }),
-                Err(_) => Ok(ProbeResult {
-                    url: url.to_string(),
-                    reachable: false,
+                },
+                Err(failure) => ProbeResult {
+                    grade: ProbeGrade::Unreachable,
                     status: None,
                     latency_ms,
-                    error: Some("无法连接端点，请检查地址、代理和网络".to_string()),
+                    error: Some(failure.message),
                     at,
-                }),
-            }
+                },
+            })
         })();
         WinHttpCloseHandle(session);
         result
     }
 }
 
-/// One WinHTTP GET returning the response status and body text. The agent
-/// string doubles as the required `User-Agent`; callers pass extra request
-/// headers as CRLF-joined lines.
-pub fn http_get(url: &str, headers: &str) -> Result<(u16, String), String> {
+/// One WinHTTP request returning the response status and body text. The
+/// agent string doubles as the required `User-Agent`; callers pass extra
+/// request headers as CRLF-joined lines.
+pub fn http_request(
+    method: &str,
+    url: &str,
+    headers: &str,
+    body: &[u8],
+) -> Result<(u16, String), String> {
     let parsed = parse_url(url).ok_or_else(|| "请求地址必须是 http(s) URL".to_string())?;
 
     use windows_sys::Win32::Networking::WinHttp::{
@@ -253,7 +321,7 @@ pub fn http_get(url: &str, headers: &str) -> Result<(u16, String), String> {
                 };
                 let request = WinHttpOpenRequest(
                     connect,
-                    wide("GET").as_ptr(),
+                    wide(method).as_ptr(),
                     wide(&parsed.path).as_ptr(),
                     std::ptr::null(),
                     std::ptr::null(),
@@ -264,14 +332,19 @@ pub fn http_get(url: &str, headers: &str) -> Result<(u16, String), String> {
                     return Err(last_error());
                 }
                 let headers_w = wide(headers);
+                let (body_ptr, body_len) = if body.is_empty() {
+                    (std::ptr::null(), 0)
+                } else {
+                    (body.as_ptr().cast(), body.len() as u32)
+                };
                 let outcome = (|| {
                     if WinHttpSendRequest(
                         request,
                         headers_w.as_ptr(),
                         headers_w.len() as u32,
-                        std::ptr::null(),
-                        0,
-                        0,
+                        body_ptr,
+                        body_len,
+                        body_len,
                         0,
                     ) == 0
                     {
@@ -305,6 +378,11 @@ pub fn http_get(url: &str, headers: &str) -> Result<(u16, String), String> {
         WinHttpCloseHandle(session);
         result
     }
+}
+
+/// Convenience wrapper for the existing outbound read-only callers.
+pub fn http_get(url: &str, headers: &str) -> Result<(u16, String), String> {
+    http_request("GET", url, headers, &[])
 }
 
 /// Builds the OpenAI-compatible model-list path for a provider base URL:
@@ -468,7 +546,7 @@ pub fn fetch_models(base_url: &str, api_key: &str, _source: &str) -> Result<Vec<
 /// one fetch serves either ecosystem. `anthropic-version` is only required
 /// by the Anthropic API itself and ignored elsewhere. The value must never
 /// be logged or echoed in diagnostics.
-fn auth_headers(credential: &str) -> String {
+pub(crate) fn auth_headers(credential: &str) -> String {
     format!(
         "Authorization: Bearer {credential}\r\nx-api-key: {credential}\r\nanthropic-version: 2023-06-01"
     )
@@ -526,11 +604,87 @@ mod tests {
     }
 
     #[test]
-    fn rejected_head_statuses_fall_back_to_get() {
-        assert!(head_requires_get(405));
-        assert!(head_requires_get(501));
-        assert!(!head_requires_get(200));
-        assert!(!head_requires_get(404));
+    fn reachable_latencies_grade_ok_until_the_slow_threshold() {
+        assert_eq!(grade_for(0), ProbeGrade::Ok);
+        assert_eq!(grade_for(6_000), ProbeGrade::Ok);
+        assert_eq!(grade_for(6_001), ProbeGrade::Slow);
+        assert_eq!(grade_for(45_000), ProbeGrade::Slow);
+    }
+
+    fn timeout_failure() -> ProbeError {
+        ProbeError {
+            code: windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_TIMEOUT,
+            message: failure_message(
+                windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_TIMEOUT,
+            )
+            .to_string(),
+        }
+    }
+
+    fn refused_failure() -> ProbeError {
+        ProbeError {
+            code: windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_CANNOT_CONNECT,
+            message: failure_message(
+                windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_CANNOT_CONNECT,
+            )
+            .to_string(),
+        }
+    }
+
+    #[test]
+    fn timeout_failures_get_exactly_one_retry() {
+        let mut attempts = 0;
+        let outcome = probe_with_retries(|| {
+            attempts += 1;
+            if attempts == 1 {
+                Err(timeout_failure())
+            } else {
+                Ok(204)
+            }
+        });
+        assert_eq!(outcome, Ok(204));
+        assert_eq!(attempts, 2);
+    }
+
+    #[test]
+    fn immediate_failures_do_not_retry() {
+        let mut attempts = 0;
+        let outcome = probe_with_retries(|| {
+            attempts += 1;
+            Err(refused_failure())
+        });
+        assert!(outcome.is_err());
+        assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn a_second_timeout_is_final() {
+        let mut attempts = 0;
+        let outcome = probe_with_retries(|| {
+            attempts += 1;
+            Err(timeout_failure())
+        });
+        assert!(outcome.is_err());
+        assert_eq!(attempts, 2);
+    }
+
+    #[test]
+    fn failure_codes_map_to_actionable_classes() {
+        use windows_sys::Win32::Networking::WinHttp::{
+            ERROR_WINHTTP_CANNOT_CONNECT, ERROR_WINHTTP_NAME_NOT_RESOLVED,
+            ERROR_WINHTTP_SECURE_CHANNEL_ERROR, ERROR_WINHTTP_TIMEOUT,
+        };
+        assert_eq!(failure_message(ERROR_WINHTTP_TIMEOUT), "连接超时");
+        assert_eq!(
+            failure_message(ERROR_WINHTTP_NAME_NOT_RESOLVED),
+            "域名解析失败（DNS）"
+        );
+        assert_eq!(failure_message(ERROR_WINHTTP_CANNOT_CONNECT), "连接被拒绝");
+        assert_eq!(
+            failure_message(ERROR_WINHTTP_SECURE_CHANNEL_ERROR),
+            "TLS 握手失败"
+        );
+        assert_eq!(failure_message(0), "网络请求失败");
     }
 
     #[test]

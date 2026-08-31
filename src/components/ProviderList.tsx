@@ -17,8 +17,19 @@ import {
 } from "@dnd-kit/sortable";
 import type { ProviderProfile } from "../api/client";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { ReactNode } from "react";
-import { EditIcon, EyeOffIcon, GripIcon, PlayIcon, PreviewIcon, TrashIcon } from "./icons";
+import { useState, type ReactNode } from "react";
+import {
+  ConnectivityIcon,
+  EditIcon,
+  EyeOffIcon,
+  GripIcon,
+  PlayIcon,
+  PreviewIcon,
+  TrashIcon,
+  UsageIcon,
+} from "./icons";
+import { ProbeFeedback, useEndpointProbe } from "./ProbePanel";
+import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { Tooltip } from "./Tooltip";
 
 interface Props {
@@ -36,6 +47,8 @@ interface Props {
   onActivate?: (profile: ProviderProfile) => void;
   onPreview?: (profile: ProviderProfile) => void;
   onEdit?: (profile: ProviderProfile) => void;
+  /** Opens the dedicated usage-query workspace for this profile. */
+  onConfigureUsage?: (profile: ProviderProfile) => void;
   onDelete?: (profile: ProviderProfile) => void;
   /** Expansion content rendered inside the previewed row's own card, under
    * the row line. Ownership stays with the caller; the list only places it. */
@@ -55,11 +68,14 @@ interface RowProps {
   active: boolean;
   selected: boolean;
   previewOpen: boolean;
+  usageOpen: boolean;
   sortable: boolean;
   onSelect: (id: string) => void;
+  onToggleUsage: (profile: ProviderProfile) => void;
   onActivate?: (profile: ProviderProfile) => void;
   onPreview?: (profile: ProviderProfile) => void;
   onEdit?: (profile: ProviderProfile) => void;
+  onConfigureUsage?: (profile: ProviderProfile) => void;
   onDelete?: (profile: ProviderProfile) => void;
   renderPreview?: (profile: ProviderProfile) => ReactNode;
 }
@@ -74,11 +90,14 @@ function ProviderRow({
   active,
   selected,
   previewOpen,
+  usageOpen,
   sortable,
   onSelect,
+  onToggleUsage,
   onActivate,
   onPreview,
   onEdit,
+  onConfigureUsage,
   onDelete,
   renderPreview,
 }: RowProps) {
@@ -88,16 +107,24 @@ function ProviderRow({
   });
   const initial = profile.name.trim().charAt(0).toUpperCase() || "?";
   const baseUrl = profile.baseUrl;
+  const probe = useEndpointProbe(baseUrl ?? null);
   // Valid profiles always carry an endpoint; the fallback only guards
   // pre-migration shapes.
   const detail = baseUrl ? hostLabel(baseUrl) : "自定义服务";
+  const hasUsageQuery = profile.usageQuery !== null && profile.usageQuery !== undefined;
+  const usageLabel = hasUsageQuery
+    ? usageOpen
+      ? `收起 ${profile.name} 用量`
+      : `查看 ${profile.name} 用量`
+    : `配置 ${profile.name} 用量`;
+  const hasProbeFeedback = probe.result !== null || probe.error !== null;
+  const probeFeedbackId = `provider-probe-${profile.id}`;
+  const hasActions = Boolean(baseUrl || hasUsageQuery || onConfigureUsage || onPreview || onEdit || onDelete);
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`asb-row-item${selected ? " is-selected" : ""}${active ? " is-live" : ""}${
-        isDragging ? " is-dragging" : ""
-      }`}
+      className={`asb-row-item${active ? " is-live" : ""}${isDragging ? " is-dragging" : ""}`}
     >
       <div className="asb-row-line">
       {sortable && (
@@ -159,8 +186,40 @@ function ProviderRow({
         </Tooltip>
       )}
       {active && <span className="asb-pill-status">使用中</span>}
-      {(onPreview || onEdit || onDelete) && (
+      {hasActions && (
         <span className="asb-iconcluster" role="group" aria-label={`${profile.name} 操作`}>
+          {(hasUsageQuery || onConfigureUsage) && (
+            <Tooltip label={usageLabel}>
+              <button
+                type="button"
+                className={`asb-btn-icon${usageOpen ? " is-active" : ""}`}
+                aria-label={usageLabel}
+                aria-controls={hasUsageQuery ? `provider-usage-${profile.id}` : undefined}
+                aria-expanded={hasUsageQuery ? usageOpen : undefined}
+                onClick={() => {
+                  if (hasUsageQuery) onToggleUsage(profile);
+                  else onConfigureUsage?.(profile);
+                }}
+              >
+                <UsageIcon />
+              </button>
+            </Tooltip>
+          )}
+          {baseUrl && (
+            <Tooltip label={probe.busy ? `正在测试 ${profile.name} 连通性` : `测试 ${profile.name} 连通性`}>
+              <button
+                type="button"
+                className={`asb-btn-icon${hasProbeFeedback ? " is-active" : ""}`}
+                aria-label={probe.busy ? `正在测试 ${profile.name} 连通性` : `测试 ${profile.name} 连通性`}
+                aria-busy={probe.busy}
+                aria-describedby={hasProbeFeedback ? probeFeedbackId : undefined}
+                disabled={probe.busy}
+                onClick={() => void probe.run()}
+              >
+                <ConnectivityIcon />
+              </button>
+            </Tooltip>
+          )}
           {onPreview && (
             <Tooltip label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}>
               <button
@@ -201,6 +260,22 @@ function ProviderRow({
         </span>
       )}
       </div>
+      {hasProbeFeedback && (
+        <ProbeFeedback
+          id={probeFeedbackId}
+          className="asb-provider-probe-feedback"
+          result={probe.result}
+          error={probe.error}
+        />
+      )}
+      {usageOpen && profile.usageQuery && (
+        <ProviderUsagePanel
+          id={`provider-usage-${profile.id}`}
+          profile={profile}
+          query={profile.usageQuery}
+          onConfigure={onConfigureUsage}
+        />
+      )}
       {previewOpen && renderPreview && renderPreview(profile)}
     </li>
   );
@@ -216,9 +291,11 @@ export function ProviderList({
   onActivate,
   onPreview,
   onEdit,
+  onConfigureUsage,
   onDelete,
   renderPreview,
 }: Props) {
+  const [openUsageId, setOpenUsageId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -231,6 +308,10 @@ export function ProviderList({
     const newIndex = ids.indexOf(String(over.id));
     if (oldIndex === -1 || newIndex === -1) return;
     onReorder?.(arrayMove(ids, oldIndex, newIndex));
+  };
+  const toggleUsage = (profile: ProviderProfile) => {
+    if (!profile.usageQuery) return;
+    setOpenUsageId((current) => (current === profile.id ? null : profile.id));
   };
   if (profiles.length === 0) {
     return <p className="asb-empty">尚无供应商</p>;
@@ -246,11 +327,14 @@ export function ProviderList({
               active={profile.id === activeProfileId}
               selected={selectedId === profile.id}
               previewOpen={profile.id === openPreviewId}
+              usageOpen={profile.id === openUsageId}
               sortable={Boolean(onReorder)}
               onSelect={onSelect}
+              onToggleUsage={toggleUsage}
               onActivate={onActivate}
               onPreview={onPreview}
               onEdit={onEdit}
+              onConfigureUsage={onConfigureUsage}
               onDelete={onDelete}
               renderPreview={renderPreview}
             />

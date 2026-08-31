@@ -29,10 +29,22 @@ describe("token ownership", () => {
       const text = readFileSync(file, "utf8");
       const hex = text.match(/#[0-9a-fA-F]{3,8}\b/g);
       if (hex) offenders.push(`${rel}: raw color ${hex.join(", ")}`);
-      const rawBlur = text.match(/(?:backdrop-filter|-webkit-backdrop-filter)[^;]*blur\(\s*\d/g);
-      if (rawBlur) offenders.push(`${rel}: raw blur length`);
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("uses one opaque surface path without backdrop sampling or exit states", () => {
+    const tokens = readFileSync(join(srcRoot, tokenOwner), "utf8");
+    const base = readFileSync(join(srcRoot, "styles/base.css"), "utf8");
+
+    expect(tokens).toContain("--asb-surface-rail:");
+    expect(tokens).toContain("--asb-surface-menu:");
+    expect(tokens).toContain("--asb-surface-sheet:");
+    expect(tokens).not.toMatch(/--asb-(blur|glass|saturation)-/);
+    expect(base).not.toMatch(/(?:-webkit-)?backdrop-filter|filter:\s*blur\(/);
+    expect(base).not.toMatch(
+      /button:not\(:disabled\):active|asb-(route-card-in|select-in|tooltip-in|sheet-in|toast-in|toast-out)|is-leaving/,
+    );
   });
 
   it("supports explicit theme and motion overrides without a second stylesheet owner", () => {

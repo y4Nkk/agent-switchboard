@@ -4,6 +4,10 @@ import { UpdateSection } from "../components/UpdateSection";
 
 interface SettingsPageProps {
   settings: AppSettings | null;
+  /** Why settings could not load; null while loading or after success. */
+  loadError: string | null;
+  /** Re-runs the settings load after a failure. */
+  onRetryLoad: () => void;
   busy: boolean;
   /** Saves one field of the currently loaded settings. */
   onPatch: (patch: Partial<AppSettings>) => void;
@@ -16,6 +20,8 @@ interface SettingsPageProps {
  * configuration contract. */
 export function SettingsPage({
   settings,
+  loadError,
+  onRetryLoad,
   busy,
   onPatch,
   updateCheck,
@@ -26,20 +32,40 @@ export function SettingsPage({
       <div className="asb-panel-heading">
         <h2 className="asb-panel-title">设置</h2>
       </div>
-      {settings ? (
-        <AppSettingsForm
-          settings={settings}
-          busy={busy}
-          onCloseBehaviorChange={(closeBehavior) => onPatch({ closeBehavior })}
-          onThemeChange={(theme) => onPatch({ theme })}
-          onMotionChange={(motion) => onPatch({ motion })}
-          onAlwaysOnTopChange={(alwaysOnTop) => onPatch({ alwaysOnTop })}
-          onHardwareAccelerationChange={(hardwareAcceleration) => onPatch({ hardwareAcceleration })}
-        />
-      ) : (
-        <p className="asb-empty">加载中</p>
-      )}
       <div className="asb-app-settings">
+        {settings ? (
+          <AppSettingsForm
+            settings={settings}
+            busy={busy}
+            onCloseBehaviorChange={(closeBehavior) => onPatch({ closeBehavior })}
+            onThemeChange={(theme) => onPatch({ theme })}
+            onMotionChange={(motion) => onPatch({ motion })}
+            onInterfaceFontChange={(interfaceFont) => onPatch({ interfaceFont })}
+            onAlwaysOnTopChange={(alwaysOnTop) => onPatch({ alwaysOnTop })}
+            onHardwareAccelerationChange={(hardwareAcceleration) =>
+              onPatch({ hardwareAcceleration })
+            }
+          />
+        ) : loadError ? (
+          <div className="asb-app-setting-row" role="alert">
+            <div className="asb-app-setting-copy">
+              <span className="asb-checkbox-label">设置加载失败：{loadError}</span>
+              <span className="asb-app-setting-detail">
+                读取失败期间，外观与关闭行为使用默认值
+              </span>
+            </div>
+            <button
+              type="button"
+              className="asb-btn-secondary"
+              disabled={busy}
+              onClick={onRetryLoad}
+            >
+              重试
+            </button>
+          </div>
+        ) : (
+          <p className="asb-empty">加载中</p>
+        )}
         <UpdateSection result={updateCheck} busy={busy} onCheck={onCheckUpdate} />
       </div>
     </section>

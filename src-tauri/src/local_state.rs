@@ -5,6 +5,8 @@
 //! Claude Code configuration paths are resolved separately and are not
 //! created by this module.
 
+use crate::codex_reset::CodexResetStatus;
+use crate::runtime_log::RuntimeLogLevel;
 use asb_core::{AppKind, CommonConfigPatch, ProviderDraft, ProviderProfile, SwitchLog};
 use std::collections::{HashSet, VecDeque};
 use std::fs;
@@ -35,10 +37,13 @@ pub enum MotionPreference {
     Reduce,
 }
 
+/// Bundled web font shipped with the app; also the interface-font default.
+pub(crate) const DEFAULT_INTERFACE_FONT: &str = "Noto Sans SC";
+
 /// Application-owned desktop preferences, stored separately from profile data.
 /// This is a strict complete contract. The only migration is the exact
 /// immediately previous complete shape, which is atomically rewritten with
-/// hardware acceleration enabled to preserve the prior runtime behavior.
+/// the bundled default runtime-log level.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppSettings {
@@ -47,6 +52,27 @@ pub struct AppSettings {
     pub motion: MotionPreference,
     pub always_on_top: bool,
     pub hardware_acceleration: bool,
+    pub interface_font: String,
+    pub runtime_log_level: RuntimeLogLevel,
+}
+
+impl AppSettings {
+    /// A font name is used verbatim as a CSS font-family value, so it must be
+    /// a plain non-empty name without quotes or control characters.
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        let valid = self.interface_font.trim().len() == self.interface_font.len()
+            && !self.interface_font.is_empty()
+            && self.interface_font.len() <= 64
+            && !self
+                .interface_font
+                .chars()
+                .any(|character| character.is_control() || matches!(character, '"' | '\'' | '\\'));
+        if valid {
+            Ok(())
+        } else {
+            Err("界面字体名称无效：须为非空字体名，且不含首尾空格、引号或控制字符".to_string())
+        }
+    }
 }
 
 impl Default for AppSettings {
@@ -57,7 +83,53 @@ impl Default for AppSettings {
             motion: MotionPreference::System,
             always_on_top: false,
             hardware_acceleration: true,
+            interface_font: DEFAULT_INTERFACE_FONT.to_string(),
+            runtime_log_level: RuntimeLogLevel::Info,
         }
+    }
+}
+
+/// Connection coordinates for a user-owned Supabase project. The project
+/// publishable key identifies a public desktop client; authentication and the
+/// separate cloud-backup password are intentionally never written to disk.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CloudBackupSettings {
+    pub project_url: String,
+    pub publishable_key: String,
+    pub email: String,
+}
+
+impl CloudBackupSettings {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        let project_url = self.project_url.trim();
+        let publishable_key = self.publishable_key.trim();
+        let email = self.email.trim();
+        let valid_url = project_url.starts_with("https://")
+            && project_url.len() == self.project_url.len()
+            && project_url.len() > "https://".len()
+            && !project_url.contains(['?', '#', ' '])
+            && !project_url.chars().any(char::is_control)
+            && !project_url.ends_with('/');
+        if !valid_url {
+            return Err("Supabase 项目地址必须是无尾随斜杠的 https URL".to_string());
+        }
+        if publishable_key.is_empty()
+            || publishable_key.len() != self.publishable_key.len()
+            || publishable_key.len() > 2048
+            || publishable_key.chars().any(char::is_control)
+        {
+            return Err("Supabase publishable key 无效".to_string());
+        }
+        if email.is_empty()
+            || email.len() != self.email.len()
+            || email.len() > 320
+            || !email.contains('@')
+            || email.chars().any(char::is_control)
+        {
+            return Err("Supabase 登录邮箱无效".to_string());
+        }
+        Ok(())
     }
 }
 
@@ -90,17 +162,87 @@ impl std::fmt::Display for ProfileStoreError {
 }
 
 fn validate_store(store: &ProfileStore) -> Result<(), ProfileStoreError> {
+    validate_store_for_write(store).map_err(|_| ProfileStoreError::Unsupported)
+}
+
+/// The write boundary validates both the shared serializable contract and
+/// the desktop-only JavaScript loading contract. Persistence therefore never
+/// accepts a script that could only fail later when a user clicks test.
+fn validate_store_for_write(store: &ProfileStore) -> Result<(), String> {
     for profile in &store.profiles {
-        profile
-            .validate()
-            .map_err(|_| ProfileStoreError::Unsupported)?;
+        profile.validate().map_err(|error| error.to_string())?;
+        if let Some(query) = &profile.usage_query {
+            crate::usage_query::validate_persisted(query)?;
+        }
     }
     for patch in &store.common {
-        patch
-            .validate()
-            .map_err(|_| ProfileStoreError::Unsupported)?;
+        patch.validate().map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+/// Parses the one current profile-store contract, with the only permitted
+/// migration performed before typed deserialization: a complete old bare
+/// declarative `usageQuery` object gains `kind: "declarative"`. This is a
+/// migration boundary, not an old runtime read path.
+fn parse_profile_store(text: &str) -> Result<(ProfileStore, bool), ProfileStoreError> {
+    let mut raw: serde_json::Value =
+        serde_json::from_str(text).map_err(|_| ProfileStoreError::Unsupported)?;
+    let migrated = migrate_legacy_usage_queries(&mut raw)?;
+    let store: ProfileStore =
+        serde_json::from_value(raw).map_err(|_| ProfileStoreError::Unsupported)?;
+    validate_store(&store)?;
+    Ok((store, migrated))
+}
+
+/// Accepts exactly the former declarative field set and no other untagged
+/// shapes. Any unknown key, missing URL, or wrong value type rejects the
+/// whole store before it can be written back.
+fn migrate_legacy_usage_queries(raw: &mut serde_json::Value) -> Result<bool, ProfileStoreError> {
+    let root = raw.as_object_mut().ok_or(ProfileStoreError::Unsupported)?;
+    let profiles = root
+        .get_mut("profiles")
+        .ok_or(ProfileStoreError::Unsupported)?
+        .as_array_mut()
+        .ok_or(ProfileStoreError::Unsupported)?;
+    let mut migrated = false;
+
+    for profile in profiles {
+        let profile = profile
+            .as_object_mut()
+            .ok_or(ProfileStoreError::Unsupported)?;
+        let Some(query) = profile.get_mut("usageQuery") else {
+            continue;
+        };
+        if query.is_null() {
+            continue;
+        }
+        let query = query
+            .as_object_mut()
+            .ok_or(ProfileStoreError::Unsupported)?;
+        if query.contains_key("kind") {
+            continue;
+        }
+        let allowed = ["url", "remainingPath", "usedPath", "totalPath", "unit"];
+        if query.keys().any(|key| !allowed.contains(&key.as_str()))
+            || !matches!(query.get("url"), Some(serde_json::Value::String(_)))
+            || query.iter().any(|(key, value)| {
+                key != "url"
+                    && !matches!(
+                        value,
+                        serde_json::Value::String(_) | serde_json::Value::Null
+                    )
+            })
+        {
+            return Err(ProfileStoreError::Unsupported);
+        }
+        query.insert(
+            "kind".to_string(),
+            serde_json::Value::String("declarative".to_string()),
+        );
+        migrated = true;
+    }
+    Ok(migrated)
 }
 
 fn same_profile(profile: &ProviderProfile, draft: &ProviderDraft) -> bool {
@@ -141,6 +283,13 @@ impl LocalState {
         Self::user_config_path(app)
     }
 
+    /// Resolves the one global instruction document owned by each supported
+    /// client. Codex honors an explicit CODEX_HOME when available; Claude
+    /// follows its user-level .claude directory.
+    pub fn global_prompt_target(&self, app: AppKind) -> Result<PathBuf, String> {
+        Self::global_prompt_path(app)
+    }
+
     pub fn user_config_path(app: AppKind) -> Result<PathBuf, String> {
         let home = std::env::var_os("USERPROFILE")
             .filter(|value| !value.is_empty())
@@ -148,8 +297,28 @@ impl LocalState {
         Ok(target_in_home(Path::new(&home), app))
     }
 
+    pub fn global_prompt_path(app: AppKind) -> Result<PathBuf, String> {
+        let home = std::env::var_os("USERPROFILE")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+        let codex_home = std::env::var_os("CODEX_HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Ok(global_prompt_target_in_home(
+            Path::new(&home),
+            codex_home.as_deref(),
+            app,
+        ))
+    }
+
     pub fn backup_dir(&self) -> PathBuf {
         self.root.join("backups")
+    }
+
+    /// Prompt-document backups stay in their own collection so configuration
+    /// restore and undo never offer a document snapshot as a client config.
+    pub fn prompt_backup_dir(&self) -> PathBuf {
+        self.backup_dir().join("prompts")
     }
 
     pub fn load_store(&self) -> Result<ProfileStore, ProfileStoreError> {
@@ -161,9 +330,11 @@ impl LocalState {
             }
             Err(_) => return Err(ProfileStoreError::Unreadable),
         };
-        let store: ProfileStore =
-            serde_json::from_str(&text).map_err(|_| ProfileStoreError::Unsupported)?;
-        validate_store(&store)?;
+        let (store, migrated) = parse_profile_store(&text)?;
+        if migrated {
+            self.save_store(&store)
+                .map_err(|_| ProfileStoreError::Unreadable)?;
+        }
         Ok(store)
     }
 
@@ -338,8 +509,11 @@ impl LocalState {
 
     pub fn get_app_settings(&self) -> Result<AppSettings, String> {
         match fs::read_to_string(self.settings_path()) {
-            Ok(text) => match serde_json::from_str(&text) {
-                Ok(settings) => Ok(settings),
+            Ok(text) => match serde_json::from_str::<AppSettings>(&text) {
+                Ok(settings) => match settings.validate() {
+                    Ok(()) => Ok(settings),
+                    Err(_) => Err("应用设置格式无效".to_string()),
+                },
                 Err(_) => {
                     let settings = migrate_previous_app_settings(&text)?;
                     self.set_app_settings(&settings)
@@ -355,6 +529,7 @@ impl LocalState {
     }
 
     pub fn set_app_settings(&self, settings: &AppSettings) -> Result<(), String> {
+        settings.validate()?;
         let content =
             serde_json::to_string_pretty(settings).map_err(|_| "应用设置序列化失败".to_string())?;
         fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
@@ -367,8 +542,96 @@ impl LocalState {
         Ok(())
     }
 
+    /// The cloud destination is optional. Reading an absent file never
+    /// creates state, matching the other app-owned optional snapshots.
+    pub fn get_cloud_backup_settings(&self) -> Result<Option<CloudBackupSettings>, String> {
+        let text = match fs::read_to_string(self.cloud_backup_settings_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("云端备份设置不可读".to_string()),
+        };
+        let settings: CloudBackupSettings =
+            serde_json::from_str(&text).map_err(|_| "云端备份设置格式无效".to_string())?;
+        settings
+            .validate()
+            .map_err(|_| "云端备份设置格式无效".to_string())?;
+        Ok(Some(settings))
+    }
+
+    pub fn set_cloud_backup_settings(&self, settings: &CloudBackupSettings) -> Result<(), String> {
+        settings.validate()?;
+        let content = serde_json::to_string_pretty(settings)
+            .map_err(|_| "云端备份设置序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self
+            .root
+            .join(format!("cloud-backup.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content).map_err(|_| "无法写入云端备份设置临时文件".to_string())?;
+        if fs::rename(&temporary, self.cloud_backup_settings_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存云端备份设置".to_string());
+        }
+        Ok(())
+    }
+
+    /// Restores cloud plaintext only through the same strict parser and
+    /// one-time usage-query migration as the on-disk profile store.
+    pub(crate) fn restore_cloud_backup_store_bytes(
+        &self,
+        bytes: &[u8],
+    ) -> Result<ProfileStore, String> {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| "云端备份不是当前支持的供应商数据格式".to_string())?;
+        let (store, _) = parse_profile_store(text).map_err(|error| error.to_string())?;
+        self.save_store(&store)?;
+        Ok(store)
+    }
+
+    /// The last successfully normalized public signal. An absent file is a
+    /// normal first-run state; invalid data is left untouched rather than
+    /// silently being mistaken for a current result.
+    pub fn load_codex_reset_cache(&self) -> Result<Option<CodexResetStatus>, String> {
+        let text = match fs::read_to_string(self.codex_reset_cache_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("Codex 重置信号缓存不可读".to_string()),
+        };
+        let status: CodexResetStatus =
+            serde_json::from_str(&text).map_err(|_| "Codex 重置信号缓存格式无效".to_string())?;
+        status
+            .validate_cached()
+            .map_err(|_| "Codex 重置信号缓存格式无效".to_string())?;
+        Ok(Some(status))
+    }
+
+    /// Replaces the prior public snapshot atomically after a successful
+    /// signal read. It never stores the upstream raw payload or credentials.
+    pub fn save_codex_reset_cache(&self, status: &CodexResetStatus) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(status)
+            .map_err(|_| "Codex 重置信号缓存序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self
+            .root
+            .join(format!("codex-reset-cache.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content)
+            .map_err(|_| "无法写入 Codex 重置信号缓存临时文件".to_string())?;
+        if fs::rename(&temporary, self.codex_reset_cache_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存 Codex 重置信号缓存".to_string());
+        }
+        Ok(())
+    }
+
     fn settings_path(&self) -> PathBuf {
         self.root.join("settings.json")
+    }
+
+    fn codex_reset_cache_path(&self) -> PathBuf {
+        self.root.join("codex-reset-cache.json")
+    }
+
+    fn cloud_backup_settings_path(&self) -> PathBuf {
+        self.root.join("cloud-backup.json")
     }
 
     fn from_app_data_dir(app_data_dir: PathBuf) -> Self {
@@ -382,6 +645,7 @@ impl LocalState {
     }
 
     fn save_store(&self, store: &ProfileStore) -> Result<(), String> {
+        validate_store_for_write(store)?;
         let content =
             serde_json::to_string_pretty(store).map_err(|_| "供应商存储序列化失败".to_string())?;
         fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
@@ -399,7 +663,14 @@ impl LocalState {
 fn migrate_previous_app_settings(text: &str) -> Result<AppSettings, String> {
     let mut fields = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(text)
         .map_err(|_| "应用设置格式无效".to_string())?;
-    let previous_fields = ["closeBehavior", "theme", "motion", "alwaysOnTop"];
+    let previous_fields = [
+        "closeBehavior",
+        "theme",
+        "motion",
+        "alwaysOnTop",
+        "hardwareAcceleration",
+        "interfaceFont",
+    ];
     if fields.len() != previous_fields.len()
         || !previous_fields
             .iter()
@@ -409,8 +680,8 @@ fn migrate_previous_app_settings(text: &str) -> Result<AppSettings, String> {
     }
 
     fields.insert(
-        "hardwareAcceleration".to_string(),
-        serde_json::Value::Bool(true),
+        "runtimeLogLevel".to_string(),
+        serde_json::Value::String("info".to_string()),
     );
     serde_json::from_value(serde_json::Value::Object(fields))
         .map_err(|_| "应用设置格式无效".to_string())
@@ -423,9 +694,21 @@ fn target_in_home(home: &Path, app: AppKind) -> PathBuf {
     }
 }
 
+fn global_prompt_target_in_home(home: &Path, codex_home: Option<&Path>, app: AppKind) -> PathBuf {
+    match app {
+        AppKind::Codex => match codex_home {
+            Some(directory) => directory.join(app.global_prompt_file_name()),
+            None => home.join(".codex").join(app.global_prompt_file_name()),
+        },
+        AppKind::Claude => home.join(".claude").join(app.global_prompt_file_name()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::codex_reset::{CodexResetFeedStatus, ResetSignal};
+    use asb_core::contracts::UsageQuery;
     use asb_core::{PatchEntry, PatchValue};
 
     fn codex_draft(name: &str) -> ProviderDraft {
@@ -438,6 +721,31 @@ mod tests {
             model_options: None,
             notes: None,
             website_url: None,
+            usage_query: None,
+        }
+    }
+
+    fn legacy_usage_store(query: &str) -> String {
+        r#"{"profiles":[{"id":"p1","app":"codex","name":"旧用量档案","model":null,"baseUrl":"https://relay.example/v1","apiKey":"test-api-key","notes":null,"websiteUrl":null,"usageQuery":__QUERY__}],"common":[],"switchLog":[]}"#
+            .replace("__QUERY__", query)
+    }
+
+    fn cached_reset_status() -> CodexResetStatus {
+        CodexResetStatus {
+            source_url: "https://www.codexrunway.com/api/status.json".to_string(),
+            feed_status: CodexResetFeedStatus::Ok,
+            generated_at: "2026-08-31T03:08:02.232Z".to_string(),
+            last_successful_check_at: "2026-08-31T03:08:02.232Z".to_string(),
+            checked_at: "2026-08-31T03:10:00.000Z".to_string(),
+            latest_confirmed_reset: Some(ResetSignal {
+                announced_at: "2026-08-31T02:34:27Z".to_string(),
+                effective_at: None,
+                schedule_precision: None,
+                confidence: 0.98,
+            }),
+            next_scheduled_reset: None,
+            latest_relevant_tibo_post: None,
+            source_warning: None,
         }
     }
 
@@ -453,6 +761,121 @@ mod tests {
         assert!(!state.store_path().exists());
         let target = target_in_home(&directory.path().join("home"), AppKind::Codex);
         assert!(!target.exists());
+    }
+
+    #[test]
+    fn global_prompt_targets_use_the_supported_client_document_names() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let home = directory.path().join("home");
+        let codex_home = directory.path().join("custom-codex-home");
+
+        assert_eq!(
+            global_prompt_target_in_home(&home, None, AppKind::Codex),
+            home.join(".codex").join("AGENTS.md")
+        );
+        assert_eq!(
+            global_prompt_target_in_home(&home, Some(&codex_home), AppKind::Codex),
+            codex_home.join("AGENTS.md")
+        );
+        assert_eq!(
+            global_prompt_target_in_home(&home, None, AppKind::Claude),
+            home.join(".claude").join("CLAUDE.md")
+        );
+    }
+
+    #[test]
+    fn codex_reset_cache_is_absent_without_creating_a_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+
+        assert_eq!(state.load_codex_reset_cache().expect("empty cache"), None);
+        assert!(!state.codex_reset_cache_path().exists());
+    }
+
+    #[test]
+    fn cloud_backup_settings_are_optional_and_persist_without_passwords() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        let settings = CloudBackupSettings {
+            project_url: "https://example.supabase.co".to_string(),
+            publishable_key: "sb_publishable_example".to_string(),
+            email: "backup@example.com".to_string(),
+        };
+
+        assert_eq!(state.get_cloud_backup_settings().expect("absent"), None);
+        state
+            .set_cloud_backup_settings(&settings)
+            .expect("save settings");
+
+        assert_eq!(
+            state.get_cloud_backup_settings().expect("reload settings"),
+            Some(settings)
+        );
+        let stored = fs::read_to_string(state.cloud_backup_settings_path()).expect("stored text");
+        assert!(!stored.contains("password"));
+    }
+
+    #[test]
+    fn cloud_backup_settings_reject_a_non_https_or_noncanonical_project_url() {
+        let invalid = CloudBackupSettings {
+            project_url: "https://example.supabase.co/".to_string(),
+            publishable_key: "sb_publishable_example".to_string(),
+            email: "backup@example.com".to_string(),
+        };
+
+        assert_eq!(
+            invalid.validate().expect_err("trailing slash"),
+            "Supabase 项目地址必须是无尾随斜杠的 https URL"
+        );
+    }
+
+    #[test]
+    fn codex_reset_cache_replaces_and_persists_the_latest_successful_snapshot() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let root = directory.path().join("state");
+        let state = LocalState::from_root(root.clone());
+        let first = cached_reset_status();
+        let latest = CodexResetStatus {
+            checked_at: "2026-08-31T04:10:00.000Z".to_string(),
+            next_scheduled_reset: Some(ResetSignal {
+                announced_at: "2026-08-31T04:00:00Z".to_string(),
+                effective_at: Some("2026-08-31T09:00:00Z".to_string()),
+                schedule_precision: Some("datetime".to_string()),
+                confidence: 0.84,
+            }),
+            ..first.clone()
+        };
+
+        state
+            .save_codex_reset_cache(&first)
+            .expect("save first cache");
+        state
+            .save_codex_reset_cache(&latest)
+            .expect("replace cache with latest snapshot");
+
+        let reopened = LocalState::from_root(root);
+        assert_eq!(
+            reopened.load_codex_reset_cache().expect("read cache"),
+            Some(latest)
+        );
+    }
+
+    #[test]
+    fn malformed_codex_reset_cache_is_rejected_without_rewriting_it() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        let invalid = r#"{"feedStatus":"ok","generatedAt":"2026-08-31T03:08:02.232Z","lastSuccessfulCheckAt":"2026-08-31T03:08:02.232Z","checkedAt":"bad-time","latestConfirmedReset":null,"nextScheduledReset":null,"latestRelevantTiboPost":null,"sourceWarning":null}"#;
+        fs::write(state.codex_reset_cache_path(), invalid).expect("write invalid cache");
+
+        assert_eq!(
+            state.load_codex_reset_cache().unwrap_err(),
+            "Codex 重置信号缓存格式无效"
+        );
+        assert_eq!(
+            fs::read_to_string(state.codex_reset_cache_path()).expect("read invalid cache"),
+            invalid
+        );
     }
 
     #[test]
@@ -500,6 +923,94 @@ mod tests {
             ProfileStoreError::Unsupported
         );
         assert_eq!(fs::read_to_string(state.store_path()).unwrap(), legacy);
+    }
+
+    #[test]
+    fn exact_legacy_declarative_usage_query_migrates_once_and_rewrites_atomically() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        let legacy = legacy_usage_store(
+            r#"{"url":"{{baseUrl}}/balance","remainingPath":"data/balance","unit":"USD"}"#,
+        );
+        fs::write(state.store_path(), &legacy).expect("write legacy store");
+
+        let store = state.load_store().expect("migrate store");
+        assert!(matches!(
+            store.profiles[0].usage_query,
+            Some(UsageQuery::Declarative {
+                ref remaining_path,
+                ..
+            }) if remaining_path.as_deref() == Some("data/balance")
+        ));
+        let migrated = fs::read_to_string(state.store_path()).expect("read migrated store");
+        assert!(migrated.contains("\"kind\": \"declarative\""));
+
+        state.load_store().expect("second current read");
+        assert_eq!(
+            fs::read_to_string(state.store_path()).expect("read stable store"),
+            migrated
+        );
+    }
+
+    #[test]
+    fn malformed_legacy_usage_query_is_rejected_without_any_write_back() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+
+        for query in [
+            r#"{"remainingPath":"data/balance"}"#,
+            r#"{"url":"{{baseUrl}}/balance","remainingPath":"data/balance","unknown":true}"#,
+            r#"{"url":"{{baseUrl}}/balance","remainingPath":1}"#,
+        ] {
+            let invalid = legacy_usage_store(query);
+            fs::write(state.store_path(), &invalid).expect("write invalid legacy store");
+            assert_eq!(
+                state
+                    .load_store()
+                    .expect_err("invalid legacy store must fail"),
+                ProfileStoreError::Unsupported
+            );
+            assert_eq!(
+                fs::read_to_string(state.store_path()).expect("read unchanged invalid store"),
+                invalid
+            );
+        }
+    }
+
+    #[test]
+    fn cloud_restore_uses_the_same_legacy_usage_query_migration() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        let legacy = legacy_usage_store(r#"{"url":"{{baseUrl}}/balance","usedPath":"data/used"}"#);
+
+        let store = state
+            .restore_cloud_backup_store_bytes(legacy.as_bytes())
+            .expect("restore legacy cloud backup");
+        assert!(matches!(
+            store.profiles[0].usage_query,
+            Some(UsageQuery::Declarative {
+                ref used_path,
+                ..
+            }) if used_path.as_deref() == Some("data/used")
+        ));
+        assert!(fs::read_to_string(state.store_path())
+            .expect("read restored store")
+            .contains("\"kind\": \"declarative\""));
+    }
+
+    #[test]
+    fn invalid_usage_script_never_enters_the_profile_store() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        let mut draft = codex_draft("坏脚本");
+        draft.usage_query = Some(UsageQuery::Script {
+            source: "({ request() {} })".to_string(),
+        });
+
+        assert!(state.create_profile(draft).is_err());
+        assert!(!state.store_path().exists());
     }
 
     #[test]
@@ -570,6 +1081,8 @@ mod tests {
             motion: MotionPreference::Reduce,
             always_on_top: true,
             hardware_acceleration: false,
+            interface_font: "MiSans".to_string(),
+            runtime_log_level: RuntimeLogLevel::Warn,
         };
 
         state.set_app_settings(&expected).expect("save settings");
@@ -581,7 +1094,7 @@ mod tests {
         let written = fs::read_to_string(reopened.settings_path()).expect("read settings text");
         assert_eq!(
             written,
-            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false\n}"
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"MiSans\",\n  \"runtimeLogLevel\": \"warn\"\n}"
         );
         assert!(!reopened.store_path().exists());
         assert!(!reopened.backup_dir().exists());
@@ -594,7 +1107,7 @@ mod tests {
         fs::create_dir_all(&state.root).expect("create state directory");
         fs::write(
             state.settings_path(),
-            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true\n}",
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"Noto Sans SC\"\n}",
         )
         .expect("write previous settings");
 
@@ -605,12 +1118,14 @@ mod tests {
                 theme: ThemePreference::Dark,
                 motion: MotionPreference::Reduce,
                 always_on_top: true,
-                hardware_acceleration: true,
+                hardware_acceleration: false,
+                interface_font: DEFAULT_INTERFACE_FONT.to_string(),
+                runtime_log_level: RuntimeLogLevel::Info,
             }
         );
         assert_eq!(
             fs::read_to_string(state.settings_path()).expect("read migrated settings"),
-            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": true\n}"
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"Noto Sans SC\",\n  \"runtimeLogLevel\": \"info\"\n}"
         );
     }
 
@@ -623,13 +1138,38 @@ mod tests {
         for invalid in [
             // Previous incomplete settings shape: no compatibility path.
             "{\"closeBehavior\":\"hideToTray\"}",
-            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"legacy\":true}",
-            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"sepia\",\"motion\":\"system\",\"alwaysOnTop\":false}",
-            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":\"false\"}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\",\"legacy\":true}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"sepia\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":\"false\",\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
+            // Two-versions-old complete shape: only one migration step exists.
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true}",
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"verbose\"}",
+            // A font name is consumed verbatim as a quoted CSS value.
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true,\"interfaceFont\":\"\",\"runtimeLogLevel\":\"info\"}",
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true,\"interfaceFont\":\"MiSans \",\"runtimeLogLevel\":\"info\"}",
         ] {
             fs::write(state.settings_path(), invalid).expect("write invalid settings");
             assert_eq!(state.get_app_settings().unwrap_err(), "应用设置格式无效");
         }
+    }
+
+    #[test]
+    fn invalid_interface_font_names_are_rejected_before_any_write() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+
+        let names = ["", "  ", "\"quoted\"", "back\\slash", "MiSans "]
+            .into_iter()
+            .map(str::to_string)
+            .chain([core::iter::repeat('x').take(65).collect::<String>()]);
+        for name in names {
+            let settings = AppSettings {
+                interface_font: name,
+                ..AppSettings::default()
+            };
+            assert!(state.set_app_settings(&settings).is_err());
+        }
+        assert!(!state.settings_path().exists());
     }
 
     #[test]
@@ -705,6 +1245,7 @@ mod tests {
                 model_options: None,
                 notes: None,
                 website_url: None,
+                usage_query: None,
             })
             .expect("create claude");
         let codex_b = state
@@ -759,6 +1300,7 @@ mod tests {
                 model_options: None,
                 notes: None,
                 website_url: None,
+                usage_query: None,
             })
             .expect("create claude");
 
@@ -809,7 +1351,6 @@ mod tests {
                 operation: asb_core::SwitchOp::Switch,
             })
             .expect("record second");
-
         let latest = state
             .latest_switch(AppKind::Codex)
             .expect("latest switch")

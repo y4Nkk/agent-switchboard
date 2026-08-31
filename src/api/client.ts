@@ -4,8 +4,51 @@
  * configuration text or filesystem paths themselves.
  * (Enforced by boundary.test.ts.)
  */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isBrowserDevelopment } from "../lib/runtime";
+
+type InvokeArgs = Record<string, unknown>;
+
+interface WebCommandResponse<T> {
+  kind: "success" | "failure";
+  result?: T;
+  error?: CommandError;
+}
+
+/** In browser development, Vite proxies this call to the local Tauri helper
+ * process. Desktop and test code keep the native Tauri invoke transport. */
+async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
+  if (!isBrowserDevelopment) {
+    return args === undefined ? tauriInvoke<T>(command) : tauriInvoke<T>(command, args);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch("/api/invoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command, args }),
+    });
+  } catch {
+    throw {
+      code: "web-backend-unavailable",
+      message: "本机开发后端未就绪；请通过 npm run dev 启动应用",
+    } satisfies CommandError;
+  }
+
+  const payload = (await response.json().catch(() => null)) as WebCommandResponse<T> | null;
+  if (!response.ok || !payload) {
+    throw {
+      code: "web-backend-unavailable",
+      message: "本机开发后端没有返回有效响应",
+    } satisfies CommandError;
+  }
+  if (payload.kind === "failure") {
+    throw payload.error;
+  }
+  return payload.result as T;
+}
 
 export type AppKind = "codex" | "claude";
 export type PatchValue = boolean | string | number | PatchValue[];
@@ -29,6 +72,38 @@ export type ModelOptions =
   | ({ kind: "codex" } & CodexModelSettings)
   | ({ kind: "claude" } & ClaudeModelSettings);
 
+/** One declarative usage-balance query: a GET against the provider endpoint
+ * with `{{baseUrl}}` / `{{apiKey}}` placeholders plus JSON Pointer paths. */
+export interface DeclarativeUsageQuery {
+  kind: "declarative";
+  url: string;
+  remainingPath?: string | null;
+  usedPath?: string | null;
+  totalPath?: string | null;
+  /** Display unit for the extracted numbers, e.g. "USD". */
+  unit?: string | null;
+}
+
+/** A self-authored JavaScript query. The source evaluates to `{ request,
+ * extract }`; it is executed in the backend's restricted runtime. */
+export interface ScriptUsageQuery {
+  kind: "script";
+  source: string;
+}
+
+/** The only persisted usage-query contract. `null` on a profile means the
+ * optional feature is not configured. */
+export type UsageQuery = DeclarativeUsageQuery | ScriptUsageQuery;
+
+/** Numbers picked out of one usage-query response. */
+export interface UsageSummary {
+  remaining: number | null;
+  used: number | null;
+  total: number | null;
+  unit: string | null;
+  at: string;
+}
+
 export interface ProviderProfile {
   id: string;
   app: AppKind;
@@ -41,6 +116,8 @@ export interface ProviderProfile {
   notes?: string | null;
   /** Provider homepage, used for navigation only. */
   websiteUrl?: string | null;
+  /** Application-side usage-balance query; never written into client config. */
+  usageQuery?: UsageQuery | null;
 }
 
 /** Every profile routes to a custom endpoint; official login is not a
@@ -54,6 +131,7 @@ export interface ProviderDraft {
   modelOptions: ModelOptions | null;
   notes?: string | null;
   websiteUrl?: string | null;
+  usageQuery?: UsageQuery | null;
 }
 
 export interface PatchEntry {
@@ -65,6 +143,16 @@ export interface PatchEntry {
 export interface CommonConfigPatch {
   app: AppKind;
   entries: PatchEntry[];
+}
+
+/** One backend-resolved global instruction document. Its absolute path never
+ * crosses the renderer boundary; the hash protects against stale saves. */
+export interface GlobalPromptDocument {
+  app: AppKind;
+  fileName: string;
+  content: string;
+  contentHash: string;
+  exists: boolean;
 }
 
 /** One official general-config toggle with the file's current line state. */
@@ -113,6 +201,8 @@ export interface RouteState {
   scopeWarnings: string[];
 }
 
+export type SwitchOperation = "switch" | "commonsettings";
+
 export interface SwitchLog {
   app: AppKind;
   profileId: string | null;
@@ -120,6 +210,44 @@ export interface SwitchLog {
   contentHash: string;
   backupId: string;
   at: string;
+  operation: SwitchOperation;
+}
+
+/** Closed, renderer-safe runtime events emitted by the application backend. */
+export type RuntimeLogAction =
+  | "appStarted"
+  | "appSettingsSaved"
+  | "profileStoreReset"
+  | "profileCreated"
+  | "profileUpdated"
+  | "profileDeleted"
+  | "profilesReordered"
+  | "profileImported"
+  | "commonSettingsSaved"
+  | "commonSettingsApplied"
+  | "globalPromptDocumentSaved"
+  | "configurationSwitched"
+  | "backupRestored"
+  | "switchUndone"
+  | "staleLockRecovered"
+  | "cloudBackupSettingsSaved"
+  | "cloudBackupUploaded"
+  | "cloudBackupRestored"
+  | "sessionResumed"
+  | "ccSwitchProfilesImported";
+
+/** Persisted recording threshold. `silent` stops future event writes. */
+export type RuntimeLogLevel = "debug" | "info" | "warn" | "error" | "silent";
+
+/** Severity of one event already written to the application log. */
+export type RuntimeLogSeverity = Exclude<RuntimeLogLevel, "silent">;
+
+/** One non-secret application runtime event from the app-owned log files. */
+export interface RuntimeLogEntry {
+  at: string;
+  level: RuntimeLogSeverity;
+  action: RuntimeLogAction;
+  errorCode?: string;
 }
 
 export type MatchStatus =
@@ -131,9 +259,12 @@ export type MatchStatus =
   | { kind: "unmanaged" }
   | { kind: "unknown" };
 
+/** Reachability grade of one manual probe: any HTTP answer counts as ok/slow,
+ * only network-level failures (DNS / refused / TLS / timeout) are unreachable. */
+export type ProbeGrade = "ok" | "slow" | "unreachable";
+
 export interface ProbeResult {
-  url: string;
-  reachable: boolean;
+  grade: ProbeGrade;
   status: number | null;
   latencyMs: number | null;
   error: string | null;
@@ -385,6 +516,24 @@ export function applyCommon(
   return invoke<SwitchOutcome>("apply_common", { target: app, patch, confirmWrite });
 }
 
+export function getGlobalPromptDocument(app: AppKind): Promise<GlobalPromptDocument> {
+  return invoke<GlobalPromptDocument>("get_global_prompt_document", { target: app });
+}
+
+export function saveGlobalPromptDocument(
+  app: AppKind,
+  content: string,
+  expectedHash: string,
+  confirmWrite: boolean,
+): Promise<GlobalPromptDocument> {
+  return invoke<GlobalPromptDocument>("save_global_prompt_document", {
+    target: app,
+    content,
+    expectedHash,
+    confirmWrite,
+  });
+}
+
 export type CloseBehavior = "hideToTray" | "exit";
 export type ThemePreference = "system" | "light" | "dark";
 export type MotionPreference = "system" | "reduce";
@@ -396,6 +545,25 @@ export interface AppSettings {
   motion: MotionPreference;
   alwaysOnTop: boolean;
   hardwareAcceleration: boolean;
+  /** Font family for display and interface text; the value is quoted
+   * verbatim as a CSS font-family, so it must be a plain family name. */
+  interfaceFont: string;
+  /** Threshold used for future application runtime-event recording. */
+  runtimeLogLevel: RuntimeLogLevel;
+}
+
+/** Public connection coordinates for a user-owned Supabase project. The
+ * Supabase account password and cloud-backup password are action-only inputs
+ * and are never persisted. */
+export interface CloudBackupSettings {
+  projectUrl: string;
+  publishableKey: string;
+  email: string;
+}
+
+export interface CloudBackupResult {
+  updatedAt: string;
+  profileCount: number;
 }
 
 export function getAppSettings(): Promise<AppSettings> {
@@ -404,6 +572,49 @@ export function getAppSettings(): Promise<AppSettings> {
 
 export function setAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("set_app_settings", { settings });
+}
+
+export function getCloudBackupSettings(): Promise<CloudBackupSettings | null> {
+  return invoke<CloudBackupSettings | null>("get_cloud_backup_settings");
+}
+
+export function setCloudBackupSettings(
+  settings: CloudBackupSettings,
+): Promise<CloudBackupSettings> {
+  return invoke<CloudBackupSettings>("set_cloud_backup_settings", { settings });
+}
+
+export function getCloudBackupSetupSql(): Promise<string> {
+  return invoke<string>("cloud_backup_setup_sql");
+}
+
+export function uploadCloudBackup(
+  accountPassword: string,
+  backupPassword: string,
+  confirmWrite: boolean,
+): Promise<CloudBackupResult> {
+  return invoke<CloudBackupResult>("upload_cloud_backup", {
+    accountPassword,
+    backupPassword,
+    confirmWrite,
+  });
+}
+
+export function restoreCloudBackup(
+  accountPassword: string,
+  backupPassword: string,
+  confirmWrite: boolean,
+): Promise<CloudBackupResult> {
+  return invoke<CloudBackupResult>("restore_cloud_backup", {
+    accountPassword,
+    backupPassword,
+    confirmWrite,
+  });
+}
+
+/** Installed system font families, offered by the interface-font picker. */
+export function listSystemFonts(): Promise<string[]> {
+  return invoke<string[]>("list_system_fonts");
 }
 
 /** Dev-machine debug affordance: toggles the WebView inspector. */
@@ -433,6 +644,15 @@ export function listBackups(): Promise<BackupRecord[]> {
   return invoke<BackupRecord[]>("list_backups");
 }
 
+export function listRuntimeLogs(): Promise<RuntimeLogEntry[]> {
+  return invoke<RuntimeLogEntry[]>("list_runtime_logs");
+}
+
+/** Opens the app-owned runtime-log directory without exposing its path to the UI. */
+export function openRuntimeLogDir(): Promise<void> {
+  return invoke<void>("open_runtime_log_dir");
+}
+
 export function restoreBackup(backupId: string, confirmWrite: boolean): Promise<RestoreOutcome> {
   return invoke<RestoreOutcome>("restore_backup", { backupId, confirmWrite });
 }
@@ -458,6 +678,16 @@ export function fetchProviderModels(baseUrl: string, apiKey: string): Promise<st
   return invoke<string[]>("fetch_provider_models", { url: baseUrl, apiKey });
 }
 
+/** Runs one on-demand usage-balance query with the supplied profile or editor
+ * credential; nothing is persisted and the credential never appears in errors. */
+export function testUsageQuery(
+  query: UsageQuery,
+  apiKey: string,
+  baseUrl: string | null,
+): Promise<UsageSummary> {
+  return invoke<UsageSummary>("test_usage_query", { query, apiKey, baseUrl });
+}
+
 /** Result of one manual app-update check; informational only. */
 export interface UpdateCheck {
   currentVersion: string;
@@ -470,6 +700,53 @@ export interface UpdateCheck {
 
 export function checkUpdate(): Promise<UpdateCheck> {
   return invoke<UpdateCheck>("check_update");
+}
+
+/** Public, global reset signals from Codex Runway. These do not describe the
+ * signed-in account's actual quota or entitlement. */
+export type CodexResetFeedStatus = "ok" | "degraded";
+
+export interface ResetSignal {
+  announcedAt: string;
+  effectiveAt: string | null;
+  schedulePrecision: string | null;
+  confidence: number;
+}
+
+export interface TiboPost {
+  announcedAt: string;
+  text: string;
+  url: string;
+}
+
+export interface CodexResetStatus {
+  sourceUrl: string;
+  feedStatus: CodexResetFeedStatus;
+  generatedAt: string;
+  lastSuccessfulCheckAt: string;
+  checkedAt: string;
+  latestConfirmedReset: ResetSignal | null;
+  nextScheduledReset: ResetSignal | null;
+  latestRelevantTiboPost: TiboPost | null;
+  sourceWarning: string | null;
+}
+
+export type CodexResetFreshness = "cached" | "live";
+
+/** The normalized public signal plus how the overview obtained it. */
+export interface CodexResetRead {
+  status: CodexResetStatus;
+  freshness: CodexResetFreshness;
+  cacheWarning: string | null;
+}
+
+/** Reads only the last successful local snapshot; it never contacts the feed. */
+export function getCachedCodexResetStatus(): Promise<CodexResetRead | null> {
+  return invoke<CodexResetRead | null>("get_cached_codex_reset_status");
+}
+
+export function checkCodexResetStatus(): Promise<CodexResetRead> {
+  return invoke<CodexResetRead>("check_codex_reset_status");
 }
 
 export function getLockStatus(app: AppKind): Promise<LockStatus> {
@@ -501,21 +778,26 @@ export function resumeSession(app: AppKind, sessionId: string): Promise<SessionR
    window_close / window_is_maximized), keeping all backend access inside this
    boundary. Maximize state is re-synced through window resize events. */
 export function minimizeWindow(): Promise<void> {
+  if (isBrowserDevelopment) return Promise.resolve();
   return invoke("window_minimize");
 }
 
 export function toggleMaximizeWindow(): Promise<void> {
+  if (isBrowserDevelopment) return Promise.resolve();
   return invoke("window_toggle_maximize");
 }
 
 export function closeWindow(): Promise<void> {
+  if (isBrowserDevelopment) return Promise.resolve();
   return invoke("window_close");
 }
 
 export function getWindowMaximized(): Promise<boolean> {
+  if (isBrowserDevelopment) return Promise.resolve(false);
   return invoke<boolean>("window_is_maximized");
 }
 
 export function onWindowResized(handler: () => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
   return getCurrentWindow().onResized(() => handler());
 }

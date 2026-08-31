@@ -150,3 +150,29 @@ export function UpdateIcon({ size = 16 }: IconProps) {
     size,
   );
 }
+
+/** Account-usage readout: three measured bars above a baseline. */
+export function UsageIcon({ size = 16 }: IconProps) {
+  return svg(
+    <>
+      <path d="M4 20h16" />
+      <path d="M6.5 16v-4" />
+      <path d="M12 16V7" />
+      <path d="M17.5 16v-7" />
+    </>,
+    size,
+  );
+}
+
+/** Endpoint reachability: radio arcs converge on the service address. */
+export function ConnectivityIcon({ size = 16 }: IconProps) {
+  return svg(
+    <>
+      <path d="M5.5 10.2a9.2 9.2 0 0 1 13 0" />
+      <path d="M8.3 13a5.2 5.2 0 0 1 7.4 0" />
+      <path d="M10.6 15.8a2 2 0 0 1 2.8 0" />
+      <circle cx="12" cy="18.4" r=".8" fill="currentColor" stroke="none" />
+    </>,
+    size,
+  );
+}

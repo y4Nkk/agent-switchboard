@@ -1,12 +1,15 @@
+import { useState } from "react";
 import type {
   AppKind,
   CommonChoicesState,
   FilePreview,
+  GlobalPromptDocument,
   ToggleState,
 } from "../api/client";
 import { ClientLogo } from "../components/ClientLogo";
 import { CodePreview } from "../components/CodePreview";
 import { GeneralSettingsForm } from "../components/GeneralSettingsForm";
+import { GlobalPromptManager } from "../components/GlobalPromptManager";
 import { Tooltip } from "../components/Tooltip";
 import { clientName } from "../lib/client-name";
 
@@ -19,6 +22,15 @@ interface CommonSettingsPageProps {
   busy: boolean;
   /** One control = one config line, written through the safe transaction. */
   onApplyLine: (app: AppKind, key: string, value: boolean | string | null) => void;
+  promptApp: AppKind;
+  promptDocument: GlobalPromptDocument | undefined;
+  promptDraft: string;
+  promptDirty: boolean;
+  onSelectPromptApp: (app: AppKind) => void;
+  onPromptDraftChange: (content: string) => void;
+  onSavePrompt: () => void;
+  onDiscardPrompt: () => void;
+  onReloadPrompt: () => void;
 }
 
 /** General settings: per-client overlay controls plus the live candidate
@@ -31,53 +43,100 @@ export function CommonSettingsPage({
   commonPreview,
   busy,
   onApplyLine,
+  promptApp,
+  promptDocument,
+  promptDraft,
+  promptDirty,
+  onSelectPromptApp,
+  onPromptDraftChange,
+  onSavePrompt,
+  onDiscardPrompt,
+  onReloadPrompt,
 }: CommonSettingsPageProps) {
+  const [section, setSection] = useState<"models" | "prompts">("models");
   return (
     <section className="asb-panel" aria-label="通用设置">
       <div className="asb-panel-heading">
         <h2 className="asb-panel-title">通用设置</h2>
       </div>
-      <div className="asb-tabs" role="tablist" aria-label="客户端">
-        {(["codex", "claude"] as const).map((target) => (
-          <Tooltip key={target} label={clientName(target)} side="bottom">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={app === target}
-              aria-label={clientName(target)}
-              className={`asb-tab${app === target ? " is-on" : ""}`}
-              onClick={() => onSelectApp(target)}
-            >
-              <ClientLogo app={target} className="asb-tab-logo" />
-            </button>
-          </Tooltip>
-        ))}
+      <div className="asb-settings-main-tabs" role="tablist" aria-label="通用设置内容">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === "models"}
+          className={`asb-settings-main-tab${section === "models" ? " is-on" : ""}`}
+          onClick={() => setSection("models")}
+        >
+          模型配置
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === "prompts"}
+          className={`asb-settings-main-tab${section === "prompts" ? " is-on" : ""}`}
+          onClick={() => setSection("prompts")}
+        >
+          提示词管理
+        </button>
       </div>
-      <p className="asb-scope-note">
-        勾选即在配置文件写入该行，取消勾选即移除；写入前自动备份并原子替换。仅管理用户级配置，项目级配置与命令行参数可能覆盖此处设置。
-      </p>
-      {toggles && choices ? (
-        <GeneralSettingsForm
-          app={app}
-          toggles={toggles}
-          choices={choices.choices}
-          groups={choices.groups}
-          busy={busy}
-          onToggle={(toggle, checked) =>
-            onApplyLine(app, toggle.key, checked ? toggle.applied : null)
-          }
-          onChoiceChange={(choice, value) => onApplyLine(app, choice.key, value)}
-        />
+      {section === "models" ? (
+        <>
+          <div className="asb-tabs" role="tablist" aria-label="客户端">
+            {(["codex", "claude"] as const).map((target) => (
+              <Tooltip key={target} label={clientName(target)} side="bottom">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={app === target}
+                  aria-label={clientName(target)}
+                  className={`asb-tab${app === target ? " is-on" : ""}`}
+                  onClick={() => onSelectApp(target)}
+                >
+                  <ClientLogo app={target} className="asb-tab-logo" />
+                </button>
+              </Tooltip>
+            ))}
+          </div>
+          <p className="asb-scope-note">
+            勾选即在配置文件写入该行，取消勾选即移除；写入前自动备份并原子替换。仅管理用户级配置，项目级配置与命令行参数可能覆盖此处设置。
+          </p>
+          {toggles && choices ? (
+            <GeneralSettingsForm
+              app={app}
+              toggles={toggles}
+              choices={choices.choices}
+              groups={choices.groups}
+              busy={busy}
+              onToggle={(toggle, checked) =>
+                onApplyLine(app, toggle.key, checked ? toggle.applied : null)
+              }
+              onChoiceChange={(choice, value) => onApplyLine(app, choice.key, value)}
+            />
+          ) : (
+            <p className="asb-empty">加载中</p>
+          )}
+          <div className="asb-settings-preview">
+            {commonPreview ? (
+              <CodePreview target={commonPreview.preview.target} content={commonPreview.content} />
+            ) : (
+              <p className="asb-empty">正在生成配置预览</p>
+            )}
+          </div>
+        </>
       ) : (
-        <p className="asb-empty">加载中</p>
+        <GlobalPromptManager
+          app={promptApp}
+          document={promptDocument}
+          draft={promptDraft}
+          dirty={promptDirty}
+          busy={busy}
+          onSelectApp={onSelectPromptApp}
+          onChange={onPromptDraftChange}
+          onSave={onSavePrompt}
+          onDiscard={onDiscardPrompt}
+          onReload={onReloadPrompt}
+        />
       )}
-      <div className="asb-settings-preview">
-        {commonPreview ? (
-          <CodePreview target={commonPreview.preview.target} content={commonPreview.content} />
-        ) : (
-          <p className="asb-empty">正在生成配置预览</p>
-        )}
-      </div>
     </section>
   );
 }

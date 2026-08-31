@@ -6,12 +6,15 @@ interface Props {
   url: string | null;
 }
 
+interface FeedbackProps {
+  id?: string;
+  className?: string;
+  result: ProbeResult | null;
+  error: string | null;
+}
 
-/**
- * Manual endpoint verification: reachability, HTTP status, latency, and the
- * time of the probe. Informational only — nothing is selected automatically.
- */
-export function ProbePanel({ url }: Props) {
+/** Shared request lifecycle for every visible endpoint-probe trigger. */
+export function useEndpointProbe(url: string | null) {
   const [result, setResult] = useState<ProbeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,9 +27,8 @@ export function ProbePanel({ url }: Props) {
     setBusy(false);
   }, [url]);
 
-  if (!url) return null;
-
   const run = async () => {
+    if (!url || busy) return;
     const version = requestVersion.current;
     setBusy(true);
     setError(null);
@@ -35,35 +37,67 @@ export function ProbePanel({ url }: Props) {
       if (requestVersion.current === version) setResult(nextResult);
     } catch (caught) {
       if (requestVersion.current === version) {
-        setError((caught as { message?: string }).message ?? "验证失败");
+        setError((caught as { message?: string }).message ?? "检测失败");
       }
     } finally {
       if (requestVersion.current === version) setBusy(false);
     }
   };
 
+  return { result, busy, error, run };
+}
+
+/** One result presentation for editor and supplier-card probe controls. */
+export function ProbeFeedback({ id, className, result, error }: FeedbackProps) {
+  if (!result && !error) return null;
+
   return (
-    <div className="asb-probe">
-      <div className="asb-form-actions">
-        <button type="button" className="asb-btn-secondary" disabled={busy} onClick={run}>
-          验证端点
-        </button>
-      </div>
-      {error && <p className="asb-warn-text">{error}</p>}
+    <div id={id} className={`asb-probe-feedback${className ? ` ${className}` : ""}`} aria-live="polite">
       {result && (
-        <div className="asb-kv" aria-label="端点验证结果">
-          <span
-            className={`asb-kv-label ${result.reachable ? "asb-ok-text" : "asb-fail-text"}`}
-          >
-            {result.reachable
-              ? `可达 · HTTP ${result.status ?? "?"} · ${result.latencyMs ?? "?"} 毫秒`
-              : "不可达"}
-          </span>
-          <span className="asb-kv-value">
-            {result.error ?? <Time iso={result.at} />}
-          </span>
-        </div>
+        <span
+          className={`asb-kv-label ${
+            result.grade === "ok"
+              ? "asb-ok-text"
+              : result.grade === "slow"
+                ? "asb-warn-text"
+                : "asb-fail-text"
+          }`}
+        >
+          {result.grade === "unreachable"
+            ? `无法连通 · ${result.error ?? "网络请求失败"}`
+            : `${result.grade === "ok" ? "连通正常" : "连通但较慢"} · HTTP ${result.status ?? "?"} · ${result.latencyMs ?? "?"} 毫秒`}
+          {" · "}
+          <Time iso={result.at} />
+        </span>
+      )}
+      {error ? (
+        <p className="asb-warn-text" role="alert">{error}</p>
+      ) : (
+        result && (
+          <p className="asb-scope-note">
+            检测仅确认服务地址可达，不发送模型请求，也不验证密钥是否有效。
+          </p>
+        )
       )}
     </div>
+  );
+}
+
+/** Manual reachability check for the endpoint being edited, ported from the
+ * CC Switch pattern: any HTTP answer proves the address is reachable (graded
+ * slow past the latency threshold), only network-level failures report as
+ * unreachable. The probe sends no model request and carries no credential. */
+export function ProbePanel({ url }: Props) {
+  const probe = useEndpointProbe(url);
+
+  if (!url) return null;
+
+  return (
+    <>
+      <button type="button" className="asb-btn-secondary" disabled={probe.busy} onClick={() => void probe.run()}>
+        {probe.busy ? "检测中…" : "检测连通"}
+      </button>
+      <ProbeFeedback className="asb-editor-probe-feedback" result={probe.result} error={probe.error} />
+    </>
   );
 }

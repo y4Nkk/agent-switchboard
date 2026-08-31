@@ -17,9 +17,9 @@ interface SnapshotDeps {
 }
 
 /**
- * The observable client snapshot: file statuses, profiles, backups, locks,
- * and the selected profile id. One versioned `refresh` keeps late responses
- * from overwriting newer ones.
+ * The observable client snapshot: file statuses, profiles, backups, and
+ * locks, plus the selected profile id. One versioned `refresh` keeps
+ * late responses from overwriting newer ones.
  */
 export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const [statuses, setStatuses] = useState<ConfigFileStatus[] | null>(null);
@@ -32,13 +32,14 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     try {
-      const [nextStatuses, nextProfiles, nextBackups, codexLock, claudeLock] = await Promise.all([
-        getConfigStatus(),
-        listProfiles(),
-        listBackups(),
-        getLockStatus("codex"),
-        getLockStatus("claude"),
-      ]);
+      const [nextStatuses, nextProfiles, nextBackups, codexLock, claudeLock] =
+        await Promise.all([
+          getConfigStatus(),
+          listProfiles(),
+          listBackups(),
+          getLockStatus("codex"),
+          getLockStatus("claude"),
+        ]);
       if (refreshVersion.current !== version) return;
       setStatuses(nextStatuses);
       setProfiles(nextProfiles);

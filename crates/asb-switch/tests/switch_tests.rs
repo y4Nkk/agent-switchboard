@@ -27,6 +27,7 @@ fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> SwitchPlan
             model_options: None,
             notes: None,
             website_url: None,
+            usage_query: None,
         },
         common: CommonConfigPatch {
             app: AppKind::Codex,
@@ -51,6 +52,7 @@ fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
             model_options: None,
             notes: None,
             website_url: None,
+            usage_query: None,
         },
         common: CommonConfigPatch {
             app: AppKind::Claude,
@@ -205,13 +207,11 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
     assert!(fp.content.contains("••••••••"));
     assert!(!fp.content.contains("CODEX_RELAY_B_KEY"));
     assert!(switched.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
+    assert!(switched.contains("model_provider = \"openai\""));
+    assert!(switched.contains("openai_base_url = \"https://relay-b.internal/v1\""));
+    assert!(!switched.contains("[model_providers"));
     assert!(switched.contains("https://relay-b.internal/v1"));
-    for host in [
-        "threads = 8",
-        "history_persistence",
-        "[model_providers.openai]",
-        "trusted = true",
-    ] {
+    for host in ["threads = 8", "history_persistence", "trusted = true"] {
         assert!(switched.contains(host), "host field lost: {host}");
     }
 
@@ -808,7 +808,7 @@ fn common_apply_sets_and_removes_toggle_lines_transactionally() {
     assert!(text.contains("hide_agent_reasoning = true"));
     // Host content outside the patch survives untouched.
     assert!(text.contains("threads = 8"));
-    assert!(text.contains("[model_providers.openai]"));
+    assert!(text.contains("trusted = true"));
     assert!(Path::new(&format!("{}.meta.json", outcome.backup.backup_path)).exists());
 
     let remove_patch = codex_common(vec![PatchEntry {

@@ -22,7 +22,7 @@ describe("UpdateSection", () => {
     render(<UpdateSection result={null} busy={false} onCheck={() => {}} />);
 
     expect(screen.getByText("检查新版本")).toBeInTheDocument();
-    expect(screen.getByText("从 GitHub 发布页检查 Agent Switchboard 的最新版本")).toBeInTheDocument();
+    expect(screen.queryByText(/当前版本/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开下载页面" })).not.toBeInTheDocument();
   });
 

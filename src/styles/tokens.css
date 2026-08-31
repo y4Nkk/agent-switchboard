@@ -1,9 +1,9 @@
 /*
  * Agent Switchboard runtime token owner.
  *
- * This stylesheet is the ONLY place where palette, blur, radius, spacing and
+ * This stylesheet is the ONLY place where palette, surface, radius, spacing and
  * motion values may be defined. Components consume the semantic variables and
- * must never introduce local color, blur or duration constants
+ * must never introduce local color, surface or duration constants
  * (DESIGN.md §5; enforced by src/styles/tokens.test.ts).
  */
 
@@ -23,18 +23,18 @@
   --asb-text-muted: rgba(20, 22, 27, 0.62);
   --asb-hairline: rgba(20, 22, 27, 0.12);
   --asb-hairline-strong: rgba(20, 22, 27, 0.2);
-  --asb-content: rgba(255, 255, 255, 0.92);
-  --asb-content-muted: rgba(255, 255, 255, 0.72);
-  --asb-glass-rail: rgba(246, 247, 251, 0.7);
-  --asb-glass-menu: rgba(246, 247, 251, 0.78);
-  --asb-glass-sheet: rgba(246, 247, 251, 0.62);
+  --asb-content: #ffffff;
+  --asb-content-muted: #f1f3f8;
+  --asb-surface-rail: #eef0f7;
+  --asb-surface-menu: #f5f6fa;
+  --asb-surface-sheet: #f2f3f8;
   /* Opaque by design: the ring gradient paints the border-box, so a
      translucent surface would let it bleed through the card face (the
      removed center-ray artifact). */
   --asb-row-selected: color-mix(in srgb, var(--asb-action) 8%, white);
   --asb-danger: #d70015;
   --asb-warning: #b25000;
-  --asb-code-bg: rgba(20, 22, 27, 0.035);
+  --asb-code-bg: #f0f1f5;
 
   /* Diff semantics — red outgoing / green incoming (user-directed
      2026-08-28). Owned here; diff surfaces never re-derive these colors.
@@ -44,30 +44,22 @@
   --asb-diff-add-bg: rgba(30, 142, 62, 0.1);
 
   /* Row emphasis: tinted lift shadow (cc-switch reference) plus the ported
-     spiralcoder gradient system (user directive 2026-08-28): a four-stop
-     ring palette with rest/full intensities and the primary-button gradient
-     with its inner glow. Fixed brand palette — defined once here; dark mode
-     inherits unchanged. */
+     spiralcoder gradient system (user directive 2026-08-28): the live-row
+     four-stop ring and the primary-button gradient with its inner glow.
+     Fixed brand palette — defined once here; dark mode inherits unchanged. */
   --asb-accent-shadow: 0 8px 24px rgba(10, 132, 255, 0.2),
     0 1px 2px rgba(10, 132, 255, 0.1);
   --asb-accent-ring-blue: #046aff;
   --asb-accent-ring-violet: #7f66f8;
   --asb-accent-ring-mauve: #c39cad;
   --asb-accent-ring-gold: #ffe6b6;
-  --asb-accent-border-stops-rest:
-    color-mix(in srgb, var(--asb-accent-ring-blue) 48%, transparent) 0deg,
-    color-mix(in srgb, var(--asb-accent-ring-violet) 62%, transparent) 108deg,
-    color-mix(in srgb, var(--asb-accent-ring-mauve) 54%, transparent) 216deg,
-    color-mix(in srgb, var(--asb-accent-ring-gold) 46%, transparent) 320deg,
-    color-mix(in srgb, var(--asb-accent-ring-blue) 48%, transparent) 360deg;
   --asb-accent-border-stops-active:
     var(--asb-accent-ring-blue) 0deg,
     var(--asb-accent-ring-violet) 108deg,
     var(--asb-accent-ring-mauve) 216deg,
     var(--asb-accent-ring-gold) 320deg,
     var(--asb-accent-ring-blue) 360deg;
-  --asb-accent-border-duration: 6s;
-  --asb-accent-border-duration-strong: 4s;
+  --asb-accent-border-duration: 4s;
   --asb-gradient-button: linear-gradient(
     88deg,
     #52e1ff -15.8%,
@@ -80,9 +72,13 @@
   --asb-gradient-button-glow-hover: inset 0 0 16px 0 #ffffff,
     inset 0 0 14px 0 #80b4ff;
 
-  /* Typography */
-  --asb-font-display: "Segoe UI Variable Display", "MiSans", system-ui, sans-serif;
-  --asb-font-ui: "Segoe UI Variable", "MiSans", system-ui, sans-serif;
+  /* Typography. The user-selected interface font leads both text stacks; the
+     fallback here is the bundled default (see main.tsx @font-face imports).
+     useAppSettings overrides --asb-font-user at runtime. */
+  --asb-font-user: "Noto Sans SC";
+  --asb-font-display: var(--asb-font-user), "Segoe UI Variable Display", "MiSans", system-ui,
+    sans-serif;
+  --asb-font-ui: var(--asb-font-user), "Segoe UI Variable", "MiSans", system-ui, sans-serif;
   --asb-font-code: "Maple Mono", "Cascadia Mono", ui-monospace, monospace;
   --asb-text-title: 600 17px/1.3 var(--asb-font-display);
   --asb-text-body: 400 15px/1.55 var(--asb-font-ui);
@@ -113,21 +109,14 @@
   --asb-space-5: 32px;
   --asb-space-6: 48px;
 
-  /* Ambient field lights */
+  /* Ambient field lights. Soft stops are painted directly: background layers
+     never sample or blur the pixels behind them. */
   --asb-ambient-light-codex: rgba(10, 132, 255, 0.1);
   --asb-ambient-light-claude: rgba(139, 124, 255, 0.09);
 
   /* Materials */
-  --asb-blur-ambient: 72px;
-  --asb-blur-rail: 28px;
-  --asb-blur-menu: 20px;
-  --asb-blur-sheet: 40px;
-  --asb-saturation-rail: 160%;
   --asb-shadow-modal: 0 12px 40px rgba(7, 23, 37, 0.18);
   --asb-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  --asb-glass-fallback-rail: #eef0f7;
-  --asb-glass-fallback-sheet: #eef0f7;
-  --asb-glass-fallback-menu: #eef0f7;
 
   /* Motion */
   --asb-motion-press: 120ms;
@@ -148,11 +137,11 @@
   /* Route card — model-service-card treatment replicated from the
      spiralcoder reference (user-directed 2026-08-27). Enabled cards carry
      the blue→light-blue→warm-peach flow with a bottom blue wash; idle cards
-     stay frosted. This is the ONLY sanctioned gradient surface (DESIGN.md §4). */
+   stay calm and near-solid. This is the ONLY sanctioned gradient surface (DESIGN.md §4). */
   --asb-route-active-gradient:
     linear-gradient(180deg, rgba(49, 108, 237, 0) 42%, rgba(49, 108, 237, 0.86) 100%),
     linear-gradient(100deg, #477ff5 0%, #78a0f4 54%, #f8c09c 100%);
-  --asb-route-idle-bg: rgba(255, 255, 255, 0.95);
+  --asb-route-idle-bg: #f8f9fc;
   /* Starlight matrix particle tones (RGB triplets), consumed by
      MatrixStarlightCanvas; the only animated decoration (DESIGN.md §4). */
   --asb-route-particle-base-rgb: 239 248 255;
@@ -161,9 +150,7 @@
   --asb-route-particle-idle-flare-rgb: 133 106 207;
   --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
   --asb-route-pill-text: #1e66f5;
-  --asb-route-inner-bg: rgba(255, 255, 255, 0.85);
-  --asb-blur-route-inner: 12px;
-  --asb-blur-route-idle: 40px;
+  --asb-route-inner-bg: #edf1f8;
 
   /* Layout */
   --asb-touch-target: 40px;
@@ -177,11 +164,11 @@
     --asb-text-muted: rgba(237, 240, 247, 0.6);
     --asb-hairline: rgba(237, 240, 247, 0.14);
     --asb-hairline-strong: rgba(237, 240, 247, 0.26);
-    --asb-content: rgba(13, 33, 51, 0.92);
-    --asb-content-muted: rgba(13, 33, 51, 0.72);
-    --asb-glass-rail: rgba(7, 23, 37, 0.7);
-    --asb-glass-menu: rgba(7, 23, 37, 0.78);
-    --asb-glass-sheet: rgba(7, 23, 37, 0.62);
+     --asb-content: #0d2133;
+     --asb-content-muted: #10293f;
+     --asb-surface-rail: #0b2236;
+     --asb-surface-menu: #10283d;
+     --asb-surface-sheet: #0e273b;
     --asb-row-selected: color-mix(
       in srgb,
       var(--asb-action) 16%,
@@ -189,7 +176,7 @@
     );
     --asb-danger: #ff453a;
     --asb-warning: #ff9f0a;
-    --asb-code-bg: rgba(246, 247, 251, 0.06);
+     --asb-code-bg: #112b40;
     --asb-diff-add-text: #4cd964;
     --asb-diff-remove-bg: rgba(255, 69, 58, 0.16);
     --asb-diff-add-bg: rgba(48, 209, 88, 0.14);
@@ -200,15 +187,12 @@
     --asb-scrollbar-thumb-active: rgba(237, 240, 247, 0.66);
     --asb-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
-    --asb-glass-fallback-rail: #0b2236;
-    --asb-glass-fallback-sheet: #0b2236;
-    --asb-glass-fallback-menu: #0b2236;
-    --asb-route-idle-bg: rgba(7, 23, 37, 0.95);
+     --asb-route-idle-bg: #071725;
     --asb-route-particle-idle-base-rgb: 133 176 255;
     --asb-route-particle-idle-flare-rgb: 173 150 235;
     --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
     --asb-route-pill-text: #8be9fd;
-    --asb-route-inner-bg: rgba(13, 33, 51, 0.85);
+     --asb-route-inner-bg: #0d2133;
   }
 }
 
@@ -221,11 +205,11 @@
     --asb-text-muted: rgba(237, 240, 247, 0.6);
     --asb-hairline: rgba(237, 240, 247, 0.14);
     --asb-hairline-strong: rgba(237, 240, 247, 0.26);
-    --asb-content: rgba(13, 33, 51, 0.92);
-    --asb-content-muted: rgba(13, 33, 51, 0.72);
-    --asb-glass-rail: rgba(7, 23, 37, 0.7);
-    --asb-glass-menu: rgba(7, 23, 37, 0.78);
-    --asb-glass-sheet: rgba(7, 23, 37, 0.62);
+    --asb-content: #0d2133;
+    --asb-content-muted: #10293f;
+    --asb-surface-rail: #0b2236;
+    --asb-surface-menu: #10283d;
+    --asb-surface-sheet: #0e273b;
     --asb-row-selected: color-mix(
       in srgb,
       var(--asb-action) 16%,
@@ -233,7 +217,7 @@
     );
     --asb-danger: #ff453a;
     --asb-warning: #ff9f0a;
-    --asb-code-bg: rgba(246, 247, 251, 0.06);
+    --asb-code-bg: #112b40;
     --asb-diff-add-text: #4cd964;
     --asb-diff-remove-bg: rgba(255, 69, 58, 0.16);
     --asb-diff-add-bg: rgba(48, 209, 88, 0.14);
@@ -244,15 +228,12 @@
     --asb-scrollbar-thumb-active: rgba(237, 240, 247, 0.66);
     --asb-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
-    --asb-glass-fallback-rail: #0b2236;
-    --asb-glass-fallback-sheet: #0b2236;
-    --asb-glass-fallback-menu: #0b2236;
-    --asb-route-idle-bg: rgba(7, 23, 37, 0.95);
+    --asb-route-idle-bg: #071725;
     --asb-route-particle-idle-base-rgb: 133 176 255;
     --asb-route-particle-idle-flare-rgb: 173 150 235;
     --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
     --asb-route-pill-text: #8be9fd;
-    --asb-route-inner-bg: rgba(13, 33, 51, 0.85);
+    --asb-route-inner-bg: #0d2133;
 }
 
 @media (prefers-reduced-motion: reduce) {

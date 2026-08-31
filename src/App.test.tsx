@@ -8,6 +8,7 @@ import type {
   ConfigFileStatus,
   FilePreview,
   ProviderProfile,
+  RuntimeLogEntry,
   SwitchLog,
 } from "./api/client";
 
@@ -26,7 +27,16 @@ const codexSwitch: SwitchLog = {
   contentHash: "hash-after",
   backupId: "b1",
   at: "2026-08-26T08:00:00Z",
+  operation: "switch",
 };
+
+const runtimeLogs: RuntimeLogEntry[] = [
+  {
+    at: "2026-08-26T08:00:00Z",
+    level: "info",
+    action: "configurationSwitched",
+  },
+];
 
 const statuses: ConfigFileStatus[] = [
   {
@@ -106,6 +116,16 @@ const filePreview: FilePreview = {
 
 const emptyPatch = (app: "codex" | "claude"): CommonConfigPatch => ({ app, entries: [] });
 
+const defaultSettings = {
+  closeBehavior: "hideToTray",
+  theme: "system",
+  motion: "system",
+  alwaysOnTop: false,
+  hardwareAcceleration: true,
+  interfaceFont: "Noto Sans SC",
+  runtimeLogLevel: "info",
+};
+
 function targetFrom(args: unknown): "codex" | "claude" {
   if (
     typeof args === "object" &&
@@ -126,7 +146,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function primeBackend() {
+function primeBackend(logEntries: RuntimeLogEntry[] = []) {
   invokeMock.mockImplementation((command: string, args?: unknown) => {
     switch (command) {
       case "config_status":
@@ -135,18 +155,16 @@ function primeBackend() {
         return Promise.resolve(profiles);
       case "list_backups":
         return Promise.resolve([]);
+      case "list_runtime_logs":
+        return Promise.resolve(logEntries);
       case "lock_status":
         return Promise.resolve({ state: "free" });
       case "get_app_settings":
-        return Promise.resolve({
-          closeBehavior: "hideToTray",
-          theme: "system",
-          motion: "system",
-          alwaysOnTop: false,
-          hardwareAcceleration: true,
-        });
+        return Promise.resolve(defaultSettings);
       case "set_app_settings":
         return Promise.resolve((args as { settings: unknown }).settings);
+      case "list_system_fonts":
+        return Promise.resolve(["Microsoft YaHei", "Noto Sans SC"]);
       case "get_common":
         return Promise.resolve(emptyPatch(targetFrom(args)));
       case "common_toggles":
@@ -219,6 +237,27 @@ function primeBackend() {
           recovery: { outcome: "notNeeded" },
           finalHash: "h2",
         });
+      case "get_global_prompt_document": {
+        const target = targetFrom(args);
+        return Promise.resolve({
+          app: target,
+          fileName: target === "codex" ? "AGENTS.md" : "CLAUDE.md",
+          content: target === "codex" ? "# Codex global instructions\n" : "# Claude global instructions\n",
+          contentHash: `${target}-prompt-hash`,
+          exists: true,
+        });
+      }
+      case "save_global_prompt_document": {
+        const target = targetFrom(args);
+        const payload = args as { content: string };
+        return Promise.resolve({
+          app: target,
+          fileName: target === "codex" ? "AGENTS.md" : "CLAUDE.md",
+          content: payload.content,
+          contentHash: `${target}-saved-prompt-hash`,
+          exists: true,
+        });
+      }
       case "preview_switch":
         return Promise.resolve(filePreview);
       case "execute_switch":
@@ -317,6 +356,40 @@ describe("App integration with the typed client boundary", () => {
     expect(await screen.findByText(/已切换到「备用网关」/)).toBeInTheDocument();
   });
 
+  it("opens the logs tab through the typed application-log command", async () => {
+    primeBackend(runtimeLogs);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByText("本机网关");
+    await user.click(screen.getByRole("button", { name: "日志" }));
+
+    expect(await screen.findByText("已切换配置")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("list_runtime_logs");
+  });
+
+  it("saves the selected runtime-log threshold through the one app-settings path", async () => {
+    primeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "日志" }));
+    await screen.findByText("暂无应用运行日志");
+    const levelControl = screen.getByRole("combobox", { name: "记录级别" });
+    await waitFor(() => expect(levelControl).not.toBeDisabled());
+    await user.click(levelControl);
+    await user.click(screen.getByRole("option", { name: "静默" }));
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
+        settings: {
+          ...defaultSettings,
+          runtimeLogLevel: "silent",
+        },
+      }),
+    );
+  });
+
   it("reports match state, last switch time, and the user-config scope on the overview", async () => {
     primeBackend();
     render(<App />);
@@ -336,6 +409,12 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
       if (command === "get_common") return Promise.resolve(emptyPatch(targetFrom(args)));
+      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
+      if (command === "backup_diff") {
+        return Promise.resolve([
+          { key: "model", kind: "set", before: "gpt-5.3", after: "gpt-5.4" },
+        ]);
+      }
       if (command === "undo_last_switch") {
         return Promise.resolve({
           preRestoreBackup: {
@@ -359,7 +438,11 @@ describe("App integration with the typed client boundary", () => {
 
     await user.click(screen.getByRole("button", { name: "备份" }));
     await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
+    const diff = await screen.findByLabelText("撤回后写入的差异");
+    expect(within(diff).getByText("gpt-5.4")).toHaveClass("asb-diff-old");
+    expect(within(diff).getByText("gpt-5.3")).toHaveClass("asb-diff-new");
+    expect(within(dialog).getByRole("button", { name: "确认撤回" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "确认撤回" }));
 
     await waitFor(() =>
@@ -369,6 +452,50 @@ describe("App integration with the typed client boundary", () => {
       }),
     );
     expect(await screen.findByText("已撤回上一次切换")).toBeInTheDocument();
+  });
+
+  it("keeps undo confirmation unavailable until the exact difference is ready", async () => {
+    primeBackend();
+    const pendingDiff = deferred<Awaited<ReturnType<typeof client.backupDiff>>>();
+    const backend = invokeMock.getMockImplementation();
+    expect(backend).toBeDefined();
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "backup_diff") return pendingDiff.promise;
+      return backend!(command, args as never);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "备份" }));
+    await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
+    const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
+    expect(within(dialog).getByRole("button", { name: "确认撤回" })).toBeDisabled();
+    expect(within(dialog).getByText("正在生成撤回后会写入的差异。")).toBeInTheDocument();
+
+    await act(async () => {
+      pendingDiff.resolve([]);
+    });
+
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "确认撤回" })).toBeEnabled(),
+    );
+    expect(within(dialog).getByText("当前受管配置已与将恢复的备份一致。")).toBeInTheDocument();
+  });
+
+  it("cancels an undo confirmation without starting the restore transaction", async () => {
+    primeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "备份" }));
+    invokeMock.mockClear();
+    await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
+    const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
+
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("dialog", { name: "撤回上一次切换" })).not.toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith("undo_last_switch", expect.anything());
   });
 
   it("opens the backup folder via the backend command", async () => {
@@ -429,12 +556,14 @@ describe("App integration with the typed client boundary", () => {
           motion: "system",
           alwaysOnTop: false,
           hardwareAcceleration: true,
+          interfaceFont: "Noto Sans SC",
+          runtimeLogLevel: "info",
         },
       }),
     );
     expect(document.documentElement.dataset.theme).toBe("dark");
 
-    await user.click(screen.getByRole("checkbox", { name: "窗口始终置顶" }));
+    await user.click(screen.getByRole("switch", { name: "窗口始终置顶" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
         settings: {
@@ -443,11 +572,13 @@ describe("App integration with the typed client boundary", () => {
           motion: "system",
           alwaysOnTop: true,
           hardwareAcceleration: true,
+          interfaceFont: "Noto Sans SC",
+          runtimeLogLevel: "info",
         },
       }),
     );
 
-    await user.click(screen.getByRole("checkbox", { name: "启用硬件加速" }));
+    await user.click(screen.getByRole("switch", { name: "启用硬件加速" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
         settings: {
@@ -456,6 +587,8 @@ describe("App integration with the typed client boundary", () => {
           motion: "system",
           alwaysOnTop: true,
           hardwareAcceleration: false,
+          interfaceFont: "Noto Sans SC",
+          runtimeLogLevel: "info",
         },
       }),
     );
@@ -477,6 +610,8 @@ describe("App integration with the typed client boundary", () => {
           motion: "system",
           alwaysOnTop: true,
           hardwareAcceleration: true,
+          interfaceFont: "Noto Sans SC",
+          runtimeLogLevel: "info",
         },
       }),
     );
@@ -493,6 +628,8 @@ describe("App integration with the typed client boundary", () => {
           motion: "reduce",
           alwaysOnTop: false,
           hardwareAcceleration: true,
+          interfaceFont: "Noto Sans SC",
+          runtimeLogLevel: "info",
         });
       }
       if (command === "set_app_settings") return Promise.reject({ message: "保存失败" });
@@ -517,6 +654,64 @@ describe("App integration with the typed client boundary", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("保存失败");
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.dataset.motion).toBe("reduce");
+  });
+
+  it("界面字体经完整设置对象保存并立即应用到界面", async () => {
+    primeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "设置" }));
+    const trigger = await screen.findByRole("button", { name: "选择界面字体" });
+    expect(trigger.textContent).toContain("Noto Sans SC");
+    expect(document.documentElement.style.getPropertyValue("--asb-font-user")).toBe(
+      '"Noto Sans SC"',
+    );
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: /Microsoft YaHei/ }));
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
+        settings: {
+          closeBehavior: "hideToTray",
+          theme: "system",
+          motion: "system",
+          alwaysOnTop: false,
+          hardwareAcceleration: true,
+          interfaceFont: "Microsoft YaHei",
+          runtimeLogLevel: "info",
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue("--asb-font-user")).toBe(
+        '"Microsoft YaHei"',
+      ),
+    );
+  });
+
+  it("设置加载失败时固定显示原因并支持重试", async () => {
+    primeBackend();
+    let failSettings = true;
+    const backend = invokeMock.getMockImplementation();
+    invokeMock.mockImplementation((command: string, args?: Parameters<typeof invoke>[1]) => {
+      if (command === "get_app_settings" && failSettings) {
+        return Promise.reject({ code: "app-settings-unavailable", message: "应用设置格式无效" });
+      }
+      return backend?.(command, args) ?? Promise.resolve([]);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "设置" }));
+    expect(await screen.findByText("设置加载失败：应用设置格式无效")).toBeInTheDocument();
+    expect(screen.queryByText("加载中")).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "界面主题" })).toBeNull();
+
+    failSettings = false;
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByRole("radiogroup", { name: "界面主题" })).toBeInTheDocument();
   });
 
   it("marks keyboard focus and clears it on pointer interaction", async () => {
@@ -549,6 +744,7 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
       if (command === "get_common") return Promise.resolve(emptyPatch("codex"));
+      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       if (command === "discover_local") {
         return Promise.resolve({
           codex: {
@@ -583,6 +779,7 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
+      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       if (command === "discover_local") {
         return Promise.resolve({
           codex: {
@@ -665,6 +862,7 @@ describe("App integration with the typed client boundary", () => {
   it("scans CC Switch read-only, previews providers, and imports the selection", async () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
+      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       if (command === "scan_ccswitch") return Promise.resolve(ccScan);
       if (command === "import_ccswitch_profiles") {
         return Promise.resolve({
@@ -774,6 +972,7 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_profiles") {
         return Promise.reject({ code: "store-unreadable", message: "供应商存储不可读" });
       }
+      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       return Promise.resolve(command === "get_common" ? emptyPatch(targetFrom(args)) : []);
     });
     render(<App />);
@@ -788,6 +987,7 @@ describe("App integration with the typed client boundary", () => {
       if (command === "config_status") {
         return Promise.reject({ code: "read-current", message: "无法读取当前配置" });
       }
+      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       return Promise.resolve([]);
     });
     render(<App />);

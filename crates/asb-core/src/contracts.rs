@@ -21,6 +21,27 @@ impl AppKind {
             AppKind::Claude => "~/.claude/settings.json",
         }
     }
+
+    /// The one user-global instruction document supported for this client.
+    pub fn global_prompt_file_name(self) -> &'static str {
+        match self {
+            AppKind::Codex => "AGENTS.md",
+            AppKind::Claude => "CLAUDE.md",
+        }
+    }
+}
+
+/// One user-global instruction document. The backend owns its absolute target
+/// path; the renderer receives only the stable file name, text, and version
+/// hash needed to edit it without constructing a filesystem path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalPromptDocument {
+    pub app: AppKind,
+    pub file_name: String,
+    pub content: String,
+    pub content_hash: String,
+    pub exists: bool,
 }
 
 /// How a profile routes a client. The mode is explicit; an empty base URL
@@ -69,6 +90,52 @@ pub enum ModelOptions {
     Claude(ClaudeModelSettings),
 }
 
+/// One explicit usage-balance query mode owned by a profile. Declarative
+/// queries use the application's fixed GET/auth/JSON-Pointer behavior;
+/// script queries provide the two constrained JavaScript functions evaluated
+/// by the desktop runtime. The tag is the only persisted discriminator.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum UsageQuery {
+    /// Request URL; the `{{baseUrl}}` and `{{apiKey}}` placeholders are
+    /// substituted at run time. The desktop runtime sends a GET with its
+    /// established dual-ecosystem authorization headers.
+    Declarative {
+        url: String,
+        /// JSON Pointer (RFC 6901) into the response body, e.g.
+        /// `data/balance`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        remaining_path: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        used_path: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total_path: Option<String>,
+        /// Display unit for the extracted numbers, e.g. `USD`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        unit: Option<String>,
+    },
+    /// JavaScript source that evaluates to `{ request(input), extract(input) }`.
+    /// It is compiled and executed only by the constrained desktop runtime.
+    Script { source: String },
+}
+
+/// Numbers picked out of one usage-query response.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageSummary {
+    pub remaining: Option<f64>,
+    pub used: Option<f64>,
+    pub total: Option<f64>,
+    pub unit: Option<String>,
+    /// RFC 3339 UTC timestamp of the query.
+    pub at: String,
+}
+
 /// A provider profile. It is a small overlay, never a full copy of a user's
 /// configuration file. The profile owns the API key used for its configured
 /// endpoint and persists it in the application-owned profile store.
@@ -89,6 +156,10 @@ pub struct ProviderProfile {
     /// Provider homepage, used for navigation only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website_url: Option<String>,
+    /// Optional usage-balance query; application-side metadata that is never
+    /// written into any client configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage_query: Option<UsageQuery>,
 }
 
 /// Editable provider fields. The application assigns the stable profile id
@@ -108,6 +179,8 @@ pub struct ProviderDraft {
     pub notes: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage_query: Option<UsageQuery>,
 }
 
 impl std::fmt::Debug for ProviderProfile {
@@ -123,6 +196,7 @@ impl std::fmt::Debug for ProviderProfile {
             .field("model_options", &self.model_options)
             .field("notes", &self.notes)
             .field("website_url", &self.website_url)
+            .field("usage_query", &self.usage_query)
             .finish()
     }
 }
@@ -139,6 +213,7 @@ impl std::fmt::Debug for ProviderDraft {
             .field("model_options", &self.model_options)
             .field("notes", &self.notes)
             .field("website_url", &self.website_url)
+            .field("usage_query", &self.usage_query)
             .finish()
     }
 }
@@ -155,6 +230,7 @@ impl ProviderProfile {
             model_options: draft.model_options,
             notes: draft.notes,
             website_url: draft.website_url,
+            usage_query: draft.usage_query,
         }
     }
 }
@@ -373,4 +449,48 @@ pub struct ImportProposal {
     pub app: AppKind,
     pub draft: ProviderDraft,
     pub basis: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profiles_without_usage_query_still_deserialize() {
+        let legacy = r#"{
+            "id": "p1", "app": "codex", "name": "中转",
+            "model": null, "baseUrl": "https://relay.example/v1", "apiKey": "sk-x",
+            "notes": null, "websiteUrl": null
+        }"#;
+        let profile: ProviderProfile = serde_json::from_str(legacy).expect("legacy profile");
+        assert_eq!(profile.usage_query, None);
+    }
+
+    #[test]
+    fn usage_query_round_trips_as_the_only_tagged_contract() {
+        let json = r#"{
+            "kind": "declarative",
+            "url": "{{baseUrl}}/user/balance",
+            "remainingPath": "data/balance",
+            "totalPath": "data/total",
+            "unit": "USD"
+        }"#;
+        let query: UsageQuery = serde_json::from_str(json).expect("usage query");
+        assert!(matches!(
+            query,
+            UsageQuery::Declarative {
+                remaining_path: Some(ref path),
+                ..
+            } if path == "data/balance"
+        ));
+        assert!(serde_json::from_str::<UsageQuery>(r#"{"url":"u","remainingPath":"x"}"#).is_err());
+        assert!(serde_json::from_str::<UsageQuery>(
+            r#"{"kind":"declarative","url":"u","bogus":1}"#
+        )
+        .is_err());
+        assert!(serde_json::from_str::<UsageQuery>(
+            r#"{"kind":"script","source":"({})","url":"u"}"#
+        )
+        .is_err());
+    }
 }

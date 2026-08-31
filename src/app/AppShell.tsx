@@ -4,8 +4,9 @@ import { PinTopButton } from "../components/PinTopButton";
 import { UpdateButton } from "../components/UpdateButton";
 import { WindowControls } from "../components/WindowControls";
 import appIcon from "../assets/app-icon.png";
+import { isBrowserDevelopment } from "../lib/runtime";
 
-export const PAGES = ["概览", "供应商", "通用设置", "会话", "备份", "发现", "设置"] as const;
+export const PAGES = ["概览", "供应商", "通用设置", "会话", "日志", "备份", "发现", "设置"] as const;
 export type Page = (typeof PAGES)[number];
 
 interface AppShellProps {
@@ -41,7 +42,7 @@ export function AppShell({
     <>
       <div className="asb-ambient" aria-hidden="true" />
       <div className="asb-shell">
-        <header className="asb-topbar asb-glass" data-tauri-drag-region>
+        <header className="asb-topbar asb-surface-rail" data-tauri-drag-region>
           <span className="asb-topbar-brand" data-tauri-drag-region>
             <img className="asb-topbar-icon" src={appIcon} alt="" />
             <h1 className="asb-topbar-title" data-tauri-drag-region>
@@ -64,13 +65,14 @@ export function AppShell({
               ))}
             </ul>
           </nav>
+          {isBrowserDevelopment ? <span className="asb-web-development-badge">浏览器开发 · 本机后端</span> : null}
           {update ? (
             <UpdateButton latestVersion={update.latestVersion} onOpen={update.onOpen} />
           ) : null}
           {pin ? (
             <PinTopButton active={pin.active} disabled={busy} onToggle={pin.onToggle} />
           ) : null}
-          <WindowControls />
+          {!isBrowserDevelopment && <WindowControls />}
         </header>
         <div className="asb-workspace">
           <div className="asb-banner-stack" aria-label="操作状态">

@@ -8,6 +8,7 @@ import { useSwitchboardModel } from "./app/useSwitchboardModel";
 import { BackupsPage } from "./pages/BackupsPage";
 import { CommonSettingsPage } from "./pages/CommonSettingsPage";
 import { CcImportSection, DiscoveryPage } from "./pages/DiscoveryPage";
+import { LogsPage } from "./pages/LogsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -26,7 +27,9 @@ export default function App() {
     activeProfileId,
     switchPreview,
     commonSettings,
+    promptDocuments,
     appSettingsState,
+    cloudBackup,
     updateCheck,
     discoveryState,
     ccImport,
@@ -74,7 +77,6 @@ export default function App() {
                 onRequestSwitch={requestSwitch}
                 onRefresh={() => void snapshot.refresh()}
                 onRecoverLock={operations.setRecoverLockPending}
-                onOpenSessions={() => setPage("会话")}
               />
             )}
             {page === "供应商" && (
@@ -91,6 +93,7 @@ export default function App() {
                 onNew={() => setEditorMode("new")}
                 onCloseEditor={() => setEditorMode(null)}
                 onSave={providers.saveProfile}
+                onSaveUsageQuery={providers.saveProfileUsageQuery}
                 onSelect={switchPreview.selectProfile}
                 onReorder={providers.dragReorderProfiles}
                 onActivate={switchPreview.previewProfile}
@@ -111,11 +114,28 @@ export default function App() {
                 onApplyLine={(app, key, value) =>
                   void commonSettings.applyCommonLine(app, key, value)
                 }
+                promptApp={promptDocuments.promptApp}
+                promptDocument={promptDocuments.documents[promptDocuments.promptApp]}
+                promptDraft={
+                  promptDocuments.drafts[promptDocuments.promptApp] ??
+                  promptDocuments.documents[promptDocuments.promptApp]?.content ??
+                  ""
+                }
+                promptDirty={promptDocuments.isPromptDirty(promptDocuments.promptApp)}
+                onSelectPromptApp={promptDocuments.setPromptApp}
+                onPromptDraftChange={(content) =>
+                  promptDocuments.setPromptDraft(promptDocuments.promptApp, content)
+                }
+                onSavePrompt={() => void promptDocuments.savePromptDocument(promptDocuments.promptApp)}
+                onDiscardPrompt={() => promptDocuments.discardPromptDraft(promptDocuments.promptApp)}
+                onReloadPrompt={() => promptDocuments.reloadPromptDocument(promptDocuments.promptApp)}
               />
             )}
             {page === "设置" && (
               <SettingsPage
                 settings={appSettingsState.appSettings}
+                loadError={appSettingsState.loadError}
+                onRetryLoad={appSettingsState.retryLoad}
                 busy={busy}
                 onPatch={appSettingsState.saveSettingsPatch}
                 updateCheck={updateCheck.updateCheck}
@@ -128,13 +148,23 @@ export default function App() {
               </div>
               <SessionManager active={page === "会话"} />
             </section>
+            {page === "日志" && (
+              <LogsPage
+                logLevel={appSettingsState.appSettings?.runtimeLogLevel ?? null}
+                busy={busy}
+                onLogLevelChange={(runtimeLogLevel) =>
+                  appSettingsState.saveSettingsPatch({ runtimeLogLevel })
+                }
+              />
+            )}
             {page === "备份" && (
               <BackupsPage
                 records={snapshot.backups}
                 busy={busy}
                 lastSwitch={lastSwitchOverall}
+                cloudBackup={cloudBackup}
                 onRestore={operations.runRestore}
-                onUndo={operations.setUndoPending}
+                onUndo={operations.requestUndo}
                 onOpenDir={openBackupFolder}
               />
             )}

@@ -9,6 +9,7 @@ import {
   type CommandError,
   type ProviderDraft,
   type ProviderProfile,
+  type UsageQuery,
 } from "../api/client";
 
 export type EditorMode = "new" | "edit" | null;
@@ -124,6 +125,26 @@ export function useProviders({
     ],
   );
 
+  const saveProfileUsageQuery = useCallback(
+    async (profile: ProviderProfile, usageQuery: UsageQuery | null): Promise<boolean> => {
+      if (busy) return false;
+      setBusy(true);
+      clearError();
+      try {
+        const { id, ...draft } = profile;
+        await updateProfile(id, { ...draft, usageQuery });
+        await refresh();
+        return true;
+      } catch (caught) {
+        onError(caught as CommandError);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, clearError, onError, refresh, setBusy],
+  );
+
   const runDelete = useCallback(async () => {
     if (busy || !deletePending) return;
     const target = deletePending;
@@ -193,6 +214,7 @@ export function useProviders({
     selectApp,
     dragReorderProfiles,
     saveProfile,
+    saveProfileUsageQuery,
     runDelete,
     runResetStore,
   };

@@ -1,5 +1,6 @@
 import type { FilePreview } from "../api/client";
 import { ConfirmSheet } from "../components/ConfirmSheet";
+import { DiffView } from "../components/DiffView";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
 import type { useProviders } from "./useProviders";
@@ -76,10 +77,29 @@ export function OperationConfirmSheets({
               切换时间 <Time iso={undoPending.at} />
             </>,
             "将恢复该次切换前的备份；当前内容会先另行备份。",
+            operations.undoDiff.state === "loading"
+              ? "正在生成撤回后会写入的差异。"
+              : operations.undoDiff.state === "error"
+                ? <span className="asb-warn-text">{operations.undoDiff.message}</span>
+                : operations.undoDiff.state === "ready" && operations.undoDiff.changes.length === 0
+                  ? "当前受管配置已与将恢复的备份一致。"
+                  : operations.undoDiff.state === "ready"
+                    ? (
+                        <DiffView
+                          changes={operations.undoDiff.changes.map((change) => ({
+                            ...change,
+                            before: change.after,
+                            after: change.before,
+                          }))}
+                          label="撤回后写入的差异"
+                        />
+                      )
+                    : null,
           ]}
           confirmLabel="确认撤回"
+          confirmDisabled={operations.undoDiff.state !== "ready"}
           onConfirm={() => void operations.runUndo()}
-          onCancel={() => operations.setUndoPending(null)}
+          onCancel={operations.cancelUndo}
         />
       )}
       {recoverLockPending && (

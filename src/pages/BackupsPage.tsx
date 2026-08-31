@@ -1,5 +1,8 @@
+import { useState } from "react";
 import type { BackupRecord, SwitchLog } from "../api/client";
+import type { useCloudBackup } from "../app/useCloudBackup";
 import { BackupHistory } from "../components/BackupHistory";
+import { CloudBackupPanel } from "../components/CloudBackupPanel";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
 
@@ -7,10 +10,13 @@ interface BackupsPageProps {
   records: BackupRecord[];
   busy: boolean;
   lastSwitch: SwitchLog | null;
+  cloudBackup: ReturnType<typeof useCloudBackup>;
   onRestore: (backupId: string) => void;
   onUndo: (lastSwitch: SwitchLog) => void;
   onOpenDir: () => void;
 }
+
+type BackupTab = "local" | "cloud";
 
 /** Backup history with restore, undo of the last switch, and the handoff to
  * the system file manager for cleanup. */
@@ -18,40 +24,93 @@ export function BackupsPage({
   records,
   busy,
   lastSwitch,
+  cloudBackup,
   onRestore,
   onUndo,
   onOpenDir,
 }: BackupsPageProps) {
+  const [activeTab, setActiveTab] = useState<BackupTab>("local");
+
   return (
-    <section className="asb-panel" aria-label="备份历史">
+    <section className="asb-panel" aria-label="备份">
       <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">备份历史</h2>
-        <div className="asb-panel-actions">
-          {lastSwitch && (
-            <button
-              type="button"
-              className="asb-btn-danger"
-              disabled={busy}
-              onClick={() => onUndo(lastSwitch)}
-            >
-              撤回上一次切换
-            </button>
-          )}
-          <button type="button" className="asb-btn-secondary" onClick={onOpenDir}>
-            打开备份文件夹
+        <h2 className="asb-panel-title">备份</h2>
+        <div className="asb-tabs" role="tablist" aria-label="备份类型">
+          <button
+            id="backup-local-tab"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "local"}
+            aria-controls="backup-local-panel"
+            className={`asb-tab${activeTab === "local" ? " is-on" : ""}`}
+            onClick={() => setActiveTab("local")}
+          >
+            本地备份
+          </button>
+          <button
+            id="backup-cloud-tab"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "cloud"}
+            aria-controls="backup-cloud-panel"
+            className={`asb-tab${activeTab === "cloud" ? " is-on" : ""}`}
+            onClick={() => setActiveTab("cloud")}
+          >
+            加密云端备份
           </button>
         </div>
       </div>
-      {lastSwitch && (
-        <p className="asb-scope-note">
-          上次操作：{clientName(lastSwitch.app)}
-          {lastSwitch.profileName
-            ? ` 切换到「${lastSwitch.profileName}」`
-            : " 恢复了备份"}
-          ，<Time iso={lastSwitch.at} />。
-        </p>
+      {activeTab === "local" ? (
+        <div
+          id="backup-local-panel"
+          className="asb-backup-local"
+          role="tabpanel"
+          aria-labelledby="backup-local-tab"
+        >
+          <div className="asb-backup-toolbar">
+            <div className="asb-panel-actions">
+              {lastSwitch && (
+                <button
+                  type="button"
+                  className="asb-btn-danger"
+                  disabled={busy}
+                  onClick={() => onUndo(lastSwitch)}
+                >
+                  撤回上一次切换
+                </button>
+              )}
+              <button type="button" className="asb-btn-secondary" onClick={onOpenDir}>
+                打开备份文件夹
+              </button>
+            </div>
+          </div>
+          {lastSwitch && (
+            <p className="asb-scope-note">
+              上次操作：{clientName(lastSwitch.app)}
+              {lastSwitch.profileName
+                ? ` 切换到「${lastSwitch.profileName}」`
+                : " 恢复了备份"}
+              ，<Time iso={lastSwitch.at} />。
+            </p>
+          )}
+          <BackupHistory records={records} busy={busy} onRestore={onRestore} />
+        </div>
+      ) : (
+        <div
+          id="backup-cloud-panel"
+          role="tabpanel"
+          aria-labelledby="backup-cloud-tab"
+        >
+          <CloudBackupPanel
+            settings={cloudBackup.settings}
+            loaded={cloudBackup.loaded}
+            busy={busy}
+            onSave={cloudBackup.saveSettings}
+            onUpload={cloudBackup.upload}
+            onRestore={cloudBackup.restore}
+          />
+        </div>
       )}
-      <BackupHistory records={records} busy={busy} onRestore={onRestore} />
     </section>
   );
 }

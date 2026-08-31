@@ -7,6 +7,70 @@ import { ProviderEditor } from "./ProviderEditor";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 describe("ProviderEditor", () => {
+  it("keeps only connectivity and model fetching beside the main-model field", () => {
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("服务地址"), {
+      target: { value: "https://relay.example/v1" },
+    });
+    const connectivityToggle = screen.getByRole("button", { name: "检测连通" });
+    expect(connectivityToggle.parentElement).toHaveClass("asb-model-actions");
+    expect(screen.getByLabelText("服务地址").parentElement).not.toContainElement(connectivityToggle);
+    expect(screen.getByRole("button", { name: "获取模型" }).parentElement).toHaveClass(
+      "asb-model-actions",
+    );
+    expect(screen.queryByRole("button", { name: "查询用量" })).not.toBeInTheDocument();
+  });
+
+  it("preserves an existing usage query while saving other provider fields", () => {
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={{
+          id: "profile-a",
+          app: "codex",
+          name: "中继 A",
+          model: null,
+          baseUrl: "https://relay.example/v1",
+          apiKey: "sk-test",
+          modelOptions: null,
+          usageQuery: {
+            kind: "declarative",
+            url: "{{baseUrl}}/balance",
+            remainingPath: "data/balance",
+          },
+        }}
+        initialApp="codex"
+        busy={false}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "中继 A（更新）" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存供应商" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usageQuery: {
+          kind: "declarative",
+          url: "{{baseUrl}}/balance",
+          remainingPath: "data/balance",
+          usedPath: null,
+          totalPath: null,
+          unit: null,
+        },
+      }),
+    );
+  });
+
   it("submits a Codex draft with model options and an API key", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -34,6 +98,7 @@ describe("ProviderEditor", () => {
       apiKey: "sk-test-codex",
       notes: null,
       websiteUrl: null,
+      usageQuery: null,
       modelOptions: null,
     });
   });
@@ -232,6 +297,7 @@ describe("ProviderEditor", () => {
       apiKey: "sk-test-key",
       notes: null,
       websiteUrl: null,
+      usageQuery: null,
       modelOptions: null,
     });
   });
@@ -264,6 +330,7 @@ describe("ProviderEditor", () => {
       apiKey: "sk-test-key",
       notes: null,
       websiteUrl: null,
+      usageQuery: null,
       modelOptions: {
         kind: "claude",
         primaryOneM: false,
@@ -357,7 +424,7 @@ describe("ProviderEditor", () => {
     await user.click(await screen.findByRole("option", { name: "gpt-5.3-codex" }));
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
     expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "gpt-5.3-codex", notes: null, websiteUrl: null }),
+      expect.objectContaining({ model: "gpt-5.3-codex", notes: null, websiteUrl: null, usageQuery: null }),
     );
     invokeMock.mockReset();
   });
@@ -443,6 +510,7 @@ describe("ProviderEditor", () => {
       apiKey: "sk-test-key",
       notes: null,
       websiteUrl: null,
+      usageQuery: null,
       modelOptions: {
         kind: "claude",
         primaryOneM: false,

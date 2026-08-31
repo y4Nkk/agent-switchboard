@@ -11,6 +11,7 @@ pub mod executor;
 pub mod io;
 pub mod lockfile;
 pub mod pids;
+mod prompt_documents;
 mod restore;
 
 pub use executor::{
@@ -21,5 +22,9 @@ pub use io::{FsIo, SwitchIo};
 pub use lockfile::{
     acquire, lock_path_for, probe_lock, probe_lock_with, recover_stale, release, AcquireOutcome,
     RecoveryEntry,
+};
+pub use prompt_documents::{
+    read_global_prompt_document, write_global_prompt_document, GlobalPromptDocumentOutcome,
+    GlobalPromptDocumentRequest,
 };
 pub use restore::{list_backups, restore, RestoreOutcome};

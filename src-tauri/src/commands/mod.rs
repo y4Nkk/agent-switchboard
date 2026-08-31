@@ -9,6 +9,7 @@
 //! - [`window`]: title-bar window controls and the inspector toggle
 //! - [`status`]: read-only configuration status and lock observation
 //! - [`common_settings`]: general-configuration overlay commands
+//! - [`prompt_management`]: global AGENTS.md / CLAUDE.md document commands
 //! - [`switching`]: switch, backup, restore, and undo commands
 //!
 //! Profile store CRUD, application settings, probing, discovery, sessions,
@@ -18,8 +19,11 @@
 //! network runs through [`error::blocking`] so the main thread never stalls
 //! behind I/O. Only the fast native window controls stay synchronous.
 
+pub(crate) mod cloud_backup;
 pub(crate) mod common_settings;
 pub(crate) mod error;
+pub(crate) mod prompt_management;
+pub(crate) mod runtime_log;
 pub(crate) mod status;
 pub(crate) mod switching;
 pub(crate) mod window;
@@ -29,9 +33,10 @@ pub(crate) use status::ConfigFileStatus;
 pub(crate) use window::apply_window_settings;
 
 use crate::local_state::{AppSettings, LocalState};
+use crate::runtime_log::RuntimeLogAction;
 use asb_core::contracts::{AppKind, ProviderDraft, ProviderProfile};
 use asb_core::discovery::{self, DiscoveryPaths, DiscoveryReport};
-use error::{blocking, state, store_error, CommandError};
+use error::{blocking, observe, state, store_error, CommandError};
 
 /// Reads application-runtime settings. This is deliberately separate from the
 /// Codex / Claude common configuration contract.
@@ -52,15 +57,28 @@ pub async fn set_app_settings(
     app: tauri::AppHandle,
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
-    let state = state(&app)?;
-    apply_window_settings(&app, &settings)?;
-    blocking(move || {
-        state
-            .set_app_settings(&settings)
-            .map_err(|error| CommandError::new("app-settings-save-failed", error))?;
-        Ok(settings)
+    let saved = observe(RuntimeLogAction::AppSettingsSaved, async move {
+        let state = state(&app)?;
+        apply_window_settings(&app, &settings)?;
+        blocking(move || {
+            state
+                .set_app_settings(&settings)
+                .map_err(|error| CommandError::new("app-settings-save-failed", error))?;
+            // The cache is not a second setting store: it applies the
+            // just-persisted threshold to this result and later events.
+            crate::runtime_log::set_level(settings.runtime_log_level);
+            Ok(settings)
+        })
+        .await
     })
-    .await
+    .await?;
+    Ok(saved)
+}
+
+/// Installed system font families, offered by the interface-font picker.
+#[tauri::command]
+pub async fn list_system_fonts() -> Result<Vec<String>, CommandError> {
+    blocking(|| Ok(crate::fonts::system_font_families())).await
 }
 
 #[tauri::command]
@@ -74,12 +92,15 @@ pub async fn reset_profile_store(
     app: tauri::AppHandle,
     confirm_write: bool,
 ) -> Result<(), CommandError> {
-    error::require_write_confirmation(confirm_write, "重置供应商数据")?;
-    let state = state(&app)?;
-    blocking(move || {
-        state
-            .reset_profile_store()
-            .map_err(|error| CommandError::new("profile-store-reset-failed", error))
+    observe(RuntimeLogAction::ProfileStoreReset, async move {
+        error::require_write_confirmation(confirm_write, "重置供应商数据")?;
+        let state = state(&app)?;
+        blocking(move || {
+            state
+                .reset_profile_store()
+                .map_err(|error| CommandError::new("profile-store-reset-failed", error))
+        })
+        .await
     })
     .await
 }
@@ -89,11 +110,14 @@ pub async fn create_profile(
     app: tauri::AppHandle,
     draft: ProviderDraft,
 ) -> Result<ProviderProfile, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        state
-            .create_profile(draft)
-            .map_err(|error| CommandError::new("profile-create-failed", error))
+    observe(RuntimeLogAction::ProfileCreated, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            state
+                .create_profile(draft)
+                .map_err(|error| CommandError::new("profile-create-failed", error))
+        })
+        .await
     })
     .await
 }
@@ -104,22 +128,28 @@ pub async fn update_profile(
     profile_id: String,
     draft: ProviderDraft,
 ) -> Result<ProviderProfile, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        state
-            .update_profile(&profile_id, draft)
-            .map_err(|error| CommandError::new("profile-update-failed", error))
+    observe(RuntimeLogAction::ProfileUpdated, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            state
+                .update_profile(&profile_id, draft)
+                .map_err(|error| CommandError::new("profile-update-failed", error))
+        })
+        .await
     })
     .await
 }
 
 #[tauri::command]
 pub async fn delete_profile(app: tauri::AppHandle, profile_id: String) -> Result<(), CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        state
-            .delete_profile(&profile_id)
-            .map_err(|error| CommandError::new("profile-delete-failed", error))
+    observe(RuntimeLogAction::ProfileDeleted, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            state
+                .delete_profile(&profile_id)
+                .map_err(|error| CommandError::new("profile-delete-failed", error))
+        })
+        .await
     })
     .await
 }
@@ -130,11 +160,14 @@ pub async fn reorder_profiles(
     target: AppKind,
     ordered_ids: Vec<String>,
 ) -> Result<Vec<ProviderProfile>, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        state
-            .reorder_profiles(target, &ordered_ids)
-            .map_err(|error| CommandError::new("profile-reorder-failed", error))
+    observe(RuntimeLogAction::ProfilesReordered, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            state
+                .reorder_profiles(target, &ordered_ids)
+                .map_err(|error| CommandError::new("profile-reorder-failed", error))
+        })
+        .await
     })
     .await
 }
@@ -144,16 +177,21 @@ pub async fn import_discovered_profile(
     app: tauri::AppHandle,
     target: AppKind,
 ) -> Result<ProviderProfile, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let proposal = discovery_report()?
-            .import_proposals
-            .into_iter()
-            .find(|candidate| candidate.app == target)
-            .ok_or_else(|| CommandError::new("import-unavailable", "当前配置没有可导入的供应商"))?;
-        state
-            .import_profile(proposal.draft)
-            .map_err(|error| CommandError::new("profile-import-failed", error))
+    observe(RuntimeLogAction::ProfileImported, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            let proposal = discovery_report()?
+                .import_proposals
+                .into_iter()
+                .find(|candidate| candidate.app == target)
+                .ok_or_else(|| {
+                    CommandError::new("import-unavailable", "当前配置没有可导入的供应商")
+                })?;
+            state
+                .import_profile(proposal.draft)
+                .map_err(|error| CommandError::new("profile-import-failed", error))
+        })
+        .await
     })
     .await
 }
@@ -186,6 +224,24 @@ pub async fn fetch_provider_models(
     .await
 }
 
+/// Numbers from one manual usage-balance query. The current editor draft
+/// supplies the query and its credential; nothing is persisted by this
+/// command and the credential never appears in errors or the summary.
+pub use asb_core::contracts::{UsageQuery, UsageSummary};
+
+#[tauri::command]
+pub async fn test_usage_query(
+    query: UsageQuery,
+    api_key: String,
+    base_url: Option<String>,
+) -> Result<UsageSummary, CommandError> {
+    blocking(move || {
+        crate::usage_query::run_usage_query(&query, &api_key, base_url.as_deref())
+            .map_err(|error| CommandError::new("usage-query-failed", error))
+    })
+    .await
+}
+
 /// Result of one manual update check against the project's GitHub releases.
 /// Informational only: nothing is downloaded or installed by this command.
 pub use crate::update::UpdateCheck;
@@ -196,6 +252,45 @@ pub async fn check_update(app: tauri::AppHandle) -> Result<UpdateCheck, CommandE
     blocking(move || {
         crate::update::check(&current_version)
             .map_err(|error| CommandError::new("update-check-failed", error))
+    })
+    .await
+}
+
+/// A typed overview snapshot and its display freshness. Both are
+/// informational and global; they never read an account's quota or credentials.
+pub use crate::codex_reset::CodexResetRead;
+
+/// Reads the last successful public signal snapshot without contacting the
+/// network. An empty cache is a normal first-run result.
+#[tauri::command]
+pub async fn get_cached_codex_reset_status(
+    app: tauri::AppHandle,
+) -> Result<Option<CodexResetRead>, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        state
+            .load_codex_reset_cache()
+            .map(|status| status.map(CodexResetRead::cached))
+            .map_err(|error| CommandError::new("codex-reset-cache-unavailable", error))
+    })
+    .await
+}
+
+/// One explicit read of the public reset-status feed. A successful read
+/// replaces the local snapshot; a cache-write failure does not hide the fresh
+/// informational result from the overview.
+#[tauri::command]
+pub async fn check_codex_reset_status(
+    app: tauri::AppHandle,
+) -> Result<CodexResetRead, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let status = crate::codex_reset::check()
+            .map_err(|error| CommandError::new("codex-reset-status-unavailable", error))?;
+        let cache_warning = state.save_codex_reset_cache(&status).err().map(|_| {
+            "最新公开信号已显示，但未能写入本地缓存；下次打开应用可能无法保留该结果。".to_string()
+        });
+        Ok(CodexResetRead::live(status, cache_warning))
     })
     .await
 }
@@ -262,9 +357,12 @@ pub async fn resume_session(
     app: AppKind,
     session_id: String,
 ) -> Result<crate::session_manager::SessionResume, CommandError> {
-    blocking(move || {
-        crate::session_manager::resume_session(app, &session_id)
-            .map_err(|message| CommandError::new("session-resume-failed", message))
+    observe(RuntimeLogAction::SessionResumed, async move {
+        blocking(move || {
+            crate::session_manager::resume_session(app, &session_id)
+                .map_err(|message| CommandError::new("session-resume-failed", message))
+        })
+        .await
     })
     .await
 }
@@ -290,10 +388,13 @@ pub async fn import_ccswitch_profiles(
     app: tauri::AppHandle,
     keys: Vec<String>,
 ) -> Result<crate::ccswitch_source::CcSwitchImportOutcome, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        crate::ccswitch_source::import(&state, &keys)
-            .map_err(|error| CommandError::new("ccswitch-import-failed", error))
+    observe(RuntimeLogAction::CcSwitchProfilesImported, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            crate::ccswitch_source::import(&state, &keys)
+                .map_err(|error| CommandError::new("ccswitch-import-failed", error))
+        })
+        .await
     })
     .await
 }

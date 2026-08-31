@@ -7,6 +7,13 @@
   box-sizing: border-box;
 }
 
+/* The `hidden` attribute owns route-level visibility (App.tsx session panel).
+   Author `display` declarations otherwise defeat the UA default, so restore
+   it as an app-wide hard contract. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body,
 #root {
@@ -64,39 +71,20 @@ body {
   background-color: var(--asb-scrollbar-thumb-active);
 }
 
-/* Ambient field — real aria-hidden DOM layer, never a pseudo-element control. */
+/* Ambient field — one direct, paint-only background layer. */
 .asb-ambient {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-}
-
-.asb-ambient::before {
-  content: "";
-  position: absolute;
-  inset: -10%;
   background:
     radial-gradient(38% 32% at 18% 12%, var(--asb-ambient-light-codex), transparent 70%),
     radial-gradient(34% 30% at 84% 78%, var(--asb-ambient-light-claude), transparent 70%);
-  filter: blur(var(--asb-blur-ambient));
 }
 
-@supports not ((backdrop-filter: none) or (-webkit-backdrop-filter: none)) {
-  .asb-glass {
-    background: var(--asb-glass-fallback-rail);
-  }
-
-  .asb-toast {
-    background: var(--asb-glass-fallback-menu);
-  }
-}
-
-.asb-glass {
-  background: var(--asb-glass-rail);
-  -webkit-backdrop-filter: blur(var(--asb-blur-rail)) saturate(var(--asb-saturation-rail));
-  backdrop-filter: blur(var(--asb-blur-rail)) saturate(var(--asb-saturation-rail));
+.asb-surface-rail {
+  background: var(--asb-surface-rail);
   border: 1px solid var(--asb-hairline);
   box-shadow: var(--asb-inset-highlight);
 }
@@ -138,6 +126,17 @@ body {
 .asb-topbar-title {
   margin: 0;
   font: var(--asb-text-title);
+}
+
+.asb-web-development-badge {
+  flex: 0 0 auto;
+  padding: 4px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-code-bg);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: nowrap;
 }
 
 /* Window controls for the integrated title bar. */
@@ -289,18 +288,12 @@ body {
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
   background: var(--asb-route-idle-bg);
-  -webkit-backdrop-filter: blur(var(--asb-blur-route-idle));
-  backdrop-filter: blur(var(--asb-blur-route-idle));
-  animation: asb-route-card-in var(--asb-motion-sheet) var(--asb-easing) backwards;
-  animation-delay: calc(var(--asb-route-stagger, 0) * 60ms);
 }
 
 .asb-route-card.is-on {
   border-color: var(--asb-action);
   background: var(--asb-route-active-gradient);
   box-shadow: var(--asb-route-shadow);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 
 .asb-route-card[data-app="claude"].is-on {
@@ -316,18 +309,6 @@ body {
   width: 100%;
   height: 100%;
   pointer-events: none;
-}
-
-@keyframes asb-route-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .asb-route-card-body {
@@ -425,8 +406,6 @@ body {
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-action);
   background: var(--asb-route-inner-bg);
-  -webkit-backdrop-filter: blur(var(--asb-blur-route-inner));
-  backdrop-filter: blur(var(--asb-blur-route-inner));
 }
 
 .asb-route-values > div {
@@ -570,7 +549,7 @@ button:disabled {
   padding: 3px;
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
-  background: var(--asb-glass-fallback-rail);
+  background: var(--asb-surface-rail);
 }
 
 .asb-tab {
@@ -595,6 +574,149 @@ button:disabled {
   border-color: var(--asb-action);
   color: var(--asb-text);
   font-weight: 600;
+}
+
+/* Main settings mode switch. It is deliberately separate from the inner
+   client tabs: one chooses the management domain, the other chooses a
+   supported client or its global prompt document. */
+.asb-settings-main-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-4);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-settings-main-tab {
+  min-height: var(--asb-touch-target);
+  padding: 0 var(--asb-space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-settings-main-tab:hover:not(:disabled),
+.asb-settings-main-tab[aria-selected="true"] {
+  color: var(--asb-text);
+}
+
+.asb-settings-main-tab[aria-selected="true"] {
+  border-bottom-color: var(--asb-action);
+}
+
+/* Prompt management uses a near-solid work surface rather than another
+   frosted layer, keeping editable Markdown high contrast. */
+.asb-prompt-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-prompt-manager-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+}
+
+.asb-prompt-manager-title {
+  margin: 0 0 var(--asb-space-1);
+  font: var(--asb-text-body);
+  font-weight: 700;
+}
+
+.asb-prompt-manager .asb-scope-note {
+  margin: 0;
+}
+
+.asb-prompt-document-tabs {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-rail);
+}
+
+.asb-prompt-document-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-height: calc(var(--asb-touch-target) - 8px);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid transparent;
+  border-radius: calc(var(--asb-radius-control) - 4px);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-prompt-document-tab.is-on {
+  border-color: var(--asb-action);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font-weight: 600;
+}
+
+.asb-prompt-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-prompt-file-name {
+  font: var(--asb-text-code);
+  color: var(--asb-text);
+}
+
+.asb-prompt-editor {
+  min-height: 320px;
+  padding: var(--asb-space-3);
+  border-color: var(--asb-hairline-strong);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.asb-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+.asb-prompt-state {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+@media (max-width: 680px) {
+  .asb-prompt-manager-heading {
+    flex-direction: column;
+  }
+
+  .asb-prompt-document-tabs {
+    width: 100%;
+  }
+
+  .asb-prompt-document-tab {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .asb-prompt-actions > .asb-btn-primary {
+    flex: 1;
+  }
 }
 
 /* Provider rows — CC Switch-style cards (user-directed 2026-08-27): avatar
@@ -636,28 +758,6 @@ button:disabled {
   background: var(--asb-row-selected);
 }
 
-/* Selected row: opaque quiet-blue surface with the ported four-stop ring
-   flowing slowly at rest intensity (spiralcoder global gradient system,
-   user directive 2026-08-28; cc-switch contributes the tinted shadow).
-   The surface must stay opaque — a translucent face lets the border-box
-   gradient bleed through as a center ray. Plain declarations first: if
-   conic-gradient/color-mix is unsupported, the flat fallback keeps the
-   state legible. */
-.asb-row-item.is-selected {
-  border-color: var(--asb-action);
-  background: var(--asb-row-selected);
-  box-shadow: var(--asb-accent-shadow);
-  background:
-    linear-gradient(var(--asb-row-selected), var(--asb-row-selected)) padding-box,
-    conic-gradient(
-      from var(--asb-accent-border-angle),
-      var(--asb-accent-border-stops-rest)
-    )
-      border-box;
-  animation: asb-accent-border-flow var(--asb-accent-border-duration) linear
-    infinite;
-}
-
 /* Live-matched row: the same ring at full stops and the emphasis pace —
    intensity plus motion mark the one row that matches the real config. */
 .asb-row-item.is-live {
@@ -671,8 +771,7 @@ button:disabled {
       var(--asb-accent-border-stops-active)
     )
       border-box;
-  animation: asb-accent-border-flow var(--asb-accent-border-duration-strong)
-    linear infinite;
+  animation: asb-accent-border-flow var(--asb-accent-border-duration) linear infinite;
 }
 
 @property --asb-accent-border-angle {
@@ -688,7 +787,6 @@ button:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .asb-row-item.is-selected,
   .asb-row-item.is-live {
     animation: none;
   }
@@ -718,7 +816,7 @@ button:disabled {
   flex: none;
   padding: 3px;
   border-radius: calc(var(--asb-radius-control) - 4px);
-  background: var(--asb-glass-fallback-rail);
+  background: var(--asb-surface-rail);
 }
 
 .asb-row-item .asb-btn-icon {
@@ -739,11 +837,149 @@ button:disabled {
   color: var(--asb-text);
 }
 
-/* The eye button's open state: quiet action tint plus the closed-eye glyph
-   and aria-expanded carry the state, never color alone. */
+/* Expanded card actions use a quiet tint; their icon and aria-expanded carry
+   the state, never color alone. */
 .asb-row-item .asb-btn-icon.is-active {
   background: var(--asb-row-selected);
   color: var(--asb-action);
+}
+
+.asb-provider-usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+  border-left: 2px solid var(--asb-action);
+  background: var(--asb-code-bg);
+}
+
+.asb-provider-usage-head,
+.asb-provider-usage-actions,
+.asb-provider-usage-title {
+  display: flex;
+  align-items: center;
+}
+
+.asb-provider-usage-head {
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-usage-title {
+  min-width: 0;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-usage-title h3 {
+  margin: 0;
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-provider-usage-title span {
+  padding: 2px var(--asb-space-1);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-provider-usage-actions {
+  flex: none;
+  gap: var(--asb-space-2);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-provider-usage-refresh,
+.asb-provider-usage-configure {
+  min-height: var(--asb-touch-target);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content);
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-provider-usage-refresh {
+  color: var(--asb-action);
+}
+
+.asb-provider-usage-configure {
+  color: var(--asb-text-muted);
+}
+
+.asb-provider-usage-refresh:hover:not(:disabled),
+.asb-provider-usage-configure:hover:not(:disabled) {
+  border-color: var(--asb-action);
+  background: var(--asb-row-selected);
+  color: var(--asb-action);
+}
+
+.asb-provider-usage-ledger {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--asb-hairline);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-provider-usage-metric {
+  min-width: 0;
+  padding: var(--asb-space-2);
+}
+
+.asb-provider-usage-metric + .asb-provider-usage-metric {
+  border-left: 1px solid var(--asb-hairline);
+}
+
+.asb-provider-usage-metric dt {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-provider-usage-metric dd {
+  display: flex;
+  align-items: baseline;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+  margin: var(--asb-space-unit) 0 0;
+}
+
+.asb-provider-usage-metric strong {
+  overflow: hidden;
+  font: var(--asb-text-title);
+  color: var(--asb-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-provider-usage-metric small,
+.asb-provider-usage-state {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-provider-usage-state {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .asb-provider-usage-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asb-provider-usage-ledger {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asb-provider-usage-metric + .asb-provider-usage-metric {
+    border-top: 1px solid var(--asb-hairline);
+    border-left: 0;
+  }
 }
 
 /* The change preview unfolds inside the previewed row's own card, under
@@ -820,16 +1056,15 @@ button:disabled {
 
 /* Reveal rules sit after the shared primary rules so the hidden default
    wins at equal specificity; hover keeps the mouse path, :focus-within
-   keeps the keyboard path (tabbing the row reveals the button so it can
-   be reached), and .is-selected keeps an already-chosen row stable when
-   the pointer leaves. */
+   keeps the keyboard path, and the semantic selection attribute keeps an
+   already-chosen row's action available after the pointer leaves. */
 .asb-row-item .asb-row-activate {
   display: none;
 }
 
 .asb-row-item:hover .asb-row-activate,
 .asb-row-item:focus-within .asb-row-activate,
-.asb-row-item.is-selected .asb-row-activate {
+.asb-row[aria-selected="true"] + .asb-row-activate {
   display: inline-flex;
 }
 
@@ -860,7 +1095,7 @@ button:disabled {
   height: 44px;
   flex: none;
   border-radius: var(--asb-radius-control);
-  background: var(--asb-glass-fallback-rail);
+  background: var(--asb-surface-rail);
   font: 600 16px/1 var(--asb-font-display);
   color: var(--asb-text-muted);
 }
@@ -1116,80 +1351,129 @@ button:disabled {
   display: block;
 }
 
-/* Local session overview — a quiet two-client ledger, deliberately outside
-   the route cards because session file metadata is not routing or usage data. */
-.asb-session-overview-list {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--asb-hairline);
+/* Public reset signals are a compact three-column ledger, separate from the
+   client-routing cards because they never describe local configuration. */
+.asb-codex-reset-read-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.asb-session-overview-row {
+.asb-codex-reset-read-state.is-cached {
+  background: var(--asb-content-muted);
+}
+
+.asb-codex-reset-read-state.is-live {
+  border-color: var(--asb-safe);
+  color: var(--asb-safe);
+}
+
+.asb-codex-reset-grid {
   display: grid;
-  grid-template-columns: minmax(152px, 0.78fr) minmax(0, 1.22fr);
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-3) 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--asb-hairline);
   border-bottom: 1px solid var(--asb-hairline);
 }
 
-.asb-session-overview-client {
+.asb-codex-reset-item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--asb-space-2);
   min-width: 0;
+  padding: var(--asb-space-3);
 }
 
-.asb-session-overview-client h3 {
+.asb-codex-reset-item + .asb-codex-reset-item {
+  border-left: 1px solid var(--asb-hairline);
+}
+
+.asb-codex-reset-label {
   margin: 0;
+  color: var(--asb-text-muted);
   font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-codex-reset-value {
+  display: block;
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
   font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.asb-codex-reset-detail,
+.asb-codex-reset-source,
+.asb-codex-reset-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
+.asb-codex-reset-post {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.asb-codex-reset-post-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  margin-top: auto;
+}
+
+.asb-codex-reset > .asb-warn-text {
+  margin: var(--asb-space-2) 0 0;
+  font: var(--asb-text-label);
+}
+
+.asb-codex-reset-source {
+  margin-top: var(--asb-space-2);
+}
+
+.asb-codex-reset-note {
+  margin-top: var(--asb-space-unit);
+}
+
+.asb-codex-reset-source-link {
+  color: var(--asb-action);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.asb-codex-reset-source-link:hover {
   color: var(--asb-text);
 }
 
-.asb-session-overview-logo {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
-
-.asb-session-overview-values {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--asb-space-3);
-  margin: 0;
-}
-
-.asb-session-overview-values dt {
-  margin-bottom: var(--asb-space-unit);
-  font: var(--asb-text-label);
-  color: var(--asb-text-muted);
-}
-
-.asb-session-overview-values dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font: var(--asb-text-body);
-}
-
-.asb-session-overview-issues {
-  display: flex;
-  grid-column: 2;
-  flex-direction: column;
-  gap: var(--asb-space-unit);
-  padding: 0;
-  margin: calc(var(--asb-space-2) * -1) 0 0;
-  list-style: none;
-  font: var(--asb-text-label);
-}
-
-.asb-session-overview-note {
-  margin: var(--asb-space-2) 0 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
+.asb-codex-reset-source-link:focus-visible {
+  outline: var(--asb-focus-ring);
 }
 
 /* Application-runtime settings: same compact, solid information surface as
    client settings, without claiming to write a client config line. */
+.asb-app-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+}
+
 .asb-app-settings-group {
   display: flex;
   flex-direction: column;
@@ -1229,7 +1513,8 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .asb-app-setting-row .asb-segments {
+  .asb-app-setting-row .asb-segments,
+  .asb-app-setting-row .asb-switch {
     justify-self: start;
   }
 }
@@ -1569,20 +1854,11 @@ button:disabled {
   transform: translate(-50%, -50%);
   transition:
     left var(--asb-slider-motion-duration) var(--asb-easing),
-    box-shadow var(--asb-motion-fast) var(--asb-easing),
-    scale var(--asb-motion-fast) var(--asb-ease-out-back);
+    box-shadow var(--asb-motion-fast) var(--asb-easing);
 }
 
 .asb-slider:hover:not([data-disabled="true"]) .asb-slider-thumb {
   box-shadow: 0 2px 7px rgb(20 22 27 / 0.2);
-}
-
-.asb-slider:has(.asb-slider-input:active) {
-  --asb-slider-motion-duration: var(--asb-motion-press);
-}
-
-.asb-slider:has(.asb-slider-input:active) .asb-slider-thumb {
-  scale: 0.96;
 }
 
 .asb-slider-input {
@@ -1763,40 +2039,14 @@ button:disabled {
 }
 
 .asb-select-content {
-  --asb-select-enter-y: -6px;
   z-index: 60;
   max-height: min(24rem, var(--radix-select-content-available-height));
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
-  background: var(--asb-glass-menu);
+  background: var(--asb-surface-menu);
   color: var(--asb-text);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
-  backdrop-filter: blur(var(--asb-blur-menu));
-  -webkit-backdrop-filter: blur(var(--asb-blur-menu));
-  animation: asb-select-in var(--asb-motion-node) var(--asb-easing);
-}
-
-@supports not ((backdrop-filter: none) or (-webkit-backdrop-filter: none)) {
-  .asb-select-content {
-    background: var(--asb-glass-fallback-menu);
-  }
-}
-
-.asb-select-content[data-side="top"] {
-  --asb-select-enter-y: 6px;
-}
-
-@keyframes asb-select-in {
-  from {
-    opacity: 0;
-    transform: scale(0.97) translateY(var(--asb-select-enter-y));
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .asb-select-viewport {
@@ -1856,6 +2106,142 @@ button:disabled {
   display: block;
   width: 14px;
   height: 14px;
+}
+
+/* Interface-font picker: select-language trigger plus a searchable menu whose
+   every option previews its own family. Same material as the select menu. */
+.asb-font-picker {
+  position: relative;
+}
+
+.asb-font-trigger {
+  width: 14rem;
+}
+
+.asb-font-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-font-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, calc(100vw - 3rem));
+  overflow: hidden;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-menu);
+  color: var(--asb-text);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+}
+
+.asb-font-search {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-touch-target);
+  margin: var(--asb-space-1);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-canvas);
+  transition: border-color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-font-search:focus-within {
+  border-color: var(--asb-action);
+}
+
+.asb-font-search svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--asb-text-muted);
+}
+
+.asb-font-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  outline: none;
+}
+
+.asb-font-search input::placeholder {
+  color: var(--asb-text-muted);
+}
+
+.asb-font-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 18rem;
+  margin: 0 var(--asb-space-1) var(--asb-space-1);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-font-option {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: none;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  color: var(--asb-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.asb-font-option:hover,
+.asb-font-option:focus-visible {
+  background: var(--asb-row-selected);
+}
+
+.asb-font-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-font-option-sample {
+  flex: none;
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+/* Fixed trailing slot on every row: samples line up and the current item's
+   check does not shift the sample column. */
+.asb-font-check {
+  flex: none;
+  display: flex;
+  width: 14px;
+  height: 14px;
+  color: var(--asb-text);
+}
+
+.asb-font-check svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.asb-font-empty {
+  padding: var(--asb-space-2);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
 }
 
 .asb-form-actions {
@@ -1965,15 +2351,92 @@ button:disabled {
   border-color: var(--asb-action);
 }
 
-.asb-checkbox:active:not([data-disabled]) .asb-checkbox-box {
-  scale: 0.92;
-}
-
 :root[data-focus-source="key"] .asb-checkbox-input:focus-visible + .asb-checkbox-box {
   box-shadow: var(--asb-focus-ring);
 }
 
-/* Hover/focus tooltip (Radix portal content; spiralcoder dark treatment) */
+/* On/off switch for application-settings rows (spiralcoder structure,
+   Frosted Relay tokens). The setting text lives in the row's copy column;
+   this control renders on the right. The checked track carries the ported
+   spiralcoder primary-button gradient with its inset glow; hover strengthens
+   the glow, exactly like the provider-row activate button. */
+.asb-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--asb-space-1) 0;
+  min-height: var(--asb-touch-target);
+  cursor: pointer;
+  user-select: none;
+}
+
+.asb-switch[data-disabled="true"] {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.asb-switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.asb-switch-track {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  width: 44px;
+  height: 26px;
+  padding: 3px;
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-canvas);
+  transition:
+    background var(--asb-motion-node) var(--asb-easing),
+    border-color var(--asb-motion-node) var(--asb-easing),
+    box-shadow var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-switch-track[data-checked="true"] {
+  border-color: transparent;
+  background: var(--asb-gradient-button);
+  box-shadow: var(--asb-gradient-button-glow);
+}
+
+.asb-switch:hover:not([data-disabled]) .asb-switch-track {
+  border-color: var(--asb-action);
+}
+
+.asb-switch:hover:not([data-disabled]) .asb-switch-track[data-checked="true"] {
+  border-color: transparent;
+  box-shadow: var(--asb-gradient-button-glow-hover);
+}
+
+.asb-switch-thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-slider-thumb-bg);
+  box-shadow: 0 1px 3px rgb(20 22 27 / 0.28);
+  translate: 0 0;
+  transition: translate var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-switch-track[data-checked="true"] .asb-switch-thumb {
+  translate: 18px 0;
+}
+
+:root[data-focus-source="key"] .asb-switch-input:focus-visible + .asb-switch-track {
+  box-shadow: var(--asb-focus-ring);
+}
+
+/* Hover/focus tooltip (Radix portal content; no animated compositing). */
 .asb-tooltip-anchor {
   display: inline-flex;
 }
@@ -1987,19 +2450,6 @@ button:disabled {
   color: var(--asb-canvas);
   font: var(--asb-text-label);
   box-shadow: var(--asb-shadow-modal);
-  animation: asb-tooltip-in var(--asb-motion-node) var(--asb-easing);
-}
-
-@keyframes asb-tooltip-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(2px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 /* Grouped form sections: routing mode, model mapping */
@@ -2025,18 +2475,217 @@ button:disabled {
   font-family: inherit;
 }
 
-/* Endpoint verification */
-.asb-probe {
+/* Endpoint verification feedback is shared by the editor and supplier cards. */
+.asb-probe-feedback {
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-2);
+}
+
+/* Editor feedback occupies the second row of the model-control grid. */
+.asb-editor-probe-feedback {
+  grid-column: 1 / -1;
+  grid-row: 2;
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
 }
 
-.asb-probe .asb-form-actions {
-  justify-content: flex-start;
+/* Card feedback unfolds within the card itself rather than becoming a nested
+   glass panel. */
+.asb-provider-probe-feedback {
+  padding: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+/* Usage query workspace — a dedicated provider subview entered from its card.
+   Its measurement-strip result is intentionally one ledger surface, not three
+   dashboard cards. */
+.asb-usage-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+  min-height: 100%;
+}
+
+.asb-usage-workspace-head {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  padding-bottom: var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-workspace-head > div {
+  min-width: 0;
+}
+
+.asb-usage-provider {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-usage-mode {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-canvas);
+}
+
+.asb-usage-mode-tab {
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-1) var(--asb-space-3);
+  border: 1px solid transparent;
+  border-radius: calc(var(--asb-radius-control) - 4px);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-usage-mode-tab[aria-selected="true"] {
+  border-color: var(--asb-action);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font-weight: 600;
+}
+
+.asb-usage-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
+
+.asb-usage-paths {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-usage-script-contract {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--asb-space-1) var(--asb-space-3);
+  padding: var(--asb-space-3);
+  border-left: 2px solid var(--asb-action);
+  background: var(--asb-code-bg);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-usage-script-contract code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-usage-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-run {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+}
+
+.asb-usage-readout {
+  overflow: hidden;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-canvas);
+}
+
+.asb-usage-readout-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.asb-usage-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--asb-space-1);
+  align-items: baseline;
+  min-width: 0;
+  padding: var(--asb-space-3);
+}
+
+.asb-usage-metric + .asb-usage-metric {
+  border-left: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-metric > span,
+.asb-usage-metric > small {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-usage-metric > strong {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  font: var(--asb-text-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-usage-metric > small {
+  justify-self: end;
+}
+
+@media (max-width: 720px) {
+  .asb-model-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asb-model-actions {
+    display: flex;
+    grid-column: 1;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: var(--asb-space-2);
+  }
+
+  .asb-editor-probe-feedback {
+    grid-column: auto;
+    grid-row: auto;
+    flex-basis: 100%;
+  }
+
+  .asb-usage-paths {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asb-usage-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asb-usage-metric + .asb-usage-metric {
+    border-top: 1px solid var(--asb-hairline);
+    border-left: 0;
+  }
 }
 
 /* Scope-of-effect notes on overview and backups */
@@ -2085,6 +2734,153 @@ button:disabled {
   min-width: 64px;
 }
 
+/* The local backup tab owns its scroll region. The page panel fills the
+   workspace, keeping the controls fixed while long backup histories scroll
+   inside the history module instead of extending .asb-main. */
+.asb-panel:has(.asb-backup-local) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.asb-backup-local {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.asb-backup-local > .asb-scope-note {
+  flex: none;
+}
+
+/* Local backup actions stay tied to their tab rather than the cloud flow. */
+.asb-backup-toolbar {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-backups {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+/* The cloud-backup controls fill their own tab and remain a clearly bounded
+   encrypted remote operation, never a second glass card. */
+.asb-cloud-backup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  margin: 0;
+}
+
+/* Runtime log — a single app-owned operational ledger. The renderer sees
+   parsed, closed events only; diagnostics remain solid and easy to scan. */
+.asb-panel.asb-runtime-logs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.asb-runtime-log-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+.asb-runtime-log-level-control {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-runtime-log-level-label {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: nowrap;
+}
+
+.asb-runtime-log-level-control .asb-select-trigger {
+  min-width: 108px;
+}
+
+.asb-runtime-log-notice {
+  margin: 0 0 var(--asb-space-3);
+  padding: var(--asb-space-2);
+  border-left: 2px solid var(--asb-danger);
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+}
+
+.asb-runtime-log-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 180px;
+  padding: var(--asb-space-5);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+.asb-runtime-log-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+  scrollbar-gutter: stable;
+}
+
+.asb-runtime-log-table {
+  min-width: 680px;
+}
+
+.asb-runtime-log-table td:first-child {
+  color: var(--asb-text-muted);
+  white-space: nowrap;
+}
+
+.asb-runtime-log-action {
+  font-weight: 600;
+}
+
+.asb-runtime-log-level {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-runtime-log-level.is-error {
+  border-color: var(--asb-danger);
+  color: var(--asb-danger);
+}
+
+.asb-runtime-log-level.is-debug {
+  border-color: var(--asb-action);
+  color: var(--asb-action);
+}
+
+.asb-runtime-log-level.is-warn {
+  border-color: var(--asb-warning);
+  color: var(--asb-warning);
+}
+
 /* Session manager — a restrained master/detail workspace. The list stays
    compact and operational; transcript text is intentionally near-solid so
    project paths and past instructions remain easy to audit. The panel fills
@@ -2131,7 +2927,7 @@ button:disabled {
 
 .asb-session-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 520px;
@@ -2244,11 +3040,23 @@ button:disabled {
 
 .asb-session-detail-head {
   justify-content: space-between;
+  align-items: flex-start;
   gap: var(--asb-space-3);
 }
 
+.asb-session-detail-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  flex: 1;
+}
+
 .asb-session-detail-head h3 {
-  margin: var(--asb-space-1) 0 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: var(--asb-text-title);
 }
 
@@ -2262,34 +3070,159 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  flex-shrink: 0;
   gap: var(--asb-space-2);
 }
 
-.asb-session-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--asb-space-2);
-  margin: 0;
+/* One compact fact line replaces the former meta grid so the transcript
+   keeps as much height as possible: id, last-active, directory name. */
+.asb-session-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-1) var(--asb-space-3);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
 }
 
-.asb-session-meta > div {
-  min-width: 0;
-  padding: var(--asb-space-2);
+.asb-session-meta-id {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-session-meta-dir {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  cursor: pointer;
+}
+
+.asb-session-meta-dir:hover {
+  color: var(--asb-text);
+  text-decoration: underline;
+}
+
+.asb-session-meta-dir:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+.asb-session-command {
+  display: flex;
+  align-items: center;
+  padding: var(--asb-space-1) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
   background: var(--asb-code-bg);
 }
 
-.asb-session-meta dt {
-  margin-bottom: var(--asb-space-1);
+.asb-session-command .asb-code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Conversation column plus the user-message outline; the outline only
+   renders when the window is wide enough for it to fit beside the
+   transcript (1280px), matching the reference master/detail proportions. */
+.asb-session-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--asb-space-3);
+}
+
+.asb-session-conversation {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: var(--asb-space-2);
+}
+
+.asb-session-toc {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .asb-session-toc {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 248px;
+    min-height: 0;
+    border-left: 1px solid var(--asb-hairline);
+    padding-left: var(--asb-space-3);
+  }
+}
+
+.asb-session-toc-heading {
+  padding-bottom: var(--asb-space-2);
+  border-bottom: 1px solid var(--asb-hairline);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
 
-.asb-session-meta dd {
-  margin: 0;
+.asb-session-toc-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--asb-space-2);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-session-toc-items button {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--asb-space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 0;
+  border-radius: var(--asb-radius-control);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.asb-session-toc-items button:hover {
+  background: var(--asb-row-selected);
+  color: var(--asb-text);
+}
+
+.asb-session-toc-items button:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+.asb-session-toc-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--asb-radius-pill);
+  background: color-mix(in srgb, var(--asb-action) 12%, transparent);
+  color: var(--asb-action);
+  font: var(--asb-text-code);
+}
+
+.asb-session-toc-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   overflow-wrap: anywhere;
-  font: var(--asb-text-body);
 }
 
 .asb-session-transcript {
@@ -2330,6 +3263,67 @@ button:disabled {
 .asb-session-message header span {
   color: var(--asb-text);
   font-weight: 600;
+}
+
+.asb-session-message-time {
+  margin-left: auto;
+  color: var(--asb-text-muted);
+  font-weight: 400;
+}
+
+/* Per-message copy stays out of sight until hover or keyboard focus. */
+.asb-session-message-copy {
+  min-height: 28px;
+  padding: 0 var(--asb-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-session-message:hover .asb-session-message-copy,
+.asb-session-message-copy:focus-visible {
+  opacity: 1;
+}
+
+.asb-session-message-copy:hover {
+  border-color: var(--asb-hairline);
+  background: var(--asb-content);
+  color: var(--asb-text);
+}
+
+.asb-session-message-copy:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+/* Outline-jump target: the action border plus route shadow reads as the
+   same "you are here" signal the active row uses elsewhere. */
+.asb-session-message.is-target {
+  border-color: var(--asb-action);
+  box-shadow: var(--asb-route-shadow);
+}
+
+.asb-session-message-toggle {
+  min-height: 28px;
+  margin-top: var(--asb-space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  cursor: pointer;
+}
+
+.asb-session-message-toggle:hover {
+  color: var(--asb-text);
+}
+
+.asb-session-message-toggle:focus-visible {
+  outline: var(--asb-focus-ring);
 }
 
 .asb-session-message pre {
@@ -2378,13 +3372,13 @@ button:disabled {
   z-index: 10;
   display: grid;
   place-items: center;
-  background: var(--asb-glass-sheet);
-  -webkit-backdrop-filter: blur(var(--asb-blur-sheet));
-  backdrop-filter: blur(var(--asb-blur-sheet));
+  background: var(--asb-surface-sheet);
 }
 
 .asb-sheet {
   width: min(440px, calc(100% - var(--asb-space-6)));
+  max-height: calc(100% - var(--asb-space-6));
+  min-height: 0;
   padding: var(--asb-space-4);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-panel);
@@ -2393,23 +3387,15 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-3);
-  animation: asb-sheet-in var(--asb-motion-sheet) var(--asb-easing);
-}
-
-@keyframes asb-sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .asb-sheet-details {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   margin: 0;
   padding: 0;
+  scrollbar-gutter: stable;
   list-style: none;
   display: flex;
   flex-direction: column;
@@ -2432,7 +3418,7 @@ button:disabled {
   z-index: 20;
   padding: var(--asb-space-1) var(--asb-space-3);
   border-radius: 999px;
-  background: var(--asb-glass-menu);
+  background: var(--asb-surface-menu);
   border: 1px solid var(--asb-hairline);
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
@@ -2454,26 +3440,6 @@ button:disabled {
   pointer-events: none;
 }
 
-@keyframes asb-toast-in {
-  from {
-    transform: translateY(-16px) scale(0.97);
-  }
-  to {
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes asb-toast-out {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-12px) scale(0.97);
-  }
-}
-
 .asb-toast {
   display: flex;
   align-items: center;
@@ -2483,16 +3449,9 @@ button:disabled {
   pointer-events: auto;
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-panel);
-  background: var(--asb-glass-menu);
+  background: var(--asb-surface-menu);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
-  -webkit-backdrop-filter: blur(var(--asb-blur-menu)) saturate(var(--asb-saturation-rail));
-  backdrop-filter: blur(var(--asb-blur-menu)) saturate(var(--asb-saturation-rail));
   color: var(--asb-text);
-  animation: asb-toast-in var(--asb-motion-sheet) var(--asb-easing) both;
-}
-
-.asb-toast.is-leaving {
-  animation: asb-toast-out var(--asb-motion-fast) var(--asb-easing) both;
 }
 
 .asb-toast-icon {
@@ -2567,26 +3526,9 @@ button:disabled {
   border-radius: var(--asb-radius-control);
 }
 
-button:not(:disabled):active {
-  transform: scale(0.98);
-  transition: transform var(--asb-motion-press) var(--asb-easing);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  button:not(:disabled):active {
-    transform: none;
-  }
-
-  .asb-checkbox:active:not([data-disabled]) .asb-checkbox-box {
-    transform: none;
-  }
-
   .asb-checkbox-box {
     transition: none;
-  }
-
-  .asb-checkbox-box {
-    scale: none;
   }
 
   .asb-tooltip {
@@ -2646,6 +3588,10 @@ button:not(:disabled):active {
   /* Stacked mode trades the fixed detail chrome for a taller list: the whole
      detail pane scrolls instead of only the transcript, so the header and
      meta travel with the content instead of starving the transcript. */
+  .asb-session-body {
+    flex: none;
+  }
+
   .asb-session-detail {
     overflow-y: auto;
     scrollbar-gutter: stable;
@@ -2659,24 +3605,44 @@ button:not(:disabled):active {
 }
 
 @media (max-width: 600px) {
-  .asb-session-overview .asb-panel-heading,
-  .asb-session-overview .asb-panel-actions {
+  .asb-runtime-logs .asb-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asb-runtime-log-controls {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .asb-runtime-log-level-control,
+  .asb-runtime-log-controls .asb-tabs,
+  .asb-runtime-log-controls .asb-btn-secondary {
+    width: 100%;
+  }
+
+  .asb-runtime-log-level-control {
+    justify-content: space-between;
+  }
+
+  .asb-runtime-log-level-control .asb-select-trigger {
+    flex: 1;
+  }
+
+  .asb-codex-reset .asb-panel-heading,
+  .asb-codex-reset .asb-panel-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .asb-session-overview-row {
+  .asb-codex-reset-grid {
     grid-template-columns: 1fr;
   }
 
-  .asb-session-overview-values {
-    grid-template-columns: 1fr;
-    gap: var(--asb-space-2);
-  }
-
-  .asb-session-overview-issues {
-    grid-column: auto;
-    margin-top: 0;
+  .asb-codex-reset-item + .asb-codex-reset-item {
+    border-top: 1px solid var(--asb-hairline);
+    border-left: 0;
   }
 
   .asb-session-toolbar {
@@ -2691,10 +3657,6 @@ button:not(:disabled):active {
   .asb-session-actions {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .asb-session-meta {
-    grid-template-columns: 1fr;
   }
 
   .asb-session-message.is-assistant,

@@ -5,7 +5,7 @@ import type { KeyChange } from "../api/client";
 
 const changes: KeyChange[] = [
   { key: "model", kind: "set", before: "gpt-5.1", after: "gpt-5.2" },
-  { key: "model_providers.asb.api_key", kind: "remove", before: "••••••••", after: null },
+  { key: "experimental_bearer_token", kind: "remove", before: "••••••••", after: null },
 ];
 
 describe("DiffView", () => {

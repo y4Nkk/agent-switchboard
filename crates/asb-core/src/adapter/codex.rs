@@ -14,10 +14,7 @@ use crate::redact::redact;
 use crate::AppKind;
 use toml_edit::{DocumentMut, Item, TableLike, Value as TomlValue};
 
-/// The single provider table Agent Switchboard manages.
-pub const MANAGED_TABLE: &str = "model_providers.asb";
-pub const MANAGED_NAME: &str = "asb";
-/// The built-in provider Codex routes to when no custom service is active.
+/// Codex's built-in provider id.
 pub const OFFICIAL_PROVIDER: &str = "openai";
 
 fn parse(text: &str) -> Result<DocumentMut, AdapterError> {
@@ -94,38 +91,28 @@ fn to_toml_value(value: PatchValue) -> TomlValue {
     }
 }
 
-/// Builds the overlay entries implied by `plan`. Every profile routes to a
-/// custom endpoint; validation rejects a draft without a base URL.
+/// Builds the overlay entries implied by `plan`. Every profile routes through
+/// Codex's built-in OpenAI provider with its official base-URL override;
+/// validation rejects a draft without a custom base URL.
 fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
     let p = &plan.profile;
-    let mut entries: Vec<(String, OverlayEntry)> = {
-        let mut table = vec![
-            (
-                "model_provider".into(),
-                OverlayEntry::Set(PatchValue::Str(MANAGED_NAME.into())),
-            ),
-            (
-                format!("{MANAGED_TABLE}.name"),
-                OverlayEntry::Set(PatchValue::Str(p.name.clone())),
-            ),
-            (
-                format!("{MANAGED_TABLE}.wire_api"),
-                OverlayEntry::Set(PatchValue::Str("responses".into())),
-            ),
-            (
-                format!("{MANAGED_TABLE}.base_url"),
-                OverlayEntry::Set(PatchValue::Str(
-                    p.base_url.clone().expect("validated custom base_url"),
-                )),
-            ),
-            (
-                "experimental_bearer_token".into(),
-                OverlayEntry::Set(PatchValue::Str(p.api_key.clone())),
-            ),
-        ];
-        table.append(&mut run_parameter_entries(p));
-        table
-    };
+    let mut entries = vec![
+        (
+            "model_provider".into(),
+            OverlayEntry::Set(PatchValue::Str(OFFICIAL_PROVIDER.into())),
+        ),
+        (
+            "openai_base_url".into(),
+            OverlayEntry::Set(PatchValue::Str(
+                p.base_url.clone().expect("validated custom base_url"),
+            )),
+        ),
+        (
+            "experimental_bearer_token".into(),
+            OverlayEntry::Set(PatchValue::Str(p.api_key.clone())),
+        ),
+    ];
+    entries.extend(run_parameter_entries(p));
     // Top-level owned keys hold possible host values: absent overlay fields
     // leave them untouched.
     entries.push((
@@ -226,26 +213,6 @@ pub(crate) fn owned_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>
     ))
 }
 
-fn active_provider_name(doc: &DocumentMut) -> Option<String> {
-    doc.as_table()
-        .get("model_provider")
-        .and_then(item_repr)
-        .filter(|name| name != OFFICIAL_PROVIDER)
-}
-
-fn active_provider_table<'a>(doc: &'a DocumentMut) -> Option<&'a dyn TableLike> {
-    let active = active_provider_name(doc)?;
-    doc.as_table()
-        .get("model_providers")
-        .and_then(Item::as_table_like)?
-        .get(&active)
-        .and_then(Item::as_table_like)
-}
-
-fn table_value(table: &dyn TableLike, key: &str) -> Option<String> {
-    table.get(key).and_then(item_repr)
-}
-
 /// Scope-of-effect warnings for facts inside this file that a `--profile`
 /// launch or other override can shadow.
 fn scope_warnings(doc: &DocumentMut) -> Vec<String> {
@@ -268,19 +235,22 @@ fn scope_warnings(doc: &DocumentMut) -> Vec<String> {
 pub fn route_state(text: &str) -> RouteState {
     let doc = parse(text).expect("caller validates syntax first");
     let get = |path: &str| item_at(&doc, path).and_then(item_repr);
-    let provider = active_provider_table(&doc);
+    let provider_id = get("model_provider").unwrap_or_else(|| OFFICIAL_PROVIDER.to_string());
+    let openai_base_url = (provider_id == OFFICIAL_PROVIDER)
+        .then(|| get("openai_base_url"))
+        .flatten();
+    let wire_api = openai_base_url.as_ref().map(|_| "responses".to_string());
     RouteState {
         app: AppKind::Codex,
-        route_mode: match active_provider_name(&doc) {
-            Some(_) => RouteMode::Custom,
-            None => RouteMode::Official,
+        route_mode: if provider_id != OFFICIAL_PROVIDER || openai_base_url.is_some() {
+            RouteMode::Custom
+        } else {
+            RouteMode::Official
         },
-        provider_name: provider.and_then(|table| table_value(table, "name")),
+        provider_name: None,
         model: get("model"),
-        base_url: provider.and_then(|table| table_value(table, "base_url")),
-        wire_api: provider
-            .and_then(|table| table_value(table, "wire_api"))
-            .or_else(|| provider.map(|_| "responses".to_string())),
+        base_url: openai_base_url,
+        wire_api,
         codex_model_options: Some(CodexModelSettings {
             context_window: item_at(&doc, "model_context_window")
                 .and_then(|item| item.as_value())
@@ -335,16 +305,6 @@ pub(crate) fn preview_entries(
                     });
                 }
             }
-            OverlayEntry::RemoveTableIfPresent => {
-                if item_at(&doc, &key).is_some_and(Item::is_table_like) {
-                    changes.push(KeyChange {
-                        key: key.clone(),
-                        kind: ChangeKind::Remove,
-                        before: Some("（托管供应商表）".to_string()),
-                        after: None,
-                    });
-                }
-            }
         }
     }
 
@@ -370,7 +330,7 @@ pub(crate) fn render_entries(
         match entry {
             OverlayEntry::Set(value) => set_path(&mut doc, &key, value),
             OverlayEntry::Leave => {}
-            OverlayEntry::RemoveIfPresent | OverlayEntry::RemoveTableIfPresent => {
+            OverlayEntry::RemoveIfPresent => {
                 remove_path(&mut doc, &key);
             }
         }
@@ -419,6 +379,7 @@ mod tests {
                 })),
                 notes: None,
                 website_url: None,
+                usage_query: None,
             },
             common: CommonConfigPatch {
                 app: AppKind::Codex,
@@ -464,7 +425,7 @@ mod tests {
         assert!(set.contains("hide_agent_reasoning = true"));
         // Host content outside the patch survives untouched.
         assert!(set.contains("threads = 8"));
-        assert!(set.contains("[model_providers.openai]"));
+        assert!(set.contains("trusted = true"));
 
         let removed = crate::adapter::common_render(
             &set,
@@ -519,10 +480,10 @@ mod tests {
 
         let changed: Vec<&str> = preview.changes.iter().map(|c| c.key.as_str()).collect();
         assert!(changed.contains(&"model"));
-        // model_provider is already "asb"; an unchanged key produces no diff
-        // entry.
+        // model_provider is already the built-in OpenAI id; an unchanged key
+        // produces no diff entry.
         assert!(!changed.contains(&"model_provider"));
-        assert!(changed.contains(&"model_providers.asb.base_url"));
+        assert!(changed.contains(&"openai_base_url"));
         assert!(changed.contains(&"model_context_window"));
         assert_eq!(preview.backup_dir, "F:/backups");
         assert_eq!(preview.target, "~/.codex/config.toml");
@@ -569,12 +530,12 @@ mod tests {
         assert!(rendered.contains("# host-owned Codex configuration (test sample)"));
         assert!(rendered.contains("threads = 8"));
         assert!(rendered.contains("history_persistence = \"save-all\""));
-        assert!(rendered.contains("[model_providers.openai]"));
         assert!(rendered.contains("trusted = true"));
-        assert!(rendered.contains("base_url = \"https://relay-b.internal/v1\""));
         assert!(rendered.contains("model = \"gpt-5.2\""));
-        assert!(rendered.contains("model_provider = \"asb\""));
-        assert!(rendered.contains("wire_api = \"responses\""));
+        assert!(rendered.contains("model_provider = \"openai\""));
+        assert!(rendered.contains("openai_base_url = \"https://relay-b.internal/v1\""));
+        assert!(!rendered.contains("[model_providers"));
+        assert!(!rendered.contains("wire_api"));
         // Output stays valid TOML.
         rendered
             .parse::<DocumentMut>()
@@ -585,8 +546,16 @@ mod tests {
     fn render_writes_profile_bearer_token() {
         let rendered = render(CODEX_TOML, &plan_b()).unwrap();
         assert!(rendered.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
-        // Host provider table survives.
-        assert!(rendered.contains("[model_providers.openai]"));
+    }
+
+    #[test]
+    fn render_preserves_host_owned_provider_tables() {
+        let current = format!(
+            "{CODEX_TOML}\n[model_providers.gateway]\nbase_url = \"https://gateway.internal/v1\"\n"
+        );
+        let rendered = render(&current, &plan_b()).unwrap();
+        assert!(rendered.contains("[model_providers.gateway]"));
+        assert!(rendered.contains("base_url = \"https://gateway.internal/v1\""));
     }
 
     #[test]
@@ -603,10 +572,10 @@ mod tests {
     }
 
     #[test]
-    fn route_state_reads_active_provider_and_model() {
+    fn route_state_reads_builtin_openai_override_and_model() {
         let state = route_state(CODEX_TOML);
         assert_eq!(state.route_mode, RouteMode::Custom);
-        assert_eq!(state.provider_name.as_deref(), Some("中继 A"));
+        assert!(state.provider_name.is_none());
         assert_eq!(state.model.as_deref(), Some("gpt-5.1"));
         assert_eq!(
             state.base_url.as_deref(),
@@ -616,12 +585,41 @@ mod tests {
     }
 
     #[test]
-    fn route_state_reports_official_when_routing_to_openai_or_nothing() {
-        let official_table =
-            CODEX_TOML.replace("model_provider = \"asb\"", "model_provider = \"openai\"");
-        assert_eq!(route_state(&official_table).route_mode, RouteMode::Official);
+    fn route_state_defaults_to_openai_when_model_provider_is_omitted() {
+        let implicit = CODEX_TOML.replace("model_provider = \"openai\"\n", "");
+        let state = route_state(&implicit);
+        assert_eq!(state.route_mode, RouteMode::Custom);
+        assert_eq!(
+            state.base_url.as_deref(),
+            Some("https://relay-a.internal/v1")
+        );
+        assert_eq!(state.wire_api.as_deref(), Some("responses"));
+    }
 
-        let no_provider = CODEX_TOML.replace("model_provider = \"asb\"\n", "");
+    #[test]
+    fn route_state_does_not_interpret_custom_provider_tables() {
+        let external = r#"
+model_provider = "gateway"
+
+[model_providers.gateway]
+name = "Gateway"
+base_url = "https://gateway.internal/v1"
+wire_api = "responses"
+"#;
+        let state = route_state(external);
+        assert_eq!(state.route_mode, RouteMode::Custom);
+        assert!(state.provider_name.is_none());
+        assert!(state.base_url.is_none());
+        assert!(state.wire_api.is_none());
+    }
+
+    #[test]
+    fn route_state_reports_official_without_an_openai_base_url() {
+        let official =
+            CODEX_TOML.replace("openai_base_url = \"https://relay-a.internal/v1\"\n", "");
+        assert_eq!(route_state(&official).route_mode, RouteMode::Official);
+
+        let no_provider = official.replace("model_provider = \"openai\"\n", "");
         assert_eq!(route_state(&no_provider).route_mode, RouteMode::Official);
     }
 

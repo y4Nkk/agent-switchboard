@@ -5,7 +5,7 @@
 
 use crate::contracts::{
     AppKind, ClaudeModelSettings, CodexModelSettings, CommonConfigPatch, ModelOptions, PatchValue,
-    ProviderDraft, ProviderProfile,
+    ProviderDraft, ProviderProfile, UsageQuery,
 };
 use crate::ownership::{choice_spec, is_owned, is_profile_exclusive, toggle_spec};
 use thiserror::Error;
@@ -60,6 +60,18 @@ pub enum ValidationError {
     BadWebsiteUrl(String),
     #[error("备注最长 {0} 个字符")]
     NotesTooLong(usize),
+    #[error("用量查询地址不能为空")]
+    EmptyUsageQueryUrl,
+    #[error("用量查询地址必须以 http(s) 地址或 {{baseUrl}} 开头")]
+    BadUsageQueryUrl,
+    #[error("用量查询至少要配置一个提取路径（余额 / 已用 / 总量）")]
+    UsageQueryExtractsNothing,
+    #[error("用量查询的 {field} 不能为空")]
+    EmptyUsageQueryField { field: &'static str },
+    #[error("用量查询脚本不能为空")]
+    EmptyUsageQueryScript,
+    #[error("用量查询脚本最长 {0} 个字符")]
+    UsageQueryScriptTooLong(usize),
 }
 
 /// Metadata fields shared by draft and profile; kept short and local-only.
@@ -79,6 +91,7 @@ impl ProviderProfile {
             model_options: self.model_options.as_ref(),
             notes: self.notes.as_deref(),
             website_url: self.website_url.as_deref(),
+            usage_query: self.usage_query.as_ref(),
         })
     }
 }
@@ -94,6 +107,7 @@ impl ProviderDraft {
             model_options: self.model_options.as_ref(),
             notes: self.notes.as_deref(),
             website_url: self.website_url.as_deref(),
+            usage_query: self.usage_query.as_ref(),
         })
     }
 }
@@ -107,6 +121,7 @@ struct ProfileFields<'a> {
     model_options: Option<&'a ModelOptions>,
     notes: Option<&'a str>,
     website_url: Option<&'a str>,
+    usage_query: Option<&'a UsageQuery>,
 }
 
 fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationError> {
@@ -119,6 +134,7 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
         model_options,
         notes,
         website_url,
+        usage_query,
     } = fields;
 
     if name.trim().is_empty() {
@@ -154,7 +170,67 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
             return Err(ValidationError::BadWebsiteUrl(url.to_string()));
         }
     }
+    if let Some(query) = usage_query {
+        validate_usage_query(query)?;
+    }
     Ok(())
+}
+
+const MAX_USAGE_QUERY_SOURCE_LEN: usize = 65_536;
+
+/// Checks the serializable usage-query contract. Loading the two JavaScript
+/// functions is intentionally desktop-runtime work, because this core crate
+/// owns no JavaScript engine; LocalState runs that additional validation for
+/// every persisted profile before it accepts or writes a store.
+pub fn validate_usage_query(query: &UsageQuery) -> Result<(), ValidationError> {
+    match query {
+        UsageQuery::Declarative {
+            url,
+            remaining_path,
+            used_path,
+            total_path,
+            unit,
+        } => {
+            let url = url.trim();
+            if url.is_empty() {
+                return Err(ValidationError::EmptyUsageQueryUrl);
+            }
+            if !(url.starts_with("https://")
+                || url.starts_with("http://")
+                || url.starts_with("{{baseUrl}}"))
+                || url.chars().any(char::is_control)
+            {
+                return Err(ValidationError::BadUsageQueryUrl);
+            }
+            if remaining_path.is_none() && used_path.is_none() && total_path.is_none() {
+                return Err(ValidationError::UsageQueryExtractsNothing);
+            }
+            for (field, value) in [
+                ("remainingPath", remaining_path),
+                ("usedPath", used_path),
+                ("totalPath", total_path),
+                ("unit", unit),
+            ] {
+                if value.as_ref().is_some_and(|value| {
+                    value.trim().is_empty() || value.chars().any(char::is_control)
+                }) {
+                    return Err(ValidationError::EmptyUsageQueryField { field });
+                }
+            }
+            Ok(())
+        }
+        UsageQuery::Script { source } => {
+            if source.trim().is_empty() {
+                return Err(ValidationError::EmptyUsageQueryScript);
+            }
+            if source.chars().count() > MAX_USAGE_QUERY_SOURCE_LEN {
+                return Err(ValidationError::UsageQueryScriptTooLong(
+                    MAX_USAGE_QUERY_SOURCE_LEN,
+                ));
+            }
+            Ok(())
+        }
+    }
 }
 
 fn validate_model_options(
@@ -345,6 +421,7 @@ mod tests {
             model_options: None,
             notes: None,
             website_url: None,
+            usage_query: None,
         }
     }
 
@@ -666,5 +743,37 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ValidationError::AppMismatch { .. }));
+    }
+
+    #[test]
+    fn usage_query_contract_rejects_empty_paths_and_scripts_before_persistence() {
+        let valid = UsageQuery::Declarative {
+            url: "{{baseUrl}}/balance".to_string(),
+            remaining_path: Some("data/balance".to_string()),
+            used_path: None,
+            total_path: None,
+            unit: Some("USD".to_string()),
+        };
+        assert!(validate_usage_query(&valid).is_ok());
+
+        let empty_paths = UsageQuery::Declarative {
+            url: "https://relay.example/balance".to_string(),
+            remaining_path: None,
+            used_path: None,
+            total_path: None,
+            unit: None,
+        };
+        assert_eq!(
+            validate_usage_query(&empty_paths),
+            Err(ValidationError::UsageQueryExtractsNothing)
+        );
+
+        let blank_script = UsageQuery::Script {
+            source: " \n".to_string(),
+        };
+        assert_eq!(
+            validate_usage_query(&blank_script),
+            Err(ValidationError::EmptyUsageQueryScript)
+        );
     }
 }

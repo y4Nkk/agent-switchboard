@@ -2,8 +2,10 @@
 //! executor transaction and records an audit entry so it can be undone.
 
 use super::error::{
-    blocking, record_audit_or_warn, require_write_confirmation, state, store_error, CommandError,
+    blocking, observe, record_audit_or_warn, require_write_confirmation, state, store_error,
+    CommandError,
 };
+use crate::runtime_log::RuntimeLogAction;
 use asb_core::adapter;
 use asb_core::contracts::{AppKind, BackupRecord, KeyChange, SwitchLog, SwitchOp, SwitchPlan};
 use asb_switch::io::{FsIo, SwitchIo};
@@ -61,40 +63,43 @@ pub async fn execute_switch(
     expected_rendered_hash: String,
     confirm_write: bool,
 ) -> Result<SwitchOutcome, CommandError> {
-    require_write_confirmation(confirm_write, "写入配置")?;
-    let state = state(&app)?;
-    blocking(move || {
-        let plan = build_plan(&state, &profile_id)?;
-        let target = state
-            .target(plan.app)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let backup_dir = state.backup_dir();
-        let mut outcome = execute(
-            &FsIo,
-            &asb_switch::SwitchRequest {
-                target: &target,
-                plan: &plan,
-                backup_dir: &backup_dir,
-                expected_hash: &expected_hash,
-                expected_rendered_hash: &expected_rendered_hash,
-            },
-        )
-        .map_err(CommandError::from)?;
-        outcome.preview.target = target.to_string_lossy().to_string();
-        record_audit_or_warn(
-            state.record_switch(SwitchLog {
-                app: plan.app,
-                profile_id: Some(plan.profile.id.clone()),
-                profile_name: Some(plan.profile.name.clone()),
-                content_hash: outcome.final_hash.clone(),
-                backup_id: outcome.backup.id.clone(),
-                at: outcome.backup.created_at.clone(),
-                operation: SwitchOp::Switch,
-            }),
-            &mut outcome.warnings,
-        );
-        crate::tray::refresh(&app);
-        Ok(outcome)
+    observe(RuntimeLogAction::ConfigurationSwitched, async move {
+        require_write_confirmation(confirm_write, "写入配置")?;
+        let state = state(&app)?;
+        blocking(move || {
+            let plan = build_plan(&state, &profile_id)?;
+            let target = state
+                .target(plan.app)
+                .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+            let backup_dir = state.backup_dir();
+            let mut outcome = execute(
+                &FsIo,
+                &asb_switch::SwitchRequest {
+                    target: &target,
+                    plan: &plan,
+                    backup_dir: &backup_dir,
+                    expected_hash: &expected_hash,
+                    expected_rendered_hash: &expected_rendered_hash,
+                },
+            )
+            .map_err(CommandError::from)?;
+            outcome.preview.target = target.to_string_lossy().to_string();
+            record_audit_or_warn(
+                state.record_switch(SwitchLog {
+                    app: plan.app,
+                    profile_id: Some(plan.profile.id.clone()),
+                    profile_name: Some(plan.profile.name.clone()),
+                    content_hash: outcome.final_hash.clone(),
+                    backup_id: outcome.backup.id.clone(),
+                    at: outcome.backup.created_at.clone(),
+                    operation: SwitchOp::Switch,
+                }),
+                &mut outcome.warnings,
+            );
+            crate::tray::refresh(&app);
+            Ok(outcome)
+        })
+        .await
     })
     .await
 }
@@ -175,13 +180,16 @@ pub async fn restore_backup(
     backup_id: String,
     confirm_write: bool,
 ) -> Result<RestoreOutcome, CommandError> {
-    require_write_confirmation(confirm_write, "恢复配置")?;
-    let state = state(&app)?;
-    blocking(move || {
-        let record = find_backup(&state, &backup_id)?;
-        let outcome = run_restore(&state, &record)?;
-        crate::tray::refresh(&app);
-        Ok(outcome)
+    observe(RuntimeLogAction::BackupRestored, async move {
+        require_write_confirmation(confirm_write, "恢复配置")?;
+        let state = state(&app)?;
+        blocking(move || {
+            let record = find_backup(&state, &backup_id)?;
+            let outcome = run_restore(&state, &record)?;
+            crate::tray::refresh(&app);
+            Ok(outcome)
+        })
+        .await
     })
     .await
 }
@@ -194,17 +202,22 @@ pub async fn undo_last_switch(
     target: AppKind,
     confirm_write: bool,
 ) -> Result<RestoreOutcome, CommandError> {
-    require_write_confirmation(confirm_write, "撤回切换")?;
-    let state = state(&app)?;
-    blocking(move || {
-        let last = state
-            .latest_switch(target)
-            .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("undo-unavailable", "该客户端没有可撤回的切换记录"))?;
-        let record = find_backup(&state, &last.backup_id)?;
-        let outcome = run_restore(&state, &record)?;
-        crate::tray::refresh(&app);
-        Ok(outcome)
+    observe(RuntimeLogAction::SwitchUndone, async move {
+        require_write_confirmation(confirm_write, "撤回切换")?;
+        let state = state(&app)?;
+        blocking(move || {
+            let last = state
+                .latest_switch(target)
+                .map_err(store_error)?
+                .ok_or_else(|| {
+                    CommandError::new("undo-unavailable", "该客户端没有可撤回的切换记录")
+                })?;
+            let record = find_backup(&state, &last.backup_id)?;
+            let outcome = run_restore(&state, &record)?;
+            crate::tray::refresh(&app);
+            Ok(outcome)
+        })
+        .await
     })
     .await
 }

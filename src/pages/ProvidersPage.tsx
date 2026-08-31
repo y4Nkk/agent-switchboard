@@ -3,13 +3,16 @@ import type {
   FilePreview,
   ProviderDraft,
   ProviderProfile,
+  UsageQuery,
 } from "../api/client";
+import { useState } from "react";
 import { ClientLogo } from "../components/ClientLogo";
 import { PlusIcon } from "../components/icons";
 import { PreviewInspector } from "../components/PreviewInspector";
 import { ProviderEditor } from "../components/ProviderEditor";
 import { ProviderList } from "../components/ProviderList";
 import { Tooltip } from "../components/Tooltip";
+import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
 import type { EditorMode } from "../app/useProviders";
 import { clientName } from "../lib/client-name";
 
@@ -26,6 +29,7 @@ interface ProvidersPageProps {
   onNew: () => void;
   onCloseEditor: () => void;
   onSave: (draft: ProviderDraft) => Promise<void>;
+  onSaveUsageQuery: (profile: ProviderProfile, usageQuery: UsageQuery | null) => Promise<boolean>;
   onSelect: (profileId: string) => void;
   onReorder: (orderedIds: string[]) => void;
   onActivate: (profile: ProviderProfile) => void;
@@ -50,6 +54,7 @@ export function ProvidersPage({
   onNew,
   onCloseEditor,
   onSave,
+  onSaveUsageQuery,
   onSelect,
   onReorder,
   onActivate,
@@ -58,6 +63,31 @@ export function ProvidersPage({
   onDelete,
   onRequestSwitch,
 }: ProvidersPageProps) {
+  const [usageProfile, setUsageProfile] = useState<ProviderProfile | null>(null);
+
+  if (usageProfile) {
+    return (
+      <div className="asb-edit-view">
+        <section className="asb-panel asb-edit-panel">
+          <UsageQueryWorkspace
+            key={usageProfile.id}
+            providerName={usageProfile.name}
+            value={usageProfile.usageQuery ?? null}
+            apiKey={usageProfile.apiKey}
+            baseUrl={usageProfile.baseUrl}
+            busy={busy}
+            onSave={async (usageQuery) => {
+              const saved = await onSaveUsageQuery(usageProfile, usageQuery);
+              if (saved) setUsageProfile(null);
+              return saved;
+            }}
+            onClose={() => setUsageProfile(null)}
+          />
+        </section>
+      </div>
+    );
+  }
+
   if (editorMode !== null) {
     return (
       <div className="asb-edit-view">
@@ -135,6 +165,7 @@ export function ProvidersPage({
         onActivate={onActivate}
         onPreview={onTogglePreview}
         onEdit={onEdit}
+        onConfigureUsage={setUsageProfile}
         onDelete={onDelete}
         renderPreview={() =>
           preview && (

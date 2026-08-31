@@ -12,9 +12,9 @@ const preview: FilePreview = {
     target: "~/.codex/config.toml",
     changes: [
       { key: "model", kind: "set", before: "gpt-5.1", after: "gpt-5.2" },
-      { key: "model_providers.asb.api_key", kind: "remove", before: "••••••••", after: null },
+      { key: "experimental_bearer_token", kind: "remove", before: "••••••••", after: null },
     ],
-    warnings: ["该供应商未设置服务地址，将移除托管表中的 base_url"],
+    warnings: ["将使用 Codex 内置 OpenAI 路由覆盖服务地址"],
     backupDir: "F:/appdata/backups",
   },
 };
@@ -23,7 +23,7 @@ describe("PreviewInspector", () => {
   it("names every changed key with before and after values", () => {
     render(<PreviewInspector filePreview={preview} />);
     expect(screen.getByText("model")).toBeInTheDocument();
-    expect(screen.getByText("model_providers.asb.api_key")).toBeInTheDocument();
+    expect(screen.getByText("experimental_bearer_token")).toBeInTheDocument();
     expect(screen.getByText("gpt-5.1")).toBeInTheDocument();
     expect(screen.getByText("gpt-5.2")).toBeInTheDocument();
     expect(screen.getByText("••••••••")).toBeInTheDocument();

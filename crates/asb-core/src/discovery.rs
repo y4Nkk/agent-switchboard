@@ -6,7 +6,8 @@
 //! redacted.
 
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, ImportProposal, ModelOptions, ProviderDraft, RouteState,
+    AppKind, ClaudeModelSettings, ImportProposal, ModelOptions, ProviderDraft, RouteMode,
+    RouteState,
 };
 use toml_edit::Item;
 
@@ -89,21 +90,14 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
     let claude_import_error = (app == AppKind::Claude)
         .then(|| claude_import_model_fields(&route).err())
         .flatten();
-    if managed && matches!(route.provider_name, None) {
-        warnings.push("存在托管键但未识别到供应商名称".to_string());
-    }
     let importable = match app {
         AppKind::Codex => codex_import_is_supported(text, &route),
         AppKind::Claude => route.base_url.is_some() && claude_import_error.is_none(),
     };
-    if app == AppKind::Codex && route.provider_name.is_some() && !importable {
-        if route.wire_api.as_deref() != Some("responses") {
-            warnings.push("当前 Codex 供应商未使用 responses 协议，无法导入".to_string());
-        } else {
-            warnings.push("当前 Codex 供应商包含本应用无法完整表示的设置，无法导入".to_string());
-        }
+    if app == AppKind::Codex && route.route_mode == RouteMode::Custom && !importable {
+        warnings.push("当前 Codex 配置无法作为供应商档案导入".to_string());
     }
-    if app == AppKind::Claude && route.base_url.is_some() {
+    if app == AppKind::Claude && route.route_mode == RouteMode::Custom {
         if let Some(error) = claude_import_error {
             warnings.push(format!("当前 Claude 配置无法作为供应商档案导入：{error}"));
         }
@@ -122,7 +116,7 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
 }
 
 fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
-    if route.provider_name.is_none()
+    if route.route_mode != RouteMode::Custom
         || route.base_url.is_none()
         || route.wire_api.as_deref() != Some("responses")
     {
@@ -131,27 +125,19 @@ fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
     let Ok(doc) = text.parse::<toml_edit::DocumentMut>() else {
         return false;
     };
-    let Some(provider_id) = doc
+    let provider_id = doc
         .as_table()
         .get("model_provider")
         .and_then(Item::as_value)
+        .and_then(|value| value.as_str());
+    if provider_id.is_some_and(|id| id != crate::adapter::codex::OFFICIAL_PROVIDER) {
+        return false;
+    }
+    doc.as_table()
+        .get("experimental_bearer_token")
+        .and_then(Item::as_value)
         .and_then(|value| value.as_str())
-    else {
-        return false;
-    };
-    let Some(provider) = doc
-        .as_table()
-        .get("model_providers")
-        .and_then(Item::as_table_like)
-        .and_then(|providers| providers.get(provider_id))
-        .and_then(Item::as_table_like)
-    else {
-        return false;
-    };
-    let has_only_supported_keys = provider
-        .iter()
-        .all(|(key, _)| matches!(key, "name" | "base_url" | "api_key" | "wire_api"));
-    has_only_supported_keys
+        .is_some_and(|value| !value.trim().is_empty())
 }
 
 /// Converts only the externally valid Claude wire spelling into the profile
@@ -206,12 +192,18 @@ fn inspect_codex(text: &str) -> (bool, Vec<String>) {
     let Ok(doc) = parsed else {
         return (false, vec![]); // caller already classified parse errors
     };
-    let managed = doc
+    let provider_id = doc
         .as_table()
-        .get("model_providers")
-        .and_then(|item| item.as_table_like())
-        .map(|t| t.contains_key("asb"))
-        .unwrap_or(false);
+        .get("model_provider")
+        .and_then(Item::as_value)
+        .and_then(|value| value.as_str())
+        .unwrap_or(crate::adapter::codex::OFFICIAL_PROVIDER);
+    let managed = provider_id == crate::adapter::codex::OFFICIAL_PROVIDER
+        && doc
+            .as_table()
+            .get("openai_base_url")
+            .and_then(Item::as_value)
+            .is_some();
 
     (managed, vec![])
 }
@@ -252,11 +244,6 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
     match file.app {
         AppKind::Codex => {
             let doc = text.parse::<toml_edit::DocumentMut>().ok()?;
-            let provider_id = doc
-                .as_table()
-                .get("model_provider")
-                .and_then(Item::as_value)
-                .and_then(|value| value.as_str())?;
             let key = doc
                 .as_table()
                 .get("experimental_bearer_token")
@@ -274,15 +261,16 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
                     name: route
                         .provider_name
                         .clone()
-                        .unwrap_or_else(|| provider_id.to_string()),
+                        .unwrap_or_else(|| "当前 Codex 配置".to_string()),
                     model: route.model.clone(),
                     base_url: route.base_url.clone(),
                     api_key: key.to_string(),
                     model_options,
                     notes: None,
                     website_url: None,
+                    usage_query: None,
                 },
-                basis: "由当前 Codex 自定义供应商配置生成".to_string(),
+                basis: "由当前 Codex 可转换配置生成".to_string(),
             })
         }
         AppKind::Claude => {
@@ -304,6 +292,7 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
                     model_options,
                     notes: None,
                     website_url: None,
+                    usage_query: None,
                 },
                 basis: "由当前 Claude 配置的模型与服务地址生成".to_string(),
             })
@@ -408,7 +397,8 @@ mod tests {
             panic!("codex should be ok");
         };
         assert!(managed);
-        assert_eq!(route.provider_name.as_deref(), Some("中继 A"));
+        assert_eq!(route.route_mode, RouteMode::Custom);
+        assert!(route.provider_name.is_none());
         assert_eq!(route.wire_api.as_deref(), Some("responses"));
         let codex_proposal = report
             .import_proposals
@@ -478,19 +468,30 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_codex_protocol_is_not_imported() {
-        let current = CODEX_TOML.replace("wire_api = \"responses\"", "wire_api = \"chat\"");
-        let file = inspect(AppKind::Codex, "c", Some(&current));
-        let DiscoveredState::Ok { warnings, .. } = &file.state else {
+    fn non_openai_codex_provider_is_not_imported() {
+        let current = r#"
+model_provider = "gateway"
+experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
+"#;
+        let file = inspect(AppKind::Codex, "c", Some(current));
+        let DiscoveredState::Ok {
+            warnings,
+            importable,
+            ..
+        } = &file.state
+        else {
             panic!("should parse");
         };
-        assert!(warnings.iter().any(|w| w.contains("responses")));
-        assert!(import_proposal(&file, Some(&current)).is_none());
+        assert!(!importable);
+        assert!(warnings
+            .iter()
+            .any(|w| w.contains("无法作为供应商档案导入")));
+        assert!(import_proposal(&file, Some(current)).is_none());
     }
 
     #[test]
     fn default_responses_protocol_and_codex_run_options_are_imported() {
-        let current = CODEX_TOML.replace("wire_api = \"responses\"", "").replace(
+        let current = CODEX_TOML.replace(
             "threads = 8",
             "threads = 8\nmodel_reasoning_effort = \"xhigh\"\nmodel_context_window = 272000",
         );
@@ -514,10 +515,10 @@ mod tests {
     }
 
     #[test]
-    fn codex_provider_with_extra_settings_is_not_imported() {
+    fn codex_builtin_openai_route_without_a_token_is_not_imported() {
         let current = CODEX_TOML.replace(
-            "wire_api = \"responses\"",
-            "wire_api = \"responses\"\nhttp_headers = { X-Provider = \"example\" }",
+            "experimental_bearer_token = \"TEST_CODEX_IMPORT_KEY\"\n",
+            "",
         );
         let file = inspect(AppKind::Codex, "c", Some(&current));
 
@@ -532,7 +533,7 @@ mod tests {
         assert!(!importable);
         assert!(warnings
             .iter()
-            .any(|warning| warning.contains("无法完整表示")));
+            .any(|warning| warning.contains("无法作为供应商档案导入")));
         assert!(import_proposal(&file, Some(&current)).is_none());
     }
 

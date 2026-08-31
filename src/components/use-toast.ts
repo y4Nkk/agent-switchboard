@@ -22,7 +22,6 @@ const DEFAULT_TOAST_REMOVE_DELAY: Record<ToastKind, number> = {
   warning: 6000,
   error: 10000,
 };
-const DISMISS_ANIMATION_DURATION = 300;
 
 let count = 0;
 
@@ -37,24 +36,19 @@ type Action =
       toast: Toast;
     }
   | {
-      type: "DISMISS_TOAST";
-      toastId: Toast["id"];
-    }
-  | {
       type: "REMOVE_TOAST";
       toastId: Toast["id"];
     };
 
 interface State {
   toasts: Toast[];
-  dismissingIds: string[];
 }
 
 const listeners: Array<(state: State) => void> = [];
 const toastTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const toastDeadlines = new Map<string, number>();
 const pausedToastRemaining = new Map<string, number>();
-let memoryState: State = { toasts: [], dismissingIds: [] };
+let memoryState: State = { toasts: [] };
 
 function clearToastTimer(toastId: string): void {
   const timer = toastTimers.get(toastId);
@@ -70,7 +64,7 @@ function scheduleTimer(toastId: string, delayMs: number): void {
   const timeout = setTimeout(() => {
     toastDeadlines.delete(toastId);
     pausedToastRemaining.delete(toastId);
-    dismissWithAnimation(toastId);
+    dismissToast(toastId);
   }, delayMs);
   toastTimers.set(toastId, timeout);
 }
@@ -99,22 +93,14 @@ function resumeAutoDismiss(toastId: string): void {
     return;
   }
   pausedToastRemaining.delete(toastId);
-  dismissWithAnimation(toastId);
+  dismissToast(toastId);
 }
 
-function dismissWithAnimation(toastId: string): void {
-  const toastExists = memoryState.toasts.some((toast) => toast.id === toastId);
-  if (!toastExists || memoryState.dismissingIds.includes(toastId)) return;
+function dismissToast(toastId: string): void {
+  if (!memoryState.toasts.some((toast) => toast.id === toastId)) return;
 
   clearToastTimer(toastId);
-  toastDeadlines.delete(toastId);
-  pausedToastRemaining.delete(toastId);
-  dispatch({ type: "DISMISS_TOAST", toastId });
-  const timeout = setTimeout(() => {
-    toastTimers.delete(toastId);
-    dispatch({ type: "REMOVE_TOAST", toastId });
-  }, DISMISS_ANIMATION_DURATION);
-  toastTimers.set(toastId, timeout);
+  dispatch({ type: "REMOVE_TOAST", toastId });
 }
 
 function reducer(state: State, action: Action): State {
@@ -123,27 +109,12 @@ function reducer(state: State, action: Action): State {
       const toasts = [action.toast, ...state.toasts]
         .sort((left, right) => Number(right.kind === "error") - Number(left.kind === "error"))
         .slice(0, TOAST_LIMIT);
-      const retainedIds = new Set(toasts.map((toast) => toast.id));
-      return {
-        toasts,
-        dismissingIds: state.dismissingIds.filter((id) => retainedIds.has(id)),
-      };
-    }
-
-    case "DISMISS_TOAST": {
-      return {
-        ...state,
-        dismissingIds: state.dismissingIds.includes(action.toastId)
-          ? state.dismissingIds
-          : [...state.dismissingIds, action.toastId],
-      };
+      return { toasts };
     }
 
     case "REMOVE_TOAST": {
       return {
-        ...state,
         toasts: state.toasts.filter((toast) => toast.id !== action.toastId),
-        dismissingIds: state.dismissingIds.filter((id) => id !== action.toastId),
       };
     }
   }
@@ -209,20 +180,19 @@ function useToast() {
   return {
     ...state,
     toast,
-    dismiss: dismissWithAnimation,
+    dismiss: dismissToast,
     pause: pauseAutoDismiss,
     resume: resumeAutoDismiss,
   };
 }
 
-/** Removes every toast immediately, without the exit animation. Test
- * isolation only: the module-level store otherwise outlives one render. */
+/** Test isolation: the module-level store otherwise outlives one render. */
 function clearToasts(): void {
   for (const timer of toastTimers.values()) clearTimeout(timer);
   toastTimers.clear();
   toastDeadlines.clear();
   pausedToastRemaining.clear();
-  memoryState = { toasts: [], dismissingIds: [] };
+  memoryState = { toasts: [] };
   listeners.forEach((listener) => {
     listener(memoryState);
   });

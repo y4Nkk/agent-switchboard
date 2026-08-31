@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { AppKind, ProviderProfile, RouteState } from "../api/client";
 import { ClientLogo } from "./ClientLogo";
 import { MatrixStarlightCanvas } from "./experience/MatrixStarlightCanvas";
@@ -42,7 +41,6 @@ function RouteCard({ app, route }: { app: AppKind; route: RouteState | null }) {
     <article
       className={`asb-route-card${on ? " is-on" : ""}`}
       data-app={app}
-      style={{ "--asb-route-stagger": app === "codex" ? 0 : 1 } as CSSProperties}
       aria-label={`${client} 路由`}
     >
       <MatrixStarlightCanvas variant={on ? "route-active" : "route-idle"} />
@@ -80,7 +78,7 @@ function RouteCard({ app, route }: { app: AppKind; route: RouteState | null }) {
 /** The Dual Relay: the one intentionally expressive control (DESIGN.md §4). */
 export function DualRelay({ routes, selectedProfile, canSwitch, busy, onPreview, onSwitch }: Props) {
   return (
-    <section className="asb-routebar asb-glass" aria-label="当前路由">
+    <section className="asb-routebar asb-surface-rail" aria-label="当前路由">
       <h2 className="asb-panel-title">当前路由</h2>
       <div className="asb-route-cards">
         <RouteCard app="codex" route={routes.codex} />

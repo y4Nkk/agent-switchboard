@@ -14,6 +14,7 @@ import { Input } from "./Input";
 import { ProbePanel } from "./ProbePanel";
 import { Select } from "./Select";
 import { Textarea } from "./Textarea";
+import { normalizeUsageQuery } from "../lib/usage-query";
 
 interface Props {
   profile: ProviderProfile | null;
@@ -46,6 +47,7 @@ function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): Provid
       modelOptions: profile.modelOptions,
       notes: profile.notes ?? null,
       websiteUrl: profile.websiteUrl ?? null,
+      usageQuery: profile.usageQuery ?? null,
     };
   }
   return {
@@ -57,6 +59,7 @@ function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): Provid
     modelOptions: null,
     notes: null,
     websiteUrl: null,
+    usageQuery: null,
   };
 }
 
@@ -156,6 +159,7 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           notes: optional(draft.notes ?? ""),
           websiteUrl: optional(draft.websiteUrl ?? ""),
           modelOptions,
+          usageQuery: normalizeUsageQuery(draft.usageQuery),
         });
       }}
     >

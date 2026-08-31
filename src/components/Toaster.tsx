@@ -10,7 +10,7 @@ import { useToast, type Toast } from "./use-toast";
  * system's tokens (DESIGN.md §8 全局通知).
  */
 export function Toaster() {
-  const { toasts, dismissingIds, dismiss, pause, resume } = useToast();
+  const { toasts, dismiss, pause, resume } = useToast();
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -31,7 +31,6 @@ export function Toaster() {
         <ToastItem
           key={toast.id}
           toast={toast}
-          isDismissing={dismissingIds.includes(toast.id)}
           onDismiss={dismiss}
           onPause={pause}
           onResume={resume}
@@ -43,17 +42,16 @@ export function Toaster() {
 
 interface ToastItemProps {
   toast: Toast;
-  isDismissing: boolean;
   onDismiss: (toastId: string) => void;
   onPause: (toastId: string) => void;
   onResume: (toastId: string) => void;
 }
 
-function ToastItem({ toast, isDismissing, onDismiss, onPause, onResume }: ToastItemProps) {
+function ToastItem({ toast, onDismiss, onPause, onResume }: ToastItemProps) {
   const { id, title, description, kind } = toast;
   return (
     <div
-      className={`asb-toast${isDismissing ? " is-leaving" : ""}`}
+      className="asb-toast"
       onPointerEnter={() => onPause(id)}
       onPointerLeave={() => onResume(id)}
       onFocus={() => onPause(id)}
@@ -68,7 +66,6 @@ function ToastItem({ toast, isDismissing, onDismiss, onPause, onResume }: ToastI
         type="button"
         className="asb-toast-close"
         aria-label="关闭通知"
-        disabled={isDismissing}
         onClick={() => onDismiss(id)}
       >
         <CloseIcon />

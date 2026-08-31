@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
+  backupDiff,
   executeSwitch,
   recoverStaleLock,
   restoreBackup,
@@ -8,6 +9,7 @@ import {
   type CommandError,
   type ConfigFileStatus,
   type FilePreview,
+  type KeyChange,
   type ProviderProfile,
   type SwitchLog,
 } from "../api/client";
@@ -49,7 +51,40 @@ export function useSwitchOperations({
 }: SwitchOperationDeps) {
   const [confirmingSwitch, setConfirmingSwitch] = useState(false);
   const [undoPending, setUndoPending] = useState<SwitchLog | null>(null);
+  const [undoDiff, setUndoDiff] = useState<
+    | { state: "idle" | "loading" }
+    | { state: "ready"; changes: KeyChange[] }
+    | { state: "error"; message: string }
+  >({ state: "idle" });
   const [recoverLockPending, setRecoverLockPending] = useState<AppKind | null>(null);
+  const undoDiffVersion = useRef(0);
+
+  const requestUndo = useCallback(
+    (target: SwitchLog) => {
+      if (busy) return;
+      const version = undoDiffVersion.current + 1;
+      undoDiffVersion.current = version;
+      setUndoPending(target);
+      setUndoDiff({ state: "loading" });
+      void backupDiff(target.backupId).then(
+        (changes) => {
+          if (undoDiffVersion.current === version) setUndoDiff({ state: "ready", changes });
+        },
+        (caught: CommandError) => {
+          if (undoDiffVersion.current === version) {
+            setUndoDiff({ state: "error", message: caught.message ?? "无法生成撤回差异" });
+          }
+        },
+      );
+    },
+    [busy],
+  );
+
+  const cancelUndo = useCallback(() => {
+    undoDiffVersion.current += 1;
+    setUndoPending(null);
+    setUndoDiff({ state: "idle" });
+  }, []);
 
   const runSwitch = useCallback(async () => {
     if (busy || !selectedId || !preview || !selectedProfile) return;
@@ -131,9 +166,9 @@ export function useSwitchOperations({
   );
 
   const runUndo = useCallback(async () => {
-    if (busy || !undoPending) return;
+    if (busy || !undoPending || undoDiff.state !== "ready") return;
     const target = undoPending;
-    setUndoPending(null);
+    cancelUndo();
     invalidateCandidates();
     setBusy(true);
     clearError();
@@ -153,6 +188,7 @@ export function useSwitchOperations({
     }
   }, [
     busy,
+    cancelUndo,
     clearError,
     invalidateCandidates,
     onError,
@@ -161,6 +197,7 @@ export function useSwitchOperations({
     selectedId,
     selectProfile,
     setBusy,
+    undoDiff.state,
     undoPending,
   ]);
 
@@ -184,7 +221,9 @@ export function useSwitchOperations({
     confirmingSwitch,
     setConfirmingSwitch,
     undoPending,
-    setUndoPending,
+    undoDiff,
+    requestUndo,
+    cancelUndo,
     recoverLockPending,
     setRecoverLockPending,
     runSwitch,

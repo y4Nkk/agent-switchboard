@@ -21,12 +21,8 @@ export function UpdateSection({
       : "已是最新版本"
     : "检查新版本";
   const detail: ReactNode = result ? (
-    <>
-      当前版本 {result.currentVersion} · 检查于 <Time iso={result.checkedAt} />
-    </>
-  ) : (
-    "从 GitHub 发布页检查 Agent Switchboard 的最新版本"
-  );
+    <>当前版本 {result.currentVersion} · 检查于 <Time iso={result.checkedAt} /></>
+  ) : null;
   return (
     <section className="asb-app-settings-group" aria-labelledby="software-update">
       <h3 id="software-update" className="asb-toggle-group-title">
@@ -35,7 +31,7 @@ export function UpdateSection({
       <div className="asb-app-setting-row">
         <div className="asb-app-setting-copy">
           <span className="asb-checkbox-label">{label}</span>
-          <span className="asb-app-setting-detail">{detail}</span>
+          {detail ? <span className="asb-app-setting-detail">{detail}</span> : null}
         </div>
         <div className="asb-panel-actions">
           {result?.updateAvailable === true && (

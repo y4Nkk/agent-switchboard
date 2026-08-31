@@ -3,12 +3,18 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppSettingsForm } from "./AppSettingsForm";
 
+vi.mock("../api/client", () => ({
+  listSystemFonts: vi.fn().mockResolvedValue(["Microsoft YaHei", "等线", "Segoe UI"]),
+}));
+
 const settings = {
   closeBehavior: "hideToTray" as const,
   theme: "system" as const,
   motion: "system" as const,
   alwaysOnTop: false,
   hardwareAcceleration: true,
+  interfaceFont: "Noto Sans SC",
+  runtimeLogLevel: "info" as const,
 };
 
 function callbacks() {
@@ -16,6 +22,7 @@ function callbacks() {
     onCloseBehaviorChange: vi.fn(),
     onThemeChange: vi.fn(),
     onMotionChange: vi.fn(),
+    onInterfaceFontChange: vi.fn(),
     onAlwaysOnTopChange: vi.fn(),
     onHardwareAccelerationChange: vi.fn(),
   };
@@ -28,7 +35,6 @@ describe("AppSettingsForm", () => {
     expect(screen.getByRole("radiogroup", { name: "点击关闭按钮时" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "最小化到托盘" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "退出应用" })).not.toBeChecked();
-    expect(screen.getByText("关闭窗口后应用继续在系统托盘运行")).toBeInTheDocument();
   });
 
   it("emits the selected close behavior", async () => {
@@ -54,11 +60,22 @@ describe("AppSettingsForm", () => {
     expect(handlers.onThemeChange).toHaveBeenCalledWith("dark");
     await user.click(screen.getAllByRole("radio", { name: "减少动态效果" })[0]);
     expect(handlers.onMotionChange).toHaveBeenCalledWith("reduce");
-    await user.click(screen.getByRole("checkbox", { name: "窗口始终置顶" }));
+    await user.click(screen.getByRole("switch", { name: "窗口始终置顶" }));
     expect(handlers.onAlwaysOnTopChange).toHaveBeenCalledWith(true);
-    expect(screen.getByText("使用 GPU 渲染界面；完整重启应用后生效")).toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "启用硬件加速" }));
+    await user.click(screen.getByRole("switch", { name: "启用硬件加速" }));
     expect(handlers.onHardwareAccelerationChange).toHaveBeenCalledWith(false);
+  });
+
+  it("renders the interface-font row and emits the chosen font", async () => {
+    const user = userEvent.setup();
+    const handlers = callbacks();
+    render(<AppSettingsForm settings={settings} busy={false} {...handlers} />);
+
+    const trigger = screen.getByRole("button", { name: "选择界面字体" });
+    expect(trigger.textContent).toContain("Noto Sans SC");
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: /Microsoft YaHei/ }));
+    expect(handlers.onInterfaceFontChange).toHaveBeenCalledWith("Microsoft YaHei");
   });
 
   it("disables close behavior choices while the update is being saved", () => {
@@ -72,6 +89,7 @@ describe("AppSettingsForm", () => {
 
     expect(screen.getByRole("radio", { name: "最小化到托盘" })).toBeDisabled();
     expect(screen.getByRole("radio", { name: "退出应用" })).toBeDisabled();
-    expect(screen.getByRole("checkbox", { name: "启用硬件加速" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "启用硬件加速" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "选择界面字体" })).toBeDisabled();
   });
 });

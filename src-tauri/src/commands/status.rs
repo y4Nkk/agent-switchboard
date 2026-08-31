@@ -1,7 +1,8 @@
 //! Read-only configuration status: per-client file health, route facts,
 //! match classification against the profile store, and lock observation.
 
-use super::error::{blocking, state, store_error, CommandError};
+use super::error::{blocking, observe, state, store_error, CommandError};
+use crate::runtime_log::RuntimeLogAction;
 use asb_core::contracts::{
     AppKind, CommonConfigPatch, MatchStatus, ProviderProfile, RouteState, SwitchLog, SwitchOp,
     SwitchPlan,
@@ -203,13 +204,16 @@ pub async fn recover_stale_lock(
     app: AppHandle,
     target: AppKind,
 ) -> Result<RecoveryEntry, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let target = state
-            .target(target)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        lockfile::recover_stale(&FsIo, &target)
-            .map_err(|_| CommandError::new("lock-not-stale", "当前锁不是可恢复的遗留状态"))
+    observe(RuntimeLogAction::StaleLockRecovered, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            let target = state
+                .target(target)
+                .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+            lockfile::recover_stale(&FsIo, &target)
+                .map_err(|_| CommandError::new("lock-not-stale", "当前锁不是可恢复的遗留状态"))
+        })
+        .await
     })
     .await
 }
@@ -229,6 +233,7 @@ mod tests {
             model_options: None,
             notes: None,
             website_url: None,
+            usage_query: None,
         }
     }
 

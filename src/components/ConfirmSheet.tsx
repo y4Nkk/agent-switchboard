@@ -4,6 +4,7 @@ interface Props {
   title: string;
   details: ReactNode[];
   confirmLabel: string;
+  confirmDisabled?: boolean;
   destructive?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -17,6 +18,7 @@ export function ConfirmSheet({
   title,
   details,
   confirmLabel,
+  confirmDisabled = false,
   destructive = false,
   onConfirm,
   onCancel,
@@ -71,6 +73,7 @@ export function ConfirmSheet({
           <button
             type="button"
             className={destructive ? "asb-btn-danger" : "asb-btn-primary"}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

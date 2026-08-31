@@ -172,6 +172,7 @@ fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String
             model_options,
             notes: row.notes.clone(),
             website_url: row.website_url.clone(),
+            usage_query: None,
         },
         warnings,
     })
@@ -249,6 +250,7 @@ fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String>
             model_options: None,
             notes: row.notes.clone(),
             website_url: row.website_url.clone(),
+            usage_query: None,
         },
         warnings: vec![],
     })

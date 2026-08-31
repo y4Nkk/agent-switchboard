@@ -368,8 +368,8 @@ pub(crate) fn preview_entries(
             // Absent overlay fields for the shared `env` object only leave
             // keys that this overlay never claims.
             OverlayEntry::Leave => {}
-            // Owned keys and the deprecated key are removed when present.
-            OverlayEntry::RemoveIfPresent | OverlayEntry::RemoveTableIfPresent => {
+            // Owned keys are removed when present.
+            OverlayEntry::RemoveIfPresent => {
                 if let Some(before) = existing {
                     changes.push(KeyChange {
                         key: key.clone(),
@@ -405,7 +405,7 @@ pub(crate) fn render_entries(
         match entry {
             OverlayEntry::Set(value) => set(&mut root, &key, value),
             OverlayEntry::Leave => {}
-            OverlayEntry::RemoveIfPresent | OverlayEntry::RemoveTableIfPresent => {
+            OverlayEntry::RemoveIfPresent => {
                 remove(&mut root, &key);
             }
         }
@@ -448,6 +448,7 @@ mod tests {
                 })),
                 notes: None,
                 website_url: None,
+                usage_query: None,
             },
             common: CommonConfigPatch {
                 app: AppKind::Claude,

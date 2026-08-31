@@ -46,11 +46,6 @@ describe("Toaster", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByRole("status")).toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -69,7 +64,7 @@ describe("Toaster", () => {
 
     fireEvent.pointerOut(toastSurface()!);
     act(() => {
-      vi.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(4500);
     });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
@@ -88,18 +83,12 @@ describe("Toaster", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     act(() => {
       toast({ kind: "error", title: "写入失败" });
     });
     fireEvent.click(screen.getByRole("button", { name: "关闭通知" }));
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

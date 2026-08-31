@@ -66,15 +66,19 @@ fn route_label(status: &crate::commands::ConfigFileStatus) -> String {
         asb_core::AppKind::Codex => "Codex",
         asb_core::AppKind::Claude => "Claude",
     };
-    let route = status
-        .route
-        .as_ref()
+    let route_state = status.route.as_ref();
+    let route = route_state
         .and_then(|route| route.provider_name.as_deref())
         .unwrap_or_else(|| {
             if status.read_error.is_some() {
                 "配置不可读"
             } else if !status.exists {
                 "未加载"
+            } else if matches!(
+                route_state.map(|route| route.route_mode),
+                Some(asb_core::RouteMode::Custom)
+            ) {
+                "自定义服务"
             } else {
                 "官方登录"
             }
@@ -195,6 +199,7 @@ pub fn setup(app: &AppHandle<Wry>) -> tauri::Result<()> {
 mod tests {
     use super::*;
     use crate::local_state::{MotionPreference, ThemePreference};
+    use crate::runtime_log::RuntimeLogLevel;
 
     #[test]
     fn settings_error_keeps_the_app_recoverable_when_tray_exists() {
@@ -211,6 +216,8 @@ mod tests {
                 motion: MotionPreference::System,
                 always_on_top: false,
                 hardware_acceleration: true,
+                interface_font: "Noto Sans SC".to_string(),
+                runtime_log_level: RuntimeLogLevel::Info,
             })
         ));
     }

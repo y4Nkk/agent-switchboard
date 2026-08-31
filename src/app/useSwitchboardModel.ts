@@ -3,10 +3,12 @@ import { openBackupDir, type AppKind, type CommandError } from "../api/client";
 import type { Page } from "./AppShell";
 import { useAppSettings } from "./useAppSettings";
 import { useCcImport } from "./useCcImport";
+import { useCloudBackup } from "./useCloudBackup";
 import { useCommonSettings } from "./useCommonSettings";
 import { useConfigSnapshot } from "./useConfigSnapshot";
 import { useDiscovery } from "./useDiscovery";
 import { useOperationFrame } from "./useOperationFrame";
+import { usePromptDocuments } from "./usePromptDocuments";
 import { useProviders } from "./useProviders";
 import { latestOverall, useSwitchOperations } from "./useSwitchOperations";
 import { useSwitchPreview } from "./useSwitchPreview";
@@ -43,6 +45,13 @@ export function useSwitchboardModel() {
     clearError,
     setBusy: frame.setBusy,
   });
+  const promptDocuments = usePromptDocuments({
+    active: page === "通用设置",
+    busy,
+    onError: reportError,
+    clearError,
+    setBusy: frame.setBusy,
+  });
   /** Writes and store changes invalidate every candidate on both domains. */
   const invalidateCandidates = useCallback(() => {
     invalidateSwitchCandidates();
@@ -54,6 +63,14 @@ export function useSwitchboardModel() {
     onError: reportError,
     clearError,
     setBusy: frame.setBusy,
+  });
+  const cloudBackup = useCloudBackup({
+    busy,
+    setBusy: frame.setBusy,
+    onError: reportError,
+    clearError,
+    invalidateCandidates,
+    refresh,
   });
   const updateCheck = useUpdateCheck({
     busy,
@@ -130,7 +147,9 @@ export function useSwitchboardModel() {
     activeProfileId,
     switchPreview,
     commonSettings,
+    promptDocuments,
     appSettingsState,
+    cloudBackup,
     updateCheck,
     discoveryState,
     ccImport,

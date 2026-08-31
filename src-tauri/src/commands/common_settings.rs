@@ -2,8 +2,10 @@
 //! catalogs, the side-effect-free preview, and the transactional apply.
 
 use super::error::{
-    blocking, record_audit_or_warn, require_write_confirmation, state, store_error, CommandError,
+    blocking, observe, record_audit_or_warn, require_write_confirmation, state, store_error,
+    CommandError,
 };
+use crate::runtime_log::RuntimeLogAction;
 use asb_core::contracts::{AppKind, CommonConfigPatch, SwitchLog, SwitchOp};
 use asb_core::{adapter, ownership};
 use asb_switch::io::{FsIo, SwitchIo};
@@ -26,11 +28,14 @@ pub async fn set_common(
     target: AppKind,
     patch: CommonConfigPatch,
 ) -> Result<(), CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        state
-            .set_common(target, patch)
-            .map_err(|error| CommandError::new("common-save-failed", error))
+    observe(RuntimeLogAction::CommonSettingsSaved, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            state
+                .set_common(target, patch)
+                .map_err(|error| CommandError::new("common-save-failed", error))
+        })
+        .await
     })
     .await
 }
@@ -207,55 +212,58 @@ pub async fn apply_common(
     patch: CommonConfigPatch,
     confirm_write: bool,
 ) -> Result<SwitchOutcome, CommandError> {
-    require_write_confirmation(confirm_write, "写入通用配置")?;
-    let state = state(&app)?;
-    blocking(move || {
-        patch
-            .validate()
-            .map_err(|error| CommandError::new("common-patch-invalid", error.to_string()))?;
-        let target_path = state
-            .target(target)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let backup_dir = state.backup_dir();
-        let preview = read_common_preview(
-            &FsIo,
-            &CommonRequest {
-                target: &target_path,
-                app: target,
-                common: &patch,
-                backup_dir: &backup_dir,
-                expected_hash: "",
-                expected_rendered_hash: "",
-            },
-        )
-        .map_err(map_common_preview_error)?;
-        let mut outcome = execute_common(
-            &FsIo,
-            &CommonRequest {
-                target: &target_path,
-                app: target,
-                common: &patch,
-                backup_dir: &backup_dir,
-                expected_hash: &preview.content_hash,
-                expected_rendered_hash: &preview.rendered_hash,
-            },
-        )
-        .map_err(CommandError::from)?;
-        outcome.preview.target = target_path.to_string_lossy().to_string();
-        record_audit_or_warn(
-            state.record_switch(SwitchLog {
-                app: target,
-                profile_id: None,
-                profile_name: None,
-                content_hash: outcome.final_hash.clone(),
-                backup_id: outcome.backup.id.clone(),
-                at: outcome.backup.created_at.clone(),
-                operation: SwitchOp::CommonSettings,
-            }),
-            &mut outcome.warnings,
-        );
-        crate::tray::refresh(&app);
-        Ok(outcome)
+    observe(RuntimeLogAction::CommonSettingsApplied, async move {
+        require_write_confirmation(confirm_write, "写入通用配置")?;
+        let state = state(&app)?;
+        blocking(move || {
+            patch
+                .validate()
+                .map_err(|error| CommandError::new("common-patch-invalid", error.to_string()))?;
+            let target_path = state
+                .target(target)
+                .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+            let backup_dir = state.backup_dir();
+            let preview = read_common_preview(
+                &FsIo,
+                &CommonRequest {
+                    target: &target_path,
+                    app: target,
+                    common: &patch,
+                    backup_dir: &backup_dir,
+                    expected_hash: "",
+                    expected_rendered_hash: "",
+                },
+            )
+            .map_err(map_common_preview_error)?;
+            let mut outcome = execute_common(
+                &FsIo,
+                &CommonRequest {
+                    target: &target_path,
+                    app: target,
+                    common: &patch,
+                    backup_dir: &backup_dir,
+                    expected_hash: &preview.content_hash,
+                    expected_rendered_hash: &preview.rendered_hash,
+                },
+            )
+            .map_err(CommandError::from)?;
+            outcome.preview.target = target_path.to_string_lossy().to_string();
+            record_audit_or_warn(
+                state.record_switch(SwitchLog {
+                    app: target,
+                    profile_id: None,
+                    profile_name: None,
+                    content_hash: outcome.final_hash.clone(),
+                    backup_id: outcome.backup.id.clone(),
+                    at: outcome.backup.created_at.clone(),
+                    operation: SwitchOp::CommonSettings,
+                }),
+                &mut outcome.warnings,
+            );
+            crate::tray::refresh(&app);
+            Ok(outcome)
+        })
+        .await
     })
     .await
 }
