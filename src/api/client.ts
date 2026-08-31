@@ -16,9 +16,12 @@ export interface CodexModelSettings {
 }
 
 export interface ClaudeModelSettings {
+  primaryOneM: boolean;
   haikuModel: string | null;
   sonnetModel: string | null;
+  sonnetOneM: boolean;
   opusModel: string | null;
+  opusOneM: boolean;
   availableModels: string[] | null;
 }
 

@@ -86,18 +86,26 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
         AppKind::Codex => inspect_codex(text),
         AppKind::Claude => inspect_claude(text),
     };
+    let claude_import_error = (app == AppKind::Claude)
+        .then(|| claude_import_model_fields(&route).err())
+        .flatten();
     if managed && matches!(route.provider_name, None) {
         warnings.push("存在托管键但未识别到供应商名称".to_string());
     }
     let importable = match app {
         AppKind::Codex => codex_import_is_supported(text, &route),
-        AppKind::Claude => claude_import_is_supported(&route),
+        AppKind::Claude => route.base_url.is_some() && claude_import_error.is_none(),
     };
     if app == AppKind::Codex && route.provider_name.is_some() && !importable {
         if route.wire_api.as_deref() != Some("responses") {
             warnings.push("当前 Codex 供应商未使用 responses 协议，无法导入".to_string());
         } else {
             warnings.push("当前 Codex 供应商包含本应用无法完整表示的设置，无法导入".to_string());
+        }
+    }
+    if app == AppKind::Claude && route.base_url.is_some() {
+        if let Some(error) = claude_import_error {
+            warnings.push(format!("当前 Claude 配置无法作为供应商档案导入：{error}"));
         }
     }
     DiscoveredFile {
@@ -146,10 +154,51 @@ fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
     has_only_supported_keys
 }
 
-fn claude_import_is_supported(route: &RouteState) -> bool {
-    // Official login is not a profile kind; only a custom endpoint is
-    // importable. Model tiers alone no longer qualify.
-    route.base_url.is_some()
+/// Converts only the externally valid Claude wire spelling into the profile
+/// contract. The resulting profile never carries a `[1m]` suffix in a model
+/// string; enabled context lives in the explicit boolean fields.
+fn claude_import_model_fields(
+    route: &RouteState,
+) -> Result<(Option<String>, Option<ModelOptions>), String> {
+    let (model, primary_one_m) =
+        crate::claude_model::parse_optional_model(route.model.as_deref(), "主模型", true)?;
+    let (haiku_model, _) =
+        crate::claude_model::parse_optional_model(route.haiku_model.as_deref(), "Haiku 档", false)?;
+    let (sonnet_model, sonnet_one_m) = crate::claude_model::parse_optional_model(
+        route.sonnet_model.as_deref(),
+        "Sonnet 档",
+        true,
+    )?;
+    let (opus_model, opus_one_m) =
+        crate::claude_model::parse_optional_model(route.opus_model.as_deref(), "Opus 档", true)?;
+    let available_models = match route.available_models.as_ref() {
+        Some(models) => {
+            for model in models {
+                crate::claude_model::parse_model(model, "可选模型列表", false)?;
+            }
+            Some(models.clone())
+        }
+        None => None,
+    };
+    let has_settings = primary_one_m
+        || haiku_model.is_some()
+        || sonnet_model.is_some()
+        || sonnet_one_m
+        || opus_model.is_some()
+        || opus_one_m
+        || available_models.is_some();
+    let model_options = has_settings.then(|| {
+        ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m,
+            haiku_model,
+            sonnet_model,
+            sonnet_one_m,
+            opus_model,
+            opus_one_m,
+            available_models,
+        })
+    });
+    Ok((model, model_options))
 }
 
 fn inspect_codex(text: &str) -> (bool, Vec<String>) {
@@ -243,26 +292,16 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
                 .or_else(|| root.pointer("/env/ANTHROPIC_API_KEY"))
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())?;
-            let has_tiers = route.haiku_model.is_some()
-                || route.sonnet_model.is_some()
-                || route.opus_model.is_some()
-                || route.available_models.is_some();
+            let (model, model_options) = claude_import_model_fields(route).ok()?;
             Some(ImportProposal {
                 app: AppKind::Claude,
                 draft: ProviderDraft {
                     app: AppKind::Claude,
                     name: "当前 Claude 配置".to_string(),
-                    model: route.model.clone(),
+                    model,
                     base_url: route.base_url.clone(),
                     api_key: key.to_string(),
-                    model_options: has_tiers.then(|| {
-                        ModelOptions::Claude(ClaudeModelSettings {
-                            haiku_model: route.haiku_model.clone(),
-                            sonnet_model: route.sonnet_model.clone(),
-                            opus_model: route.opus_model.clone(),
-                            available_models: route.available_models.clone(),
-                        })
-                    }),
+                    model_options,
                     notes: None,
                     website_url: None,
                 },
@@ -383,6 +422,44 @@ mod tests {
             .find(|proposal| proposal.app == AppKind::Claude)
             .expect("claude proposal");
         assert_eq!(claude_proposal.draft.api_key, "TEST_CLAUDE_IMPORT_KEY");
+    }
+
+    #[test]
+    fn importing_claude_configuration_decodes_lowercase_one_m_into_semantic_state() {
+        let current = r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"TEST_CLAUDE_IMPORT_KEY","ANTHROPIC_MODEL":"claude-opus-4-1[1m]","ANTHROPIC_DEFAULT_SONNET_MODEL":"claude-sonnet-4-6[1m]","ANTHROPIC_DEFAULT_OPUS_MODEL":"claude-opus-4-1[1m]"}}"#;
+        let file = inspect(AppKind::Claude, "s", Some(current));
+        let proposal = import_proposal(&file, Some(current)).expect("must be importable");
+
+        assert_eq!(proposal.draft.model.as_deref(), Some("claude-opus-4-1"));
+        let Some(ModelOptions::Claude(settings)) = proposal.draft.model_options.as_ref() else {
+            panic!("Claude model settings should be imported");
+        };
+        assert!(settings.primary_one_m);
+        assert_eq!(settings.sonnet_model.as_deref(), Some("claude-sonnet-4-6"));
+        assert!(settings.sonnet_one_m);
+        assert_eq!(settings.opus_model.as_deref(), Some("claude-opus-4-1"));
+        assert!(settings.opus_one_m);
+        assert!(proposal.draft.validate().is_ok());
+    }
+
+    #[test]
+    fn importing_claude_configuration_rejects_uppercase_one_m_before_import() {
+        let current = r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"TEST_CLAUDE_IMPORT_KEY","ANTHROPIC_MODEL":"claude-opus-4-1[1M]"}}"#;
+        let file = inspect(AppKind::Claude, "s", Some(current));
+        let DiscoveredState::Ok {
+            warnings,
+            importable,
+            ..
+        } = &file.state
+        else {
+            panic!("should parse");
+        };
+
+        assert!(!importable);
+        assert!(warnings
+            .iter()
+            .any(|warning| warning.contains("1M 标记无效")));
+        assert!(import_proposal(&file, Some(current)).is_none());
     }
 
     #[test]

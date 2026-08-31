@@ -119,11 +119,11 @@ fn to_json(value: PatchValue) -> Json {
     }
 }
 
-fn tier_entry(key: &str, value: &Option<String>) -> (String, OverlayEntry) {
+fn tier_entry(key: &str, value: &Option<String>, one_m: bool) -> (String, OverlayEntry) {
     match value {
         Some(v) => (
             key.to_string(),
-            OverlayEntry::Set(PatchValue::Str(v.clone())),
+            OverlayEntry::Set(PatchValue::Str(crate::claude_model::render_model(v, one_m))),
         ),
         None => (key.to_string(), OverlayEntry::RemoveIfPresent),
     }
@@ -157,18 +157,25 @@ fn overlay(plan: &SwitchPlan) -> (Vec<(String, OverlayEntry)>, Vec<String>) {
         OverlayEntry::RemoveIfPresent,
     ));
 
-    if let Some(ModelOptions::Claude(settings)) = &p.model_options {
+    let claude_settings = match &p.model_options {
+        Some(ModelOptions::Claude(settings)) => Some(settings),
+        _ => None,
+    };
+    if let Some(settings) = claude_settings {
         entries.push(tier_entry(
             "env.ANTHROPIC_DEFAULT_HAIKU_MODEL",
             &settings.haiku_model,
+            false,
         ));
         entries.push(tier_entry(
             "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
             &settings.sonnet_model,
+            settings.sonnet_one_m,
         ));
         entries.push(tier_entry(
             "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
             &settings.opus_model,
+            settings.opus_one_m,
         ));
         entries.push(match &settings.available_models {
             Some(models) => (
@@ -191,7 +198,10 @@ fn overlay(plan: &SwitchPlan) -> (Vec<(String, OverlayEntry)>, Vec<String>) {
             );
             (
                 "model".to_string(),
-                OverlayEntry::Set(PatchValue::Str(m.clone())),
+                OverlayEntry::Set(PatchValue::Str(crate::claude_model::render_model(
+                    m,
+                    claude_settings.map_or(false, |settings| settings.primary_one_m),
+                ))),
             )
         }
         None => ("model".to_string(), OverlayEntry::Leave),
@@ -425,9 +435,12 @@ mod tests {
                 base_url: Some("https://relay-c.internal".into()),
                 api_key: "test-api-key".into(),
                 model_options: Some(ModelOptions::Claude(ClaudeModelSettings {
+                    primary_one_m: false,
                     haiku_model: Some("claude-haiku-4".into()),
                     sonnet_model: None,
+                    sonnet_one_m: false,
                     opus_model: None,
+                    opus_one_m: false,
                     available_models: Some(vec![
                         "claude-opus-4".to_string(),
                         "claude-sonnet-4".to_string(),
@@ -556,9 +569,12 @@ mod tests {
     fn undeclared_tiers_are_removed_and_undeclared_lists_go_away() {
         let mut plan = plan_b();
         plan.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: false,
             haiku_model: None,
             sonnet_model: Some("claude-sonnet-4".into()),
+            sonnet_one_m: false,
             opus_model: None,
+            opus_one_m: false,
             available_models: None,
         }));
         let current = r#"{
@@ -650,6 +666,37 @@ mod tests {
         let text = rendered.to_ascii_lowercase();
         assert!(!text.contains("sk-"));
         assert!(!text.contains("claude-relay-c"));
+    }
+
+    #[test]
+    fn render_writes_canonical_one_m_markers_for_supported_model_slots() {
+        let mut plan = plan_b();
+        plan.profile.model = Some("claude-opus-4-7".into());
+        plan.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: true,
+            haiku_model: Some("claude-haiku-4".into()),
+            sonnet_model: Some("claude-sonnet-4-6".into()),
+            sonnet_one_m: true,
+            opus_model: Some("claude-opus-4-7".into()),
+            opus_one_m: true,
+            available_models: None,
+        }));
+
+        let rendered = render(CLAUDE_JSON, &plan).unwrap();
+        let parsed: Json = serde_json::from_str(&rendered).unwrap();
+        assert_eq!(parsed["model"], Json::String("claude-opus-4-7[1m]".into()));
+        assert_eq!(
+            parsed["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"],
+            Json::String("claude-sonnet-4-6[1m]".into())
+        );
+        assert_eq!(
+            parsed["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"],
+            Json::String("claude-opus-4-7[1m]".into())
+        );
+        assert_eq!(
+            parsed["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"],
+            Json::String("claude-haiku-4".into())
+        );
     }
 
     #[test]

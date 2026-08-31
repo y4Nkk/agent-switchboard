@@ -1642,6 +1642,46 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+/* A credential stays masked until the user explicitly reveals it. */
+.asb-secret-control {
+  display: flex;
+  align-items: stretch;
+  gap: var(--asb-space-2);
+}
+
+.asb-secret-control .asb-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.asb-secret-control .asb-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--asb-space-1);
+}
+
+/* The model field keeps its model ID input on the left and endpoint and
+   model-list actions on its right edge. */
+.asb-model-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+  gap: var(--asb-space-2);
+  align-items: stretch;
+}
+
+.asb-model-control .asb-input {
+  min-width: 0;
+}
+
+.asb-model-actions {
+  display: contents;
+}
+
+.asb-model-actions > button {
+  grid-row: 1;
+}
+
 .asb-input {
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-1) var(--asb-space-2);

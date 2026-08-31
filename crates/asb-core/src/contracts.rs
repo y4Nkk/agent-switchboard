@@ -47,11 +47,15 @@ pub struct CodexModelSettings {
 /// Claude Code model mapping owned by one profile. The primary model is the
 /// profile's `model` field; these are the remaining tiers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClaudeModelSettings {
+    /// The primary model itself lives on `ProviderProfile::model`.
+    pub primary_one_m: bool,
     pub haiku_model: Option<String>,
     pub sonnet_model: Option<String>,
+    pub sonnet_one_m: bool,
     pub opus_model: Option<String>,
+    pub opus_one_m: bool,
     /// Optional `availableModels` list in settings.json.
     pub available_models: Option<Vec<String>>,
 }

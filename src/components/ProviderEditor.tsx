@@ -8,6 +8,8 @@ import type {
   ProviderDraft,
   ProviderProfile,
 } from "../api/client";
+import { Checkbox } from "./Checkbox";
+import { EyeOffIcon, PreviewIcon } from "./icons";
 import { Input } from "./Input";
 import { ProbePanel } from "./ProbePanel";
 import { Select } from "./Select";
@@ -28,6 +30,7 @@ interface Props {
 // choice uses this sentinel; it maps back to null on change.
 const MODEL_NONE = "__none__";
 const MODEL_PLACEHOLDER_LABEL = "（从获取列表选择）";
+const CONTEXT_WINDOW_1M = 1_000_000;
 
 function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): ProviderDraft {
   // The editor only produces custom-endpoint profiles (user decision
@@ -78,7 +81,15 @@ function claudeOptions(
   const base: ClaudeModelSettings =
     current?.kind === "claude"
       ? current
-      : { haikuModel: null, sonnetModel: null, opusModel: null, availableModels: null };
+      : {
+          primaryOneM: false,
+          haikuModel: null,
+          sonnetModel: null,
+          sonnetOneM: false,
+          opusModel: null,
+          opusOneM: false,
+          availableModels: null,
+        };
   return { kind: "claude", ...base, ...patch };
 }
 
@@ -92,11 +103,13 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
   const [models, setModels] = useState<string[] | null>(null);
   const [modelsBusy, setModelsBusy] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const modelsVersion = useRef(0);
   const baseUrl = draft.baseUrl?.trim() ?? "";
 
   useEffect(() => {
     setDraft(draftFrom(profile, initialApp));
+    setApiKeyVisible(false);
   }, [profile?.id, initialApp]);
 
   useEffect(() => {
@@ -196,89 +209,139 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
         />
       </label>
-      <label className="asb-field">
+      <div className="asb-field">
         <span>服务地址</span>
         <Input
+          aria-label="服务地址"
           type="url"
           required
           value={draft.baseUrl ?? ""}
           disabled={busy}
           onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))}
         />
-      </label>
+      </div>
       <div className="asb-field">
         <span>主模型</span>
-        <Input
-          aria-label="主模型"
-          value={draft.model ?? ""}
-          disabled={busy}
-          placeholder="（可选）"
-          onChange={(event) => setDraft((current) => ({ ...current, model: event.target.value }))}
-        />
+        <div className="asb-model-control">
+          <Input
+            aria-label="主模型"
+            value={draft.model ?? ""}
+            disabled={busy}
+            placeholder="（可选）"
+            onChange={(event) =>
+              setDraft((current) => {
+                const model = event.target.value;
+                if (
+                  !codex &&
+                  !model.trim() &&
+                  current.modelOptions?.kind === "claude"
+                ) {
+                  return {
+                    ...current,
+                    model,
+                    modelOptions: { ...current.modelOptions, primaryOneM: false },
+                  };
+                }
+                return { ...current, model };
+              })
+            }
+          />
+          <div className="asb-model-actions">
+            <ProbePanel url={draft.baseUrl?.trim() || null} />
+            <button
+              type="button"
+              className="asb-btn-secondary"
+              disabled={busy || modelsBusy || !baseUrl}
+              onClick={() => void fetchModels()}
+            >
+              {modelsBusy ? "获取中…" : "获取模型"}
+            </button>
+          </div>
+        </div>
+        {!codex && (
+          <Checkbox
+            label="主模型启用 1M 上下文"
+            checked={claudeSettings?.primaryOneM ?? false}
+            disabled={busy || !draft.model?.trim()}
+            onChange={(enabled) =>
+              setDraft((current) => ({
+                ...current,
+                modelOptions: claudeOptions(current.modelOptions, { primaryOneM: enabled }),
+              }))
+            }
+          />
+        )}
         <div className="asb-field-actions">
-          <button
-            type="button"
-            className="asb-btn-secondary"
-            disabled={busy || modelsBusy || !baseUrl}
-            onClick={() => void fetchModels()}
-          >
-            {modelsBusy ? "获取中…" : "获取模型"}
-          </button>
           {modelsError && <span className="asb-warn-text">{modelsError}</span>}
           {models && (
             <Select
               ariaLabel="选择模型"
-              value={draft.model}
+              value={draft.model ?? ""}
               placeholder={MODEL_PLACEHOLDER_LABEL}
               options={[
                 { value: MODEL_NONE, label: MODEL_PLACEHOLDER_LABEL },
                 ...models.map((id) => ({ value: id, label: id })),
               ]}
               disabled={busy}
-              onChange={(model) =>
-                setDraft((current) => ({
-                  ...current,
-                  model: model === MODEL_NONE ? null : model,
-                }))
+              onChange={(selected) =>
+                setDraft((current) => {
+                  const model = selected === MODEL_NONE ? null : selected;
+                  if (!codex && model === null && current.modelOptions?.kind === "claude") {
+                    return {
+                      ...current,
+                      model,
+                      modelOptions: { ...current.modelOptions, primaryOneM: false },
+                    };
+                  }
+                  return { ...current, model };
+                })
               }
             />
           )}
         </div>
       </div>
-      <label className="asb-field">
+      <div className="asb-field">
         <span>API 密钥</span>
-        <Input
-          type="password"
-          required
-          value={draft.apiKey}
-          disabled={busy}
-          onChange={(event) =>
-            setDraft((current) => ({ ...current, apiKey: event.target.value }))
-          }
-        />
-      </label>
+        <div className="asb-secret-control">
+          <Input
+            aria-label="API 密钥"
+            type={apiKeyVisible ? "text" : "password"}
+            required
+            value={draft.apiKey}
+            disabled={busy}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, apiKey: event.target.value }))
+            }
+          />
+          <button
+            type="button"
+            className="asb-btn-secondary"
+            aria-pressed={apiKeyVisible}
+            disabled={busy}
+            onClick={() => setApiKeyVisible((current) => !current)}
+          >
+            {apiKeyVisible ? <EyeOffIcon size={16} /> : <PreviewIcon size={16} />}
+            {apiKeyVisible ? "隐藏密钥" : "查看密钥"}
+          </button>
+        </div>
+      </div>
 
       {codex && (
         <fieldset className="asb-fieldset">
           <legend>模型运行参数</legend>
-          <label className="asb-field">
-            <span className="asb-kv-label">上下文窗口</span>
-            <Input
-              code
-              type="number"
-              min={1}
-              value={codexSettings?.contextWindow ?? ""}
-              disabled={busy}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  modelOptions: codexOptions(current.modelOptions, {
-                    contextWindow: event.target.value ? Number(event.target.value) : null,
-                  }),
-                }))
-              }
-            />
-          </label>
+          <Checkbox
+            label="启用 1M 上下文窗口"
+            checked={codexSettings?.contextWindow === CONTEXT_WINDOW_1M}
+            disabled={busy}
+            onChange={(checked) =>
+              setDraft((current) => ({
+                ...current,
+                modelOptions: codexOptions(current.modelOptions, {
+                  contextWindow: checked ? CONTEXT_WINDOW_1M : null,
+                }),
+              }))
+            }
+          />
         </fieldset>
       )}
 
@@ -295,44 +358,76 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
                 setDraft((current) => ({
                   ...current,
                   modelOptions: claudeOptions(current.modelOptions, {
-                    haikuModel: event.target.value || null,
+                    haikuModel: optional(event.target.value),
                   }),
                 }))
               }
             />
           </label>
-          <label className="asb-field">
+          <div className="asb-field">
             <span>Sonnet 档</span>
             <Input
               code
+              aria-label="Sonnet 档"
               value={claudeSettings?.sonnetModel ?? ""}
               disabled={busy}
               onChange={(event) =>
+                setDraft((current) => {
+                  const sonnetModel = optional(event.target.value);
+                  return {
+                    ...current,
+                    modelOptions: claudeOptions(current.modelOptions, {
+                      sonnetModel,
+                      ...(sonnetModel ? {} : { sonnetOneM: false }),
+                    }),
+                  };
+                })
+              }
+            />
+            <Checkbox
+              label="Sonnet 档启用 1M 上下文"
+              checked={claudeSettings?.sonnetOneM ?? false}
+              disabled={busy || !claudeSettings?.sonnetModel?.trim()}
+              onChange={(enabled) =>
                 setDraft((current) => ({
                   ...current,
-                  modelOptions: claudeOptions(current.modelOptions, {
-                    sonnetModel: event.target.value || null,
-                  }),
+                  modelOptions: claudeOptions(current.modelOptions, { sonnetOneM: enabled }),
                 }))
               }
             />
-          </label>
-          <label className="asb-field">
+          </div>
+          <div className="asb-field">
             <span>Opus 档</span>
             <Input
               code
+              aria-label="Opus 档"
               value={claudeSettings?.opusModel ?? ""}
               disabled={busy}
               onChange={(event) =>
+                setDraft((current) => {
+                  const opusModel = optional(event.target.value);
+                  return {
+                    ...current,
+                    modelOptions: claudeOptions(current.modelOptions, {
+                      opusModel,
+                      ...(opusModel ? {} : { opusOneM: false }),
+                    }),
+                  };
+                })
+              }
+            />
+            <Checkbox
+              label="Opus 档启用 1M 上下文"
+              checked={claudeSettings?.opusOneM ?? false}
+              disabled={busy || !claudeSettings?.opusModel?.trim()}
+              onChange={(enabled) =>
                 setDraft((current) => ({
                   ...current,
-                  modelOptions: claudeOptions(current.modelOptions, {
-                    opusModel: event.target.value || null,
-                  }),
+                  modelOptions: claudeOptions(current.modelOptions, { opusOneM: enabled }),
                 }))
               }
             />
-          </label>
+          </div>
           <label className="asb-field">
             <span>可选模型列表（每行一个）</span>
             <Textarea
@@ -358,8 +453,6 @@ export function ProviderEditor({ profile, initialApp, busy, onSave, onCancel }: 
           </label>
         </fieldset>
       )}
-
-      <ProbePanel url={draft.baseUrl?.trim() || null} />
 
       <div className="asb-form-actions">
         <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onCancel}>

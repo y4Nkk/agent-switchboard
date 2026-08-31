@@ -98,10 +98,23 @@ fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String
             .filter(|v| !v.is_empty())
     };
     let base_url = text("ANTHROPIC_BASE_URL");
-    let model = text("ANTHROPIC_MODEL");
-    let haiku = text("ANTHROPIC_DEFAULT_HAIKU_MODEL");
-    let sonnet = text("ANTHROPIC_DEFAULT_SONNET_MODEL");
-    let opus = text("ANTHROPIC_DEFAULT_OPUS_MODEL");
+    let (model, primary_one_m) =
+        crate::claude_model::parse_optional_model(text("ANTHROPIC_MODEL"), "主模型", true)?;
+    let (haiku, _) = crate::claude_model::parse_optional_model(
+        text("ANTHROPIC_DEFAULT_HAIKU_MODEL"),
+        "Haiku 档",
+        false,
+    )?;
+    let (sonnet, sonnet_one_m) = crate::claude_model::parse_optional_model(
+        text("ANTHROPIC_DEFAULT_SONNET_MODEL"),
+        "Sonnet 档",
+        true,
+    )?;
+    let (opus, opus_one_m) = crate::claude_model::parse_optional_model(
+        text("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        "Opus 档",
+        true,
+    )?;
 
     // Names only; values of unrecognized keys never enter the output.
     let mut warnings = Vec::new();
@@ -130,21 +143,30 @@ fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String
     let api_key = text("ANTHROPIC_AUTH_TOKEN")
         .or_else(|| text("ANTHROPIC_API_KEY"))
         .ok_or_else(|| "缺少 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY".to_string())?;
-    let model_options = (haiku.is_some() || sonnet.is_some() || opus.is_some()).then(|| {
-        ModelOptions::Claude(ClaudeModelSettings {
-            haiku_model: haiku.map(str::to_string),
-            sonnet_model: sonnet.map(str::to_string),
-            opus_model: opus.map(str::to_string),
-            available_models: None,
-        })
-    });
+    let model_options = (primary_one_m
+        || haiku.is_some()
+        || sonnet.is_some()
+        || sonnet_one_m
+        || opus.is_some()
+        || opus_one_m)
+        .then(|| {
+            ModelOptions::Claude(ClaudeModelSettings {
+                primary_one_m,
+                haiku_model: haiku,
+                sonnet_model: sonnet,
+                sonnet_one_m,
+                opus_model: opus,
+                opus_one_m,
+                available_models: None,
+            })
+        });
     Ok(CcSwitchProposal {
         key,
         app: AppKind::Claude,
         draft: ProviderDraft {
             app: AppKind::Claude,
             name: row.name.clone(),
-            model: model.map(str::to_string),
+            model,
             base_url: Some(base_url.to_string()),
             api_key: api_key.to_string(),
             model_options,
@@ -280,6 +302,35 @@ mod tests {
         assert!(outcome
             .warnings
             .contains(&"未导入: permissions".to_string()));
+    }
+
+    #[test]
+    fn claude_import_decodes_lowercase_one_m_model_markers_into_semantic_state() {
+        let config = format!(
+            r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"{TOKEN}","ANTHROPIC_MODEL":"claude-opus-4-1[1m]","ANTHROPIC_DEFAULT_SONNET_MODEL":"claude-sonnet-4-6[1m]","ANTHROPIC_DEFAULT_OPUS_MODEL":"claude-opus-4-1[1m]"}}}}"#
+        );
+        let outcome = map_row(&row("claude", "id-1m", "百万上下文", &config)).unwrap();
+
+        assert_eq!(outcome.draft.model.as_deref(), Some("claude-opus-4-1"));
+        let Some(ModelOptions::Claude(settings)) = outcome.draft.model_options.as_ref() else {
+            panic!("Claude model settings should be imported");
+        };
+        assert!(settings.primary_one_m);
+        assert_eq!(settings.sonnet_model.as_deref(), Some("claude-sonnet-4-6"));
+        assert!(settings.sonnet_one_m);
+        assert_eq!(settings.opus_model.as_deref(), Some("claude-opus-4-1"));
+        assert!(settings.opus_one_m);
+        assert!(outcome.draft.validate().is_ok());
+    }
+
+    #[test]
+    fn claude_import_rejects_uppercase_one_m_model_markers() {
+        let config = format!(
+            r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"{TOKEN}","ANTHROPIC_MODEL":"claude-opus-4-1[1M]"}}}}"#
+        );
+        let skipped = map_row(&row("claude", "id-1m", "百万上下文", &config)).unwrap_err();
+
+        assert!(skipped.reason.contains("1M 标记无效"));
     }
 
     #[test]

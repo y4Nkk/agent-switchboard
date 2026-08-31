@@ -469,6 +469,40 @@ mod tests {
     }
 
     #[test]
+    fn legacy_claude_one_m_model_strings_are_rejected_without_rewriting_them() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        let legacy = r#"{"profiles":[{"id":"old","app":"claude","name":"旧档案","baseUrl":"https://relay.example/v1","apiKey":"<placeholder>","model":"claude-opus-4-1[1m]","modelOptions":{"kind":"claude","primaryOneM":false,"haikuModel":null,"sonnetModel":null,"sonnetOneM":false,"opusModel":null,"opusOneM":false,"availableModels":null}}],"common":[],"switchLog":[]}"#;
+        fs::write(state.store_path(), legacy).expect("write legacy store");
+
+        assert_eq!(
+            state
+                .load_store()
+                .expect_err("old Claude model form must fail"),
+            ProfileStoreError::Unsupported
+        );
+        assert_eq!(fs::read_to_string(state.store_path()).unwrap(), legacy);
+    }
+
+    #[test]
+    fn legacy_claude_model_options_without_context_flags_are_rejected_without_rewriting() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        let legacy = r#"{"profiles":[{"id":"old","app":"claude","name":"旧档案","baseUrl":"https://relay.example/v1","apiKey":"<placeholder>","model":"claude-opus-4-1","modelOptions":{"kind":"claude","haikuModel":null,"sonnetModel":"claude-sonnet-4-6","opusModel":null,"availableModels":null}}],"common":[],"switchLog":[]}"#;
+        fs::write(state.store_path(), legacy).expect("write legacy store");
+
+        assert_eq!(
+            state
+                .load_store()
+                .expect_err("old Claude option form must fail"),
+            ProfileStoreError::Unsupported
+        );
+        assert_eq!(fs::read_to_string(state.store_path()).unwrap(), legacy);
+    }
+
+    #[test]
     fn reset_profile_store_replaces_unsupported_data_with_current_empty_store() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = LocalState::from_root(directory.path().join("state"));

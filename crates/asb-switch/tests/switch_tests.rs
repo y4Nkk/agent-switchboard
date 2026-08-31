@@ -2,7 +2,8 @@
 //! directories; no real user configuration is ever touched.
 
 use asb_core::contracts::{
-    AppKind, CommonConfigPatch, PatchEntry, PatchValue, ProviderProfile, SwitchPlan,
+    AppKind, ClaudeModelSettings, CommonConfigPatch, ModelOptions, PatchEntry, PatchValue,
+    ProviderProfile, SwitchPlan,
 };
 use asb_core::test_support::{CLAUDE_JSON, CODEX_TOML};
 use asb_switch::io::{FsIo, SwitchIo};
@@ -251,6 +252,51 @@ fn claude_switch_round_trips_with_a_redacted_preview() {
     assert!(text.contains("claude-opus-4"));
     assert!(text.contains("Bash(npm run test:*)"));
     assert!(text.contains("\"ANTHROPIC_AUTH_TOKEN\": \"test-api-key\""));
+}
+
+#[test]
+fn claude_one_m_switch_writes_the_wire_suffix_from_semantic_profile_state() {
+    let (_dir, target, backup_dir) = setup(AppKind::Claude, CLAUDE_JSON);
+    let io = FsIo;
+    let mut plan = claude_plan("Relay 1M", "https://relay-c.internal", "claude-opus-4-7");
+    plan.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        primary_one_m: true,
+        haiku_model: Some("claude-haiku-4".into()),
+        sonnet_model: Some("claude-sonnet-4-6".into()),
+        sonnet_one_m: true,
+        opus_model: Some("claude-opus-4-7".into()),
+        opus_one_m: true,
+        available_models: None,
+    }));
+
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+    execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+
+    let rendered: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&target).unwrap()).unwrap();
+    assert_eq!(rendered["model"], "claude-opus-4-7[1m]");
+    assert_eq!(
+        rendered["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"],
+        "claude-sonnet-4-6[1m]"
+    );
+    assert_eq!(
+        rendered["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"],
+        "claude-opus-4-7[1m]"
+    );
+    assert_eq!(
+        rendered["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"],
+        "claude-haiku-4"
+    );
 }
 
 #[test]

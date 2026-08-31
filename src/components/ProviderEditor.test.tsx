@@ -38,6 +38,174 @@ describe("ProviderEditor", () => {
     });
   });
 
+  it("reveals and hides the API key only on explicit action", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProviderEditor
+        profile={{
+          id: "secret-profile",
+          app: "codex",
+          name: "密钥档案",
+          model: null,
+          baseUrl: "https://gateway.example/v1",
+          apiKey: "sk-test-secret",
+          modelOptions: null,
+        }}
+        initialApp="codex"
+        busy={false}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    const apiKey = screen.getByLabelText("API 密钥");
+    expect(apiKey).toHaveAttribute("type", "password");
+    const reveal = screen.getByRole("button", { name: "查看密钥" });
+    expect(reveal).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(reveal);
+
+    expect(apiKey).toHaveAttribute("type", "text");
+    expect(apiKey).toHaveValue("sk-test-secret");
+    const hide = screen.getByRole("button", { name: "隐藏密钥" });
+    expect(hide).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(hide);
+
+    expect(apiKey).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: "查看密钥" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("maps the 1M context checkbox to the fixed context-window value", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    const contextWindow = screen.getByRole("checkbox", { name: "启用 1M 上下文窗口" });
+    expect(contextWindow).not.toBeChecked();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+
+    await user.click(contextWindow);
+    expect(contextWindow).toBeChecked();
+    await user.type(screen.getByLabelText("名称"), "百万上下文网关");
+    await user.type(screen.getByLabelText("服务地址"), "https://gateway.example/v1");
+    await user.type(screen.getByLabelText("API 密钥"), "sk-test-codex");
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelOptions: { kind: "codex", contextWindow: 1_000_000 },
+      }),
+    );
+
+    onSave.mockClear();
+    await user.click(contextWindow);
+    expect(contextWindow).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ modelOptions: null }));
+  });
+
+  it("maps Claude Code 1M checkboxes to explicit semantic model state", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="claude"
+        busy={false}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("名称"), "百万上下文 Claude");
+    await user.type(screen.getByLabelText("服务地址"), "https://relay.example");
+    await user.type(screen.getByLabelText("API 密钥"), "sk-test-claude");
+    await user.type(screen.getByLabelText("主模型"), "claude-opus-4-1");
+    await user.type(screen.getByLabelText("Sonnet 档"), "claude-sonnet-4-6");
+    await user.type(screen.getByLabelText("Opus 档"), "claude-opus-4-1");
+
+    expect(screen.queryByRole("checkbox", { name: "Haiku 档启用 1M 上下文" })).toBeNull();
+    const primaryOneM = screen.getByRole("checkbox", { name: "主模型启用 1M 上下文" });
+    const sonnetOneM = screen.getByRole("checkbox", { name: "Sonnet 档启用 1M 上下文" });
+    const opusOneM = screen.getByRole("checkbox", { name: "Opus 档启用 1M 上下文" });
+    expect(primaryOneM).not.toBeChecked();
+    expect(sonnetOneM).not.toBeChecked();
+    expect(opusOneM).not.toBeChecked();
+
+    await user.click(primaryOneM);
+    await user.click(sonnetOneM);
+    await user.click(opusOneM);
+
+    expect(screen.getByLabelText("主模型")).toHaveValue("claude-opus-4-1");
+    expect(screen.getByLabelText("Sonnet 档")).toHaveValue("claude-sonnet-4-6");
+    expect(screen.getByLabelText("Opus 档")).toHaveValue("claude-opus-4-1");
+
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "claude-opus-4-1",
+        modelOptions: {
+          kind: "claude",
+          primaryOneM: true,
+          haikuModel: null,
+          sonnetModel: "claude-sonnet-4-6",
+          sonnetOneM: true,
+          opusModel: "claude-opus-4-1",
+          opusOneM: true,
+          availableModels: null,
+        },
+      }),
+    );
+  });
+
+  it("renders saved Claude 1M state through the matching checkboxes", () => {
+    render(
+      <ProviderEditor
+        profile={{
+          id: "claude-1m",
+          app: "claude",
+          name: "已有 Claude 1M",
+          model: "claude-opus-4-1",
+          baseUrl: "https://relay.example",
+          apiKey: "sk-test-claude",
+          modelOptions: {
+            kind: "claude",
+            primaryOneM: true,
+            haikuModel: "claude-haiku-4",
+            sonnetModel: "claude-sonnet-4-6",
+            sonnetOneM: true,
+            opusModel: "claude-opus-4-1",
+            opusOneM: false,
+            availableModels: null,
+          },
+        }}
+        initialApp="claude"
+        busy={false}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByLabelText("主模型")).toHaveValue("claude-opus-4-1");
+    expect(screen.getByRole("checkbox", { name: "主模型启用 1M 上下文" })).toBeChecked();
+    expect(screen.getByLabelText("Haiku 档")).toHaveValue("claude-haiku-4");
+    expect(screen.getByLabelText("Sonnet 档")).toHaveValue("claude-sonnet-4-6");
+    expect(screen.getByRole("checkbox", { name: "Sonnet 档启用 1M 上下文" })).toBeChecked();
+  });
+
   it("drops an all-empty model-mapping block instead of storing it", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -98,9 +266,12 @@ describe("ProviderEditor", () => {
       websiteUrl: null,
       modelOptions: {
         kind: "claude",
+        primaryOneM: false,
         haikuModel: null,
         sonnetModel: null,
+        sonnetOneM: false,
         opusModel: null,
+        opusOneM: false,
         availableModels: null,
       },
     });
@@ -274,9 +445,12 @@ describe("ProviderEditor", () => {
       websiteUrl: null,
       modelOptions: {
         kind: "claude",
+        primaryOneM: false,
         haikuModel: "claude-haiku-4",
         sonnetModel: null,
+        sonnetOneM: false,
         opusModel: null,
+        opusOneM: false,
         availableModels: ["claude-opus-4", "claude-sonnet-4"],
       },
     });

@@ -6,6 +6,7 @@
 
 pub mod adapter;
 pub mod ccswitch;
+mod claude_model;
 pub mod contracts;
 pub mod discovery;
 pub mod lock;

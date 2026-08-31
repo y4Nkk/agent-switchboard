@@ -297,6 +297,70 @@ mod tests {
     }
 
     #[test]
+    fn import_persists_lowercase_one_m_as_semantic_profile_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = fixture_db(dir.path());
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute(
+                "UPDATE providers SET settings_config = ?1 WHERE id = ?2 AND app_type = ?3",
+                params![
+                    r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"<placeholder>","ANTHROPIC_MODEL":"claude-opus-4-1[1m]","ANTHROPIC_DEFAULT_SONNET_MODEL":"claude-sonnet-4-6[1m]","ANTHROPIC_DEFAULT_OPUS_MODEL":"claude-opus-4-1[1m]"}}"#,
+                    "id-1",
+                    "claude",
+                ],
+            )
+            .unwrap();
+
+        let state = LocalState::from_root(dir.path().join("state"));
+        let outcome = import_at(&path, &state, &["claude:id-1".into()]).unwrap();
+        let imported = outcome.imported.first().expect("one profile should import");
+
+        assert_eq!(imported.model.as_deref(), Some("claude-opus-4-1"));
+        let Some(asb_core::ModelOptions::Claude(settings)) = imported.model_options.as_ref() else {
+            panic!("Claude model settings should be persisted");
+        };
+        assert!(settings.primary_one_m);
+        assert_eq!(settings.sonnet_model.as_deref(), Some("claude-sonnet-4-6"));
+        assert!(settings.sonnet_one_m);
+        assert_eq!(settings.opus_model.as_deref(), Some("claude-opus-4-1"));
+        assert!(settings.opus_one_m);
+    }
+
+    #[test]
+    fn import_rejects_ccswitch_uppercase_one_m_models_before_persistence() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = fixture_db(dir.path());
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute(
+                "UPDATE providers SET settings_config = ?1 WHERE id = ?2 AND app_type = ?3",
+                params![
+                    r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"<placeholder>","ANTHROPIC_MODEL":"claude-opus-4-1[1M]"}}"#,
+                    "id-1",
+                    "claude",
+                ],
+            )
+            .unwrap();
+
+        let state = LocalState::from_root(dir.path().join("state"));
+        let scan = scan_at(&path, &state).unwrap();
+        assert!(scan.providers.iter().all(|item| item.key != "claude:id-1"));
+        assert!(scan
+            .skipped
+            .iter()
+            .any(|item| item.key == "claude:id-1" && item.reason.contains("1M 标记无效")));
+
+        let outcome = import_at(&path, &state, &["claude:id-1".into()]).unwrap();
+        assert!(outcome.imported.is_empty());
+        assert!(outcome
+            .not_imported
+            .iter()
+            .any(|item| item.reason.contains("1M 标记无效")));
+        assert!(state.list_profiles().unwrap().is_empty());
+    }
+
+    #[test]
     fn missing_database_reports_unavailable() {
         let dir = tempfile::tempdir().unwrap();
         let error = open_read_only(&dir.path().join("none.db")).unwrap_err();

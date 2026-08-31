@@ -44,6 +44,10 @@ pub enum ValidationError {
     BadContextWindow,
     #[error("availableModels 不能包含空行；请每行填写一个模型标识")]
     EmptyAvailableModel,
+    #[error("{field} 不能包含 1M 标记；请通过 1M 上下文复选框设置")]
+    InlineOneMMarker { field: &'static str },
+    #[error("{field} 已启用 1M 上下文，但未填写模型")]
+    OneMRequiresModel { field: &'static str },
     #[error("键 {key:?} 属于 {app:?} 的宿主配置；请从覆盖配置中移除，Agent Switchboard 只能修改应用托管的键")]
     HostOwnedKey { app: AppKind, key: String },
     #[error("键 {key:?} 由供应商档案管理；请在“供应商”页的模型映射中设置，而不是通用配置")]
@@ -69,6 +73,7 @@ impl ProviderProfile {
         validate_profile_fields(ProfileFields {
             app: self.app,
             name: &self.name,
+            model: self.model.as_deref(),
             base_url: self.base_url.as_deref(),
             api_key: &self.api_key,
             model_options: self.model_options.as_ref(),
@@ -83,6 +88,7 @@ impl ProviderDraft {
         validate_profile_fields(ProfileFields {
             app: self.app,
             name: &self.name,
+            model: self.model.as_deref(),
             base_url: self.base_url.as_deref(),
             api_key: &self.api_key,
             model_options: self.model_options.as_ref(),
@@ -95,6 +101,7 @@ impl ProviderDraft {
 struct ProfileFields<'a> {
     app: AppKind,
     name: &'a str,
+    model: Option<&'a str>,
     base_url: Option<&'a str>,
     api_key: &'a str,
     model_options: Option<&'a ModelOptions>,
@@ -106,6 +113,7 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
     let ProfileFields {
         app,
         name,
+        model,
         base_url,
         api_key,
         model_options,
@@ -131,8 +139,9 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
     if api_key.chars().count() > 4_096 {
         return Err(ValidationError::ApiKeyTooLong(4_096));
     }
+    validate_model_identifier(model, "主模型")?;
     if let Some(options) = model_options {
-        validate_model_options(app, options)?;
+        validate_model_options(app, options, model)?;
     }
     if let Some(notes) = notes {
         if notes.chars().count() > MAX_NOTES_LEN {
@@ -148,7 +157,11 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
     Ok(())
 }
 
-fn validate_model_options(app: AppKind, options: &ModelOptions) -> Result<(), ValidationError> {
+fn validate_model_options(
+    app: AppKind,
+    options: &ModelOptions,
+    primary_model: Option<&str>,
+) -> Result<(), ValidationError> {
     let reject = |kind: &'static str| {
         Err(ValidationError::ModelOptionsMismatch {
             options_kind: kind,
@@ -157,10 +170,25 @@ fn validate_model_options(app: AppKind, options: &ModelOptions) -> Result<(), Va
     };
     match (app, options) {
         (AppKind::Codex, ModelOptions::Codex(settings)) => validate_codex_settings(settings),
-        (AppKind::Claude, ModelOptions::Claude(settings)) => validate_claude_settings(settings),
+        (AppKind::Claude, ModelOptions::Claude(settings)) => {
+            validate_claude_settings(settings, primary_model)
+        }
         (AppKind::Codex, ModelOptions::Claude(_)) => reject("claude"),
         (AppKind::Claude, ModelOptions::Codex(_)) => reject("codex"),
     }
+}
+
+fn validate_model_identifier(
+    model: Option<&str>,
+    field: &'static str,
+) -> Result<(), ValidationError> {
+    let Some(model) = model else {
+        return Ok(());
+    };
+    if crate::claude_model::contains_one_m_marker(model) {
+        return Err(ValidationError::InlineOneMMarker { field });
+    }
+    Ok(())
 }
 
 fn one_of(value: &str, allowed: &[&str]) -> bool {
@@ -180,11 +208,42 @@ fn validate_codex_settings(settings: &CodexModelSettings) -> Result<(), Validati
     Ok(())
 }
 
-fn validate_claude_settings(settings: &ClaudeModelSettings) -> Result<(), ValidationError> {
+fn validate_claude_settings(
+    settings: &ClaudeModelSettings,
+    primary_model: Option<&str>,
+) -> Result<(), ValidationError> {
+    validate_model_identifier(settings.haiku_model.as_deref(), "Haiku 档")?;
+    validate_model_identifier(settings.sonnet_model.as_deref(), "Sonnet 档")?;
+    validate_model_identifier(settings.opus_model.as_deref(), "Opus 档")?;
+    validate_one_m_enabled(settings.primary_one_m, primary_model, "主模型")?;
+    validate_one_m_enabled(
+        settings.sonnet_one_m,
+        settings.sonnet_model.as_deref(),
+        "Sonnet 档",
+    )?;
+    validate_one_m_enabled(
+        settings.opus_one_m,
+        settings.opus_model.as_deref(),
+        "Opus 档",
+    )?;
     if let Some(models) = settings.available_models.as_deref() {
-        if models.iter().any(|model| model.trim().is_empty()) {
-            return Err(ValidationError::EmptyAvailableModel);
+        for model in models {
+            if model.trim().is_empty() {
+                return Err(ValidationError::EmptyAvailableModel);
+            }
+            validate_model_identifier(Some(model), "可选模型列表")?;
         }
+    }
+    Ok(())
+}
+
+fn validate_one_m_enabled(
+    enabled: bool,
+    model: Option<&str>,
+    field: &'static str,
+) -> Result<(), ValidationError> {
+    if enabled && model.is_none_or(|model| model.trim().is_empty()) {
+        return Err(ValidationError::OneMRequiresModel { field });
     }
     Ok(())
 }
@@ -383,9 +442,12 @@ mod tests {
     fn rejects_model_options_that_do_not_match_the_app() {
         let mut p = profile(AppKind::Codex);
         p.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: false,
             haiku_model: None,
             sonnet_model: None,
+            sonnet_one_m: false,
             opus_model: None,
+            opus_one_m: false,
             available_models: None,
         }));
         assert!(matches!(
@@ -404,12 +466,89 @@ mod tests {
 
         let mut c = profile(AppKind::Claude);
         c.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: false,
             haiku_model: None,
             sonnet_model: None,
+            sonnet_one_m: false,
             opus_model: None,
+            opus_one_m: false,
             available_models: Some(vec!["claude-opus-4".into(), "  ".into()]),
         }));
         assert_eq!(c.validate(), Err(ValidationError::EmptyAvailableModel));
+    }
+
+    #[test]
+    fn claude_one_m_is_explicit_and_model_identifiers_are_marker_free() {
+        let mut primary = profile(AppKind::Claude);
+        primary.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: true,
+            haiku_model: None,
+            sonnet_model: None,
+            sonnet_one_m: false,
+            opus_model: None,
+            opus_one_m: false,
+            available_models: None,
+        }));
+        assert!(primary.validate().is_ok());
+
+        primary.model = Some("opus[1m]".into());
+        assert_eq!(
+            primary.validate(),
+            Err(ValidationError::InlineOneMMarker { field: "主模型" })
+        );
+
+        primary.model = Some("opus[1M]".into());
+        assert_eq!(
+            primary.validate(),
+            Err(ValidationError::InlineOneMMarker { field: "主模型" })
+        );
+
+        let mut missing_primary = profile(AppKind::Claude);
+        missing_primary.model = None;
+        missing_primary.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: true,
+            haiku_model: None,
+            sonnet_model: None,
+            sonnet_one_m: false,
+            opus_model: None,
+            opus_one_m: false,
+            available_models: None,
+        }));
+        assert_eq!(
+            missing_primary.validate(),
+            Err(ValidationError::OneMRequiresModel { field: "主模型" })
+        );
+
+        let mut mappings = profile(AppKind::Claude);
+        mappings.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: false,
+            haiku_model: Some("haiku[1m]".into()),
+            sonnet_model: Some("sonnet".into()),
+            sonnet_one_m: true,
+            opus_model: Some("opus".into()),
+            opus_one_m: true,
+            available_models: Some(vec!["opus[1m]".into()]),
+        }));
+        assert_eq!(
+            mappings.validate(),
+            Err(ValidationError::InlineOneMMarker { field: "Haiku 档" })
+        );
+
+        mappings.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+            primary_one_m: false,
+            haiku_model: None,
+            sonnet_model: None,
+            sonnet_one_m: true,
+            opus_model: Some("opus".into()),
+            opus_one_m: false,
+            available_models: None,
+        }));
+        assert_eq!(
+            mappings.validate(),
+            Err(ValidationError::OneMRequiresModel {
+                field: "Sonnet 档"
+            })
+        );
     }
 
     #[test]
