@@ -54,6 +54,13 @@ jobs:
       - name: 构建 Tauri 安装包
         run: npm run tauri build
 
+      - name: 扫描发布产物中的凭据
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "target/release/bundle/nsis/*-setup.exe" |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          .\scripts\assert-release-secret-free.ps1 -InstallerPath $setup.FullName
+
       - name: 上传 NSIS 安装包
         uses: actions/upload-artifact@v7
         with:

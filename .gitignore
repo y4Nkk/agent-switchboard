@@ -7,3 +7,12 @@ target-*/
 .playwright-mcp/
 *.log
 .DS_Store
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
+id_rsa

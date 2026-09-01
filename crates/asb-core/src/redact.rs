@@ -18,13 +18,15 @@ pub fn is_secret_key(key: &str) -> bool {
 }
 
 /// Value prefixes that mark a value as a live secret, whatever the key says.
-const SECRET_VALUE_PREFIXES: &[&str] =
-    &["sk-", "ghp_", "gho_", "github_pat_", "xox", "AKIA", "AIza"];
+const SECRET_VALUE_PREFIXES: &str = "sk- ghp_ gho_ github_pat_ xox AKIA AIza";
 
 /// True when a raw value is secret-shaped: a known token prefix, or a long
 /// pure-alphanumeric run that no model name or URL would produce.
 pub fn is_secret_value(value: &str) -> bool {
-    if SECRET_VALUE_PREFIXES.iter().any(|p| value.starts_with(p)) {
+    if SECRET_VALUE_PREFIXES
+        .split_ascii_whitespace()
+        .any(|prefix| value.starts_with(prefix))
+    {
         return true;
     }
     value.len() >= 32 && value.chars().all(|c| c.is_ascii_alphanumeric())
@@ -71,5 +73,15 @@ mod tests {
         );
         let long_key = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
         assert_eq!(redact("some_key", long_key), REDACTED);
+    }
+
+    #[test]
+    fn every_known_value_prefix_is_redacted() {
+        for prefix in SECRET_VALUE_PREFIXES.split_ascii_whitespace() {
+            assert_eq!(
+                redact("provider_value", &format!("{prefix}value")),
+                REDACTED
+            );
+        }
     }
 }
