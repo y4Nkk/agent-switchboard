@@ -41,6 +41,13 @@ describe("UpdateSection", () => {
     expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
   });
 
+  it("shows the startup lookup state before a result is available", () => {
+    render(<UpdateSection result={null} busy onCheck={() => {}} />);
+
+    expect(screen.getByText("正在检查新版本")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
+  });
+
   it("reports an up-to-date result without a download entry", () => {
     render(<UpdateSection result={upToDate} busy={false} onCheck={() => {}} />);
 

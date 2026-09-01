@@ -146,6 +146,7 @@ export default function App() {
                 onPatch={appSettingsState.saveSettingsPatch}
                 onRestart={() => void appSettingsState.restart()}
                 updateCheck={updateCheck.updateCheck}
+                updateChecking={updateCheck.checking}
                 onCheckUpdate={() => void updateCheck.runUpdateCheck()}
               />
             )}

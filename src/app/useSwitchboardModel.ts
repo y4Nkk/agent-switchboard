@@ -75,10 +75,7 @@ export function useSwitchboardModel() {
     refresh,
   });
   const updateCheck = useUpdateCheck({
-    busy,
     onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
   });
   const discoveryState = useDiscovery({
     busy,

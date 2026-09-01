@@ -168,6 +168,14 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         return Promise.resolve((args as { settings: unknown }).settings);
       case "list_system_fonts":
         return Promise.resolve(["Microsoft YaHei", "Noto Sans SC"]);
+      case "check_update":
+        return Promise.resolve({
+          currentVersion: "0.1.1",
+          latestVersion: "0.1.1",
+          updateAvailable: false,
+          releaseUrl: "https://github.com/y4Nkk/agent-switchboard/releases/tag/v0.1.1",
+          checkedAt: "2026-09-01T00:00:00Z",
+        });
       case "get_common_settings_editor":
         return Promise.resolve({
           app: targetFrom(args),

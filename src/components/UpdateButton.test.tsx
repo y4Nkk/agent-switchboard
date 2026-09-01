@@ -8,6 +8,8 @@ describe("UpdateButton", () => {
     render(<UpdateButton latestVersion="v0.2.0" onOpen={() => {}} />);
 
     expect(screen.getByRole("button", { name: "发现新版本 v0.2.0" })).toBeInTheDocument();
+    expect(screen.getByText("更新")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发现新版本 v0.2.0" }).querySelector(".asb-updatebtn-dot")).not.toBeNull();
   });
 
   it("delegates the click to the settings navigation", async () => {

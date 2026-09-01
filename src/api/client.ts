@@ -783,7 +783,7 @@ export function queryCodexOfficialQuota(profileId: string): Promise<CodexOfficia
   return invoke<CodexOfficialQuota>("query_codex_official_quota", { profileId });
 }
 
-/** Result of one manual app-update check; informational only. */
+/** Result of one startup or user-triggered app-update check; informational only. */
 export interface UpdateCheck {
   currentVersion: string;
   /** Release tag exactly as published, e.g. "v0.2.0". */

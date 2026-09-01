@@ -179,7 +179,26 @@ body {
    release is known, so it always reads as action-blue (cascade order keeps
    the blue ahead of .asb-winbtn:hover). */
 .asb-winbtn.asb-updatebtn {
+  position: relative;
+  width: auto;
+  min-width: 72px;
+  gap: var(--asb-space-1);
+  padding: 0 var(--asb-space-2);
   color: var(--asb-action);
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-updatebtn-label {
+  line-height: 1;
+}
+
+.asb-updatebtn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-safe);
+  box-shadow: 0 0 0 2px var(--asb-surface-rail);
 }
 
 .asb-nav {

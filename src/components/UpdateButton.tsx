@@ -22,6 +22,8 @@ export function UpdateButton({
           onClick={onOpen}
         >
           <UpdateIcon />
+          <span className="asb-updatebtn-label">更新</span>
+          <span className="asb-updatebtn-dot" aria-hidden="true" />
         </button>
       </span>
     </Tooltip>

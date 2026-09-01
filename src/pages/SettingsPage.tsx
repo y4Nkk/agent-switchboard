@@ -15,6 +15,8 @@ interface SettingsPageProps {
   onRestart: () => void;
   /** Latest manual update check; null until the first check runs. */
   updateCheck: UpdateCheck | null;
+  /** A startup or user-triggered release lookup is currently in flight. */
+  updateChecking: boolean;
   onCheckUpdate: () => void;
 }
 
@@ -28,6 +30,7 @@ export function SettingsPage({
   onPatch,
   onRestart,
   updateCheck,
+  updateChecking,
   onCheckUpdate,
 }: SettingsPageProps) {
   return (
@@ -71,7 +74,7 @@ export function SettingsPage({
         ) : (
           <p className="asb-empty">加载中</p>
         )}
-        <UpdateSection result={updateCheck} busy={busy} onCheck={onCheckUpdate} />
+        <UpdateSection result={updateCheck} busy={busy || updateChecking} onCheck={onCheckUpdate} />
       </div>
     </section>
   );

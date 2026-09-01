@@ -1,31 +1,42 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { checkUpdate, type CommandError, type UpdateCheck } from "../api/client";
 
 interface UpdateCheckDeps {
-  busy: boolean;
   onError: (error: CommandError) => void;
-  clearError: () => void;
-  setBusy: (busy: boolean) => void;
 }
 
-/** Manual software-update check against the project's GitHub releases.
- * Informational only: the result feeds the settings-page section and the
- * title-bar indicator; nothing is downloaded or installed. */
-export function useUpdateCheck({ busy, onError, clearError, setBusy }: UpdateCheckDeps) {
+/** One startup check plus user-triggered checks against the project's GitHub
+ * releases. The check never blocks the application shell, downloads, or
+ * installs; a new release only enables the explicit update entry. */
+export function useUpdateCheck({ onError }: UpdateCheckDeps) {
   const [updateCheck, setUpdateCheck] = useState<UpdateCheck | null>(null);
+  const [checking, setChecking] = useState(false);
+  const inFlight = useRef(false);
+  const automaticCheckStarted = useRef(false);
 
-  const runUpdateCheck = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    clearError();
+  const runUpdateCheck = useCallback(async (reportFailure: boolean) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setChecking(true);
     try {
       setUpdateCheck(await checkUpdate());
     } catch (caught) {
-      onError(caught as CommandError);
+      if (reportFailure) onError(caught as CommandError);
     } finally {
-      setBusy(false);
+      inFlight.current = false;
+      setChecking(false);
     }
-  }, [busy, clearError, onError, setBusy]);
+  }, [onError]);
 
-  return { updateCheck, runUpdateCheck };
+  useEffect(() => {
+    if (automaticCheckStarted.current) return;
+    automaticCheckStarted.current = true;
+    void runUpdateCheck(false);
+  }, [runUpdateCheck]);
+
+  return {
+    updateCheck,
+    checking,
+    runUpdateCheck: () => runUpdateCheck(true),
+  };
 }

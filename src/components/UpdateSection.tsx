@@ -3,9 +3,8 @@ import type { ReactNode } from "react";
 import type { UpdateCheck } from "../api/client";
 import { Time } from "./Time";
 
-/** Manual software-update check on the settings page. Pure display: the
- * check itself (busy gate + error toast) is owned by App, exactly like the
- * endpoint probe in the provider editor. */
+/** Software-update state on the settings page. The startup lookup is silent;
+ * a user-triggered retry exposes failures through the application error UI. */
 export function UpdateSection({
   result,
   busy,
@@ -19,7 +18,9 @@ export function UpdateSection({
     ? result.updateAvailable
       ? `发现新版本 ${result.latestVersion}`
       : "已是最新版本"
-    : "检查新版本";
+    : busy
+      ? "正在检查新版本"
+      : "检查新版本";
   const detail: ReactNode = result ? (
     <>当前版本 {result.currentVersion} · 检查于 <Time iso={result.checkedAt} /></>
   ) : null;
