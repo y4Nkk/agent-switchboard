@@ -16,3 +16,5 @@ target-*/
 credentials*.json
 secrets*.json
 id_rsa
+MEMORY.md
+.codex/memories/

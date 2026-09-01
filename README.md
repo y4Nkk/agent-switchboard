@@ -117,7 +117,6 @@ npm run dev:desktop
 | 文档 | 职责 |
 | --- | --- |
 | [DESIGN.md](DESIGN.md) | `Frosted Relay` 视觉与交互契约 |
-| [MEMORY.md](MEMORY.md) | 已验证的长期工程决策与陷阱 |
 | [progress.md](progress.md) | 唯一的阶段目标、验收与退出条件 |
 | [AGENTS.md](AGENTS.md) | 贡献、工作边界与安全规则 |
 
