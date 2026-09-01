@@ -15,7 +15,9 @@ interface Props {
   onMotionChange: (value: MotionPreference) => void;
   onInterfaceFontChange: (value: string) => void;
   onAlwaysOnTopChange: (value: boolean) => void;
+  onLaunchAtLoginChange: (value: boolean) => void;
   onHardwareAccelerationChange: (value: boolean) => void;
+  onRestart: () => void;
 }
 
 type SegmentOption<T extends string> = { value: T; label: string };
@@ -86,7 +88,9 @@ export function AppSettingsForm({
   onMotionChange,
   onInterfaceFontChange,
   onAlwaysOnTopChange,
+  onLaunchAtLoginChange,
   onHardwareAccelerationChange,
+  onRestart,
 }: Props) {
   return (
     <div className="asb-app-settings">
@@ -137,6 +141,17 @@ export function AppSettingsForm({
             onChange={onAlwaysOnTopChange}
           />
         </div>
+        <div className="asb-app-setting-row">
+          <div className="asb-app-setting-copy">
+            <span className="asb-checkbox-label">开机自动启动</span>
+          </div>
+          <Switch
+            label="开机自动启动"
+            checked={settings.launchAtLogin}
+            disabled={busy}
+            onChange={onLaunchAtLoginChange}
+          />
+        </div>
       </section>
       <section className="asb-app-settings-group" aria-labelledby="performance-settings">
         <h3 id="performance-settings" className="asb-toggle-group-title">
@@ -152,6 +167,14 @@ export function AppSettingsForm({
             disabled={busy}
             onChange={onHardwareAccelerationChange}
           />
+        </div>
+        <div className="asb-app-setting-row">
+          <div className="asb-app-setting-copy">
+            <span className="asb-checkbox-label">重启以应用硬件加速</span>
+          </div>
+          <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onRestart}>
+            重启应用
+          </button>
         </div>
       </section>
     </div>

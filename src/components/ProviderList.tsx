@@ -105,10 +105,10 @@ function ProviderRow({
   });
   const initial = profile.name.trim().charAt(0).toUpperCase() || "?";
   const baseUrl = profile.baseUrl;
+  const websiteUrl = profile.websiteUrl;
   const probe = useEndpointProbe(baseUrl ?? null);
   const [probeOpen, setProbeOpen] = useState(false);
   const official = profile.routeMode === "official";
-  const detail = baseUrl ? hostLabel(baseUrl) : official ? "官方登录" : "自定义服务";
   const hasUsageQuery = profile.usageQuery !== null && profile.usageQuery !== undefined;
   const usageLabel = hasUsageQuery
     ? usageOpen
@@ -156,23 +156,21 @@ function ProviderRow({
         </span>
         <span className="asb-row-main">
           <span className="asb-row-name">{profile.name}</span>
-          {baseUrl ? (
+          {websiteUrl ? (
             <a
               className="asb-row-meta is-url"
-              href={baseUrl}
-              title={baseUrl}
+              href={websiteUrl}
+              title={websiteUrl}
               onClick={(event) => {
                 // wry blocks webview new-window requests; the opener plugin
                 // routes the URL to the system browser instead.
                 event.preventDefault();
-                void openUrl(baseUrl);
+                void openUrl(websiteUrl);
               }}
             >
-              {hostLabel(baseUrl)}
+              {hostLabel(websiteUrl)}
             </a>
-          ) : (
-            <span className="asb-row-meta">{detail}</span>
-          )}
+          ) : official ? <span className="asb-row-meta">官方登录</span> : null}
           {profile.model && <span className="asb-row-meta">{profile.model}</span>}
         </span>
       </button>

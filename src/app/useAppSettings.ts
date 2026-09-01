@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAppSettings, setAppSettings, type AppSettings, type CommandError } from "../api/client";
+import {
+  getAppSettings,
+  restartApplication,
+  setAppSettings,
+  type AppSettings,
+  type CommandError,
+} from "../api/client";
 import { quotedFontFamily } from "../lib/font-family";
 
 interface AppSettingsDeps {
@@ -78,6 +84,19 @@ export function useAppSettings({ busy, onError, clearError, setBusy }: AppSettin
     [appSettings, saveAppSettings],
   );
 
+  const restart = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    clearError();
+    try {
+      await restartApplication();
+    } catch (caught) {
+      onError(caught as CommandError);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, clearError, onError, setBusy]);
+
   /** The title-bar always-on-top toggle; null until settings load. */
   const pin = appSettings
     ? {
@@ -86,5 +105,5 @@ export function useAppSettings({ busy, onError, clearError, setBusy }: AppSettin
       }
     : null;
 
-  return { appSettings, loadError, retryLoad, saveAppSettings, saveSettingsPatch, pin };
+  return { appSettings, loadError, retryLoad, saveAppSettings, saveSettingsPatch, restart, pin };
 }

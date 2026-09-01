@@ -96,7 +96,7 @@ npm run dev
 npm run dev:desktop
 ```
 
-每次推送都会运行 Windows 打包工作流：安装 Node 22 和 GNU Rust/MinGW，执行 Rust 与前端测试，生成 NSIS 安装包，并把安装包保留为 GitHub Actions 制品 30 天。推送 `v*` 标签时，工作流还会把该安装包发布为正式 GitHub Release。当前是否存在可下载正式版本以 [Releases](https://github.com/y4Nkk/agent-switchboard/releases) 页面为准。
+每次推送都会运行 Windows 打包工作流：安装 Node 22 和 GNU Rust/MinGW，执行 Rust 与前端测试，生成 NSIS 安装包，并把安装包保留为 GitHub Actions 制品 30 天。推送 `v*` 标签时，工作流还会把该安装包发布为正式 GitHub Release。CNB 同时通过根目录 `.cnb.yml` 在 Linux Runner 上自动执行 Rust 与前端验证；CNB 默认云端 Runner 不提供 Windows WebView2/NSIS 打包环境，因此不将其 Linux 产物冒充为安装包。当前是否存在可下载正式版本以 [Releases](https://github.com/y4Nkk/agent-switchboard/releases) 页面为准。
 
 ## 明确不做的事
 

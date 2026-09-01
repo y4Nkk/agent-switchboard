@@ -11,6 +11,8 @@ interface SettingsPageProps {
   busy: boolean;
   /** Saves one field of the currently loaded settings. */
   onPatch: (patch: Partial<AppSettings>) => void;
+  /** Restarts the desktop process on the user's explicit request. */
+  onRestart: () => void;
   /** Latest manual update check; null until the first check runs. */
   updateCheck: UpdateCheck | null;
   onCheckUpdate: () => void;
@@ -24,6 +26,7 @@ export function SettingsPage({
   onRetryLoad,
   busy,
   onPatch,
+  onRestart,
   updateCheck,
   onCheckUpdate,
 }: SettingsPageProps) {
@@ -42,9 +45,11 @@ export function SettingsPage({
             onMotionChange={(motion) => onPatch({ motion })}
             onInterfaceFontChange={(interfaceFont) => onPatch({ interfaceFont })}
             onAlwaysOnTopChange={(alwaysOnTop) => onPatch({ alwaysOnTop })}
+            onLaunchAtLoginChange={(launchAtLogin) => onPatch({ launchAtLogin })}
             onHardwareAccelerationChange={(hardwareAcceleration) =>
               onPatch({ hardwareAcceleration })
             }
+            onRestart={onRestart}
           />
         ) : loadError ? (
           <div className="asb-app-setting-row" role="alert">

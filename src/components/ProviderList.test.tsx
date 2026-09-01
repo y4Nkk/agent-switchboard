@@ -27,6 +27,7 @@ const profiles: ProviderProfile[] = [
     name: "中继 A",
     model: "gpt-5.1",
     baseUrl: "https://relay-a.internal/v1",
+    websiteUrl: "https://relay-a.example",
     apiKey: "ASB_RELAY_A_KEY",
     modelOptions: null,
   },
@@ -37,6 +38,7 @@ const profiles: ProviderProfile[] = [
     name: "官方 OpenAI",
     model: null,
     baseUrl: "https://api.openai.com/v1",
+    websiteUrl: "https://openai.com",
     apiKey: "test-api-key",
     modelOptions: null,
   },
@@ -47,31 +49,48 @@ describe("ProviderList", () => {
     invokeMock.mockReset();
   });
 
-  it("renders the service address as a link on its own line, model below", () => {
+  it("renders the configured website as a link on its own line, model below", () => {
     render(
       <ProviderList profiles={profiles} activeProfileId={null} selectedId="codex-relay-a" onSelect={() => {}} />,
     );
     expect(screen.getByRole("option", { name: /官方 OpenAI/ })).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: "relay-a.internal" });
-    expect(link).toHaveAttribute("href", "https://relay-a.internal/v1");
+    const link = screen.getByRole("link", { name: "relay-a.example" });
+    expect(link).toHaveAttribute("href", "https://relay-a.example");
     expect(link.classList.contains("asb-row-meta")).toBe(true);
-    expect(link.textContent).toBe("relay-a.internal");
+    expect(link.textContent).toBe("relay-a.example");
     expect(
       screen.getByText(
         (_, el) => el?.classList.contains("asb-row-meta") === true && el.textContent === "gpt-5.1",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("api.openai.com")).toBeInTheDocument();
+    expect(screen.getByText("openai.com")).toBeInTheDocument();
+    expect(screen.queryByText("relay-a.internal")).not.toBeInTheDocument();
+    expect(screen.queryByText("api.openai.com")).not.toBeInTheDocument();
   });
 
-  it("opens the service URL in the system browser on click, not in-app", async () => {
+  it("opens the configured website in the system browser on click, not in-app", async () => {
     const user = userEvent.setup();
     vi.mocked(openUrl).mockClear();
     render(
       <ProviderList profiles={profiles} activeProfileId={null} selectedId={null} onSelect={() => {}} />,
     );
-    await user.click(screen.getByRole("link", { name: "relay-a.internal" }));
-    expect(openUrl).toHaveBeenCalledWith("https://relay-a.internal/v1");
+    await user.click(screen.getByRole("link", { name: "relay-a.example" }));
+    expect(openUrl).toHaveBeenCalledWith("https://relay-a.example");
+  });
+
+  it("does not render a substitute when no website is configured", () => {
+    render(
+      <ProviderList
+        profiles={[{ ...profiles[0], websiteUrl: null }]}
+        activeProfileId={null}
+        selectedId={null}
+        onSelect={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByText("relay-a.internal")).not.toBeInTheDocument();
+    expect(screen.queryByText("官网未设置")).not.toBeInTheDocument();
   });
 
   it("marks the live-matched row with a status pill, not color alone", () => {

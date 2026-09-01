@@ -121,7 +121,7 @@ export interface ProviderProfile {
   /** Local-only note; never written into any client configuration. */
   notes?: string | null;
   /** Provider homepage, used for navigation only. */
-  websiteUrl?: string | null;
+  websiteUrl: string | null;
   /** Application-side usage-balance query; never written into client config. */
   usageQuery?: UsageQuery | null;
 }
@@ -144,7 +144,7 @@ export interface ProviderDraft {
   apiKey: string;
   modelOptions: ModelOptions | null;
   notes?: string | null;
-  websiteUrl?: string | null;
+  websiteUrl: string | null;
   usageQuery?: UsageQuery | null;
 }
 
@@ -594,6 +594,7 @@ export interface AppSettings {
   theme: ThemePreference;
   motion: MotionPreference;
   alwaysOnTop: boolean;
+  launchAtLogin: boolean;
   hardwareAcceleration: boolean;
   /** Font family for display and interface text; the value is quoted
    * verbatim as a CSS font-family, so it must be a plain family name. */
@@ -846,6 +847,12 @@ export function toggleMaximizeWindow(): Promise<void> {
 export function closeWindow(): Promise<void> {
   if (isBrowserDevelopment) return Promise.resolve();
   return invoke("window_close");
+}
+
+/** Restarts the native desktop process so creation-time WebView settings apply. */
+export function restartApplication(): Promise<void> {
+  if (isBrowserDevelopment) return Promise.resolve();
+  return invoke("restart_application");
 }
 
 export function getWindowMaximized(): Promise<boolean> {

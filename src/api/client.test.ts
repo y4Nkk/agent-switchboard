@@ -17,6 +17,7 @@ import {
   resetProfileStore,
   reorderProfiles,
   resumeSession,
+  restartApplication,
   setAppSettings,
   setCloudBackupSettings,
   saveGlobalPromptDocument,
@@ -174,6 +175,7 @@ describe("api client boundary", () => {
       theme: "system" as const,
       motion: "system" as const,
       alwaysOnTop: false,
+      launchAtLogin: false,
       hardwareAcceleration: true,
       interfaceFont: "Noto Sans SC",
       runtimeLogLevel: "info" as const,
@@ -188,6 +190,14 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(2, "set_app_settings", {
       settings: next,
     });
+  });
+
+  it("restarts the native application through its dedicated command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await expect(restartApplication()).resolves.toBeUndefined();
+
+    expect(invokeMock).toHaveBeenCalledWith("restart_application");
   });
 
   it("lists installed system fonts for the interface-font picker", async () => {

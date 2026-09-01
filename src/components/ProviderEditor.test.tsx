@@ -43,6 +43,7 @@ describe("ProviderEditor", () => {
           baseUrl: "https://relay.example/v1",
           apiKey: "sk-test",
           modelOptions: null,
+          websiteUrl: null,
           usageQuery: {
             kind: "declarative",
             url: "{{baseUrl}}/balance",
@@ -118,6 +119,7 @@ describe("ProviderEditor", () => {
           baseUrl: "https://gateway.example/v1",
           apiKey: "sk-test-secret",
           modelOptions: null,
+          websiteUrl: null,
         }}
         initialApp="codex"
         busy={false}
@@ -260,6 +262,7 @@ describe("ProviderEditor", () => {
             opusOneM: false,
             availableModels: null,
           },
+          websiteUrl: null,
         }}
         initialApp="claude"
         busy={false}
@@ -382,6 +385,7 @@ describe("ProviderEditor", () => {
           baseUrl: "https://relay.example",
           apiKey: "sk-test-key",
           modelOptions: null,
+          websiteUrl: null,
         }}
         initialApp="claude"
         busy={false}

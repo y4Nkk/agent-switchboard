@@ -51,6 +51,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Networking_WinHttp",
     "Win32_UI_WindowsAndMessaging",
 ] }
+tauri-plugin-autostart = "2"
 
 [dev-dependencies]
 tempfile = "3"

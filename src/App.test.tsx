@@ -99,6 +99,7 @@ const profiles: ProviderRecord[] = [
       baseUrl: "https://backup.internal/v1",
       apiKey: "OPENAI_API_KEY",
       modelOptions: null,
+      websiteUrl: null,
     },
     fileHash: "provider-file-hash",
   },
@@ -122,6 +123,7 @@ const defaultSettings = {
   theme: "system",
   motion: "system",
   alwaysOnTop: false,
+  launchAtLogin: false,
   hardwareAcceleration: true,
   interfaceFont: "Noto Sans SC",
   runtimeLogLevel: "info",
@@ -516,6 +518,7 @@ describe("App integration with the typed client boundary", () => {
           theme: "dark",
           motion: "system",
           alwaysOnTop: false,
+          launchAtLogin: false,
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
@@ -532,6 +535,7 @@ describe("App integration with the typed client boundary", () => {
           theme: "dark",
           motion: "system",
           alwaysOnTop: true,
+          launchAtLogin: false,
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
@@ -547,12 +551,16 @@ describe("App integration with the typed client boundary", () => {
           theme: "dark",
           motion: "system",
           alwaysOnTop: true,
+          launchAtLogin: false,
           hardwareAcceleration: false,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
         },
       }),
     );
+
+    await user.click(screen.getByRole("button", { name: "重启应用" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("restart_application"));
   });
 
   it("顶栏置顶钮经同一保存路径提交完整设置对象", async () => {
@@ -570,6 +578,7 @@ describe("App integration with the typed client boundary", () => {
           theme: "system",
           motion: "system",
           alwaysOnTop: true,
+          launchAtLogin: false,
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
@@ -588,6 +597,7 @@ describe("App integration with the typed client boundary", () => {
           theme: "dark",
           motion: "reduce",
           alwaysOnTop: false,
+          launchAtLogin: false,
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
@@ -644,6 +654,7 @@ describe("App integration with the typed client boundary", () => {
           theme: "system",
           motion: "system",
           alwaysOnTop: false,
+          launchAtLogin: false,
           hardwareAcceleration: true,
           interfaceFont: "Microsoft YaHei",
           runtimeLogLevel: "info",
@@ -963,6 +974,7 @@ describe("App integration with the typed client boundary", () => {
           baseUrl: "https://a.internal/v1",
           apiKey: "KEY_A",
           modelOptions: null,
+          websiteUrl: null,
         },
         fileHash: "a-hash",
       },
@@ -976,6 +988,7 @@ describe("App integration with the typed client boundary", () => {
           baseUrl: "https://b.internal/v1",
           apiKey: "KEY_B",
           modelOptions: null,
+          websiteUrl: null,
         },
         fileHash: "b-hash",
       },

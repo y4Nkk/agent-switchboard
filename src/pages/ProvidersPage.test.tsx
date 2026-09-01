@@ -13,6 +13,7 @@ const profile: ProviderProfile = {
   baseUrl: "https://relay.example/v1",
   apiKey: "test-key",
   modelOptions: null,
+  websiteUrl: null,
   usageQuery: null,
 };
 

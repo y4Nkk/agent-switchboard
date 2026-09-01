@@ -44,7 +44,7 @@ function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): Provid
       apiKey: profile.apiKey,
       modelOptions: profile.modelOptions,
       notes: profile.notes ?? null,
-      websiteUrl: profile.websiteUrl ?? null,
+      websiteUrl: profile.websiteUrl,
       usageQuery: profile.usageQuery ?? null,
     };
   }

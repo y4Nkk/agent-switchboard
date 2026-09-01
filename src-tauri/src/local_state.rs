@@ -40,9 +40,7 @@ pub enum MotionPreference {
 pub(crate) const DEFAULT_INTERFACE_FONT: &str = "Noto Sans SC";
 
 /// Application-owned desktop preferences, stored separately from configuration
-/// data. This is a strict complete contract. The only migration is the exact
-/// immediately previous complete shape, which is atomically rewritten with
-/// the bundled default runtime-log level.
+/// data. This is a strict complete current contract.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppSettings {
@@ -50,6 +48,7 @@ pub struct AppSettings {
     pub theme: ThemePreference,
     pub motion: MotionPreference,
     pub always_on_top: bool,
+    pub launch_at_login: bool,
     pub hardware_acceleration: bool,
     pub interface_font: String,
     pub runtime_log_level: RuntimeLogLevel,
@@ -81,6 +80,7 @@ impl Default for AppSettings {
             theme: ThemePreference::System,
             motion: MotionPreference::System,
             always_on_top: false,
+            launch_at_login: false,
             hardware_acceleration: true,
             interface_font: DEFAULT_INTERFACE_FONT.to_string(),
             runtime_log_level: RuntimeLogLevel::Info,
@@ -212,18 +212,14 @@ impl LocalState {
 
     pub fn get_app_settings(&self) -> Result<AppSettings, String> {
         match fs::read_to_string(self.settings_path()) {
-            Ok(text) => match serde_json::from_str::<AppSettings>(&text) {
-                Ok(settings) => match settings.validate() {
-                    Ok(()) => Ok(settings),
-                    Err(_) => Err("应用设置格式无效".to_string()),
-                },
-                Err(_) => {
-                    let settings = migrate_previous_app_settings(&text)?;
-                    self.set_app_settings(&settings)
-                        .map_err(|_| "应用设置升级失败".to_string())?;
-                    Ok(settings)
-                }
-            },
+            Ok(text) => {
+                let settings = serde_json::from_str::<AppSettings>(&text)
+                    .map_err(|_| "应用设置格式无效".to_string())?;
+                settings
+                    .validate()
+                    .map_err(|_| "应用设置格式无效".to_string())?;
+                Ok(settings)
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Ok(AppSettings::default())
             }
@@ -329,33 +325,6 @@ impl LocalState {
             root: app_data_dir.join("state"),
         }
     }
-}
-
-fn migrate_previous_app_settings(text: &str) -> Result<AppSettings, String> {
-    let mut fields = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(text)
-        .map_err(|_| "应用设置格式无效".to_string())?;
-    let previous_fields = [
-        "closeBehavior",
-        "theme",
-        "motion",
-        "alwaysOnTop",
-        "hardwareAcceleration",
-        "interfaceFont",
-    ];
-    if fields.len() != previous_fields.len()
-        || !previous_fields
-            .iter()
-            .all(|field| fields.contains_key(*field))
-    {
-        return Err("应用设置格式无效".to_string());
-    }
-
-    fields.insert(
-        "runtimeLogLevel".to_string(),
-        serde_json::Value::String("info".to_string()),
-    );
-    serde_json::from_value(serde_json::Value::Object(fields))
-        .map_err(|_| "应用设置格式无效".to_string())
 }
 
 fn target_in_home(home: &Path, app: AppKind) -> PathBuf {
@@ -547,6 +516,7 @@ mod tests {
             theme: ThemePreference::Dark,
             motion: MotionPreference::Reduce,
             always_on_top: true,
+            launch_at_login: true,
             hardware_acceleration: false,
             interface_font: "MiSans".to_string(),
             runtime_log_level: RuntimeLogLevel::Warn,
@@ -561,38 +531,9 @@ mod tests {
         let written = fs::read_to_string(reopened.settings_path()).expect("read settings text");
         assert_eq!(
             written,
-            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"MiSans\",\n  \"runtimeLogLevel\": \"warn\"\n}"
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"launchAtLogin\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"MiSans\",\n  \"runtimeLogLevel\": \"warn\"\n}"
         );
         assert!(!reopened.backup_dir().exists());
-    }
-
-    #[test]
-    fn previous_complete_app_settings_are_migrated_once_to_the_current_contract() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        let state = LocalState::from_root(directory.path().join("state"));
-        fs::create_dir_all(&state.root).expect("create state directory");
-        fs::write(
-            state.settings_path(),
-            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"Noto Sans SC\"\n}",
-        )
-        .expect("write previous settings");
-
-        assert_eq!(
-            state.get_app_settings().expect("migrate settings"),
-            AppSettings {
-                close_behavior: CloseBehavior::Exit,
-                theme: ThemePreference::Dark,
-                motion: MotionPreference::Reduce,
-                always_on_top: true,
-                hardware_acceleration: false,
-                interface_font: DEFAULT_INTERFACE_FONT.to_string(),
-                runtime_log_level: RuntimeLogLevel::Info,
-            }
-        );
-        assert_eq!(
-            fs::read_to_string(state.settings_path()).expect("read migrated settings"),
-            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"Noto Sans SC\",\n  \"runtimeLogLevel\": \"info\"\n}"
-        );
     }
 
     #[test]
@@ -602,17 +543,17 @@ mod tests {
         fs::create_dir_all(&state.root).expect("create state directory");
 
         for invalid in [
-            // Previous incomplete settings shape: no compatibility path.
+            // Any previous or incomplete settings shape is rejected.
             "{\"closeBehavior\":\"hideToTray\"}",
-            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\",\"legacy\":true}",
-            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"sepia\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
-            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"hardwareAcceleration\":\"false\",\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
-            // Two-versions-old complete shape: only one migration step exists.
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":false,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"launchAtLogin\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\",\"legacy\":true}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"sepia\",\"motion\":\"system\",\"alwaysOnTop\":false,\"launchAtLogin\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"system\",\"motion\":\"system\",\"alwaysOnTop\":false,\"launchAtLogin\":false,\"hardwareAcceleration\":\"false\",\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
             "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true}",
-            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"verbose\"}",
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"launchAtLogin\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"verbose\"}",
             // A font name is consumed verbatim as a quoted CSS value.
-            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true,\"interfaceFont\":\"\",\"runtimeLogLevel\":\"info\"}",
-            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":true,\"interfaceFont\":\"MiSans \",\"runtimeLogLevel\":\"info\"}",
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"launchAtLogin\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"\",\"runtimeLogLevel\":\"info\"}",
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"launchAtLogin\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"MiSans \",\"runtimeLogLevel\":\"info\"}",
         ] {
             fs::write(state.settings_path(), invalid).expect("write invalid settings");
             assert_eq!(state.get_app_settings().unwrap_err(), "应用设置格式无效");

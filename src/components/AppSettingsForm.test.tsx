@@ -12,6 +12,7 @@ const settings = {
   theme: "system" as const,
   motion: "system" as const,
   alwaysOnTop: false,
+  launchAtLogin: false,
   hardwareAcceleration: true,
   interfaceFont: "Noto Sans SC",
   runtimeLogLevel: "info" as const,
@@ -24,7 +25,9 @@ function callbacks() {
     onMotionChange: vi.fn(),
     onInterfaceFontChange: vi.fn(),
     onAlwaysOnTopChange: vi.fn(),
+    onLaunchAtLoginChange: vi.fn(),
     onHardwareAccelerationChange: vi.fn(),
+    onRestart: vi.fn(),
   };
 }
 
@@ -62,8 +65,12 @@ describe("AppSettingsForm", () => {
     expect(handlers.onMotionChange).toHaveBeenCalledWith("reduce");
     await user.click(screen.getByRole("switch", { name: "窗口始终置顶" }));
     expect(handlers.onAlwaysOnTopChange).toHaveBeenCalledWith(true);
+    await user.click(screen.getByRole("switch", { name: "开机自动启动" }));
+    expect(handlers.onLaunchAtLoginChange).toHaveBeenCalledWith(true);
     await user.click(screen.getByRole("switch", { name: "启用硬件加速" }));
     expect(handlers.onHardwareAccelerationChange).toHaveBeenCalledWith(false);
+    await user.click(screen.getByRole("button", { name: "重启应用" }));
+    expect(handlers.onRestart).toHaveBeenCalledTimes(1);
   });
 
   it("renders the interface-font row and emits the chosen font", async () => {
@@ -90,6 +97,7 @@ describe("AppSettingsForm", () => {
     expect(screen.getByRole("radio", { name: "最小化到托盘" })).toBeDisabled();
     expect(screen.getByRole("radio", { name: "退出应用" })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "启用硬件加速" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重启应用" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "选择界面字体" })).toBeDisabled();
   });
 });

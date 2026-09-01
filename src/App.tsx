@@ -144,6 +144,7 @@ export default function App() {
                 onRetryLoad={appSettingsState.retryLoad}
                 busy={busy}
                 onPatch={appSettingsState.saveSettingsPatch}
+                onRestart={() => void appSettingsState.restart()}
                 updateCheck={updateCheck.updateCheck}
                 onCheckUpdate={() => void updateCheck.runUpdateCheck()}
               />

@@ -30,7 +30,7 @@ pub(crate) mod window;
 
 pub(crate) use status::config_status_report;
 pub(crate) use status::ConfigFileStatus;
-pub(crate) use window::apply_window_settings;
+pub(crate) use window::apply_desktop_settings;
 
 use crate::local_state::{AppSettings, LocalState};
 use crate::runtime_log::RuntimeLogAction;
@@ -59,9 +59,22 @@ pub async fn set_app_settings(
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
     let saved = observe(RuntimeLogAction::AppSettingsSaved, async move {
+        let current_state = state(&app)?;
+        settings
+            .validate()
+            .map_err(|error| CommandError::new("app-settings-invalid", error))?;
+        let previous = blocking(move || {
+            current_state
+                .get_app_settings()
+                .map_err(|error| CommandError::new("app-settings-unavailable", error))
+        })
+        .await?;
+        if let Err(error) = apply_desktop_settings(&app, &settings) {
+            let _ = apply_desktop_settings(&app, &previous);
+            return Err(error);
+        }
         let state = state(&app)?;
-        apply_window_settings(&app, &settings)?;
-        blocking(move || {
+        let saved = blocking(move || {
             state
                 .set_app_settings(&settings)
                 .map_err(|error| CommandError::new("app-settings-save-failed", error))?;
@@ -70,7 +83,11 @@ pub async fn set_app_settings(
             crate::runtime_log::set_level(settings.runtime_log_level);
             Ok(settings)
         })
-        .await
+        .await;
+        if saved.is_err() {
+            let _ = apply_desktop_settings(&app, &previous);
+        }
+        saved
     })
     .await?;
     Ok(saved)

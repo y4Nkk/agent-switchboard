@@ -177,7 +177,6 @@ pub struct ProviderProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     /// Provider homepage, used for navigation only.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub website_url: Option<String>,
     /// Optional usage-balance query; application-side metadata that is never
     /// written into any client configuration.
@@ -201,7 +200,6 @@ pub struct ProviderDraft {
     pub model_options: Option<ModelOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub website_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_query: Option<UsageQuery>,
@@ -283,7 +281,6 @@ pub struct ProviderFile {
     pub model_options: Option<ModelOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub website_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_query: Option<UsageQuery>,
@@ -635,6 +632,7 @@ mod tests {
         let file = ProviderFile::from_profile(&profile, 300);
         let text = serde_json::to_string(&file).expect("provider file serializes");
         assert!(!text.contains("\"app\""));
+        assert!(text.contains("\"websiteUrl\":null"));
         let parsed: ProviderFile = serde_json::from_str(&text).expect("provider file parses");
         assert_eq!(parsed.position, 300);
         assert_eq!(parsed.into_profile(AppKind::Claude), profile);

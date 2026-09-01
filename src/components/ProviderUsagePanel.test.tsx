@@ -18,6 +18,7 @@ const profile = {
   baseUrl: "https://relay.example/v1",
   apiKey: "test-key",
   modelOptions: null,
+  websiteUrl: null,
 };
 
 const query = {

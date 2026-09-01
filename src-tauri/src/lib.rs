@@ -73,6 +73,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(runtime_log::plugin())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
             // A malformed settings file is rejected by the typed settings
             // surface, but must never prevent the tray/window recovery shell
@@ -81,7 +85,7 @@ pub fn run() {
                 .and_then(|state| state.get_app_settings())
             {
                 runtime_log::set_level(settings.runtime_log_level);
-                let _ = commands::apply_window_settings(app.handle(), &settings);
+                let _ = commands::apply_desktop_settings(app.handle(), &settings);
             }
             tray::setup(app.handle())?;
             runtime_log::record_started();
@@ -167,6 +171,7 @@ pub fn run() {
             commands::window::window_toggle_maximize,
             commands::window::window_is_maximized,
             commands::window::window_close,
+            commands::window::restart_application,
             commands::get_app_settings,
             commands::set_app_settings,
             commands::list_system_fonts,
@@ -175,7 +180,13 @@ pub fn run() {
         .build(context)
         .expect("Agent Switchboard 启动失败")
         .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+                // A user-invoked desktop restart must never enter the
+                // close-to-tray path. Tauri uses this dedicated code when it
+                // relaunches the executable.
+                if code == Some(tauri::RESTART_EXIT_CODE) {
+                    return;
+                }
                 // Tray menu "退出" is the one explicit request allowed to end
                 // the process. Every other exit request stays recoverable.
                 if !tray::take_explicit_exit() && tray::should_absorb(app) {

@@ -375,6 +375,7 @@ mod tests {
                 theme: ThemePreference::System,
                 motion: MotionPreference::System,
                 always_on_top: false,
+                launch_at_login: false,
                 hardware_acceleration: true,
                 interface_font: "Noto Sans SC".to_string(),
                 runtime_log_level: RuntimeLogLevel::Info,
