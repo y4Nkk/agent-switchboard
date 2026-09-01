@@ -179,8 +179,8 @@ interface CcImportSectionProps {
   onImport: () => void;
 }
 
-/** Read-only CC Switch scan with a checkbox selection for import. Keys and
- * non-routing settings never cross this boundary. */
+/** Read-only CC Switch scan with a checkbox selection for import. API keys
+ * and non-routing settings never cross this boundary. */
 export function CcImportSection({
   scan,
   selected,
@@ -200,7 +200,7 @@ export function CcImportSection({
         </button>
       </div>
       <p className="asb-scope-note">
-        只读取 CC Switch 的供应商列表；密钥与其余设置不会导入，通用配置请在通用设置页自行配置。
+        导入供应商档案的 API 密钥、服务地址、模型映射、网站、备注与可转换的已启用用量查询脚本；内建模板和未支持字段会逐项提示，通用配置请在通用设置页自行配置。
       </p>
       {scan && (
         <div className="asb-ccscan">
@@ -210,15 +210,21 @@ export function CcImportSection({
           {scan.providers.map((item) => (
             <div className="asb-ccscan-row" key={item.key}>
               <Checkbox
-                label={item.draft.name}
+                label={item.name}
                 checked={Boolean(selected[item.key]) && !item.existing}
                 disabled={busy || item.existing}
                 onChange={(checked) => onSelect(item.key, checked)}
               />
               <span className="asb-ccscan-meta">
                 {clientName(item.app)}
-                {item.draft.model ? ` · ${item.draft.model}` : ""}
-                {item.draft.baseUrl ? ` · ${item.draft.baseUrl}` : ""}
+                {item.routeMode === "official" ? " · 官方登录" : ""}
+                {item.model ? ` · ${item.model}` : ""}
+                {item.baseUrl ? ` · ${item.baseUrl}` : ""}
+                {item.usageScriptUpdatesExisting
+                  ? " · 将补充用量查询脚本"
+                  : item.usageScriptImportable
+                    ? " · 将导入用量查询脚本"
+                    : ""}
                 {item.existing ? " · 已存在相同档案，导入将跳过" : ""}
               </span>
               {item.warnings.map((warning) => (
@@ -249,7 +255,9 @@ export function CcImportSection({
       {result && (
         <div className="asb-banner asb-banner-ok" role="status" aria-label="导入结果">
           <span>
-            已导入 {result.imported.length} 项
+            已导入 {result.importedCount} 项
+            {result.usageScriptImportedCount > 0 &&
+              ` · 已导入用量脚本 ${result.usageScriptImportedCount} 项`}
             {result.skippedExisting.length > 0 &&
               ` · 跳过已存在 ${result.skippedExisting.length} 项`}
             {result.notImported.length > 0 && ` · 未导入 ${result.notImported.length} 项`}

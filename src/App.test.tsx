@@ -4,12 +4,11 @@ import userEvent from "@testing-library/user-event";
 import App from "./App";
 import * as client from "./api/client";
 import type {
-  CommonConfigPatch,
+  ConfigWriteRecord,
   ConfigFileStatus,
   FilePreview,
-  ProviderProfile,
+  ProviderRecord,
   RuntimeLogEntry,
-  SwitchLog,
 } from "./api/client";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -20,14 +19,14 @@ import { invoke } from "@tauri-apps/api/core";
 
 const invokeMock = vi.mocked(invoke);
 
-const codexSwitch: SwitchLog = {
+const codexSwitch: ConfigWriteRecord = {
   app: "codex",
   profileId: "codex-gateway",
   profileName: "备用网关",
   contentHash: "hash-after",
   backupId: "b1",
   at: "2026-08-26T08:00:00Z",
-  operation: "switch",
+  operation: "projection",
 };
 
 const runtimeLogs: RuntimeLogEntry[] = [
@@ -89,15 +88,19 @@ const statuses: ConfigFileStatus[] = [
   },
 ];
 
-const profiles: ProviderProfile[] = [
+const profiles: ProviderRecord[] = [
   {
-    id: "codex-gateway",
-    app: "codex",
-    name: "备用网关",
-    model: "gpt-5.4",
-    baseUrl: "https://backup.internal/v1",
-    apiKey: "OPENAI_API_KEY",
-    modelOptions: null,
+    profile: {
+      id: "codex-gateway",
+      app: "codex",
+      routeMode: "custom",
+      name: "备用网关",
+      model: "gpt-5.4",
+      baseUrl: "https://backup.internal/v1",
+      apiKey: "OPENAI_API_KEY",
+      modelOptions: null,
+    },
+    fileHash: "provider-file-hash",
   },
 ];
 
@@ -113,8 +116,6 @@ const filePreview: FilePreview = {
     backupDir: "C:/Users/test/AppData/Roaming/Agent Switchboard/state/backups",
   },
 };
-
-const emptyPatch = (app: "codex" | "claude"): CommonConfigPatch => ({ app, entries: [] });
 
 const defaultSettings = {
   closeBehavior: "hideToTray",
@@ -165,77 +166,27 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         return Promise.resolve((args as { settings: unknown }).settings);
       case "list_system_fonts":
         return Promise.resolve(["Microsoft YaHei", "Noto Sans SC"]);
-      case "get_common":
-        return Promise.resolve(emptyPatch(targetFrom(args)));
-      case "common_toggles":
-        return Promise.resolve([
-          {
-            key: "disable_response_storage",
-            label: "勾选后 OpenAI 服务端不保存你的请求与响应",
-            line: "disable_response_storage = true",
-            applied: true,
-            value: false,
-            group: "隐私与数据",
-          },
-        ]);
-      case "common_choices":
+      case "get_common_settings_editor":
         return Promise.resolve({
+          app: targetFrom(args),
+          settings: { settings: { hide_agent_reasoning: false } },
+          settingsHash: `${targetFrom(args)}-settings-hash`,
           groups: ["模型行为", "安全与审批", "隐私与数据"],
-          choices: [
+          specs: [
             {
-              key: "model_reasoning_effort",
-              label: "推理强度",
+              key: "hide_agent_reasoning",
+              label: "隐藏推理摘要",
               group: "模型行为",
-              control: "slider",
-              options: [
-                { value: "minimal", label: "极低" },
-                { value: "low", label: "低" },
-                { value: "medium", label: "中" },
-                { value: "high", label: "高" },
-                { value: "xhigh", label: "极高" },
-              ],
-              value: null,
+              control: "toggle",
+              default: { boolValue: false },
+              options: [],
             },
           ],
         });
-      case "preview_common":
+      case "save_common_settings":
         return Promise.resolve({
-          contentHash: "hash1",
-          renderedHash: "rendered-hash1",
-          content:
-            targetFrom(args) === "codex"
-              ? 'disable_response_storage = true\nmodel_reasoning_effort = "high"\n'
-              : '{\n  "alwaysThinkingEnabled": true\n}',
-          preview: {
-            app: targetFrom(args),
-            target:
-              targetFrom(args) === "codex"
-                ? "C:/Users/test/.codex/config.toml"
-                : "C:/Users/test/.claude/settings.json",
-            changes: [],
-            warnings: [],
-            backupDir: "C:/backups",
-          },
-        });
-      case "apply_common":
-        return Promise.resolve({
-          lock: { state: "free" },
-          acquiredAt: "2026-08-26T08:00:00Z",
-          changed: ["C:/Users/test/.codex/config.toml"],
-          warnings: [],
-          backup: {
-            id: "b2",
-            app: "codex",
-            targetPath: "C:/Users/test/.codex/config.toml",
-            backupPath: "C:/backups/config.toml.b2.bak",
-            createdAt: "2026-08-26T08:01:00Z",
-            contentHash: "h",
-            targetExisted: true,
-            reason: "common-settings",
-          },
-          preview: { app: "codex", target: "~/.codex/config.toml", changes: [], warnings: [], backupDir: "C:/backups" },
-          recovery: { outcome: "notNeeded" },
-          finalHash: "h2",
+          settings: (args as { settings: unknown }).settings,
+          settingsHash: "saved-settings-hash",
         });
       case "get_global_prompt_document": {
         const target = targetFrom(args);
@@ -296,20 +247,29 @@ const ccScan = {
     {
       key: "claude:id-1",
       app: "claude",
-      draft: {
-        app: "claude",
-        name: "中继 A",
-        model: "claude-x",
-        baseUrl: "https://relay.internal",
-        apiKey: "test-api-key",
-        modelOptions: null,
-      },
-      warnings: ["凭据 env.ANTHROPIC_AUTH_TOKEN 不导入"],
+      routeMode: "custom",
+      name: "中继 A",
+      model: "claude-x",
+      baseUrl: "https://relay.internal",
+      usageScriptImportable: true,
+      usageScriptUpdatesExisting: false,
+      warnings: [],
+      existing: false,
+    },
+    {
+      key: "codex:id-2",
+      app: "codex",
+      routeMode: "official",
+      name: "Codex 官方登录",
+      model: null,
+      baseUrl: null,
+      usageScriptImportable: false,
+      usageScriptUpdatesExisting: false,
+      warnings: [],
       existing: false,
     },
   ],
   skipped: [
-    { key: "codex:id-2", appType: "codex", name: "订阅", reason: "官方登录配置不导入；客户端自身的登录即为官方路由" },
     { key: "gemini:id-3", appType: "gemini", name: "双子", reason: "客户端 gemini 超出本应用支持范围" },
   ],
 };
@@ -397,18 +357,17 @@ describe("App integration with the typed client boundary", () => {
     expect(await screen.findByText(/与上次切换 .* 不符，配置可能被外部修改/)).toBeInTheDocument();
     const lastSwitchRow = screen.getByText("上次切换").closest(".asb-status-row");
     expect(lastSwitchRow).toHaveTextContent("2026-08-26 16:00:00");
-    expect(screen.getAllByText("自定义服务 · gpt-5.3-codex").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("本机网关 · gpt-5.3-codex").length).toBeGreaterThan(0);
     expect(screen.getAllByText("官方登录 · claude-sonnet-4").length).toBeGreaterThan(0);
   });
 
   it("undoes the last switch through an explicit confirmation", async () => {
     primeBackend();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
+    invokeMock.mockImplementation((command: string) => {
       if (command === "config_status") return Promise.resolve(statuses);
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
-      if (command === "get_common") return Promise.resolve(emptyPatch(targetFrom(args)));
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       if (command === "backup_diff") {
         return Promise.resolve([
@@ -509,7 +468,7 @@ describe("App integration with the typed client boundary", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("open_backup_dir"));
   });
 
-  it("invalidates an existing preview after a common setting changes", async () => {
+  it("saves general settings without a client-file write and invalidates supplier previews", async () => {
     primeBackend();
     const user = userEvent.setup();
     render(<App />);
@@ -522,15 +481,17 @@ describe("App integration with the typed client boundary", () => {
     expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "通用设置" }));
-    await user.click(
-      await screen.findByLabelText("勾选后 OpenAI 服务端不保存你的请求与响应"),
-    );
+    await user.click(await screen.findByRole("switch", { name: "隐藏推理摘要" }));
+    expect(screen.getByText("有未保存修改")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存通用设置" }));
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_common", {
+      expect(invokeMock).toHaveBeenCalledWith("save_common_settings", {
         target: "codex",
-        patch: { app: "codex", entries: [{ key: "disable_response_storage", value: true }] },
+        settings: { settings: { hide_agent_reasoning: true } },
+        expectedSettingsHash: "codex-settings-hash",
       }),
     );
+    expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain("execute_switch");
 
     // The switch affordance lives on the overview only.
     await user.click(screen.getByRole("button", { name: "概览" }));
@@ -620,7 +581,7 @@ describe("App integration with the typed client boundary", () => {
 
   it("keeps the applied appearance when saving a replacement setting fails", async () => {
     primeBackend();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
+    invokeMock.mockImplementation((command: string) => {
       if (command === "get_app_settings") {
         return Promise.resolve({
           closeBehavior: "hideToTray",
@@ -637,10 +598,15 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
-      if (command === "get_common") return Promise.resolve(emptyPatch(targetFrom(args)));
-      if (command === "common_toggles") return Promise.resolve([]);
-      if (command === "common_choices") return Promise.resolve({ groups: [], choices: [] });
-      if (command === "preview_common") return Promise.resolve({ file: filePreview, content: "" });
+      if (command === "get_common_settings_editor") {
+        return Promise.resolve({
+          app: "codex",
+          settings: { settings: {} },
+          settingsHash: "settings-hash",
+          groups: [],
+          specs: [],
+        });
+      }
       return Promise.resolve([]);
     });
     const user = userEvent.setup();
@@ -743,7 +709,6 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
-      if (command === "get_common") return Promise.resolve(emptyPatch("codex"));
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       if (command === "discover_local") {
         return Promise.resolve({
@@ -866,21 +831,10 @@ describe("App integration with the typed client boundary", () => {
       if (command === "scan_ccswitch") return Promise.resolve(ccScan);
       if (command === "import_ccswitch_profiles") {
         return Promise.resolve({
-          imported: [
-            {
-              id: "new-1",
-              app: "claude",
-              name: "中继 A",
-              model: "claude-x",
-              baseUrl: "https://relay.internal",
-              apiKey: "test-api-key",
-              modelOptions: null,
-            },
-          ],
+          importedCount: 2,
+          usageScriptImportedCount: 1,
           skippedExisting: [],
-          notImported: [
-            { key: "codex:id-2", appType: "codex", name: "订阅", reason: "官方登录配置不导入；客户端自身的登录即为官方路由" },
-          ],
+          notImported: [],
         });
       }
       return Promise.resolve([]);
@@ -892,22 +846,24 @@ describe("App integration with the typed client boundary", () => {
     await user.click(screen.getByRole("button", { name: "扫描 CC Switch（只读）" }));
 
     expect(await screen.findByText("中继 A")).toBeInTheDocument();
-    expect(screen.getByText(/凭据 env\.ANTHROPIC_AUTH_TOKEN 不导入/)).toBeInTheDocument();
+    expect(screen.getByText(/将导入用量查询脚本/)).toBeInTheDocument();
     expect(screen.getByText(/无法导入：客户端 gemini 超出本应用支持范围/)).toBeInTheDocument();
-    expect(screen.getByText(/官方登录配置不导入/)).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("scan_ccswitch");
 
-    // Every importable row is selected; official rows appear as skips only.
+    // Every importable row is selected, including the credential-free
+    // official route.
     expect(screen.getByRole("checkbox", { name: "中继 A" })).toBeChecked();
-    expect(screen.queryByRole("checkbox", { name: "订阅" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Codex 官方登录" })).toBeChecked();
 
-    await user.click(screen.getByRole("button", { name: "导入所选 1 项" }));
+    await user.click(screen.getByRole("button", { name: "导入所选 2 项" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("import_ccswitch_profiles", {
-        keys: ["claude:id-1"],
+        keys: ["claude:id-1", "codex:id-2"],
       }),
     );
-    expect(await screen.findByText("已导入 1 项 · 未导入 1 项")).toBeInTheDocument();
+    expect(
+      await screen.findByText("已导入 2 项 · 已导入用量脚本 1 项"),
+    ).toBeInTheDocument();
   });
 
   it("opens provider editing in a dedicated view and returns via the back affordance", async () => {
@@ -968,12 +924,12 @@ describe("App integration with the typed client boundary", () => {
 
   it("does not offer a reset for an unreadable profile store", async () => {
     primeBackend();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
+    invokeMock.mockImplementation((command: string) => {
       if (command === "list_profiles") {
         return Promise.reject({ code: "store-unreadable", message: "供应商存储不可读" });
       }
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
-      return Promise.resolve(command === "get_common" ? emptyPatch(targetFrom(args)) : []);
+      return Promise.resolve([]);
     });
     render(<App />);
 
@@ -994,172 +950,34 @@ describe("App integration with the typed client boundary", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("无法读取当前配置");
   });
 
-  it("reuses in-flight common previews across rapid client switches and shows the active client's file", async () => {
-    primeBackend();
-    const codexCommonPreview: FilePreview = {
-      contentHash: "common-codex-hash",
-      renderedHash: "common-codex-rendered",
-      content: 'model_reasoning_effort = "high"\n',
-      preview: {
-        app: "codex",
-        target: "C:/Users/test/.codex/config.toml",
-        changes: [],
-        warnings: [],
-        backupDir: "C:/backups",
-      },
-    };
-    const claudeCommonPreview: FilePreview = {
-      contentHash: "common-claude-hash",
-      renderedHash: "common-claude-rendered",
-      content: '{\n  "alwaysThinkingEnabled": true\n}',
-      preview: {
-        app: "claude",
-        target: "C:/Users/test/.claude/settings.json",
-        changes: [],
-        warnings: [],
-        backupDir: "C:/backups",
-      },
-    };
-    const pending = new Map<"codex" | "claude", ReturnType<typeof deferred<FilePreview>>>();
-    const backend = invokeMock.getMockImplementation();
-    expect(backend).toBeDefined();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
-      if (command === "preview_common") {
-        const target = targetFrom(args);
-        let entry = pending.get(target);
-        if (!entry) {
-          entry = deferred<FilePreview>();
-          pending.set(target, entry);
-        }
-        return entry.promise;
-      }
-      return backend!(command, args as never);
-    });
-    invokeMock.mockClear();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "通用设置" }));
-    await waitFor(() => expect(pending.get("codex")).toBeDefined());
-    await user.click(screen.getByRole("tab", { name: "Claude" }));
-    await waitFor(() => expect(pending.get("claude")).toBeDefined());
-    // Rapid switch back: the codex request is still in flight and is reused.
-    await user.click(screen.getByRole("tab", { name: "Codex" }));
-    const previewCalls = invokeMock.mock.calls.filter(([command]) => command === "preview_common");
-    expect(previewCalls).toHaveLength(2);
-
-    await act(async () => {
-      pending.get("claude")!.resolve(claudeCommonPreview);
-    });
-    // Codex is the active client; the claude result caches but never displays.
-    expect(screen.getByText("正在生成配置预览")).toBeInTheDocument();
-
-    await act(async () => {
-      pending.get("codex")!.resolve(codexCommonPreview);
-    });
-    expect(
-      await screen.findByLabelText("C:/Users/test/.codex/config.toml 配置预览"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("C:/Users/test/.claude/settings.json 配置预览"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("clears the common candidate during a write and regenerates it after the file changes", async () => {
-    primeBackend();
-    const beforeWrite: FilePreview = {
-      contentHash: "before-hash",
-      renderedHash: "before-rendered",
-      content: "before-write-marker\n",
-      preview: {
-        app: "codex",
-        target: "C:/Users/test/.codex/config.toml",
-        changes: [],
-        warnings: [],
-        backupDir: "C:/backups",
-      },
-    };
-    const afterWrite: FilePreview = {
-      ...beforeWrite,
-      contentHash: "after-hash",
-      renderedHash: "after-rendered",
-      content: "after-write-marker\n",
-    };
-    const applyPending = deferred<Awaited<ReturnType<typeof client.applyCommon>>>();
-    const backend = invokeMock.getMockImplementation();
-    expect(backend).toBeDefined();
-    let previewCall = 0;
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
-      if (command === "preview_common") {
-        previewCall += 1;
-        return Promise.resolve(previewCall === 1 ? beforeWrite : afterWrite);
-      }
-      if (command === "apply_common") return applyPending.promise;
-      return backend!(command, args as never);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "通用设置" }));
-    expect(await screen.findByText("before-write-marker")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("checkbox", { name: "勾选后 OpenAI 服务端不保存你的请求与响应" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("apply_common", {
-        target: "codex",
-        patch: { app: "codex", entries: [{ key: "disable_response_storage", value: true }] },
-        confirmWrite: true,
-      }),
-    );
-    await waitFor(() => expect(screen.queryByText("before-write-marker")).not.toBeInTheDocument());
-    expect(screen.getByText("正在生成配置预览")).toBeInTheDocument();
-
-    await act(async () => {
-      applyPending.resolve({
-        lock: { state: "free" },
-        acquiredAt: "2026-08-26T08:00:00Z",
-        changed: ["C:/Users/test/.codex/config.toml"],
-        warnings: [],
-        backup: {
-          id: "b2",
-          app: "codex",
-          targetPath: "C:/Users/test/.codex/config.toml",
-          backupPath: "C:/backups/config.toml.b2.bak",
-          createdAt: "2026-08-26T08:01:00Z",
-          contentHash: "after-hash",
-          targetExisted: true,
-          reason: "common-settings",
-        },
-        preview: afterWrite.preview,
-        recovery: { outcome: "not_needed" },
-        finalHash: "after-hash",
-      });
-    });
-
-    expect(await screen.findByText("after-write-marker")).toBeInTheDocument();
-    expect(previewCall).toBe(2);
-  });
-
   it("keeps the latest provider preview when an older in-flight request lands late", async () => {
     primeBackend();
-    const twoProfiles: ProviderProfile[] = [
+    const twoProfiles: ProviderRecord[] = [
       {
-        id: "codex-a",
-        app: "codex",
-        name: "网关甲",
-        model: "model-a",
-        baseUrl: "https://a.internal/v1",
-        apiKey: "KEY_A",
-        modelOptions: null,
+        profile: {
+          id: "codex-a",
+          app: "codex",
+          routeMode: "custom",
+          name: "网关甲",
+          model: "model-a",
+          baseUrl: "https://a.internal/v1",
+          apiKey: "KEY_A",
+          modelOptions: null,
+        },
+        fileHash: "a-hash",
       },
       {
-        id: "codex-b",
-        app: "codex",
-        name: "网关乙",
-        model: "model-b",
-        baseUrl: "https://b.internal/v1",
-        apiKey: "KEY_B",
-        modelOptions: null,
+        profile: {
+          id: "codex-b",
+          app: "codex",
+          routeMode: "custom",
+          name: "网关乙",
+          model: "model-b",
+          baseUrl: "https://b.internal/v1",
+          apiKey: "KEY_B",
+          modelOptions: null,
+        },
+        fileHash: "b-hash",
       },
     ];
     const previewFor = (id: string, model: string): FilePreview => ({

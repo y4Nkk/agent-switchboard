@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { AppKind, GlobalPromptDocument } from "../api/client";
 import { clientName } from "../lib/client-name";
 import { ClientLogo } from "./ClientLogo";
@@ -16,11 +17,22 @@ interface GlobalPromptManagerProps {
   onReload: () => void;
 }
 
-function stateCopy(document: GlobalPromptDocument | undefined, dirty: boolean): string {
-  if (!document) return "正在读取全局提示词文档。";
-  if (dirty) return "有未保存的草稿。保存前会核对文档是否被外部改动。";
-  if (!document.exists) return "该文档尚未创建；保存后会写入客户端的全局目录。";
-  return "已载入本机全局文档；项目内指令可在各自范围内追加更具体的约定。";
+function pixelValue(value: string): number | null {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function fitPromptEditor(textarea: HTMLTextAreaElement) {
+  const style = window.getComputedStyle(textarea);
+  const minimum = pixelValue(style.minHeight);
+  const maximum = pixelValue(style.maxHeight);
+  if (minimum === null || maximum === null) return;
+
+  textarea.style.height = `${minimum}px`;
+  const contentHeight = textarea.scrollHeight + textarea.offsetHeight - textarea.clientHeight;
+  const height = Math.min(Math.max(contentHeight, minimum), maximum);
+  textarea.style.height = `${height}px`;
+  textarea.style.overflowY = contentHeight > maximum ? "auto" : "hidden";
 }
 
 /**
@@ -40,12 +52,25 @@ export function GlobalPromptManager({
   onReload,
 }: GlobalPromptManagerProps) {
   const fileName = document?.fileName ?? "全局文档";
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    if (editorRef.current) fitPromptEditor(editorRef.current);
+  }, [draft, fileName]);
+
+  useEffect(() => {
+    const fit = () => {
+      if (editorRef.current) fitPromptEditor(editorRef.current);
+    };
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
   return (
     <section className="asb-prompt-manager" aria-label="提示词管理">
       <div className="asb-prompt-manager-heading">
         <div>
           <h3 className="asb-prompt-manager-title">全局提示词</h3>
-          <p className="asb-scope-note">为 Codex 和 Claude Code 分别维护跨项目生效的工作约定。</p>
         </div>
         <div className="asb-prompt-document-tabs" role="tablist" aria-label="全局提示词文档">
           {(["codex", "claude"] as const).map((target) => (
@@ -67,6 +92,7 @@ export function GlobalPromptManager({
       <label className="asb-prompt-editor-field">
         <span className="asb-prompt-file-name">{fileName}</span>
         <Textarea
+          ref={editorRef}
           code
           className="asb-input asb-code asb-textarea asb-prompt-editor"
           aria-label={`${fileName} 内容`}
@@ -94,9 +120,6 @@ export function GlobalPromptManager({
           {busy ? "保存中" : `保存 ${fileName}`}
         </button>
       </div>
-      <p className="asb-prompt-state" role="status">
-        {stateCopy(document, dirty)}
-      </p>
     </section>
   );
 }

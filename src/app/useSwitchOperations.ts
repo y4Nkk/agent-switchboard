@@ -11,7 +11,7 @@ import {
   type FilePreview,
   type KeyChange,
   type ProviderProfile,
-  type SwitchLog,
+  type ConfigWriteRecord,
 } from "../api/client";
 import { notifyWriteOutcome } from "./notifications";
 
@@ -50,7 +50,7 @@ export function useSwitchOperations({
   refreshDiscoveryOrAppend,
 }: SwitchOperationDeps) {
   const [confirmingSwitch, setConfirmingSwitch] = useState(false);
-  const [undoPending, setUndoPending] = useState<SwitchLog | null>(null);
+  const [undoPending, setUndoPending] = useState<ConfigWriteRecord | null>(null);
   const [undoDiff, setUndoDiff] = useState<
     | { state: "idle" | "loading" }
     | { state: "ready"; changes: KeyChange[] }
@@ -60,7 +60,7 @@ export function useSwitchOperations({
   const undoDiffVersion = useRef(0);
 
   const requestUndo = useCallback(
-    (target: SwitchLog) => {
+    (target: ConfigWriteRecord) => {
       if (busy) return;
       const version = undoDiffVersion.current + 1;
       undoDiffVersion.current = version;
@@ -234,10 +234,10 @@ export function useSwitchOperations({
 }
 
 /** Latest switch log entry across both clients, for the undo affordance. */
-export function latestOverall(statuses: ConfigFileStatus[]): SwitchLog | null {
+export function latestOverall(statuses: ConfigFileStatus[]): ConfigWriteRecord | null {
   const entries = statuses
     .map((status) => status.lastSwitch)
-    .filter((entry): entry is SwitchLog => entry !== null);
+    .filter((entry): entry is ConfigWriteRecord => entry !== null);
   if (entries.length === 0) return null;
   return entries.reduce((latest, entry) => (entry.at > latest.at ? entry : latest));
 }

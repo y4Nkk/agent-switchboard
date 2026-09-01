@@ -34,12 +34,10 @@ const MODEL_PLACEHOLDER_LABEL = "（从获取列表选择）";
 const CONTEXT_WINDOW_1M = 1_000_000;
 
 function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): ProviderDraft {
-  // The editor only produces custom-endpoint profiles (user decision
-  // 2026-08-28); official login is not a profile kind at all now. A legacy
-  // official profile converts to a custom one on save.
   if (profile) {
     return {
       app: profile.app,
+      routeMode: profile.routeMode,
       name: profile.name,
       model: profile.model,
       baseUrl: profile.baseUrl,
@@ -52,6 +50,7 @@ function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): Provid
   }
   return {
     app: initialApp,
+    routeMode: "custom",
     name: "",
     model: null,
     baseUrl: null,

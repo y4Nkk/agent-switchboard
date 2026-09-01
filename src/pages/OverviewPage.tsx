@@ -12,6 +12,7 @@ import { CodexResetPanel } from "../components/CodexResetPanel";
 import { DualRelay } from "../components/DualRelay";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
+import { currentProviderName } from "../lib/current-provider-name";
 
 interface OverviewPageProps {
   statuses: ConfigFileStatus[] | null;
@@ -35,6 +36,12 @@ function routesFrom(statuses: ConfigFileStatus[]): {
   return { codex: find("codex"), claude: find("claude") };
 }
 
+function providerNamesFrom(statuses: ConfigFileStatus[]): Partial<Record<AppKind, string>> {
+  return Object.fromEntries(
+    statuses.map((status) => [status.app, currentProviderName(status)]),
+  ) as Partial<Record<AppKind, string>>;
+}
+
 function matchLabel(status: MatchStatus): ReactNode {
   switch (status.kind) {
     case "matchesProfile":
@@ -45,12 +52,6 @@ function matchLabel(status: MatchStatus): ReactNode {
       return (
         <>
           当前为已恢复备份（<Time iso={status.at} />）
-        </>
-      );
-    case "matchesSettings":
-      return (
-        <>
-          与上次通用设置写入一致（<Time iso={status.at} />）
         </>
       );
     case "externallyModified":
@@ -129,7 +130,7 @@ function ConfigStatusCard({
           <div className="asb-status-row">
             <dt>当前服务</dt>
             <dd>
-              {status.route?.routeMode === "official" ? "官方登录" : "自定义服务"}
+              {currentProviderName(status)}
               {" · "}
               {status.route?.model ?? "默认模型"}
             </dd>
@@ -203,6 +204,7 @@ export function OverviewPage({
       {!relayHidden && (
         <DualRelay
           routes={routesFrom(statuses ?? [])}
+          providerNames={providerNamesFrom(statuses ?? [])}
           selectedProfile={selectedProfile}
           canSwitch={canSwitch}
           busy={busy}

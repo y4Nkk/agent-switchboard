@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProbePanel } from "./ProbePanel";
 
@@ -67,7 +67,29 @@ describe("ProbePanel", () => {
     expect(await screen.findByText(/无法连通 · 连接超时/)).toBeInTheDocument();
   });
 
-  it("surfaces command failures as an alert and clears them on the next run", async () => {
+  it("collapses the outcome on the second click and re-probes on the next", async () => {
+    invokeMock.mockResolvedValue(reachable);
+    const user = userEvent.setup();
+    render(<ProbePanel url="https://relay.example/v1" />);
+
+    const probeButton = screen.getByRole("button", { name: "检测连通" });
+    await user.click(probeButton);
+    expect(await screen.findByText(/连通正常/)).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "收起结果" }));
+    expect(screen.queryByText(/连通正常/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "检测连通" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    await user.click(screen.getByRole("button", { name: "检测连通" }));
+    expect(await screen.findByText(/连通正常/)).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces command failures as an alert, then collapses and re-runs", async () => {
     invokeMock
       .mockRejectedValueOnce(new Error("端点必须是 http(s) URL"))
       .mockResolvedValueOnce(reachable);
@@ -77,17 +99,27 @@ describe("ProbePanel", () => {
     await user.click(screen.getByRole("button", { name: "检测连通" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("端点必须是 http(s) URL");
 
+    await user.click(screen.getByRole("button", { name: "收起结果" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "检测连通" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
-    );
-    expect(screen.getByText(/连通正常/)).toBeInTheDocument();
+    expect(await screen.findByText(/连通正常/)).toBeInTheDocument();
   });
 
-  it("resets the displayed result when the url changes", () => {
+  it("resets the displayed result when the url changes", async () => {
+    invokeMock.mockResolvedValue(reachable);
+    const user = userEvent.setup();
     const { rerender } = render(<ProbePanel url="https://a.example" />);
+
+    await user.click(screen.getByRole("button", { name: "检测连通" }));
+    expect(await screen.findByText(/连通正常/)).toBeInTheDocument();
+
     rerender(<ProbePanel url="https://b.example" />);
     expect(screen.queryByText(/连通正常/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检测连通" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "检测连通" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 });

@@ -6,10 +6,12 @@
 
 use crate::adapter::{AdapterError, OverlayEntry};
 use crate::contracts::{
-    ChangeKind, CodexModelSettings, CommonConfigPatch, KeyChange, ModelOptions, PatchValue,
+    ChangeKind, CodexModelSettings, CommonSettings, ConfigValue, KeyChange, ModelOptions,
     RouteMode, RouteState, SwitchPlan, SwitchPreview,
 };
-use crate::ownership::is_owned;
+use crate::ownership::{
+    is_owned, provider_absent_action, setting_specs, ProviderAbsentAction, SettingOwner,
+};
 use crate::redact::redact;
 use crate::AppKind;
 use toml_edit::{DocumentMut, Item, TableLike, Value as TomlValue};
@@ -55,33 +57,100 @@ fn item_at<'a>(doc: &'a DocumentMut, path: &str) -> Option<&'a Item> {
     Some(item)
 }
 
-fn set_path(doc: &mut DocumentMut, path: &str, value: PatchValue) {
+fn parent_conflict(path: &str, segment: &str) -> AdapterError {
+    AdapterError {
+        message: format!("受管路径 {path} 的父节点 {segment} 不是 TOML 表，无法安全修改"),
+        line: None,
+    }
+}
+
+fn leaf_conflict(path: &str) -> AdapterError {
+    AdapterError {
+        message: format!("受管键 {path} 当前是 TOML 表，无法覆盖其宿主内容"),
+        line: None,
+    }
+}
+
+fn validate_path(doc: &DocumentMut, path: &str) -> Result<(), AdapterError> {
+    let segs: Vec<&str> = path.split('.').collect();
+    let (&last, parents) = segs.split_last().expect("non-empty path");
+    let mut current = doc.as_item();
+    let mut parent_path = String::new();
+    for &seg in parents {
+        let table = current
+            .as_table_like()
+            .ok_or_else(|| parent_conflict(path, &parent_path))?;
+        if !parent_path.is_empty() {
+            parent_path.push('.');
+        }
+        parent_path.push_str(seg);
+        match table.get(seg) {
+            Some(item) if item.as_table_like().is_some() => current = item,
+            Some(_) => return Err(parent_conflict(path, &parent_path)),
+            None => return Ok(()),
+        }
+    }
+    let table = current
+        .as_table_like()
+        .ok_or_else(|| parent_conflict(path, &parent_path))?;
+    if table
+        .get(last)
+        .is_some_and(|item| item.as_table_like().is_some())
+    {
+        return Err(leaf_conflict(path));
+    }
+    Ok(())
+}
+
+fn set_path(doc: &mut DocumentMut, path: &str, value: ConfigValue) -> Result<(), AdapterError> {
     let segs: Vec<&str> = path.split('.').collect();
     let (&last, parents) = segs.split_last().expect("non-empty path");
     let mut current = doc.as_item_mut();
+    let mut parent_path = String::new();
     for &seg in parents {
-        let table = current.as_table_like_mut().expect("parent is a table");
+        let table = current
+            .as_table_like_mut()
+            .ok_or_else(|| parent_conflict(path, &parent_path))?;
+        if !parent_path.is_empty() {
+            parent_path.push('.');
+        }
+        parent_path.push_str(seg);
         if !table.contains_key(seg) {
             table.insert(seg, Item::Table(toml_edit::Table::new()));
         }
-        current = table.get_mut(seg).expect("just inserted");
+        let next = table
+            .get_mut(seg)
+            .expect("inserted or pre-existing path segment");
+        if next.as_table_like().is_none() {
+            return Err(parent_conflict(path, &parent_path));
+        }
+        current = next;
     }
-    let table = current.as_table_like_mut().expect("parent is a table");
+    let table = current
+        .as_table_like_mut()
+        .ok_or_else(|| parent_conflict(path, &parent_path))?;
+    if table
+        .get(last)
+        .is_some_and(|item| item.as_table_like().is_some())
+    {
+        return Err(leaf_conflict(path));
+    }
     table.insert(last, Item::Value(to_toml_value(value)));
+    Ok(())
 }
 
-fn to_toml_value(value: PatchValue) -> TomlValue {
+fn to_toml_value(value: ConfigValue) -> TomlValue {
     match value {
-        PatchValue::Str(s) => TomlValue::from(s),
-        PatchValue::Bool(b) => TomlValue::from(b),
-        PatchValue::Number(n) => {
+        ConfigValue::Str(s) => TomlValue::from(s),
+        ConfigValue::Bool(b) => TomlValue::from(b),
+        ConfigValue::Number(n) => {
             if n.fract() == 0.0 && n.abs() < 9.0e15 {
                 TomlValue::from(n as i64)
             } else {
                 TomlValue::from(n)
             }
         }
-        PatchValue::Array(items) => {
+        ConfigValue::Array(items) => {
             let mut array = toml_edit::Array::new();
             for item in items {
                 array.push(to_toml_value(item));
@@ -91,91 +160,90 @@ fn to_toml_value(value: PatchValue) -> TomlValue {
     }
 }
 
-/// Builds the overlay entries implied by `plan`. Every profile routes through
-/// Codex's built-in OpenAI provider with its official base-URL override;
-/// validation rejects a draft without a custom base URL.
-fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
-    let p = &plan.profile;
-    let mut entries = vec![
-        (
-            "model_provider".into(),
-            OverlayEntry::Set(PatchValue::Str(OFFICIAL_PROVIDER.into())),
-        ),
-        (
-            "openai_base_url".into(),
-            OverlayEntry::Set(PatchValue::Str(
-                p.base_url.clone().expect("validated custom base_url"),
-            )),
-        ),
-        (
-            "experimental_bearer_token".into(),
-            OverlayEntry::Set(PatchValue::Str(p.api_key.clone())),
-        ),
-    ];
-    entries.extend(run_parameter_entries(p));
-    // Top-level owned keys hold possible host values: absent overlay fields
-    // leave them untouched.
-    entries.push((
-        "model".into(),
-        match &p.model {
-            Some(m) => OverlayEntry::Set(PatchValue::Str(m.clone())),
-            None => OverlayEntry::Leave,
-        },
-    ));
-    for entry in &plan.common.entries {
-        entries.push((
-            entry.key.clone(),
-            match &entry.value {
-                Some(value) => OverlayEntry::Set(value.clone()),
-                None => OverlayEntry::RemoveIfPresent,
-            },
-        ));
+/// Builds the overlay entries implied by `plan`. A custom profile routes
+/// through Codex's built-in OpenAI provider with an explicit base-URL
+/// override. An official profile removes every application-owned routing key
+/// and leaves Codex's native login cache untouched.
+fn absent_provider_entry(key: &str) -> OverlayEntry {
+    match provider_absent_action(AppKind::Codex, key) {
+        Some(ProviderAbsentAction::Remove) => OverlayEntry::RemoveIfPresent,
+        None => unreachable!("Codex provider mapping must be declared in the ownership directory"),
     }
-    entries
 }
 
-/// Overlay entries for a general-settings-only apply: exactly the patch's
-/// own lines, with no profile routing.
-pub(crate) fn common_overlay(common: &CommonConfigPatch) -> Vec<(String, OverlayEntry)> {
-    common
-        .entries
-        .iter()
-        .map(|entry| {
-            (
-                entry.key.clone(),
-                match &entry.value {
-                    Some(value) => OverlayEntry::Set(value.clone()),
-                    None => OverlayEntry::RemoveIfPresent,
-                },
-            )
+fn provider_value(profile: &crate::contracts::ProviderProfile, key: &str) -> Option<ConfigValue> {
+    if profile.route_mode == crate::contracts::RouteMode::Official {
+        return None;
+    }
+    match key {
+        "model" => profile.model.clone().map(ConfigValue::Str),
+        "model_provider" => Some(ConfigValue::Str(OFFICIAL_PROVIDER.into())),
+        "openai_base_url" => profile.base_url.clone().map(ConfigValue::Str),
+        "experimental_bearer_token" => Some(ConfigValue::Str(profile.api_key.clone())),
+        "model_context_window" => match &profile.model_options {
+            Some(ModelOptions::Codex(settings)) => settings
+                .context_window
+                .map(|tokens| ConfigValue::Number(tokens as f64)),
+            None => None,
+            Some(ModelOptions::Claude(_)) => {
+                unreachable!("profile validation rejects mismatched options")
+            }
+        },
+        _ => unreachable!("Codex provider mapping must be declared in the ownership directory"),
+    }
+}
+
+/// One common setting's overlay entry: an explicit non-default value is
+/// written, while the directory default is expressed by omitting the line.
+/// How a default is represented is an adapter-internal decision and never
+/// part of the storage or UI contract.
+fn common_entry(spec: &crate::ownership::SettingSpec, value: &ConfigValue) -> OverlayEntry {
+    match spec.default.as_ref() {
+        Some(default) if default == value => OverlayEntry::RemoveIfPresent,
+        _ => OverlayEntry::Set(value.clone()),
+    }
+}
+
+fn common_overlay(common: &CommonSettings) -> Vec<(String, OverlayEntry)> {
+    setting_specs(AppKind::Codex)
+        .into_iter()
+        .filter(|spec| spec.owner == SettingOwner::Common)
+        .map(|spec| {
+            let value = common
+                .value(spec.key)
+                .expect("common-settings validation guarantees every catalog key");
+            (spec.key.to_string(), common_entry(&spec, value))
         })
         .collect()
 }
 
-/// Codex run parameters declared by the profile's model options. Absent
-/// fields leave existing host values untouched. Effort, summary, and
-/// verbosity are general settings and never come from a profile.
-fn run_parameter_entries(p: &crate::contracts::ProviderProfile) -> Vec<(String, OverlayEntry)> {
-    let Some(ModelOptions::Codex(settings)) = &p.model_options else {
-        return vec![];
-    };
-    match settings.context_window {
-        Some(tokens) => vec![(
-            "model_context_window".to_string(),
-            OverlayEntry::Set(PatchValue::Number(tokens as f64)),
-        )],
-        None => vec![],
-    }
+/// Derives all changes by iterating the ownership directory. The only literal
+/// names below map declared slots to plan data; no second managed-key list
+/// exists in the adapter.
+fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
+    setting_specs(AppKind::Codex)
+        .into_iter()
+        .map(|spec| {
+            let entry = match spec.owner {
+                SettingOwner::Provider => provider_value(&plan.profile, spec.key)
+                    .map(OverlayEntry::Set)
+                    .unwrap_or_else(|| absent_provider_entry(spec.key)),
+                SettingOwner::Common => {
+                    let value = plan
+                        .common
+                        .value(spec.key)
+                        .expect("plan validation guarantees complete common settings");
+                    common_entry(&spec, value)
+                }
+                SettingOwner::Host => unreachable!("host keys never appear in the directory"),
+            };
+            (spec.key.to_string(), entry)
+        })
+        .collect()
 }
 
 pub(crate) fn check_syntax(text: &str) -> Result<(), AdapterError> {
     parse(text).map(|_| ())
-}
-
-/// Textual value at an owned dotted path, for toggle-state reads.
-pub(crate) fn parse_owned_scalar(text: &str, key: &str) -> Result<Option<String>, AdapterError> {
-    let doc = parse(text)?;
-    Ok(item_at(&doc, key).and_then(item_repr))
 }
 
 /// Collects every owned scalar path and its textual value.
@@ -279,6 +347,11 @@ pub(crate) fn preview_entries(
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
     let doc = parse(current)?;
+    for (key, entry) in &entries {
+        if !matches!(entry, OverlayEntry::Leave) {
+            validate_path(&doc, key)?;
+        }
+    }
     let mut changes = Vec::new();
     for (key, entry) in entries {
         let existing = item_at(&doc, &key).and_then(item_repr);
@@ -321,6 +394,15 @@ pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, Adapter
     render_entries(current, overlay(plan))
 }
 
+pub(crate) fn render_common_settings(common: &CommonSettings) -> Result<String, AdapterError> {
+    let rendered = render_entries("", common_overlay(common))?;
+    Ok(if rendered.trim().is_empty() {
+        "# 所有通用设置均为默认值\n".to_string()
+    } else {
+        rendered
+    })
+}
+
 pub(crate) fn render_entries(
     current: &str,
     entries: Vec<(String, OverlayEntry)>,
@@ -328,48 +410,49 @@ pub(crate) fn render_entries(
     let mut doc = parse(current)?;
     for (key, entry) in entries {
         match entry {
-            OverlayEntry::Set(value) => set_path(&mut doc, &key, value),
+            OverlayEntry::Set(value) => set_path(&mut doc, &key, value)?,
             OverlayEntry::Leave => {}
             OverlayEntry::RemoveIfPresent => {
-                remove_path(&mut doc, &key);
+                remove_path(&mut doc, &key)?;
             }
         }
     }
     Ok(doc.to_string())
 }
 
-fn remove_path(doc: &mut DocumentMut, path: &str) {
+fn remove_path(doc: &mut DocumentMut, path: &str) -> Result<(), AdapterError> {
+    validate_path(doc, path)?;
     let segs: Vec<&str> = path.split('.').collect();
     let (&last, parents) = segs.split_last().expect("non-empty path");
     let mut current = doc.as_item_mut();
     for &seg in parents {
         let Some(table) = current.as_table_like_mut() else {
-            return;
+            return Err(parent_conflict(path, seg));
         };
         current = match table.get_mut(seg) {
             Some(item) => item,
-            None => return,
+            None => return Ok(()),
         };
     }
     if let Some(table) = current.as_table_like_mut() {
         table.remove(last);
     }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{
-        CodexModelSettings, CommonConfigPatch, ModelOptions, PatchEntry, ProviderProfile,
-    };
+    use crate::contracts::{CodexModelSettings, ModelOptions, ProviderProfile};
+    use crate::ownership::default_common_settings;
     use crate::test_support::CODEX_TOML;
 
     fn plan_b() -> SwitchPlan {
         SwitchPlan {
-            app: AppKind::Codex,
             profile: ProviderProfile {
                 id: "p2".into(),
                 app: AppKind::Codex,
+                route_mode: crate::contracts::RouteMode::Custom,
                 name: "Relay B".into(),
                 model: Some("gpt-5.2".into()),
                 base_url: Some("https://relay-b.internal/v1".into()),
@@ -381,14 +464,14 @@ mod tests {
                 website_url: None,
                 usage_query: None,
             },
-            common: CommonConfigPatch {
-                app: AppKind::Codex,
-                entries: vec![PatchEntry {
-                    key: "disable_response_storage".into(),
-                    value: Some(PatchValue::Bool(true)),
-                }],
-            },
+            common: common_with("disable_response_storage", ConfigValue::Bool(true)),
         }
+    }
+
+    fn common_with(key: &str, value: ConfigValue) -> crate::contracts::CommonSettings {
+        let mut common = default_common_settings(AppKind::Codex);
+        common.settings.insert(key.to_string(), value);
+        common
     }
 
     #[test]
@@ -396,82 +479,6 @@ mod tests {
         assert!(parse(CODEX_TOML).is_ok());
         let err = parse("model = \"x\"\nthreads = [unclosed\n").unwrap_err();
         assert!(err.line.is_some());
-    }
-
-    fn common(entries: Vec<PatchEntry>) -> CommonConfigPatch {
-        CommonConfigPatch {
-            app: AppKind::Codex,
-            entries,
-        }
-    }
-
-    fn toggle(key: &str, value: Option<PatchValue>) -> PatchEntry {
-        PatchEntry {
-            key: key.into(),
-            value,
-        }
-    }
-
-    #[test]
-    fn common_only_render_sets_and_removes_toggle_lines() {
-        let set = crate::adapter::common_render(
-            CODEX_TOML,
-            &common(vec![toggle(
-                "hide_agent_reasoning",
-                Some(PatchValue::Bool(true)),
-            )]),
-        )
-        .unwrap();
-        assert!(set.contains("hide_agent_reasoning = true"));
-        // Host content outside the patch survives untouched.
-        assert!(set.contains("threads = 8"));
-        assert!(set.contains("trusted = true"));
-
-        let removed = crate::adapter::common_render(
-            &set,
-            &common(vec![toggle("hide_agent_reasoning", None)]),
-        )
-        .unwrap();
-        assert!(!removed.contains("hide_agent_reasoning"));
-        assert!(removed.contains("threads = 8"));
-    }
-
-    #[test]
-    fn common_only_preview_reports_only_patch_changes() {
-        let preview = crate::adapter::common_preview(
-            CODEX_TOML,
-            &common(vec![
-                toggle("disable_response_storage", Some(PatchValue::Bool(true))),
-                toggle("hide_agent_reasoning", None),
-            ]),
-            "F:/backups",
-        )
-        .unwrap();
-        assert_eq!(preview.changes.len(), 1);
-        assert_eq!(preview.changes[0].key, "disable_response_storage");
-        assert_eq!(preview.app, AppKind::Codex);
-    }
-
-    #[test]
-    fn toggle_is_active_reflects_the_line_value() {
-        assert!(crate::adapter::toggle_is_active(
-            AppKind::Codex,
-            "hide_agent_reasoning = true\nthreads = 8\n",
-            "hide_agent_reasoning",
-            true
-        ));
-        assert!(!crate::adapter::toggle_is_active(
-            AppKind::Codex,
-            "threads = 8\n",
-            "hide_agent_reasoning",
-            true
-        ));
-        assert!(!crate::adapter::toggle_is_active(
-            AppKind::Codex,
-            "not toml [",
-            "hide_agent_reasoning",
-            true
-        ));
     }
 
     #[test]
@@ -492,12 +499,51 @@ mod tests {
     }
 
     #[test]
-    fn undeclared_run_parameters_leave_host_values_untouched() {
+    fn official_route_removes_managed_custom_keys_and_keeps_host_keys() {
         let mut plan = plan_b();
+        plan.profile.route_mode = RouteMode::Official;
+        plan.profile.model = None;
+        plan.profile.base_url = None;
+        plan.profile.api_key.clear();
         plan.profile.model_options = None;
+
+        let rendered = render(CODEX_TOML, &plan).expect("official render");
+        assert!(!rendered.contains("experimental_bearer_token"));
+        assert!(!rendered.contains("openai_base_url"));
+        assert!(!rendered.contains("model_provider"));
+        assert!(rendered.contains("threads = 8"));
+    }
+
+    #[test]
+    fn non_default_general_settings_write_their_value() {
+        let current = "";
+        let preview = preview(current, &plan_b(), "/b").unwrap();
+        let change = preview
+            .changes
+            .iter()
+            .find(|c| c.key == "disable_response_storage")
+            .expect("non-default common value must be written");
+        assert_eq!(change.kind, ChangeKind::Set);
+    }
+
+    #[test]
+    fn default_valued_general_settings_omit_the_line_instead_of_writing_it() {
+        let mut plan = plan_b();
+        plan.common = default_common_settings(AppKind::Codex);
         let current = "model_verbosity = \"low\"\n";
         let preview = preview(current, &plan, "/b").unwrap();
-        assert!(!preview.changes.iter().any(|c| c.key == "model_verbosity"));
+        let change = preview
+            .changes
+            .iter()
+            .find(|c| c.key == "model_verbosity")
+            .expect("a hand-set non-default line is normalized back to the default");
+        assert_eq!(change.kind, ChangeKind::Remove);
+        let rendered = render(current, &plan).unwrap();
+        assert!(!rendered.contains("model_verbosity"));
+
+        // With the line already absent the default produces no diff entry.
+        let clean = super::preview("", &plan, "/b").unwrap();
+        assert!(!clean.changes.iter().any(|c| c.key == "model_verbosity"));
     }
 
     #[test]
@@ -546,6 +592,19 @@ mod tests {
     fn render_writes_profile_bearer_token() {
         let rendered = render(CODEX_TOML, &plan_b()).unwrap();
         assert!(rendered.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
+    }
+
+    #[test]
+    fn dotted_parent_conflict_is_rejected_without_overwriting_host_content() {
+        let current = "tui = \"host-owned scalar\"\nthreads = 8\n";
+        let mut plan = plan_b();
+        plan.common = common_with("tui.animations", ConfigValue::Bool(false));
+
+        let preview_error = preview(current, &plan, "/b").unwrap_err();
+        assert!(preview_error.message.contains("父节点 tui"));
+        let render_error = render(current, &plan).unwrap_err();
+        assert!(render_error.message.contains("父节点 tui"));
+        assert_eq!(current, "tui = \"host-owned scalar\"\nthreads = 8\n");
     }
 
     #[test]

@@ -50,10 +50,7 @@ describe("UsageQueryWorkspace", () => {
 
   it("runs a self-authored script with the current draft credential", async () => {
     invokeMock.mockResolvedValueOnce({
-      remaining: 9.5,
-      used: 0.5,
-      total: 10,
-      unit: "USD",
+      readings: [{ remaining: 9.5, used: 0.5, total: 10, unit: "USD" }],
       at: "2026-08-31T07:00:00Z",
     });
     const user = userEvent.setup();
@@ -113,10 +110,7 @@ describe("UsageQueryWorkspace", () => {
   it("clears an optional declarative query when its fields are saved blank", async () => {
     const user = userEvent.setup();
     invokeMock.mockResolvedValue({
-      remaining: 4,
-      used: null,
-      total: null,
-      unit: "USD",
+      readings: [{ remaining: 4, used: null, total: null, unit: "USD" }],
       at: "2026-08-31T08:00:00Z",
     });
     const onSave = renderWorkspace({

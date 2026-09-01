@@ -1,13 +1,13 @@
-//! Early, loud validation for provider profiles and configuration patches.
+//! Early, loud validation for provider profiles and general settings.
 //!
 //! Invalid shapes fail here with an explanation of how to fix them; the
 //! switch executor refuses to receive anything that has not passed.
 
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, CodexModelSettings, CommonConfigPatch, ModelOptions, PatchValue,
-    ProviderDraft, ProviderProfile, UsageQuery,
+    AppKind, ClaudeModelSettings, CodexModelSettings, CommonSettings, ConfigValue, ModelOptions,
+    ProviderDraft, ProviderProfile, RouteMode, UsageQuery,
 };
-use crate::ownership::{choice_spec, is_owned, is_profile_exclusive, toggle_spec};
+use crate::ownership::{setting_spec, SettingControl, SettingOwner};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -16,7 +16,7 @@ pub enum ValidationError {
     EmptyName,
     #[error("供应商标识不能为空")]
     EmptyId,
-    #[error("必须填写服务地址；官方登录不再作为供应商档案管理，客户端自身登录即为官方路由")]
+    #[error("自定义供应商必须填写服务地址")]
     CustomRequiresBaseUrl,
     #[error("base_url 必须是 http(s) URL，当前值为 {0:?}；请填写包含协议头的完整地址")]
     BadBaseUrl(String),
@@ -24,17 +24,18 @@ pub enum ValidationError {
     EmptyApiKey,
     #[error("API 密钥最长 {0} 个字符")]
     ApiKeyTooLong(usize),
-    #[error("供应商所属客户端 {profile_app:?} 与通用配置所属客户端 {patch_app:?} 不一致")]
-    AppMismatch {
-        profile_app: AppKind,
-        patch_app: AppKind,
-    },
+    #[error("官方登录不得携带服务地址、API 密钥或模型覆盖；请先移除这些自定义路由字段")]
+    OfficialRouteHasCustomFields,
     #[error("模型参数类型 {options_kind:?} 与供应商所属客户端 {app:?} 不一致")]
     ModelOptionsMismatch {
         options_kind: &'static str,
         app: AppKind,
     },
-    #[error("键 {key} 的值必须是 {allowed} 之一（或留空移除该行），当前值为 {value:?}")]
+    #[error("键 {key} 不是 {app:?} 的通用设置参数；通用设置文件只能包含设置页列出的参数")]
+    UnknownCommonKey { app: AppKind, key: String },
+    #[error("通用设置缺少参数 {key:?} 的值；请重新加载后再保存")]
+    MissingCommonKey { key: String },
+    #[error("键 {key} 的值必须是 {allowed} 之一，当前值为 {value:?}")]
     BadCommonValue {
         key: String,
         value: String,
@@ -48,12 +49,6 @@ pub enum ValidationError {
     InlineOneMMarker { field: &'static str },
     #[error("{field} 已启用 1M 上下文，但未填写模型")]
     OneMRequiresModel { field: &'static str },
-    #[error("键 {key:?} 属于 {app:?} 的宿主配置；请从覆盖配置中移除，Agent Switchboard 只能修改应用托管的键")]
-    HostOwnedKey { app: AppKind, key: String },
-    #[error("键 {key:?} 由供应商档案管理；请在“供应商”页的模型映射中设置，而不是通用配置")]
-    ProfileExclusiveKey { key: String },
-    #[error("配置项键不能为空")]
-    EmptyKey,
     #[error("键 {key:?} 的数值必须为有限数")]
     NonFiniteNumber { key: String },
     #[error("官网地址必须是 http(s) URL，当前值为 {0:?}；请填写包含协议头的完整地址，或留空")]
@@ -84,6 +79,7 @@ impl ProviderProfile {
         }
         validate_profile_fields(ProfileFields {
             app: self.app,
+            route_mode: self.route_mode,
             name: &self.name,
             model: self.model.as_deref(),
             base_url: self.base_url.as_deref(),
@@ -100,6 +96,7 @@ impl ProviderDraft {
     pub fn validate(&self) -> Result<(), ValidationError> {
         validate_profile_fields(ProfileFields {
             app: self.app,
+            route_mode: self.route_mode,
             name: &self.name,
             model: self.model.as_deref(),
             base_url: self.base_url.as_deref(),
@@ -114,6 +111,7 @@ impl ProviderDraft {
 
 struct ProfileFields<'a> {
     app: AppKind,
+    route_mode: RouteMode,
     name: &'a str,
     model: Option<&'a str>,
     base_url: Option<&'a str>,
@@ -127,6 +125,7 @@ struct ProfileFields<'a> {
 fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationError> {
     let ProfileFields {
         app,
+        route_mode,
         name,
         model,
         base_url,
@@ -140,20 +139,32 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
     if name.trim().is_empty() {
         return Err(ValidationError::EmptyName);
     }
-    {
-        let Some(url) = base_url else {
-            return Err(ValidationError::CustomRequiresBaseUrl);
-        };
-        let ok = url.starts_with("https://") || url.starts_with("http://");
-        if !ok {
-            return Err(ValidationError::BadBaseUrl(url.to_string()));
+    match route_mode {
+        RouteMode::Official => {
+            if base_url.is_some()
+                || !api_key.trim().is_empty()
+                || model.is_some()
+                || model_options.is_some()
+                || usage_query.is_some()
+            {
+                return Err(ValidationError::OfficialRouteHasCustomFields);
+            }
         }
-    }
-    if api_key.trim().is_empty() {
-        return Err(ValidationError::EmptyApiKey);
-    }
-    if api_key.chars().count() > 4_096 {
-        return Err(ValidationError::ApiKeyTooLong(4_096));
+        RouteMode::Custom => {
+            let Some(url) = base_url else {
+                return Err(ValidationError::CustomRequiresBaseUrl);
+            };
+            let ok = url.starts_with("https://") || url.starts_with("http://");
+            if !ok {
+                return Err(ValidationError::BadBaseUrl(url.to_string()));
+            }
+            if api_key.trim().is_empty() {
+                return Err(ValidationError::EmptyApiKey);
+            }
+            if api_key.chars().count() > 4_096 {
+                return Err(ValidationError::ApiKeyTooLong(4_096));
+            }
+        }
     }
     validate_model_identifier(model, "主模型")?;
     if let Some(options) = model_options {
@@ -180,8 +191,8 @@ const MAX_USAGE_QUERY_SOURCE_LEN: usize = 65_536;
 
 /// Checks the serializable usage-query contract. Loading the two JavaScript
 /// functions is intentionally desktop-runtime work, because this core crate
-/// owns no JavaScript engine; LocalState runs that additional validation for
-/// every persisted profile before it accepts or writes a store.
+/// owns no JavaScript engine; the store runs that additional validation for
+/// every persisted provider before it accepts or writes a file.
 pub fn validate_usage_query(query: &UsageQuery) -> Result<(), ValidationError> {
     match query {
         UsageQuery::Declarative {
@@ -267,14 +278,6 @@ fn validate_model_identifier(
     Ok(())
 }
 
-fn one_of(value: &str, allowed: &[&str]) -> bool {
-    allowed.contains(&value)
-}
-
-fn join_allowed(allowed: &[&str]) -> String {
-    allowed.join("、")
-}
-
 fn validate_codex_settings(settings: &CodexModelSettings) -> Result<(), ValidationError> {
     if let Some(window) = settings.context_window {
         if window == 0 {
@@ -324,96 +327,94 @@ fn validate_one_m_enabled(
     Ok(())
 }
 
-impl CommonConfigPatch {
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        for entry in &self.entries {
-            if entry.key.trim().is_empty() {
-                return Err(ValidationError::EmptyKey);
-            }
-            if !is_owned(self.app, &entry.key) {
-                return Err(ValidationError::HostOwnedKey {
-                    app: self.app,
-                    key: entry.key.clone(),
+impl CommonSettings {
+    /// Validates the complete common settings for one client. The key set
+    /// must be exactly the ownership directory's common parameters, and every
+    /// value must match its control's shape and allowed values.
+    pub fn validate_for(&self, app: AppKind) -> Result<(), ValidationError> {
+        for (key, value) in &self.settings {
+            let Some(spec) = setting_spec(app, key) else {
+                return Err(ValidationError::UnknownCommonKey {
+                    app,
+                    key: key.clone(),
+                });
+            };
+            if spec.owner != SettingOwner::Common {
+                return Err(ValidationError::UnknownCommonKey {
+                    app,
+                    key: key.clone(),
                 });
             }
-            if is_profile_exclusive(&entry.key) {
-                return Err(ValidationError::ProfileExclusiveKey {
-                    key: entry.key.clone(),
-                });
+            if let ConfigValue::Number(number) = value {
+                if !number.is_finite() {
+                    return Err(ValidationError::NonFiniteNumber { key: key.clone() });
+                }
             }
-            // Catalog keys are value-constrained: a toggle carries exactly its
-            // applied bool, a choice exactly one of its official values. An
-            // absent value (null) removes the line and is always valid.
-            if let Some(value) = &entry.value {
-                if let Some(spec) = choice_spec(self.app, &entry.key) {
-                    let allowed: Vec<&str> =
-                        spec.options.iter().map(|option| option.value).collect();
-                    if let PatchValue::Str(text) = value {
-                        if !one_of(text, &allowed) {
-                            return Err(ValidationError::BadCommonValue {
-                                key: entry.key.clone(),
-                                value: text.clone(),
-                                allowed: join_allowed(&allowed),
-                            });
-                        }
-                    } else {
+            match spec.control {
+                SettingControl::Toggle => {
+                    if !matches!(value, ConfigValue::Bool(_)) {
                         return Err(ValidationError::BadCommonValue {
-                            key: entry.key.clone(),
+                            key: key.clone(),
                             value: value.display(),
-                            allowed: join_allowed(&allowed),
+                            allowed: "true 或 false".to_string(),
                         });
                     }
-                } else if let Some(spec) = toggle_spec(self.app, &entry.key) {
-                    match value {
-                        PatchValue::Bool(flag) if *flag == spec.applied => {}
-                        other => {
-                            return Err(ValidationError::BadCommonValue {
-                                key: entry.key.clone(),
-                                value: other.display(),
-                                allowed: spec.applied.to_string(),
-                            });
-                        }
+                }
+                SettingControl::Choice { .. } => {
+                    let allowed: Vec<&str> = spec
+                        .allowed_values
+                        .iter()
+                        .map(|option| option.value)
+                        .collect();
+                    let ok = match value {
+                        ConfigValue::Str(text) => allowed.contains(&text.as_str()),
+                        _ => false,
+                    };
+                    if !ok {
+                        return Err(ValidationError::BadCommonValue {
+                            key: key.clone(),
+                            value: value.display(),
+                            allowed: allowed.join("、"),
+                        });
                     }
                 }
-            }
-            if let Some(PatchValue::Number(n)) = entry.value {
-                if !n.is_finite() {
-                    return Err(ValidationError::NonFiniteNumber {
-                        key: entry.key.clone(),
-                    });
+                SettingControl::None => {
+                    unreachable!("common settings always declare an editor control")
                 }
+            }
+        }
+        for spec in crate::ownership::setting_specs(app) {
+            if spec.owner == SettingOwner::Common && !self.settings.contains_key(spec.key) {
+                return Err(ValidationError::MissingCommonKey {
+                    key: spec.key.to_string(),
+                });
             }
         }
         Ok(())
     }
 }
 
-/// Validates that a plan is internally consistent: profile app matches patch
-/// app and both shapes are valid.
+/// Validates the only current planning contract. Client selection comes from
+/// the provider profile, so the common settings cannot carry a second,
+/// conflicting `app` value.
 pub fn validate_plan(
     profile: &ProviderProfile,
-    patch: &CommonConfigPatch,
+    common: &CommonSettings,
 ) -> Result<(), ValidationError> {
     profile.validate()?;
-    patch.validate()?;
-    if profile.app != patch.app {
-        return Err(ValidationError::AppMismatch {
-            profile_app: profile.app,
-            patch_app: patch.app,
-        });
-    }
-    Ok(())
+    common.validate_for(profile.app)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::PatchEntry;
+    use crate::ownership::default_common_settings;
 
     fn profile(app: AppKind) -> ProviderProfile {
         ProviderProfile {
             id: "p1".into(),
             app,
+            route_mode: RouteMode::Custom,
             name: "Relay A".into(),
             model: Some("m-1".into()),
             base_url: Some("https://example.internal/v1".into()),
@@ -422,16 +423,6 @@ mod tests {
             notes: None,
             website_url: None,
             usage_query: None,
-        }
-    }
-
-    fn patch(app: AppKind, key: &str) -> CommonConfigPatch {
-        CommonConfigPatch {
-            app,
-            entries: vec![PatchEntry {
-                key: key.into(),
-                value: Some(PatchValue::Bool(true)),
-            }],
         }
     }
 
@@ -629,120 +620,96 @@ mod tests {
     }
 
     #[test]
-    fn rejects_host_owned_patch_keys() {
-        let err = patch(AppKind::Codex, "threads").validate().unwrap_err();
-        assert!(matches!(err, ValidationError::HostOwnedKey { .. }));
-        assert!(err.to_string().contains("宿主配置"));
-    }
-
-    #[test]
-    fn rejects_profile_exclusive_patch_keys() {
-        let err = patch(AppKind::Codex, "model_context_window")
-            .validate()
-            .unwrap_err();
-        assert!(matches!(err, ValidationError::ProfileExclusiveKey { .. }));
-        assert!(err.to_string().contains("供应商档案"));
-    }
-
-    #[test]
-    fn choice_patch_accepts_catalog_values_and_rejects_unknown_ones() {
-        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
-        entries[0].value = Some(PatchValue::Str("xhigh".into()));
-        assert!(CommonConfigPatch {
-            app: AppKind::Codex,
-            entries
+    fn default_settings_validate_and_reject_unknown_keys_loudly() {
+        for app in [AppKind::Codex, AppKind::Claude] {
+            assert!(default_common_settings(app).validate_for(app).is_ok());
         }
-        .validate()
-        .is_ok());
 
-        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
-        entries[0].value = Some(PatchValue::Str("extreme".into()));
-        let err = CommonConfigPatch {
-            app: AppKind::Codex,
-            entries,
-        }
-        .validate()
-        .unwrap_err();
-        assert!(matches!(err, ValidationError::BadCommonValue { .. }));
-        assert!(err.to_string().contains("minimal"));
+        let mut settings = default_common_settings(AppKind::Codex);
+        settings
+            .settings
+            .insert("threads".to_string(), ConfigValue::Bool(true));
+        let error = settings.validate_for(AppKind::Codex).unwrap_err();
+        assert!(matches!(error, ValidationError::UnknownCommonKey { .. }));
+        assert!(error.to_string().contains("threads"));
 
-        // A non-string value on a choice key is equally invalid.
-        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
-        entries[0].value = Some(PatchValue::Bool(true));
+        let mut provider_key = default_common_settings(AppKind::Claude);
+        provider_key
+            .settings
+            .insert("model".to_string(), ConfigValue::Str("m".into()));
         assert!(matches!(
-            CommonConfigPatch {
-                app: AppKind::Codex,
-                entries,
-            }
-            .validate(),
-            Err(ValidationError::BadCommonValue { .. })
-        ));
-
-        // An absent value (null) removes the line and is always valid.
-        let mut entries = patch(AppKind::Codex, "model_reasoning_effort").entries;
-        entries[0].value = None;
-        assert!(CommonConfigPatch {
-            app: AppKind::Codex,
-            entries
-        }
-        .validate()
-        .is_ok());
-    }
-
-    #[test]
-    fn toggle_patch_must_carry_exactly_its_applied_value() {
-        let mut entries = patch(AppKind::Claude, "spinnerTipsEnabled").entries;
-        entries[0].value = Some(PatchValue::Bool(false));
-        assert!(CommonConfigPatch {
-            app: AppKind::Claude,
-            entries
-        }
-        .validate()
-        .is_ok());
-
-        let mut entries = patch(AppKind::Claude, "spinnerTipsEnabled").entries;
-        entries[0].value = Some(PatchValue::Bool(true));
-        assert!(matches!(
-            CommonConfigPatch {
-                app: AppKind::Claude,
-                entries,
-            }
-            .validate(),
-            Err(ValidationError::BadCommonValue { .. })
+            provider_key.validate_for(AppKind::Claude),
+            Err(ValidationError::UnknownCommonKey { .. })
         ));
     }
 
     #[test]
-    fn accepts_general_patch_keys() {
-        assert!(patch(AppKind::Codex, "disable_response_storage")
-            .validate()
-            .is_ok());
-        // tui.animations carries `false` when checked; the catalog decides.
-        let mut entries = patch(AppKind::Codex, "tui.animations").entries;
-        entries[0].value = Some(PatchValue::Bool(false));
-        assert!(CommonConfigPatch {
-            app: AppKind::Codex,
-            entries
-        }
-        .validate()
-        .is_ok());
-        assert!(patch(AppKind::Claude, "alwaysThinkingEnabled")
-            .validate()
-            .is_ok());
+    fn incomplete_settings_are_rejected_with_the_missing_key() {
+        let mut settings = default_common_settings(AppKind::Codex);
+        settings.settings.remove("model_reasoning_effort");
+        let error = settings.validate_for(AppKind::Codex).unwrap_err();
+        assert_eq!(
+            error,
+            ValidationError::MissingCommonKey {
+                key: "model_reasoning_effort".to_string()
+            }
+        );
     }
 
     #[test]
-    fn rejects_app_mismatch_between_profile_and_patch() {
-        // Claude patches have no general keys left (every owned Claude key is
-        // profile-exclusive), so the mismatch is exercised Codex↔Claude with
-        // the one valid Codex general key.
+    fn choice_values_must_be_catalog_values_and_toggles_must_be_bools() {
+        let mut settings = default_common_settings(AppKind::Codex);
+        settings.settings.insert(
+            "model_reasoning_effort".to_string(),
+            ConfigValue::Str("xhigh".into()),
+        );
+        assert!(settings.validate_for(AppKind::Codex).is_ok());
+
+        settings.settings.insert(
+            "model_reasoning_effort".to_string(),
+            ConfigValue::Str("extreme".into()),
+        );
+        let error = settings.validate_for(AppKind::Codex).unwrap_err();
+        assert!(matches!(error, ValidationError::BadCommonValue { .. }));
+        assert!(error.to_string().contains("minimal"));
+
+        settings.settings.insert(
+            "model_reasoning_effort".to_string(),
+            ConfigValue::Bool(true),
+        );
+        assert!(matches!(
+            settings.validate_for(AppKind::Codex),
+            Err(ValidationError::BadCommonValue { .. })
+        ));
+
+        let mut toggled = default_common_settings(AppKind::Claude);
+        toggled.settings.insert(
+            "autoCompactEnabled".to_string(),
+            ConfigValue::Str("on".into()),
+        );
+        assert!(matches!(
+            toggled.validate_for(AppKind::Claude),
+            Err(ValidationError::BadCommonValue { .. })
+        ));
+
+        // Both polarities are legal: the parameter is a plain value.
+        let mut both = default_common_settings(AppKind::Claude);
+        both.settings
+            .insert("autoCompactEnabled".to_string(), ConfigValue::Bool(false));
+        assert!(both.validate_for(AppKind::Claude).is_ok());
+        both.settings
+            .insert("autoCompactEnabled".to_string(), ConfigValue::Bool(true));
+        assert!(both.validate_for(AppKind::Claude).is_ok());
+    }
+
+    #[test]
+    fn plan_uses_the_profile_app_for_the_fixed_common_settings() {
         let claude_profile = profile(AppKind::Claude);
-        let err = validate_plan(
-            &claude_profile,
-            &patch(AppKind::Codex, "disable_response_storage"),
-        )
-        .unwrap_err();
-        assert!(matches!(err, ValidationError::AppMismatch { .. }));
+        assert!(validate_plan(&claude_profile, &default_common_settings(AppKind::Claude),).is_ok());
+        assert!(matches!(
+            validate_plan(&claude_profile, &default_common_settings(AppKind::Codex),),
+            Err(ValidationError::UnknownCommonKey { .. })
+        ));
     }
 
     #[test]

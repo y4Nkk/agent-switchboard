@@ -107,13 +107,19 @@ export default function App() {
               <CommonSettingsPage
                 app={commonSettings.settingsApp}
                 onSelectApp={commonSettings.setSettingsApp}
-                toggles={commonSettings.toggles[commonSettings.settingsApp]}
-                choices={commonSettings.choices[commonSettings.settingsApp]}
-                commonPreview={commonSettings.commonPreview[commonSettings.settingsApp]}
+                editorState={commonSettings.editorState}
                 busy={busy}
-                onApplyLine={(app, key, value) =>
-                  void commonSettings.applyCommonLine(app, key, value)
+                configStatus={snapshot.statuses?.find(
+                  (status) => status.app === commonSettings.settingsApp,
+                )}
+                hasActiveProvider={
+                  snapshot.activeProfileId(commonSettings.settingsApp) !== null
                 }
+                onValueChange={commonSettings.changeValue}
+                onResetGroup={commonSettings.resetGroupToDefaults}
+                onSave={(app) => void commonSettings.saveSettings(app)}
+                onRetryLoad={commonSettings.retryLoad}
+                onPreview={commonSettings.previewSettings}
                 promptApp={promptDocuments.promptApp}
                 promptDocument={promptDocuments.documents[promptDocuments.promptApp]}
                 promptDraft={

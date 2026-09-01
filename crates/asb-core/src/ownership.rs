@@ -1,102 +1,165 @@
-//! Ownership table: the single authority for which configuration keys
+//! Ownership directory: the single authority for which configuration keys
 //! Agent Switchboard is allowed to read, patch, or write.
 //!
 //! Every key outside these sets is host-owned and must be preserved
 //! byte-for-byte. Patches referencing a host-owned key are rejected at
 //! validation time, never silently dropped.
 
-use crate::contracts::AppKind;
+use crate::contracts::{AppKind, CommonSettings, ConfigValue};
+use std::collections::BTreeMap;
 
-/// Top-level keys owned by the app for each client.
-pub const CODEX_OWNED_KEYS: &[&str] = &[
-    "model",
-    "model_provider",
-    "openai_base_url",
-    "model_reasoning_effort",
-    "model_reasoning_summary",
-    "model_verbosity",
-    "model_context_window",
-    "experimental_bearer_token",
-    "disable_response_storage",
-    "hide_agent_reasoning",
-    "show_raw_agent_reasoning",
-    "personality",
-    "web_search",
-    "sandbox_mode",
-    "approval_policy",
-    "history.persistence",
-    "tui.animations",
-    "tui.show_tooltips",
-    "tui.notifications",
-    "tui.raw_output_mode",
-    "tui.vim_mode_default",
-    "disable_paste_burst",
-    "tools.view_image",
-    "features.memories",
-    "features.prevent_idle_sleep",
-    "check_for_update_on_startup",
+/// The one ownership decision for a client configuration key. Unknown keys
+/// are host-owned by default and therefore never enter a provider file or a
+/// common-settings projection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingOwner {
+    Provider,
+    Common,
+    Host,
+}
+
+/// The value shape adapters and editor controls must preserve for a managed
+/// key. The app does not infer a type from a client file at run time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingValueType {
+    Bool,
+    String,
+    Secret,
+    PositiveInteger,
+    StringArray,
+}
+
+/// What a provider projection does when the current provider has no value for
+/// one of its own keys. This is deliberately explicit so a previous provider
+/// cannot leak a routing or model field into the next one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderAbsentAction {
+    Remove,
+}
+
+/// Rendering metadata for a common-settings editor control. Provider and host
+/// settings have no common-settings control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingControl {
+    None,
+    Toggle,
+    Choice { presentation: ChoiceControl },
+}
+
+/// One strongly typed entry in the ownership directory. `setting_spec` and
+/// `setting_specs` are the only APIs consumers should use for ownership,
+/// value constraints, defaults, UI metadata, and provider cleanup decisions.
+#[derive(Debug, Clone)]
+pub struct SettingSpec {
+    pub app: AppKind,
+    pub key: &'static str,
+    pub owner: SettingOwner,
+    pub value_type: SettingValueType,
+    pub allowed_values: &'static [ChoiceOption],
+    pub control: SettingControl,
+    /// The directory-defined default for a common setting. Provider and host
+    /// settings have no default here.
+    pub default: Option<ConfigValue>,
+    pub label: Option<&'static str>,
+    pub group: Option<&'static str>,
+    pub provider_absent_action: Option<ProviderAbsentAction>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ProviderSettingSpec {
+    app: AppKind,
+    key: &'static str,
+    value_type: SettingValueType,
+}
+
+const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model_provider",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "openai_base_url",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "experimental_bearer_token",
+        value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model_context_window",
+        value_type: SettingValueType::PositiveInteger,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "model",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "availableModels",
+        value_type: SettingValueType::StringArray,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_BASE_URL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_AUTH_TOKEN",
+        value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
+        value_type: SettingValueType::String,
+    },
+    // Deprecated by Claude, but still actively removed by a provider
+    // projection so it cannot survive a switch as a hidden model mapping.
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_SMALL_FAST_MODEL",
+        value_type: SettingValueType::String,
+    },
 ];
 
-/// Claude Code keys owned by the app (dotted paths into settings.json).
-pub const CLAUDE_OWNED_KEYS: &[&str] = &[
-    "model",
-    "availableModels",
-    "env.ANTHROPIC_BASE_URL",
-    "env.ANTHROPIC_AUTH_TOKEN",
-    "env.ANTHROPIC_MODEL",
-    "env.ANTHROPIC_DEFAULT_HAIKU_MODEL",
-    "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
-    "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
-    "alwaysThinkingEnabled",
-    "spinnerTipsEnabled",
-    "attribution.coAuthoredBy",
-    "autoCompactEnabled",
-    "showThinkingSummaries",
-    "outputStyle",
-    "preferredNotifChannel",
-    "autoScrollEnabled",
-    "emojiCompletionEnabled",
-    "promptSuggestionEnabled",
-    "showTurnDuration",
-    "syntaxHighlightingDisabled",
-    "terminalProgressBarEnabled",
-    "fileCheckpointingEnabled",
-    "respectGitignore",
-    "includeGitInstructions",
-    "autoMemoryEnabled",
-];
-
-/// Keys the adapters own but that may only be set through a provider profile,
-/// never through a general-config patch. Model routing follows the profile
-/// being switched to; run-behavior preferences (effort, summary, verbosity)
-/// are NOT here: they are general settings owned by the settings page.
-pub const PROFILE_EXCLUSIVE_KEYS: &[&str] = &[
-    "model",
-    "model_provider",
-    "openai_base_url",
-    "experimental_bearer_token",
-    "model_context_window",
-    "availableModels",
-    "env.ANTHROPIC_BASE_URL",
-    "env.ANTHROPIC_AUTH_TOKEN",
-    "env.ANTHROPIC_MODEL",
-    "env.ANTHROPIC_DEFAULT_HAIKU_MODEL",
-    "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
-    "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
-];
-
-/// One checkbox-able general setting from the client's official
-/// configuration reference. `applied` is the value the checked line carries;
-/// unchecking removes the line so the client default applies.
+/// One boolean general setting from the client's official configuration
+/// reference. `default` is the value the client uses when the line is
+/// absent; the editor always stores an explicit value.
+#[derive(Debug, Clone, Copy)]
 pub struct ToggleSpec {
     pub key: &'static str,
     pub label: &'static str,
-    pub line: &'static str,
-    pub applied: bool,
+    pub default: bool,
     pub group: &'static str,
 }
 
 /// One selectable value of a multi-detent general setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChoiceOption {
     pub value: &'static str,
     pub label: &'static str,
@@ -104,18 +167,21 @@ pub struct ChoiceOption {
 
 /// How the settings page renders a choice: the reasoning-effort slider keeps
 /// its dedicated slider control; every other choice renders as segments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChoiceControl {
     Slider,
     Segment,
 }
 
 /// One multi-value general setting from the client's official configuration
-/// reference. Selecting an option writes that line; selecting 默认 removes it.
+/// reference. `default` is the value the client uses when the line is absent.
+#[derive(Debug, Clone, Copy)]
 pub struct ChoiceSpec {
     pub key: &'static str,
     pub label: &'static str,
     pub group: &'static str,
     pub control: ChoiceControl,
+    pub default: &'static str,
     pub options: &'static [ChoiceOption],
 }
 
@@ -125,92 +191,79 @@ pub const CODEX_TOGGLES: &[ToggleSpec] = &[
     ToggleSpec {
         key: "hide_agent_reasoning",
         label: "在界面中隐藏推理摘要",
-        line: "hide_agent_reasoning = true",
-        applied: true,
+        default: false,
         group: "模型行为",
     },
     ToggleSpec {
         key: "show_raw_agent_reasoning",
         label: "显示模型的原始推理内容",
-        line: "show_raw_agent_reasoning = true",
-        applied: true,
+        default: false,
         group: "模型行为",
     },
     ToggleSpec {
         key: "disable_response_storage",
-        label: "勾选后 OpenAI 服务端不保存你的请求与响应",
-        line: "disable_response_storage = true",
-        applied: true,
+        label: "OpenAI 服务端不保存你的请求与响应",
+        default: false,
         group: "隐私与数据",
     },
     ToggleSpec {
         key: "tui.animations",
-        label: "关闭终端动画（欢迎页与加载动效）",
-        line: "tui.animations = false",
-        applied: false,
+        label: "终端动画（欢迎页与加载动效）",
+        default: true,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.show_tooltips",
-        label: "关闭欢迎页功能引导提示",
-        line: "tui.show_tooltips = false",
-        applied: false,
+        label: "欢迎页功能引导提示",
+        default: true,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.notifications",
-        label: "开启终端通知（回合结束时）",
-        line: "tui.notifications = true",
-        applied: true,
+        label: "终端通知（回合结束时）",
+        default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.raw_output_mode",
-        label: "开启原始滚动模式（不切换交替屏幕）",
-        line: "tui.raw_output_mode = true",
-        applied: true,
+        label: "原始滚动模式（不切换交替屏幕）",
+        default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.vim_mode_default",
         label: "默认启用 Vim 输入模式",
-        line: "tui.vim_mode_default = true",
-        applied: true,
+        default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "disable_paste_burst",
         label: "关闭多行粘贴突发检测",
-        line: "disable_paste_burst = true",
-        applied: true,
+        default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tools.view_image",
         label: "启用本地图片查看工具",
-        line: "tools.view_image = true",
-        applied: true,
+        default: false,
         group: "工具与功能",
     },
     ToggleSpec {
         key: "features.memories",
         label: "启用 Memories 跨会话记忆",
-        line: "features.memories = true",
-        applied: true,
+        default: false,
         group: "工具与功能",
     },
     ToggleSpec {
         key: "features.prevent_idle_sleep",
         label: "会话运行期间阻止系统休眠",
-        line: "features.prevent_idle_sleep = true",
-        applied: true,
+        default: false,
         group: "工具与功能",
     },
     ToggleSpec {
         key: "check_for_update_on_startup",
-        label: "关闭启动时检查更新",
-        line: "check_for_update_on_startup = false",
-        applied: false,
+        label: "启动时检查更新",
+        default: true,
         group: "工具与功能",
     },
 ];
@@ -219,106 +272,91 @@ pub const CLAUDE_TOGGLES: &[ToggleSpec] = &[
     ToggleSpec {
         key: "alwaysThinkingEnabled",
         label: "每次会话默认开启扩展思考",
-        line: "alwaysThinkingEnabled = true",
-        applied: true,
+        default: false,
         group: "模型行为",
     },
     ToggleSpec {
         key: "autoCompactEnabled",
-        label: "关闭上下文自动压缩",
-        line: "autoCompactEnabled = false",
-        applied: false,
+        label: "上下文自动压缩",
+        default: true,
         group: "模型行为",
     },
     ToggleSpec {
         key: "showThinkingSummaries",
-        label: "隐藏思考过程摘要",
-        line: "showThinkingSummaries = false",
-        applied: false,
+        label: "思考过程摘要",
+        default: true,
         group: "模型行为",
     },
     ToggleSpec {
         key: "spinnerTipsEnabled",
-        label: "关闭加载动画中的提示语",
-        line: "spinnerTipsEnabled = false",
-        applied: false,
+        label: "加载动画提示语",
+        default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "autoScrollEnabled",
-        label: "关闭输出自动滚动",
-        line: "autoScrollEnabled = false",
-        applied: false,
+        label: "输出自动滚动",
+        default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "emojiCompletionEnabled",
-        label: "关闭输入框表情补全",
-        line: "emojiCompletionEnabled = false",
-        applied: false,
+        label: "输入框表情补全",
+        default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "promptSuggestionEnabled",
-        label: "关闭提示词建议",
-        line: "promptSuggestionEnabled = false",
-        applied: false,
+        label: "提示词建议",
+        default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "showTurnDuration",
         label: "显示每轮回复耗时",
-        line: "showTurnDuration = true",
-        applied: true,
+        default: false,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "syntaxHighlightingDisabled",
         label: "关闭输出语法高亮",
-        line: "syntaxHighlightingDisabled = true",
-        applied: true,
+        default: false,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "terminalProgressBarEnabled",
-        label: "关闭终端底部进度条",
-        line: "terminalProgressBarEnabled = false",
-        applied: false,
+        label: "终端底部进度条",
+        default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "fileCheckpointingEnabled",
-        label: "关闭文件检查点（放弃对话内回滚）",
-        line: "fileCheckpointingEnabled = false",
-        applied: false,
+        label: "文件检查点（对话内回滚）",
+        default: true,
         group: "文件与 Git",
     },
     ToggleSpec {
         key: "respectGitignore",
-        label: "文件选择忽略 .gitignore 规则",
-        line: "respectGitignore = false",
-        applied: false,
+        label: "文件选择遵守 .gitignore 规则",
+        default: true,
         group: "文件与 Git",
     },
     ToggleSpec {
         key: "includeGitInstructions",
-        label: "不注入内置 Git 使用指南",
-        line: "includeGitInstructions = false",
-        applied: false,
+        label: "注入内置 Git 使用指南",
+        default: true,
         group: "文件与 Git",
     },
     ToggleSpec {
         key: "attribution.coAuthoredBy",
-        label: "提交与 PR 不添加 Claude 署名",
-        line: "attribution.coAuthoredBy = false",
-        applied: false,
+        label: "提交与 PR 添加 Claude 署名",
+        default: true,
         group: "文件与 Git",
     },
     ToggleSpec {
         key: "autoMemoryEnabled",
-        label: "关闭自动记忆",
-        line: "autoMemoryEnabled = false",
-        applied: false,
+        label: "自动记忆",
+        default: true,
         group: "文件与 Git",
     },
 ];
@@ -329,6 +367,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "推理强度",
         group: "模型行为",
         control: ChoiceControl::Slider,
+        default: "medium",
         options: &[
             ChoiceOption {
                 value: "minimal",
@@ -357,6 +396,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "推理摘要",
         group: "模型行为",
         control: ChoiceControl::Segment,
+        default: "auto",
         options: &[
             ChoiceOption {
                 value: "auto",
@@ -381,6 +421,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "回复详细度",
         group: "模型行为",
         control: ChoiceControl::Segment,
+        default: "medium",
         options: &[
             ChoiceOption {
                 value: "low",
@@ -401,6 +442,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "助手个性",
         group: "模型行为",
         control: ChoiceControl::Segment,
+        default: "friendly",
         options: &[
             ChoiceOption {
                 value: "none",
@@ -421,6 +463,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "网页搜索",
         group: "模型行为",
         control: ChoiceControl::Segment,
+        default: "disabled",
         options: &[
             ChoiceOption {
                 value: "disabled",
@@ -445,6 +488,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "沙箱模式",
         group: "安全与审批",
         control: ChoiceControl::Segment,
+        default: "read-only",
         options: &[
             ChoiceOption {
                 value: "read-only",
@@ -465,6 +509,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "批准策略",
         group: "安全与审批",
         control: ChoiceControl::Segment,
+        default: "untrusted",
         options: &[
             ChoiceOption {
                 value: "untrusted",
@@ -485,6 +530,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "会话历史",
         group: "隐私与数据",
         control: ChoiceControl::Segment,
+        default: "save-all",
         options: &[
             ChoiceOption {
                 value: "save-all",
@@ -504,6 +550,7 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
         label: "输出风格",
         group: "模型行为",
         control: ChoiceControl::Segment,
+        default: "default",
         options: &[
             ChoiceOption {
                 value: "default",
@@ -524,6 +571,7 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
         label: "通知渠道",
         group: "界面与交互",
         control: ChoiceControl::Segment,
+        default: "auto",
         options: &[
             ChoiceOption {
                 value: "auto",
@@ -545,8 +593,8 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
     },
 ];
 
-/// The toggle catalog for one client; the settings UI consumes it instead of
-/// redefining the key list.
+/// The common toggle entries for one client. They are a projection of the
+/// ownership directory, not a second owned-key list.
 pub fn common_toggles(app: AppKind) -> &'static [ToggleSpec] {
     match app {
         AppKind::Codex => CODEX_TOGGLES,
@@ -554,8 +602,8 @@ pub fn common_toggles(app: AppKind) -> &'static [ToggleSpec] {
     }
 }
 
-/// The multi-detent catalog for one client. Values are the authority the
-/// common-patch validator checks string entries against.
+/// The common choice entries for one client. Values are the authority the
+/// common-settings validator checks string entries against.
 pub fn common_choices(app: AppKind) -> &'static [ChoiceSpec] {
     match app {
         AppKind::Codex => CODEX_CHOICES,
@@ -587,18 +635,107 @@ pub fn toggle_spec(app: AppKind, key: &str) -> Option<&'static ToggleSpec> {
     common_toggles(app).iter().find(|spec| spec.key == key)
 }
 
-/// Returns true when `key` is app-owned for `app`.
-pub fn is_owned(app: AppKind, key: &str) -> bool {
-    let keys = match app {
-        AppKind::Codex => CODEX_OWNED_KEYS,
-        AppKind::Claude => CLAUDE_OWNED_KEYS,
-    };
-    keys.contains(&key)
+/// Returns every managed spec for one client. This is the single typed
+/// directory exposed to adapters, validation, and the editor. Host keys do
+/// not appear because the host namespace is intentionally open-ended.
+pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
+    let mut specs = Vec::new();
+    specs.extend(
+        PROVIDER_SETTINGS
+            .iter()
+            .filter(|spec| spec.app == app)
+            .map(|spec| SettingSpec {
+                app,
+                key: spec.key,
+                owner: SettingOwner::Provider,
+                value_type: spec.value_type,
+                allowed_values: &[],
+                control: SettingControl::None,
+                default: None,
+                label: None,
+                group: None,
+                provider_absent_action: Some(ProviderAbsentAction::Remove),
+            }),
+    );
+    specs.extend(common_toggles(app).iter().map(|spec| SettingSpec {
+        app,
+        key: spec.key,
+        owner: SettingOwner::Common,
+        value_type: SettingValueType::Bool,
+        allowed_values: &[],
+        control: SettingControl::Toggle,
+        default: Some(ConfigValue::Bool(spec.default)),
+        label: Some(spec.label),
+        group: Some(spec.group),
+        provider_absent_action: None,
+    }));
+    specs.extend(common_choices(app).iter().map(|spec| SettingSpec {
+        app,
+        key: spec.key,
+        owner: SettingOwner::Common,
+        value_type: SettingValueType::String,
+        allowed_values: spec.options,
+        control: SettingControl::Choice {
+            presentation: spec.control,
+        },
+        default: Some(ConfigValue::Str(spec.default.to_string())),
+        label: Some(spec.label),
+        group: Some(spec.group),
+        provider_absent_action: None,
+    }));
+    specs
 }
 
-/// Returns true when `key` may only be set through a provider profile.
-pub fn is_profile_exclusive(key: &str) -> bool {
-    PROFILE_EXCLUSIVE_KEYS.contains(&key)
+/// Looks up one client configuration key in the ownership directory. An
+/// unlisted key is explicitly host-owned, rather than being an implicit
+/// application fallback.
+pub fn setting_spec(app: AppKind, key: &str) -> Option<SettingSpec> {
+    setting_specs(app).into_iter().find(|spec| spec.key == key)
+}
+
+/// Returns the complete ownership decision for a key. This is a lightweight
+/// form for callers that do not need editor metadata.
+pub fn owner_for(app: AppKind, key: &str) -> SettingOwner {
+    setting_spec(app, key)
+        .map(|spec| spec.owner)
+        .unwrap_or(SettingOwner::Host)
+}
+
+/// Returns the provider cleanup action for a provider-owned key, if any.
+pub fn provider_absent_action(app: AppKind, key: &str) -> Option<ProviderAbsentAction> {
+    setting_spec(app, key)
+        .filter(|spec| spec.owner == SettingOwner::Provider)
+        .and_then(|spec| spec.provider_absent_action)
+}
+
+/// Compatibility-free semantic spelling for adapter collectors: a key is
+/// managed when the directory says it is common or provider-owned.
+pub fn is_owned(app: AppKind, key: &str) -> bool {
+    owner_for(app, key) != SettingOwner::Host
+}
+
+/// Whether a key belongs to the selected provider profile rather than the
+/// common settings. The client argument is required: the same spelling can
+/// have different ownership in different configuration formats.
+pub fn is_provider_owned(app: AppKind, key: &str) -> bool {
+    owner_for(app, key) == SettingOwner::Provider
+}
+
+/// The complete default common settings for one client, built from this
+/// directory. It is the value a fresh installation exposes before any save
+/// and the target of every "恢复默认值" action.
+pub fn default_common_settings(app: AppKind) -> CommonSettings {
+    let mut settings = BTreeMap::new();
+    for spec in setting_specs(app)
+        .into_iter()
+        .filter(|spec| spec.owner == SettingOwner::Common)
+    {
+        let default = spec
+            .default
+            .expect("every common setting declares a directory default");
+        settings.insert(spec.key.to_string(), default);
+    }
+    CommonSettings { settings }
 }
 
 #[cfg(test)]
@@ -606,7 +743,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_catalog_key_is_owned_and_not_profile_exclusive() {
+    fn every_catalog_key_is_common_owned_in_the_directory() {
         for app in [AppKind::Codex, AppKind::Claude] {
             for toggle in common_toggles(app) {
                 assert!(
@@ -615,8 +752,8 @@ mod tests {
                     toggle.key
                 );
                 assert!(
-                    !is_profile_exclusive(toggle.key),
-                    "{} toggle key must not be profile-exclusive",
+                    owner_for(app, toggle.key) == SettingOwner::Common,
+                    "{} toggle key must be common-owned",
                     toggle.key
                 );
             }
@@ -627,8 +764,8 @@ mod tests {
                     choice.key
                 );
                 assert!(
-                    !is_profile_exclusive(choice.key),
-                    "{} choice key must not be profile-exclusive",
+                    owner_for(app, choice.key) == SettingOwner::Common,
+                    "{} choice key must be common-owned",
                     choice.key
                 );
                 assert!(
@@ -676,6 +813,48 @@ mod tests {
     }
 
     #[test]
+    fn every_default_is_one_of_the_offered_choice_values() {
+        for app in [AppKind::Codex, AppKind::Claude] {
+            for choice in common_choices(app) {
+                assert!(
+                    choice
+                        .options
+                        .iter()
+                        .any(|option| option.value == choice.default),
+                    "{} 的默认值必须是可选值之一",
+                    choice.key
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn default_common_settings_cover_exactly_the_catalog_keys() {
+        for app in [AppKind::Codex, AppKind::Claude] {
+            let defaults = default_common_settings(app);
+            let catalog_keys: Vec<&str> = setting_specs(app)
+                .into_iter()
+                .filter(|spec| spec.owner == SettingOwner::Common)
+                .map(|spec| spec.key)
+                .collect();
+            assert_eq!(defaults.settings.len(), catalog_keys.len());
+            for key in catalog_keys {
+                let value = defaults
+                    .value(key)
+                    .expect("every catalog key has a default value");
+                if matches!(
+                    setting_spec(app, key).expect("spec").control,
+                    SettingControl::Toggle
+                ) {
+                    assert!(matches!(value, ConfigValue::Bool(_)));
+                } else {
+                    assert!(matches!(value, ConfigValue::Str(_)));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn codex_top_level_routing_keys_are_owned() {
         assert!(is_owned(AppKind::Codex, "model"));
         assert!(is_owned(AppKind::Codex, "model_provider"));
@@ -702,8 +881,15 @@ mod tests {
     }
 
     #[test]
-    fn deprecated_claude_model_key_is_not_owned() {
-        assert!(!is_owned(AppKind::Claude, "env.ANTHROPIC_SMALL_FAST_MODEL"));
+    fn deprecated_claude_model_key_is_provider_owned_and_removed_when_absent() {
+        assert_eq!(
+            owner_for(AppKind::Claude, "env.ANTHROPIC_SMALL_FAST_MODEL"),
+            SettingOwner::Provider
+        );
+        assert_eq!(
+            provider_absent_action(AppKind::Claude, "env.ANTHROPIC_SMALL_FAST_MODEL"),
+            Some(ProviderAbsentAction::Remove)
+        );
     }
 
     #[test]
@@ -715,11 +901,22 @@ mod tests {
     }
 
     #[test]
-    fn profile_exclusive_keys_never_appear_in_general_patches() {
-        assert!(is_profile_exclusive("model"));
-        assert!(is_profile_exclusive("openai_base_url"));
-        assert!(is_profile_exclusive("experimental_bearer_token"));
-        assert!(is_profile_exclusive("env.ANTHROPIC_BASE_URL"));
-        assert!(!is_profile_exclusive("disable_response_storage"));
+    fn provider_keys_expose_types_and_a_cleanup_action_from_the_one_directory() {
+        let model = setting_spec(AppKind::Codex, "model").expect("model spec");
+        assert_eq!(model.owner, SettingOwner::Provider);
+        assert_eq!(model.value_type, SettingValueType::String);
+        assert_eq!(
+            model.provider_absent_action,
+            Some(ProviderAbsentAction::Remove)
+        );
+        assert!(is_provider_owned(
+            AppKind::Codex,
+            "experimental_bearer_token"
+        ));
+        assert!(!is_provider_owned(
+            AppKind::Codex,
+            "disable_response_storage"
+        ));
+        assert_eq!(owner_for(AppKind::Codex, "threads"), SettingOwner::Host);
     }
 }

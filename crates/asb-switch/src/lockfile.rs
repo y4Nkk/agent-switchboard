@@ -113,14 +113,17 @@ pub fn acquire<Io: SwitchIo>(io: &Io, target: &Path, process_name: &str) -> Acqu
     }
 }
 
-/// Releases the lock if and only if it still belongs to this process.
-pub fn release<Io: SwitchIo>(io: &Io, target: &Path) {
+/// Releases the lock if and only if it still belongs to this process. A
+/// release failure is returned to the executor so a stale active lock never
+/// becomes invisible to callers.
+pub fn release<Io: SwitchIo>(io: &Io, target: &Path) -> Result<(), String> {
     let path = lock_path_for(target);
-    if let Ok(data) = read_lock_data(io, &path) {
-        if data.pid == Some(std::process::id()) {
-            let _ = io.remove(&path);
-        }
+    let data = read_lock_data(io, &path).map_err(read_error_reason)?;
+    if data.pid != Some(std::process::id()) {
+        return Err("写入锁的持有者已变化，未删除该锁".to_string());
     }
+    io.remove(&path)
+        .map_err(|error| format!("无法删除写入锁文件：{error}"))
 }
 
 /// A logged stale-lock recovery entry.

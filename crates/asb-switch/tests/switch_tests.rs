@@ -2,24 +2,28 @@
 //! directories; no real user configuration is ever touched.
 
 use asb_core::contracts::{
-    AppKind, ClaudeModelSettings, CommonConfigPatch, ModelOptions, PatchEntry, PatchValue,
-    ProviderProfile, SwitchPlan,
+    AppKind, ClaudeModelSettings, ConfigValue, ModelOptions, ProviderProfile, SwitchPlan,
 };
+use asb_core::ownership::default_common_settings;
 use asb_core::test_support::{CLAUDE_JSON, CODEX_TOML};
 use asb_switch::io::{FsIo, SwitchIo};
 use asb_switch::lockfile;
-use asb_switch::{execute, read_preview, restore, sha256_hex, RecoveryOutcome, SwitchError};
+use asb_switch::{read_preview, sha256_hex, RecoveryOutcome, RestoreOutcome, SwitchError};
 use std::cell::Cell;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> SwitchPlan {
+    let mut common = default_common_settings(AppKind::Codex);
+    common
+        .settings
+        .insert("disable_response_storage".into(), ConfigValue::Bool(true));
     SwitchPlan {
-        app: AppKind::Codex,
         profile: ProviderProfile {
             id: format!("id-{name}"),
             app: AppKind::Codex,
+            route_mode: asb_core::RouteMode::Custom,
             name: name.into(),
             model: Some(model.into()),
             base_url: Some(base_url.into()),
@@ -29,22 +33,20 @@ fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> SwitchPlan
             website_url: None,
             usage_query: None,
         },
-        common: CommonConfigPatch {
-            app: AppKind::Codex,
-            entries: vec![PatchEntry {
-                key: "disable_response_storage".into(),
-                value: Some(PatchValue::Bool(true)),
-            }],
-        },
+        common,
     }
 }
 
 fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
+    let mut common = default_common_settings(AppKind::Claude);
+    common
+        .settings
+        .insert("alwaysThinkingEnabled".into(), ConfigValue::Bool(true));
     SwitchPlan {
-        app: AppKind::Claude,
         profile: ProviderProfile {
             id: format!("id-{name}"),
             app: AppKind::Claude,
+            route_mode: asb_core::RouteMode::Custom,
             name: name.into(),
             model: Some(model.into()),
             base_url: Some(base_url.into()),
@@ -54,11 +56,27 @@ fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
             website_url: None,
             usage_query: None,
         },
-        common: CommonConfigPatch {
-            app: AppKind::Claude,
-            entries: vec![],
-        },
+        common,
     }
+}
+
+/// Ordinary executor tests must still provide the explicit state commit
+/// closure required by the production API. This helper supplies the accepted
+/// state write so individual tests can focus on their own transaction path.
+fn execute<Io: SwitchIo>(
+    io: &Io,
+    request: &asb_switch::SwitchRequest,
+) -> Result<asb_switch::SwitchOutcome, SwitchError> {
+    asb_switch::execute(io, request, |_| Ok(()))
+}
+
+/// Ordinary restore tests also provide the required state commit closure.
+fn restore<Io: SwitchIo>(
+    io: &Io,
+    backup: &asb_core::BackupRecord,
+    target: &Path,
+) -> Result<RestoreOutcome, SwitchError> {
+    asb_switch::restore(io, backup, target, |_| Ok(()))
 }
 
 fn write(path: &Path, content: &str) {
@@ -87,6 +105,14 @@ struct FailingIo {
     /// already replaced. One-shot: the restore path must read cleanly.
     corrupt_once: Cell<bool>,
     corrupt_after_rename: bool,
+    /// Corrupts only the executor's backup re-read response without changing
+    /// the isolated temporary directory on disk.
+    corrupt_backup_read: bool,
+    /// Corrupts only the executor's temporary-file re-read response.
+    corrupt_temp_read: bool,
+    /// Simulates a host process editing the live Codex target while the
+    /// executor is preparing its temporary candidate.
+    mutate_live_after_temp_write: bool,
 }
 
 impl FailingIo {
@@ -96,6 +122,9 @@ impl FailingIo {
             renamed: Cell::new(false),
             corrupt_once: Cell::new(false),
             corrupt_after_rename: false,
+            corrupt_backup_read: false,
+            corrupt_temp_read: false,
+            mutate_live_after_temp_write: false,
         }
     }
 
@@ -116,6 +145,16 @@ impl FailingIo {
 impl SwitchIo for FailingIo {
     fn read_file(&self, path: &Path) -> io::Result<String> {
         let text = fs::read_to_string(path)?;
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        if self.corrupt_backup_read && name.ends_with(".bak") {
+            return Ok(format!("{text}\ncorrupted backup read"));
+        }
+        if self.corrupt_temp_read && (name.contains(".asb-tmp") || name.contains(".asb-restore")) {
+            return Ok(format!("{text}\ncorrupted temporary read"));
+        }
         if self.corrupt_after_rename
             && !self.corrupt_once.get()
             && self.renamed.get()
@@ -138,7 +177,14 @@ impl SwitchIo for FailingIo {
             .write(true)
             .create_new(true)
             .open(path)?;
-        file.write_all(content.as_bytes())
+        file.write_all(content.as_bytes())?;
+        if self.mutate_live_after_temp_write && path.to_string_lossy().ends_with(".asb-tmp") {
+            fs::write(
+                path.parent().expect("temp parent").join("config.toml"),
+                format!("{CODEX_TOML}\nhost_changed_during_switch = true\n"),
+            )?;
+        }
+        Ok(())
     }
 
     fn write_file_replace(&self, path: &Path, content: &str) -> io::Result<()> {
@@ -153,6 +199,12 @@ impl SwitchIo for FailingIo {
     }
 
     fn remove(&self, path: &Path) -> io::Result<()> {
+        if path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().ends_with(".asb-lock"))
+        {
+            self.check("lock-release")?;
+        }
         fs::remove_file(path)
     }
 
@@ -209,6 +261,7 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
     assert!(switched.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
     assert!(switched.contains("model_provider = \"openai\""));
     assert!(switched.contains("openai_base_url = \"https://relay-b.internal/v1\""));
+    assert!(switched.contains("disable_response_storage = true"));
     assert!(!switched.contains("[model_providers"));
     assert!(switched.contains("https://relay-b.internal/v1"));
     for host in ["threads = 8", "history_persistence", "trusted = true"] {
@@ -252,6 +305,221 @@ fn claude_switch_round_trips_with_a_redacted_preview() {
     assert!(text.contains("claude-opus-4"));
     assert!(text.contains("Bash(npm run test:*)"));
     assert!(text.contains("\"ANTHROPIC_AUTH_TOKEN\": \"test-api-key\""));
+    assert!(text.contains("\"alwaysThinkingEnabled\": true"));
+}
+
+#[test]
+fn provider_projection_restores_the_client_file_when_state_commit_fails() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FsIo;
+    let plan = codex_plan(
+        "Relay B",
+        "https://relay-b.internal/v1",
+        "gpt-5.2",
+        "CODEX_RELAY_B_KEY",
+    );
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+    let lock_path = lockfile::lock_path_for(&target);
+
+    let error = asb_switch::execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+        |_| {
+            assert!(
+                lock_path.exists(),
+                "state commit occurs before lock release"
+            );
+            Err("application state unavailable".to_string())
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        SwitchError::CommitFailed {
+            stage: "state-save",
+            recovery: RecoveryOutcome::Restored { .. },
+            ..
+        }
+    ));
+    assert_eq!(fs::read_to_string(&target).unwrap(), CODEX_TOML);
+    assert!(!lock_path.exists());
+}
+
+#[test]
+fn restore_restores_the_client_file_when_state_commit_fails() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FsIo;
+    let plan = codex_plan(
+        "Relay B",
+        "https://relay-b.internal/v1",
+        "gpt-5.2",
+        "CODEX_RELAY_B_KEY",
+    );
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+    let switched = execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+    let switched_content = fs::read_to_string(&target).unwrap();
+    let lock_path = lockfile::lock_path_for(&target);
+
+    let error = asb_switch::restore(&io, &switched.backup, &target, |_| {
+        assert!(
+            lock_path.exists(),
+            "state commit occurs before lock release"
+        );
+        Err("application state unavailable".to_string())
+    })
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        SwitchError::CommitFailed {
+            stage: "state-save",
+            recovery: RecoveryOutcome::Restored { .. },
+            ..
+        }
+    ));
+    assert_eq!(fs::read_to_string(&target).unwrap(), switched_content);
+    assert!(!lock_path.exists());
+}
+
+#[test]
+fn executor_rejects_a_backup_that_fails_its_readback_verification() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FailingIo {
+        corrupt_backup_read: true,
+        ..FailingIo::new()
+    };
+    let plan = codex_plan("Relay B", "https://relay-b.internal/v1", "gpt-5.2", "KEY");
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+
+    let error = execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        SwitchError::CommitFailed {
+            stage: "backup-verify",
+            recovery: RecoveryOutcome::NotNeeded,
+            ..
+        }
+    ));
+    assert_eq!(fs::read_to_string(&target).unwrap(), CODEX_TOML);
+    assert!(!lockfile::lock_path_for(&target).exists());
+}
+
+#[test]
+fn executor_rejects_a_temporary_file_that_fails_its_readback_verification() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FailingIo {
+        corrupt_temp_read: true,
+        ..FailingIo::new()
+    };
+    let plan = codex_plan("Relay B", "https://relay-b.internal/v1", "gpt-5.2", "KEY");
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+
+    let error = execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        SwitchError::CommitFailed {
+            stage: "temp-verify",
+            recovery: RecoveryOutcome::NotNeeded,
+            ..
+        }
+    ));
+    assert_eq!(fs::read_to_string(&target).unwrap(), CODEX_TOML);
+    assert!(!lockfile::lock_path_for(&target).exists());
+}
+
+#[test]
+fn executor_preserves_a_host_edit_made_while_preparing_the_temporary_file() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FailingIo {
+        mutate_live_after_temp_write: true,
+        ..FailingIo::new()
+    };
+    let plan = codex_plan("Relay B", "https://relay-b.internal/v1", "gpt-5.2", "KEY");
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+
+    let error = execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, SwitchError::ExternalChange { .. }));
+    assert!(fs::read_to_string(&target)
+        .unwrap()
+        .contains("host_changed_during_switch = true"));
+    assert!(!lockfile::lock_path_for(&target).exists());
+}
+
+#[test]
+fn lock_release_failure_is_returned_as_an_observable_success_warning() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FailingIo::new();
+    io.fail_stage.set(Some("lock-release"));
+    let plan = codex_plan("Relay B", "https://relay-b.internal/v1", "gpt-5.2", "KEY");
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+
+    let outcome = execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+
+    assert!(outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("无法释放写入锁")));
+    assert!(lockfile::lock_path_for(&target).exists());
 }
 
 #[test]
@@ -297,6 +565,112 @@ fn claude_one_m_switch_writes_the_wire_suffix_from_semantic_profile_state() {
         rendered["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"],
         "claude-haiku-4"
     );
+}
+
+#[test]
+fn switching_to_claude_profile_without_mappings_clears_the_previous_profile_mappings() {
+    let (_dir, target, backup_dir) = setup(AppKind::Claude, CLAUDE_JSON);
+    let io = FsIo;
+    let mut plan_a = claude_plan("Aihub", "https://aihub.internal", "claude-opus-4-7");
+    plan_a.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        primary_one_m: true,
+        haiku_model: Some("claude-haiku-4".into()),
+        sonnet_model: Some("claude-sonnet-4-6".into()),
+        sonnet_one_m: true,
+        opus_model: Some("claude-opus-4-7".into()),
+        opus_one_m: true,
+        available_models: Some(vec!["claude-opus-4-7".into()]),
+    }));
+    let preview_a = read_preview(&io, &target, &plan_a, &backup_dir.to_string_lossy()).unwrap();
+    execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan_a,
+            backup_dir: &backup_dir,
+            expected_hash: &preview_a.content_hash,
+            expected_rendered_hash: &preview_a.rendered_hash,
+        },
+    )
+    .unwrap();
+
+    let plan_b = claude_plan(
+        "AnyRouter",
+        "https://anyrouter.internal",
+        "claude-sonnet-4-6",
+    );
+    let preview_b = read_preview(&io, &target, &plan_b, &backup_dir.to_string_lossy()).unwrap();
+    execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan_b,
+            backup_dir: &backup_dir,
+            expected_hash: &preview_b.content_hash,
+            expected_rendered_hash: &preview_b.rendered_hash,
+        },
+    )
+    .unwrap();
+
+    let rendered: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&target).unwrap()).unwrap();
+    assert_eq!(rendered["model"], "claude-sonnet-4-6");
+    for key in [
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    ] {
+        assert!(
+            rendered["env"].get(key).is_none(),
+            "{key} leaked from Aihub"
+        );
+    }
+    assert!(rendered.get("availableModels").is_none());
+}
+
+#[test]
+fn switching_to_codex_profile_without_one_m_clears_the_previous_profile_window() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FsIo;
+    let mut plan_a = codex_plan("Aihub", "https://aihub.internal/v1", "gpt-5.2", "AIHUB_KEY");
+    plan_a.profile.model_options = Some(ModelOptions::Codex(asb_core::CodexModelSettings {
+        context_window: Some(1_000_000),
+    }));
+    let preview_a = read_preview(&io, &target, &plan_a, &backup_dir.to_string_lossy()).unwrap();
+    execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan_a,
+            backup_dir: &backup_dir,
+            expected_hash: &preview_a.content_hash,
+            expected_rendered_hash: &preview_a.rendered_hash,
+        },
+    )
+    .unwrap();
+
+    let plan_b = codex_plan(
+        "AnyRouter",
+        "https://anyrouter.internal/v1",
+        "gpt-5.3",
+        "ANYROUTER_KEY",
+    );
+    let preview_b = read_preview(&io, &target, &plan_b, &backup_dir.to_string_lossy()).unwrap();
+    execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan_b,
+            backup_dir: &backup_dir,
+            expected_hash: &preview_b.content_hash,
+            expected_rendered_hash: &preview_b.rendered_hash,
+        },
+    )
+    .unwrap();
+
+    let rendered = fs::read_to_string(&target).unwrap();
+    assert!(!rendered.contains("model_context_window"));
+    assert!(rendered.contains("disable_response_storage = true"));
 }
 
 #[test]
@@ -537,6 +911,79 @@ fn failed_restore_verification_recovers_the_pre_restore_snapshot() {
 }
 
 #[test]
+fn restore_rejects_a_temporary_file_that_fails_its_readback_verification() {
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let io = FsIo;
+    let plan = codex_plan(
+        "Relay B",
+        "https://relay-b.internal/v1",
+        "gpt-5.2",
+        "CODEX_RELAY_B_KEY",
+    );
+    let preview = read_preview(&io, &target, &plan, &backup_dir.to_string_lossy()).unwrap();
+    let switched = execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+    let switched_content = fs::read_to_string(&target).unwrap();
+    let failing = FailingIo {
+        corrupt_temp_read: true,
+        ..FailingIo::new()
+    };
+
+    let error = restore(&failing, &switched.backup, &target).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SwitchError::CommitFailed {
+            stage: "restore-temp-verify",
+            recovery: RecoveryOutcome::NotNeeded,
+            ..
+        }
+    ));
+    assert_eq!(fs::read_to_string(&target).unwrap(), switched_content);
+    assert!(!lockfile::lock_path_for(&target).exists());
+}
+
+#[test]
+fn restore_rejects_a_hash_matching_backup_with_invalid_syntax() {
+    let (dir, target, _backup_dir) = setup(AppKind::Codex, CODEX_TOML);
+    let invalid = "model = [\n";
+    let backup_path = dir.path().join("invalid-config.toml.bak");
+    fs::write(&backup_path, invalid).unwrap();
+    let record = asb_core::BackupRecord {
+        id: "invalid".to_string(),
+        app: AppKind::Codex,
+        target_path: target.to_string_lossy().to_string(),
+        backup_path: backup_path.to_string_lossy().to_string(),
+        created_at: "2026-09-01T00:00:00Z".to_string(),
+        content_hash: sha256_hex(invalid),
+        target_existed: true,
+        reason: "test".to_string(),
+    };
+
+    let error = restore(&FsIo, &record, &target).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SwitchError::CommitFailed {
+            stage: "restore-backup-verify",
+            recovery: RecoveryOutcome::NotNeeded,
+            ..
+        }
+    ));
+    assert_eq!(fs::read_to_string(&target).unwrap(), CODEX_TOML);
+    assert!(!lockfile::lock_path_for(&target).exists());
+}
+
+#[test]
 fn held_lock_blocks_and_stale_lock_recovery_is_explicit() {
     let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
     let io = FsIo;
@@ -761,135 +1208,4 @@ fn backup_listing_ignores_metadata_that_points_outside_its_sidecar() {
     .unwrap();
 
     assert!(asb_switch::list_backups(&io, &backup_dir).is_empty());
-}
-
-fn codex_common(entries: Vec<PatchEntry>) -> CommonConfigPatch {
-    CommonConfigPatch {
-        app: AppKind::Codex,
-        entries,
-    }
-}
-
-#[test]
-fn common_apply_sets_and_removes_toggle_lines_transactionally() {
-    let (_dir, target, backup_dir) = setup(AppKind::Codex, CODEX_TOML);
-    let io = FsIo;
-    let set_patch = codex_common(vec![PatchEntry {
-        key: "hide_agent_reasoning".into(),
-        value: Some(PatchValue::Bool(true)),
-    }]);
-
-    let preview = asb_switch::read_common_preview(
-        &io,
-        &asb_switch::CommonRequest {
-            target: &target,
-            app: AppKind::Codex,
-            common: &set_patch,
-            backup_dir: &backup_dir,
-            expected_hash: "",
-            expected_rendered_hash: "",
-        },
-    )
-    .unwrap();
-    let outcome = asb_switch::execute_common(
-        &io,
-        &asb_switch::CommonRequest {
-            target: &target,
-            app: AppKind::Codex,
-            common: &set_patch,
-            backup_dir: &backup_dir,
-            expected_hash: &preview.content_hash,
-            expected_rendered_hash: &preview.rendered_hash,
-        },
-    )
-    .unwrap();
-
-    let text = fs::read_to_string(&target).unwrap();
-    assert!(text.contains("hide_agent_reasoning = true"));
-    // Host content outside the patch survives untouched.
-    assert!(text.contains("threads = 8"));
-    assert!(text.contains("trusted = true"));
-    assert!(Path::new(&format!("{}.meta.json", outcome.backup.backup_path)).exists());
-
-    let remove_patch = codex_common(vec![PatchEntry {
-        key: "hide_agent_reasoning".into(),
-        value: None,
-    }]);
-    let preview = asb_switch::read_common_preview(
-        &io,
-        &asb_switch::CommonRequest {
-            target: &target,
-            app: AppKind::Codex,
-            common: &remove_patch,
-            backup_dir: &backup_dir,
-            expected_hash: "",
-            expected_rendered_hash: "",
-        },
-    )
-    .unwrap();
-    assert_eq!(
-        preview.preview.changes[0].kind,
-        asb_core::ChangeKind::Remove
-    );
-    asb_switch::execute_common(
-        &io,
-        &asb_switch::CommonRequest {
-            target: &target,
-            app: AppKind::Codex,
-            common: &remove_patch,
-            backup_dir: &backup_dir,
-            expected_hash: &preview.content_hash,
-            expected_rendered_hash: &preview.rendered_hash,
-        },
-    )
-    .unwrap();
-    let text = fs::read_to_string(&target).unwrap();
-    assert!(!text.contains("hide_agent_reasoning"));
-    assert!(text.contains("threads = 8"));
-}
-
-#[test]
-fn common_apply_refuses_files_changed_after_the_toggle_was_read() {
-    let (_dir, target, backup_dir) = setup(AppKind::Claude, CLAUDE_JSON);
-    let io = FsIo;
-    let patch = CommonConfigPatch {
-        app: AppKind::Claude,
-        entries: vec![PatchEntry {
-            key: "alwaysThinkingEnabled".into(),
-            value: Some(PatchValue::Bool(true)),
-        }],
-    };
-    let preview = asb_switch::read_common_preview(
-        &io,
-        &asb_switch::CommonRequest {
-            target: &target,
-            app: AppKind::Claude,
-            common: &patch,
-            backup_dir: &backup_dir,
-            expected_hash: "",
-            expected_rendered_hash: "",
-        },
-    )
-    .unwrap();
-
-    // The user edits settings.json after the toggle state was read.
-    fs::write(&target, "{ \"spinnerTipsEnabled\": true }").unwrap();
-
-    let error = asb_switch::execute_common(
-        &io,
-        &asb_switch::CommonRequest {
-            target: &target,
-            app: AppKind::Claude,
-            common: &patch,
-            backup_dir: &backup_dir,
-            expected_hash: &preview.content_hash,
-            expected_rendered_hash: &preview.rendered_hash,
-        },
-    )
-    .unwrap_err();
-    assert!(matches!(error, SwitchError::ExternalChange { .. }));
-    assert_eq!(
-        fs::read_to_string(&target).unwrap(),
-        "{ \"spinnerTipsEnabled\": true }"
-    );
 }

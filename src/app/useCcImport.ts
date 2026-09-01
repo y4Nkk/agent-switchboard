@@ -17,8 +17,8 @@ interface CcImportDeps {
 }
 
 /**
- * Read-only CC Switch scanning and selection import. Keys never cross this
- * boundary; only routing facts and drafts.
+ * Read-only CC Switch scanning and selection import. API keys never cross
+ * the scan boundary; import re-resolves selected source rows in the backend.
  */
 export function useCcImport({
   busy,

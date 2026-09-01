@@ -27,7 +27,7 @@ export function useSwitchboardModel() {
   const { busy, reportError, clearError } = frame;
 
   const snapshot = useConfigSnapshot({ onError: reportError });
-  const { selectedId, setSelectedId, refresh, activeProfileId } = snapshot;
+  const { selectedId, setSelectedId, refresh, activeProfileId, records } = snapshot;
   const switchPreview = useSwitchPreview({
     busy,
     selectedId,
@@ -52,11 +52,13 @@ export function useSwitchboardModel() {
     clearError,
     setBusy: frame.setBusy,
   });
-  /** Writes and store changes invalidate every candidate on both domains. */
-  const invalidateCandidates = useCallback(() => {
-    invalidateSwitchCandidates();
-    commonSettings.invalidateCommonPreviews();
-  }, [commonSettings, invalidateSwitchCandidates]);
+  /** Supplier drafts and app-store changes invalidate supplier candidates.
+   * Common-base drafts never carry client-file candidates; their separate
+   * read-only fragment preview does not participate in switching. */
+  const invalidateCandidates = useCallback(
+    () => invalidateSwitchCandidates(),
+    [invalidateSwitchCandidates],
+  );
 
   const appSettingsState = useAppSettings({
     busy,
@@ -97,7 +99,8 @@ export function useSwitchboardModel() {
     invalidateCandidates,
     refresh,
   });
-  const selectedProfile = snapshot.profiles.find((profile) => profile.id === selectedId) ?? null;
+  const selectedRecord = records.find((record) => record.profile.id === selectedId) ?? null;
+  const selectedProfile = selectedRecord?.profile ?? null;
   const operations = useSwitchOperations({
     busy,
     onError: reportError,
@@ -116,7 +119,8 @@ export function useSwitchboardModel() {
     busy,
     appFilter,
     setAppFilter,
-    selectedProfile,
+    selectedRecord,
+    records,
     selectedId,
     onError: reportError,
     clearError,
@@ -125,7 +129,7 @@ export function useSwitchboardModel() {
     retractPreview: switchPreview.retractPreview,
     refresh,
     selectProfile,
-    setProfiles: snapshot.setProfiles,
+    setRecords: snapshot.setRecords,
     setSelectedId,
   });
 

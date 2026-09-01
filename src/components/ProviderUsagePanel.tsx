@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  testUsageQuery,
+  queryProfileUsage,
   type ProviderProfile,
   type UsageQuery,
+  type UsageReading,
   type UsageSummary,
 } from "../api/client";
 import { Time } from "./Time";
@@ -19,29 +20,56 @@ function usageValue(value: number | null): string {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
 }
 
-function UsageMetric({
-  label,
-  value,
-  unit,
-}: {
-  label: string;
-  value: number | null;
-  unit: string | null;
-}) {
+function usageProgress(reading: UsageReading): number | null {
+  if (reading.total === null || !Number.isFinite(reading.total) || reading.total <= 0) return null;
+  const used = reading.used ?? (reading.remaining === null ? null : reading.total - reading.remaining);
+  if (used === null || !Number.isFinite(used)) return null;
+  return Math.min(100, Math.max(0, (used / reading.total) * 100));
+}
+
+function UsageReadingLedger({ reading }: { reading: UsageReading }) {
+  const primary = reading.remaining !== null
+    ? { label: "余额", value: reading.remaining }
+    : { label: "已用", value: reading.used };
+  const progress = usageProgress(reading);
+  const name = reading.planName?.trim() || "默认额度";
   return (
-    <div className="asb-provider-usage-metric">
-      <dt>{label}</dt>
-      <dd>
-        <strong>{usageValue(value)}</strong>
-        {value !== null && unit && <small>{unit}</small>}
-      </dd>
+    <div className="asb-provider-usage-reading">
+      <div className="asb-provider-usage-reading-line">
+        <h4>{name}</h4>
+        <div className="asb-provider-usage-reading-values">
+          <span className="asb-provider-usage-primary">
+            <span>{primary.label}</span>
+            <strong>{usageValue(primary.value)}</strong>
+            {primary.value !== null && reading.unit && <small>{reading.unit}</small>}
+          </span>
+          {reading.remaining !== null && reading.used !== null && (
+            <span className="asb-provider-usage-secondary">已用 {usageValue(reading.used)}</span>
+          )}
+          <span className="asb-provider-usage-total">
+            总量 {usageValue(reading.total)}
+            {reading.total !== null && reading.unit ? ` ${reading.unit}` : ""}
+          </span>
+        </div>
+      </div>
+      {progress !== null && (
+        <div
+          className="asb-provider-usage-progress"
+          role="progressbar"
+          aria-label={`${name} 已用比例`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress)}
+        >
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      )}
     </div>
   );
 }
 
-/** One configured provider's on-demand usage readout. It only reads after the
- * user expands the provider row; configuration returns to the dedicated
- * workspace through the supplied callback. */
+/** One configured provider's default-visible usage ledger. Configuration
+ * still returns to the dedicated workspace through the supplied callback. */
 export function ProviderUsagePanel({ id, profile, query, onConfigure }: Props) {
   const [querying, setQuerying] = useState(false);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
@@ -53,7 +81,7 @@ export function ProviderUsagePanel({ id, profile, query, onConfigure }: Props) {
     setQuerying(true);
     setError(null);
     try {
-      const next = await testUsageQuery(query, profile.apiKey, profile.baseUrl);
+      const next = await queryProfileUsage(profile.id);
       if (requestVersion.current === version) setSummary(next);
     } catch (caught) {
       if (requestVersion.current === version) {
@@ -62,7 +90,7 @@ export function ProviderUsagePanel({ id, profile, query, onConfigure }: Props) {
     } finally {
       if (requestVersion.current === version) setQuerying(false);
     }
-  }, [profile.apiKey, profile.baseUrl, query]);
+  }, [profile.id]);
 
   useEffect(() => {
     void run();
@@ -75,7 +103,7 @@ export function ProviderUsagePanel({ id, profile, query, onConfigure }: Props) {
     <section id={id} className="asb-provider-usage" aria-label={`${profile.name} 用量`}>
       <header className="asb-provider-usage-head">
         <div className="asb-provider-usage-title">
-          <h3>用量读数</h3>
+          <h3>用量</h3>
           <span>{query.kind === "script" ? "脚本" : "字段提取"}</span>
         </div>
         <div className="asb-provider-usage-actions">
@@ -101,11 +129,11 @@ export function ProviderUsagePanel({ id, profile, query, onConfigure }: Props) {
       </header>
 
       {summary ? (
-        <dl className="asb-provider-usage-ledger">
-          <UsageMetric label="余额" value={summary.remaining} unit={summary.unit} />
-          <UsageMetric label="已用" value={summary.used} unit={summary.unit} />
-          <UsageMetric label="总量" value={summary.total} unit={summary.unit} />
-        </dl>
+        <div className="asb-provider-usage-readings">
+          {summary.readings.map((reading, index) => (
+            <UsageReadingLedger key={`${reading.planName ?? "默认"}-${index}`} reading={reading} />
+          ))}
+        </div>
       ) : (
         !error && <p className="asb-provider-usage-state" role="status">正在读取已配置的用量…</p>
       )}

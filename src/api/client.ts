@@ -51,7 +51,6 @@ async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
 }
 
 export type AppKind = "codex" | "claude";
-export type PatchValue = boolean | string | number | PatchValue[];
 export type RouteMode = "official" | "custom";
 
 export interface CodexModelSettings {
@@ -95,18 +94,25 @@ export interface ScriptUsageQuery {
  * optional feature is not configured. */
 export type UsageQuery = DeclarativeUsageQuery | ScriptUsageQuery;
 
-/** Numbers picked out of one usage-query response. */
-export interface UsageSummary {
+/** One named or unnamed usage reading. */
+export interface UsageReading {
+  planName?: string;
   remaining: number | null;
   used: number | null;
   total: number | null;
   unit: string | null;
+}
+
+/** Complete result of one usage-query response. */
+export interface UsageSummary {
+  readings: UsageReading[];
   at: string;
 }
 
 export interface ProviderProfile {
   id: string;
   app: AppKind;
+  routeMode: "official" | "custom";
   name: string;
   model: string | null;
   baseUrl: string | null;
@@ -120,10 +126,18 @@ export interface ProviderProfile {
   usageQuery?: UsageQuery | null;
 }
 
-/** Every profile routes to a custom endpoint; official login is not a
- * profile kind (user decision 2026-08-28). */
+/** One provider file together with its storage revision. `fileHash` guards
+ * every mutation of that provider file against an external change. */
+export interface ProviderRecord {
+  profile: ProviderProfile;
+  fileHash: string;
+}
+
+/** Routing is explicit. Official profiles retain no endpoint, API key, model
+ * override, or usage script because client credentials stay native. */
 export interface ProviderDraft {
   app: AppKind;
+  routeMode: "official" | "custom";
   name: string;
   model: string | null;
   baseUrl: string | null;
@@ -132,17 +146,6 @@ export interface ProviderDraft {
   notes?: string | null;
   websiteUrl?: string | null;
   usageQuery?: UsageQuery | null;
-}
-
-export interface PatchEntry {
-  key: string;
-  /** null removes the key's line from the target file. */
-  value: PatchValue | null;
-}
-
-export interface CommonConfigPatch {
-  app: AppKind;
-  entries: PatchEntry[];
 }
 
 /** One backend-resolved global instruction document. Its absolute path never
@@ -155,34 +158,69 @@ export interface GlobalPromptDocument {
   exists: boolean;
 }
 
-/** One official general-config toggle with the file's current line state. */
-export interface ToggleState {
-  key: string;
-  label: string;
-  line: string;
-  /** The value the checked line carries (e.g. false for spinnerTipsEnabled). */
-  applied: boolean;
-  /** Whether the target file currently carries the applied line. */
-  value: boolean;
-  group: string;
+/** One plain configuration value of a general parameter. There is no null
+ * or remove state: every supported parameter always carries a value. */
+export type CommonValue = boolean | string | number;
+
+/** The complete general-parameter values for one client, stored in the
+ * application's `configuration/common/{client}.json`. */
+export interface CommonSettings {
+  settings: Record<string, CommonValue>;
 }
 
-/** One selectable value of a multi-detent general setting. */
-export interface ChoiceOption {
+export interface CommonChoiceOption {
   value: string;
   label: string;
 }
 
-/** One multi-detent general setting (e.g. reasoning effort, sandbox mode). */
-export interface ChoiceState {
-  key: string;
-  label: string;
-  group: string;
-  /** "slider" renders the detent slider; "segment" renders pill segments. */
-  control: "slider" | "segment";
-  options: ChoiceOption[];
-  /** Raw scalar at the key; null = line absent. May be outside the options. */
-  value: string | null;
+/** The directory-defined default of one parameter; the target of the
+ * group's "恢复默认值" action. It is a plain value, never a remove
+ * instruction. */
+export interface CommonDefaultValue {
+  boolValue?: boolean;
+  strValue?: string;
+}
+
+/** One ownership-catalog general parameter the settings page may edit. */
+export type CommonSettingSpec =
+  | {
+      key: string;
+      label: string;
+      group: string;
+      control: "toggle";
+      default: CommonDefaultValue;
+      options: [];
+    }
+  | {
+      key: string;
+      label: string;
+      group: string;
+      control: "slider" | "segment";
+      default: CommonDefaultValue;
+      options: CommonChoiceOption[];
+    };
+
+/** Full typed general-settings editing model. `settingsHash` is the
+ * optimistic application-store revision; it is unrelated to client-file
+ * hashes. */
+export interface CommonSettingsEditor {
+  app: AppKind;
+  settings: CommonSettings;
+  settingsHash: string;
+  groups: string[];
+  specs: CommonSettingSpec[];
+}
+
+export interface CommonSettingsSnapshot {
+  settings: CommonSettings;
+  settingsHash: string;
+}
+
+/** Read-only rendering of the current draft's shared settings only. */
+export interface CommonSettingsPreview {
+  app: AppKind;
+  target: string;
+  content: string;
 }
 
 export interface RouteState {
@@ -201,16 +239,16 @@ export interface RouteState {
   scopeWarnings: string[];
 }
 
-export type SwitchOperation = "switch" | "commonsettings";
+export type WriteOperation = "projection" | "restore";
 
-export interface SwitchLog {
+export interface ConfigWriteRecord {
   app: AppKind;
   profileId: string | null;
   profileName: string | null;
   contentHash: string;
   backupId: string;
   at: string;
-  operation: SwitchOperation;
+  operation: WriteOperation;
 }
 
 /** Closed, renderer-safe runtime events emitted by the application backend. */
@@ -223,8 +261,6 @@ export type RuntimeLogAction =
   | "profileDeleted"
   | "profilesReordered"
   | "profileImported"
-  | "commonSettingsSaved"
-  | "commonSettingsApplied"
   | "globalPromptDocumentSaved"
   | "configurationSwitched"
   | "backupRestored"
@@ -254,7 +290,6 @@ export type MatchStatus =
   | { kind: "matchesProfile"; profileId: string; profileName: string }
   | { kind: "profileChanged"; profileName: string }
   | { kind: "restoredBackup"; at: string }
-  | { kind: "matchesSettings"; at: string }
   | { kind: "externallyModified"; at: string }
   | { kind: "unmanaged" }
   | { kind: "unknown" };
@@ -319,7 +354,7 @@ export interface ConfigFileStatus {
   route: RouteState | null;
   readError: string | null;
   matchStatus: MatchStatus;
-  lastSwitch: SwitchLog | null;
+  lastSwitch: ConfigWriteRecord | null;
 }
 
 export type RecoveryOutcome =
@@ -390,7 +425,12 @@ export interface CcSwitchSkip {
 export interface CcSwitchScanItem {
   key: string;
   app: AppKind;
-  draft: ProviderDraft;
+  routeMode: "official" | "custom";
+  name: string;
+  model: string | null;
+  baseUrl: string | null;
+  usageScriptImportable: boolean;
+  usageScriptUpdatesExisting: boolean;
   warnings: string[];
   existing: boolean;
 }
@@ -402,7 +442,8 @@ export interface CcSwitchScan {
 }
 
 export interface CcSwitchImportOutcome {
-  imported: ProviderProfile[];
+  importedCount: number;
+  usageScriptImportedCount: number;
   skippedExisting: string[];
   notImported: CcSwitchSkip[];
 }
@@ -445,32 +486,44 @@ export function getConfigStatus(): Promise<ConfigFileStatus[]> {
   return invoke<ConfigFileStatus[]>("config_status");
 }
 
-export function listProfiles(): Promise<ProviderProfile[]> {
-  return invoke<ProviderProfile[]>("list_profiles");
+export function listProfiles(): Promise<ProviderRecord[]> {
+  return invoke<ProviderRecord[]>("list_profiles");
 }
 
 export function resetProfileStore(confirmWrite: boolean): Promise<void> {
   return invoke<void>("reset_profile_store", { confirmWrite });
 }
 
-export function createProfile(draft: ProviderDraft): Promise<ProviderProfile> {
-  return invoke<ProviderProfile>("create_profile", { draft });
+export function createProfile(draft: ProviderDraft): Promise<ProviderRecord> {
+  return invoke<ProviderRecord>("create_profile", { draft });
 }
 
-export function updateProfile(profileId: string, draft: ProviderDraft): Promise<ProviderProfile> {
-  return invoke<ProviderProfile>("update_profile", { profileId, draft });
+export function updateProfile(
+  profileId: string,
+  draft: ProviderDraft,
+  expectedFileHash: string,
+): Promise<ProviderRecord> {
+  return invoke<ProviderRecord>("update_profile", { profileId, draft, expectedFileHash });
 }
 
-export function deleteProfile(profileId: string): Promise<void> {
-  return invoke<void>("delete_profile", { profileId });
+export function deleteProfile(profileId: string, expectedFileHash: string): Promise<void> {
+  return invoke<void>("delete_profile", { profileId, expectedFileHash });
 }
 
-export function reorderProfiles(target: AppKind, orderedIds: string[]): Promise<ProviderProfile[]> {
-  return invoke<ProviderProfile[]>("reorder_profiles", { target, orderedIds });
+export function reorderProfiles(
+  target: AppKind,
+  orderedIds: string[],
+  expectedFileHashes: Record<string, string>,
+): Promise<ProviderRecord[]> {
+  return invoke<ProviderRecord[]>("reorder_profiles", {
+    target,
+    orderedIds,
+    expectedFileHashes,
+  });
 }
 
-export function importDiscoveredProfile(target: AppKind): Promise<ProviderProfile> {
-  return invoke<ProviderProfile>("import_discovered_profile", { target });
+export function importDiscoveredProfile(target: AppKind): Promise<ProviderRecord> {
+  return invoke<ProviderRecord>("import_discovered_profile", { target });
 }
 
 export function scanCcswitch(): Promise<CcSwitchScan> {
@@ -481,39 +534,36 @@ export function importCcswitchProfiles(keys: string[]): Promise<CcSwitchImportOu
   return invoke<CcSwitchImportOutcome>("import_ccswitch_profiles", { keys });
 }
 
-export function getCommon(app: AppKind): Promise<CommonConfigPatch> {
-  return invoke<CommonConfigPatch>("get_common", { target: app });
+/** Reads the stored general-parameter values plus the catalog that can edit
+ * them. This does not read a real Codex or Claude Code configuration file. */
+export function getCommonSettingsEditor(app: AppKind): Promise<CommonSettingsEditor> {
+  return invoke<CommonSettingsEditor>("get_common_settings_editor", { target: app });
 }
 
-export function setCommon(app: AppKind, patch: CommonConfigPatch): Promise<void> {
-  return invoke<void>("set_common", { target: app, patch });
-}
-
-export function getCommonToggles(app: AppKind): Promise<ToggleState[]> {
-  return invoke<ToggleState[]>("common_toggles", { target: app });
-}
-
-/** The choice catalog for one client: section order plus the choices. */
-export interface CommonChoicesState {
-  groups: string[];
-  choices: ChoiceState[];
-}
-
-export function getCommonChoices(app: AppKind): Promise<CommonChoicesState> {
-  return invoke<CommonChoicesState>("common_choices", { target: app });
-}
-
-export function previewCommon(app: AppKind): Promise<FilePreview> {
-  return invoke<FilePreview>("preview_common", { target: app });
-}
-
-/** Writes the general overlay through the executor's safe transaction. */
-export function applyCommon(
+/** Saves desired application state only. A supplier must subsequently be
+ * re-applied through the normal switch flow to project it into a client file. */
+export function saveCommonSettings(
   app: AppKind,
-  patch: CommonConfigPatch,
-  confirmWrite: boolean,
-): Promise<SwitchOutcome> {
-  return invoke<SwitchOutcome>("apply_common", { target: app, patch, confirmWrite });
+  settings: CommonSettings,
+  expectedSettingsHash: string,
+): Promise<CommonSettingsSnapshot> {
+  return invoke<CommonSettingsSnapshot>("save_common_settings", {
+    target: app,
+    settings,
+    expectedSettingsHash,
+  });
+}
+
+/** Renders the current common-settings draft without reading or writing a
+ * real client file. */
+export function previewCommonSettings(
+  app: AppKind,
+  settings: CommonSettings,
+): Promise<CommonSettingsPreview> {
+  return invoke<CommonSettingsPreview>("preview_common_settings", {
+    target: app,
+    settings,
+  });
 }
 
 export function getGlobalPromptDocument(app: AppKind): Promise<GlobalPromptDocument> {
@@ -686,6 +736,12 @@ export function testUsageQuery(
   baseUrl: string | null,
 ): Promise<UsageSummary> {
   return invoke<UsageSummary>("test_usage_query", { query, apiKey, baseUrl });
+}
+
+/** Runs a persisted provider query without exposing its credential to the UI.
+ * Successful summaries are retained by the desktop runtime for tray display. */
+export function queryProfileUsage(profileId: string): Promise<UsageSummary> {
+  return invoke<UsageSummary>("query_profile_usage", { profileId });
 }
 
 /** Result of one manual app-update check; informational only. */

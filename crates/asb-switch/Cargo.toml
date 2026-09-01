@@ -10,6 +10,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"
 thiserror = { workspace = true }
+toml_edit = "0.22"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Threading",

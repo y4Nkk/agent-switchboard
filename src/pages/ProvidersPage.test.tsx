@@ -7,6 +7,7 @@ import { ProvidersPage } from "./ProvidersPage";
 const profile: ProviderProfile = {
   id: "relay-a",
   app: "codex",
+  routeMode: "custom",
   name: "中继 A",
   model: null,
   baseUrl: "https://relay.example/v1",

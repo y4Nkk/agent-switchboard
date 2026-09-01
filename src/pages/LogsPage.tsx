@@ -38,8 +38,6 @@ const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   profileDeleted: "已删除供应商档案",
   profilesReordered: "已调整供应商顺序",
   profileImported: "已导入本机供应商档案",
-  commonSettingsSaved: "已保存通用设置",
-  commonSettingsApplied: "已应用通用设置",
   globalPromptDocumentSaved: "已保存全局提示词文档",
   configurationSwitched: "已切换配置",
   backupRestored: "已恢复备份",

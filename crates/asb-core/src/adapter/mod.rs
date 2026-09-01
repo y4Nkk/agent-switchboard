@@ -9,7 +9,7 @@
 pub mod claude;
 pub mod codex;
 
-use crate::contracts::{AppKind, PatchValue, SwitchPlan, SwitchPreview};
+use crate::contracts::{AppKind, CommonSettings, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
 
 /// An adapter failure with location hints, safe to show in the UI.
@@ -52,7 +52,7 @@ pub fn scrub_message(message: impl Into<String>) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub enum OverlayEntry {
     /// Set or update the key to this value.
-    Set(crate::contracts::PatchValue),
+    Set(crate::contracts::ConfigValue),
     /// Leave whatever is currently there untouched.
     Leave,
     /// Remove the key if it currently exists.
@@ -71,7 +71,7 @@ pub fn preview(
         message: scrub_message(e.to_string()),
         line: None,
     })?;
-    match plan.app {
+    match plan.app() {
         AppKind::Codex => codex::preview(current, plan, backup_dir),
         AppKind::Claude => claude::preview(current, plan, backup_dir),
     }
@@ -83,69 +83,27 @@ pub fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> 
         message: scrub_message(e.to_string()),
         line: None,
     })?;
-    match plan.app {
+    match plan.app() {
         AppKind::Codex => codex::render(current, plan),
         AppKind::Claude => claude::render(current, plan),
     }
 }
 
-/// Computes the preview for a general-settings-only apply: the patch's own
-/// lines merged into `current`, with no profile routing.
-pub fn common_preview(
-    current: &str,
-    common: &crate::contracts::CommonConfigPatch,
-    backup_dir: &str,
-) -> Result<SwitchPreview, AdapterError> {
-    common.validate().map_err(|e| AdapterError {
-        message: scrub_message(e.to_string()),
-        line: None,
-    })?;
-    match common.app {
-        AppKind::Codex => {
-            codex::preview_entries(current, codex::common_overlay(common), backup_dir)
-        }
-        AppKind::Claude => {
-            let (entries, warnings) = claude::common_overlay(common);
-            claude::preview_entries(current, entries, warnings, backup_dir)
-        }
-    }
-}
-
-/// Renders the candidate file text for a general-settings-only apply.
-pub fn common_render(
-    current: &str,
-    common: &crate::contracts::CommonConfigPatch,
+/// Renders only the current client's non-default common settings as a
+/// self-contained TOML or JSON fragment. This is a read-only editor preview,
+/// not a candidate client file: provider and host-owned configuration remain
+/// intentionally absent.
+pub fn render_common_settings(
+    app: AppKind,
+    common: &CommonSettings,
 ) -> Result<String, AdapterError> {
-    common.validate().map_err(|e| AdapterError {
-        message: scrub_message(e.to_string()),
+    common.validate_for(app).map_err(|error| AdapterError {
+        message: scrub_message(error.to_string()),
         line: None,
     })?;
-    match common.app {
-        AppKind::Codex => codex::render_entries(current, codex::common_overlay(common)),
-        AppKind::Claude => {
-            let (entries, _) = claude::common_overlay(common);
-            claude::render_entries(current, entries)
-        }
-    }
-}
-
-/// Whether `text` currently carries the toggle's applied line. Unparseable
-/// text and non-matching values both count as inactive.
-pub fn toggle_is_active(app: AppKind, text: &str, key: &str, applied: bool) -> bool {
-    let expected = PatchValue::Bool(applied).display();
-    let found = match app {
-        AppKind::Codex => codex::parse_owned_scalar(text, key),
-        AppKind::Claude => claude::parse_owned_scalar(text, key),
-    };
-    found.is_ok_and(|value| value.as_deref() == Some(expected.as_str()))
-}
-
-/// Textual value at an owned dotted path, for settings rows that read the
-/// live file instead of matching one expected value.
-pub fn owned_scalar(app: AppKind, text: &str, key: &str) -> Result<Option<String>, AdapterError> {
     match app {
-        AppKind::Codex => codex::parse_owned_scalar(text, key),
-        AppKind::Claude => claude::parse_owned_scalar(text, key),
+        AppKind::Codex => codex::render_common_settings(common),
+        AppKind::Claude => claude::render_common_settings(common),
     }
 }
 
@@ -214,6 +172,8 @@ pub(crate) fn diff_owned_maps(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contracts::ConfigValue;
+    use crate::ownership::default_common_settings;
 
     #[test]
     fn scrub_message_removes_token_shaped_values() {
@@ -228,6 +188,29 @@ mod tests {
         assert_eq!(
             scrub_message("expected `=`, found `}`"),
             "expected `=`, found `}`"
+        );
+    }
+
+    #[test]
+    fn common_fragment_contains_only_non_default_common_values() {
+        let mut settings = default_common_settings(AppKind::Codex);
+        settings
+            .settings
+            .insert("hide_agent_reasoning".to_string(), ConfigValue::Bool(true));
+
+        let rendered = render_common_settings(AppKind::Codex, &settings).expect("fragment");
+
+        assert!(rendered.contains("hide_agent_reasoning = true"));
+        assert!(!rendered.contains("experimental_bearer_token"));
+    }
+
+    #[test]
+    fn common_fragment_keeps_claude_defaults_empty() {
+        let settings = default_common_settings(AppKind::Claude);
+
+        assert_eq!(
+            render_common_settings(AppKind::Claude, &settings).expect("fragment"),
+            "{}"
         );
     }
 }

@@ -22,10 +22,11 @@ pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchRow, CcSwitchSkip};
 
 pub use adapter::{preview, render, route_state, validate_syntax, AdapterError};
 pub use contracts::{
-    AppKind, BackupRecord, ChangeKind, ClaudeModelSettings, CodexModelSettings, CommonConfigPatch,
-    GlobalPromptDocument, KeyChange, MatchStatus, ModelOptions, PatchEntry, PatchValue,
-    ProviderDraft, ProviderProfile, RouteMode, RouteState, SwitchLog, SwitchOp, SwitchPlan,
-    SwitchPreview,
+    AppKind, BackupRecord, ChangeKind, ClaudeModelSettings, CodexModelSettings, CommonSettings,
+    CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue, ConfigWriteRecord,
+    GlobalPromptDocument, KeyChange, MatchStatus, ModelOptions, ProviderDraft, ProviderFile,
+    ProviderProfile, ProviderRecord, RouteMode, RouteState, SwitchPlan, SwitchPreview,
+    WriteOperation,
 };
 pub use lock::{classify_lock, LockFileData, LockHolder, LockStatus, PidLiveness};
 pub use redact::{redact, REDACTED};

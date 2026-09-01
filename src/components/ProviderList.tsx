@@ -80,11 +80,9 @@ interface RowProps {
   renderPreview?: (profile: ProviderProfile) => ReactNode;
 }
 
-/** CC Switch-style provider cards: avatar tile, name over a link-colored
- * detail line, a status pill for the live-matched row, and an icon-action
- * cluster in a pill container (user-directed replica, DESIGN.md §8). The
- * grip handle is the only drag affordance; the row body stays a plain
- * click-to-select target. */
+/** Provider cards use the app's compact routing layout. The grip handle is
+ * the only drag affordance; the row body stays a plain click-to-select
+ * target. */
 function ProviderRow({
   profile,
   active,
@@ -108,9 +106,9 @@ function ProviderRow({
   const initial = profile.name.trim().charAt(0).toUpperCase() || "?";
   const baseUrl = profile.baseUrl;
   const probe = useEndpointProbe(baseUrl ?? null);
-  // Valid profiles always carry an endpoint; the fallback only guards
-  // pre-migration shapes.
-  const detail = baseUrl ? hostLabel(baseUrl) : "自定义服务";
+  const [probeOpen, setProbeOpen] = useState(false);
+  const official = profile.routeMode === "official";
+  const detail = baseUrl ? hostLabel(baseUrl) : official ? "官方登录" : "自定义服务";
   const hasUsageQuery = profile.usageQuery !== null && profile.usageQuery !== undefined;
   const usageLabel = hasUsageQuery
     ? usageOpen
@@ -119,12 +117,18 @@ function ProviderRow({
     : `配置 ${profile.name} 用量`;
   const hasProbeFeedback = probe.result !== null || probe.error !== null;
   const probeFeedbackId = `provider-probe-${profile.id}`;
-  const hasActions = Boolean(baseUrl || hasUsageQuery || onConfigureUsage || onPreview || onEdit || onDelete);
+  const probeVisible = probeOpen && hasProbeFeedback;
+  const probeLabel = probe.busy
+    ? `正在测试 ${profile.name} 连通性`
+    : probeVisible
+      ? `收起 ${profile.name} 连通性结果`
+      : `测试 ${profile.name} 连通性`;
+  const hasActions = Boolean(baseUrl || hasUsageQuery || (!official && onConfigureUsage) || onPreview || (!official && onEdit) || onDelete);
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`asb-row-item${active ? " is-live" : ""}${isDragging ? " is-dragging" : ""}`}
+      className={`asb-row-item${active ? " is-live" : ""}${isDragging ? " is-dragging" : ""}${previewOpen ? " is-previewing" : ""}`}
     >
       <div className="asb-row-line">
       {sortable && (
@@ -188,35 +192,15 @@ function ProviderRow({
       {active && <span className="asb-pill-status">使用中</span>}
       {hasActions && (
         <span className="asb-iconcluster" role="group" aria-label={`${profile.name} 操作`}>
-          {(hasUsageQuery || onConfigureUsage) && (
-            <Tooltip label={usageLabel}>
+          {onEdit && !official && (
+            <Tooltip label={`编辑 ${profile.name}`}>
               <button
                 type="button"
-                className={`asb-btn-icon${usageOpen ? " is-active" : ""}`}
-                aria-label={usageLabel}
-                aria-controls={hasUsageQuery ? `provider-usage-${profile.id}` : undefined}
-                aria-expanded={hasUsageQuery ? usageOpen : undefined}
-                onClick={() => {
-                  if (hasUsageQuery) onToggleUsage(profile);
-                  else onConfigureUsage?.(profile);
-                }}
+                className="asb-btn-icon"
+                aria-label={`编辑 ${profile.name}`}
+                onClick={() => onEdit(profile)}
               >
-                <UsageIcon />
-              </button>
-            </Tooltip>
-          )}
-          {baseUrl && (
-            <Tooltip label={probe.busy ? `正在测试 ${profile.name} 连通性` : `测试 ${profile.name} 连通性`}>
-              <button
-                type="button"
-                className={`asb-btn-icon${hasProbeFeedback ? " is-active" : ""}`}
-                aria-label={probe.busy ? `正在测试 ${profile.name} 连通性` : `测试 ${profile.name} 连通性`}
-                aria-busy={probe.busy}
-                aria-describedby={hasProbeFeedback ? probeFeedbackId : undefined}
-                disabled={probe.busy}
-                onClick={() => void probe.run()}
-              >
-                <ConnectivityIcon />
+                <EditIcon />
               </button>
             </Tooltip>
           )}
@@ -233,15 +217,44 @@ function ProviderRow({
               </button>
             </Tooltip>
           )}
-          {onEdit && (
-            <Tooltip label={`编辑 ${profile.name}`}>
+          {baseUrl && (
+            <Tooltip label={probeLabel}>
               <button
                 type="button"
-                className="asb-btn-icon"
-                aria-label={`编辑 ${profile.name}`}
-                onClick={() => onEdit(profile)}
+                className={`asb-btn-icon${probeVisible ? " is-active" : ""}`}
+                aria-label={probeLabel}
+                aria-busy={probe.busy}
+                aria-controls={probeFeedbackId}
+                aria-expanded={probeVisible}
+                aria-describedby={probeVisible ? probeFeedbackId : undefined}
+                disabled={probe.busy}
+                onClick={() => {
+                  if (probeVisible) {
+                    setProbeOpen(false);
+                    return;
+                  }
+                  setProbeOpen(true);
+                  void probe.run();
+                }}
               >
-                <EditIcon />
+                <ConnectivityIcon />
+              </button>
+            </Tooltip>
+          )}
+          {!official && (hasUsageQuery || onConfigureUsage) && (
+            <Tooltip label={usageLabel}>
+              <button
+                type="button"
+                className={`asb-btn-icon${usageOpen ? " is-active" : ""}`}
+                aria-label={usageLabel}
+                aria-controls={hasUsageQuery ? `provider-usage-${profile.id}` : undefined}
+                aria-expanded={hasUsageQuery ? usageOpen : undefined}
+                onClick={() => {
+                  if (hasUsageQuery) onToggleUsage(profile);
+                  else onConfigureUsage?.(profile);
+                }}
+              >
+                <UsageIcon />
               </button>
             </Tooltip>
           )}
@@ -260,7 +273,7 @@ function ProviderRow({
         </span>
       )}
       </div>
-      {hasProbeFeedback && (
+      {probeVisible && (
         <ProbeFeedback
           id={probeFeedbackId}
           className="asb-provider-probe-feedback"
@@ -295,7 +308,7 @@ export function ProviderList({
   onDelete,
   renderPreview,
 }: Props) {
-  const [openUsageId, setOpenUsageId] = useState<string | null>(null);
+  const [collapsedUsageIds, setCollapsedUsageIds] = useState<string[]>([]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -311,7 +324,11 @@ export function ProviderList({
   };
   const toggleUsage = (profile: ProviderProfile) => {
     if (!profile.usageQuery) return;
-    setOpenUsageId((current) => (current === profile.id ? null : profile.id));
+    setCollapsedUsageIds((current) =>
+      current.includes(profile.id)
+        ? current.filter((id) => id !== profile.id)
+        : [...current, profile.id],
+    );
   };
   if (profiles.length === 0) {
     return <p className="asb-empty">尚无供应商</p>;
@@ -327,7 +344,7 @@ export function ProviderList({
               active={profile.id === activeProfileId}
               selected={selectedId === profile.id}
               previewOpen={profile.id === openPreviewId}
-              usageOpen={profile.id === openUsageId}
+              usageOpen={Boolean(profile.usageQuery) && !collapsedUsageIds.includes(profile.id)}
               sortable={Boolean(onReorder)}
               onSelect={onSelect}
               onToggleUsage={toggleUsage}

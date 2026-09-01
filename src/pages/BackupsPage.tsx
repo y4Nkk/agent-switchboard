@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { BackupRecord, SwitchLog } from "../api/client";
+import type { BackupRecord, ConfigWriteRecord } from "../api/client";
 import type { useCloudBackup } from "../app/useCloudBackup";
 import { BackupHistory } from "../components/BackupHistory";
 import { CloudBackupPanel } from "../components/CloudBackupPanel";
@@ -9,10 +9,10 @@ import { clientName } from "../lib/client-name";
 interface BackupsPageProps {
   records: BackupRecord[];
   busy: boolean;
-  lastSwitch: SwitchLog | null;
+  lastSwitch: ConfigWriteRecord | null;
   cloudBackup: ReturnType<typeof useCloudBackup>;
   onRestore: (backupId: string) => void;
-  onUndo: (lastSwitch: SwitchLog) => void;
+  onUndo: (lastSwitch: ConfigWriteRecord) => void;
   onOpenDir: () => void;
 }
 
@@ -87,9 +87,11 @@ export function BackupsPage({
           {lastSwitch && (
             <p className="asb-scope-note">
               上次操作：{clientName(lastSwitch.app)}
-              {lastSwitch.profileName
-                ? ` 切换到「${lastSwitch.profileName}」`
-                : " 恢复了备份"}
+              {lastSwitch.operation === "projection" && lastSwitch.profileName
+                ? ` 已投影供应商「${lastSwitch.profileName}」`
+                : lastSwitch.operation === "restore"
+                  ? " 恢复了备份"
+                  : " 已应用通用设置投影"}
               ，<Time iso={lastSwitch.at} />。
             </p>
           )}

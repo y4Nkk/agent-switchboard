@@ -6,7 +6,7 @@
 
 use crate::commands::{self, error::CommandError};
 use crate::local_state::{AppSettings, CloudBackupSettings};
-use asb_core::contracts::{AppKind, CommonConfigPatch, ProviderDraft, UsageQuery};
+use asb_core::contracts::{AppKind, CommonSettings, ProviderDraft, UsageQuery};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,7 +15,6 @@ use tauri::AppHandle;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 pub(crate) const DEV_API_ADDRESS: &str = "127.0.0.1:1422";
-pub(crate) const DEV_ORIGIN: &str = "http://localhost:1420";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,19 +36,19 @@ enum InvokeResponse {
 }
 
 /// Binds the loopback-only RPC bridge before the browser is opened.
-pub(crate) fn start(app: AppHandle) -> Result<(), String> {
+pub(crate) fn start(app: AppHandle, development_origin: String) -> Result<(), String> {
     let server =
         Server::http(DEV_API_ADDRESS).map_err(|error| format!("无法启动本机开发后端：{error}"))?;
     thread::Builder::new()
         .name("asb-web-dev-api".to_string())
-        .spawn(move || serve(server, app))
+        .spawn(move || serve(server, app, development_origin))
         .map_err(|error| format!("无法运行本机开发后端：{error}"))?;
     Ok(())
 }
 
-fn serve(server: Server, app: AppHandle) {
+fn serve(server: Server, app: AppHandle, development_origin: String) {
     for mut request in server.incoming_requests() {
-        let response = handle_request(&mut request, &app);
+        let response = handle_request(&mut request, &app, &development_origin);
         let _ = request.respond(response);
     }
 }
@@ -57,15 +56,22 @@ fn serve(server: Server, app: AppHandle) {
 fn handle_request(
     request: &mut tiny_http::Request,
     app: &AppHandle,
+    development_origin: &str,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
+    if is_health_request(request.method(), request.url()) {
+        if !has_development_origin(request, development_origin) {
+            return error_response(
+                403,
+                "web-origin-rejected",
+                "开发后端只接受本机 Vite 页面请求",
+            );
+        }
+        return Response::from_data(Vec::new()).with_status_code(StatusCode(204));
+    }
     if request.method() != &Method::Post || request.url() != "/invoke" {
         return error_response(404, "web-command-not-found", "开发后端不存在该接口");
     }
-    if !request
-        .headers()
-        .iter()
-        .any(|header| header.field.equiv("Origin") && header.value.as_str() == DEV_ORIGIN)
-    {
+    if !has_development_origin(request, development_origin) {
         return error_response(
             403,
             "web-origin-rejected",
@@ -90,6 +96,20 @@ fn handle_request(
         Ok(result) => json_response(200, &InvokeResponse::Success { result }),
         Err(error) => json_response(200, &InvokeResponse::Failure { error }),
     }
+}
+
+fn has_development_origin(request: &tiny_http::Request, development_origin: &str) -> bool {
+    request.headers().iter().any(|header| {
+        header.field.equiv("Origin") && origin_is_allowed(header.value.as_str(), development_origin)
+    })
+}
+
+fn origin_is_allowed(request_origin: &str, development_origin: &str) -> bool {
+    request_origin == development_origin
+}
+
+fn is_health_request(method: &Method, url: &str) -> bool {
+    method == &Method::Get && url == "/health"
 }
 
 fn error_response(
@@ -156,15 +176,18 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
                 app.clone(),
                 argument(&request.args, "profileId")?,
                 argument::<ProviderDraft>(&request.args, "draft")?,
+                argument::<String>(&request.args, "expectedFileHash")?,
             )),
             "delete_profile" => command!(commands::delete_profile(
                 app.clone(),
                 argument(&request.args, "profileId")?,
+                argument::<String>(&request.args, "expectedFileHash")?,
             )),
             "reorder_profiles" => command!(commands::reorder_profiles(
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
                 argument(&request.args, "orderedIds")?,
+                argument(&request.args, "expectedFileHashes")?,
             )),
             "import_discovered_profile" => command!(commands::import_discovered_profile(
                 app.clone(),
@@ -175,33 +198,24 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
                 app.clone(),
                 argument(&request.args, "keys")?,
             )),
-            "get_common" => command!(commands::common_settings::get_common(
+            "get_common_settings_editor" => {
+                command!(commands::common_settings::get_common_settings_editor(
+                    app.clone(),
+                    argument::<AppKind>(&request.args, "target")?,
+                ))
+            }
+            "save_common_settings" => command!(commands::common_settings::save_common_settings(
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
+                argument::<CommonSettings>(&request.args, "settings")?,
+                argument::<String>(&request.args, "expectedSettingsHash")?,
             )),
-            "set_common" => command!(commands::common_settings::set_common(
-                app.clone(),
-                argument::<AppKind>(&request.args, "target")?,
-                argument::<CommonConfigPatch>(&request.args, "patch")?,
-            )),
-            "common_toggles" => command!(commands::common_settings::common_toggles(
-                app.clone(),
-                argument::<AppKind>(&request.args, "target")?,
-            )),
-            "common_choices" => command!(commands::common_settings::common_choices(
-                app.clone(),
-                argument::<AppKind>(&request.args, "target")?,
-            )),
-            "preview_common" => command!(commands::common_settings::preview_common(
-                app.clone(),
-                argument::<AppKind>(&request.args, "target")?,
-            )),
-            "apply_common" => command!(commands::common_settings::apply_common(
-                app.clone(),
-                argument::<AppKind>(&request.args, "target")?,
-                argument::<CommonConfigPatch>(&request.args, "patch")?,
-                argument(&request.args, "confirmWrite")?,
-            )),
+            "preview_common_settings" => {
+                command!(commands::common_settings::preview_common_settings(
+                    argument::<AppKind>(&request.args, "target")?,
+                    argument::<CommonSettings>(&request.args, "settings")?,
+                ))
+            }
             "get_global_prompt_document" => {
                 command!(commands::prompt_management::get_global_prompt_document(
                     app.clone(),
@@ -292,6 +306,10 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
                 argument(&request.args, "apiKey")?,
                 argument(&request.args, "baseUrl")?,
             )),
+            "query_profile_usage" => command!(commands::query_profile_usage(
+                app.clone(),
+                argument(&request.args, "profileId")?,
+            )),
             "check_update" => command!(commands::check_update(app.clone())),
             "get_cached_codex_reset_status" => {
                 command!(commands::get_cached_codex_reset_status(app.clone()))
@@ -352,5 +370,20 @@ mod tests {
             argument::<bool>(&args, "target").unwrap_err().code,
             "web-argument-invalid"
         );
+    }
+
+    #[test]
+    fn health_route_is_get_only() {
+        assert!(is_health_request(&Method::Get, "/health"));
+        assert!(!is_health_request(&Method::Post, "/health"));
+        assert!(!is_health_request(&Method::Get, "/invoke"));
+    }
+
+    #[test]
+    fn development_origin_requires_an_exact_match() {
+        let configured = "http://127.0.0.1:1420";
+        assert!(origin_is_allowed(configured, configured));
+        assert!(!origin_is_allowed("http://127.0.0.1:1421", configured));
+        assert!(!origin_is_allowed("http://127.0.0.2:1420", configured));
     }
 }

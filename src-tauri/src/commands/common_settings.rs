@@ -1,269 +1,260 @@
-//! General-configuration overlay commands: the per-client toggle and choice
-//! catalogs, the side-effect-free preview, and the transactional apply.
+//! Application-owned common-settings commands.
+//!
+//! These commands never read, lock, back up, or write a Codex or Claude Code
+//! configuration file. They expose the typed ownership catalog, persist plain
+//! parameter values in `configuration/common/{client}.json`, and can render a
+//! read-only common-settings fragment. Applying those values remains the
+//! selected supplier's switch transaction.
 
-use super::error::{
-    blocking, observe, record_audit_or_warn, require_write_confirmation, state, store_error,
-    CommandError,
+use super::error::{blocking, state, store_error, CommandError};
+use asb_core::contracts::{
+    AppKind, CommonSettings, CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue,
 };
-use crate::runtime_log::RuntimeLogAction;
-use asb_core::contracts::{AppKind, CommonConfigPatch, SwitchLog, SwitchOp};
-use asb_core::{adapter, ownership};
-use asb_switch::io::{FsIo, SwitchIo};
-use asb_switch::{execute_common, read_common_preview, CommonRequest, FilePreview, SwitchOutcome};
+use asb_core::ownership::{self, ChoiceControl, SettingControl, SettingOwner};
 use serde::Serialize;
 use tauri::AppHandle;
 
-#[tauri::command]
-pub async fn get_common(
-    app: AppHandle,
-    target: AppKind,
-) -> Result<CommonConfigPatch, CommandError> {
-    let state = state(&app)?;
-    blocking(move || state.get_common(target).map_err(store_error)).await
-}
-
-#[tauri::command]
-pub async fn set_common(
-    app: AppHandle,
-    target: AppKind,
-    patch: CommonConfigPatch,
-) -> Result<(), CommandError> {
-    observe(RuntimeLogAction::CommonSettingsSaved, async move {
-        let state = state(&app)?;
-        blocking(move || {
-            state
-                .set_common(target, patch)
-                .map_err(|error| CommandError::new("common-save-failed", error))
-        })
-        .await
-    })
-    .await
-}
-
-/// One settings-page checkbox: the official toggle plus whether the target
-/// file currently carries its applied line.
+/// A catalog option available for one common choice control.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ToggleState {
-    pub key: String,
-    pub label: String,
-    pub line: String,
-    /// The value the checked line carries (e.g. `spinnerTipsEnabled = false`).
-    pub applied: bool,
-    /// Whether the target file currently carries the applied line.
-    pub value: bool,
-    pub group: String,
-}
-
-#[tauri::command]
-pub async fn common_toggles(
-    app: AppHandle,
-    target: AppKind,
-) -> Result<Vec<ToggleState>, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let path = state
-            .target(target)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let text = FsIo.read_file(&path).unwrap_or_default();
-        Ok(ownership::common_toggles(target)
-            .iter()
-            .map(|spec| ToggleState {
-                key: spec.key.to_string(),
-                label: spec.label.to_string(),
-                line: spec.line.to_string(),
-                applied: spec.applied,
-                value: adapter::toggle_is_active(target, &text, spec.key, spec.applied),
-                group: spec.group.to_string(),
-            })
-            .collect())
-    })
-    .await
-}
-
-/// One selectable value of a multi-detent general setting.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChoiceOptionState {
+pub struct CommonChoiceOption {
     pub value: String,
     pub label: String,
 }
 
-/// One multi-detent general setting: the official values plus the line the
-/// target file currently carries (`None` = line absent, client default).
+/// The directory-defined default for one parameter. The renderer shows it as
+/// the target of the group's "恢复默认值" action; it is a plain value, never
+/// a remove instruction.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChoiceState {
+pub struct CommonDefaultValue {
+    pub bool_value: Option<bool>,
+    pub str_value: Option<String>,
+}
+
+/// One editor-safe projection of the ownership directory. The renderer never
+/// receives a client path or arbitrary config key: every parameter comes from
+/// the shared catalog and is therefore known to be a general setting.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommonSettingSpec {
     pub key: String,
     pub label: String,
     pub group: String,
-    /// "slider" or "segment"; how the settings page renders the choice.
+    /// `toggle`, `slider`, or `segment`.
     pub control: String,
-    pub options: Vec<ChoiceOptionState>,
-    /// The raw scalar at the key, even when it matches no catalog option.
-    pub value: Option<String>,
+    pub default: CommonDefaultValue,
+    pub options: Vec<CommonChoiceOption>,
 }
 
-/// The choice catalog for one client: section order plus the choices.
+/// Complete typed input required by the common settings page for one client.
+/// `settings` and `settings_hash` are application state only, not a rendered
+/// client configuration candidate.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CommonChoicesState {
-    /// Section order for the settings page, the single owner of grouping.
+pub struct CommonSettingsEditor {
+    pub app: AppKind,
+    pub settings: CommonSettings,
+    pub settings_hash: String,
     pub groups: Vec<String>,
-    pub choices: Vec<ChoiceState>,
+    pub specs: Vec<CommonSettingSpec>,
 }
 
-#[tauri::command]
-pub async fn common_choices(
-    app: AppHandle,
-    target: AppKind,
-) -> Result<CommonChoicesState, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let path = state
-            .target(target)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let text = FsIo.read_file(&path).unwrap_or_default();
-        let mut choices = Vec::new();
-        for spec in ownership::common_choices(target) {
-            let value = adapter::owned_scalar(target, &text, spec.key)
-                .map_err(|error| CommandError::new("common-choice-unreadable", error.message))?;
-            choices.push(ChoiceState {
-                key: spec.key.to_string(),
-                label: spec.label.to_string(),
-                group: spec.group.to_string(),
-                control: match spec.control {
-                    ownership::ChoiceControl::Slider => "slider",
-                    ownership::ChoiceControl::Segment => "segment",
-                }
-                .to_string(),
-                options: spec
-                    .options
-                    .iter()
-                    .map(|option| ChoiceOptionState {
-                        value: option.value.to_string(),
-                        label: option.label.to_string(),
-                    })
-                    .collect(),
-                value,
-            });
-        }
-        Ok(CommonChoicesState {
-            groups: ownership::common_groups(target)
-                .iter()
-                .map(|group| group.to_string())
-                .collect(),
-            choices,
-        })
-    })
-    .await
-}
-
-/// Side-effect-free general-config preview: the summary diff plus the
-/// pretty-printed candidate file content, computed without locking or
-/// writing.
-#[tauri::command]
-pub async fn preview_common(app: AppHandle, target: AppKind) -> Result<FilePreview, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let patch = state.get_common(target).map_err(store_error)?;
-        let target_path = state
-            .target(target)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let backup_dir = state.backup_dir();
-        let mut file = read_common_preview(
-            &FsIo,
-            &CommonRequest {
-                target: &target_path,
-                app: target,
-                common: &patch,
-                backup_dir: &backup_dir,
-                expected_hash: "",
-                expected_rendered_hash: "",
-            },
-        )
-        .map_err(map_common_preview_error)?;
-        file.preview.target = target_path.to_string_lossy().to_string();
-        Ok(file)
-    })
-    .await
-}
-
-fn map_common_preview_error(error: asb_switch::SwitchError) -> CommandError {
-    match error {
-        asb_switch::SwitchError::PlanRejected { message, line } => CommandError::new(
-            "common-patch-invalid",
-            format!(
-                "{message}{}",
-                line.map(|line| format!("（第 {line} 行）"))
-                    .unwrap_or_default()
-            ),
-        ),
-        other => CommandError::from(other),
+fn default_value(default: Option<&ConfigValue>) -> CommonDefaultValue {
+    match default {
+        Some(ConfigValue::Bool(value)) => CommonDefaultValue {
+            bool_value: Some(*value),
+            str_value: None,
+        },
+        Some(ConfigValue::Str(value)) => CommonDefaultValue {
+            bool_value: None,
+            str_value: Some(value.clone()),
+        },
+        Some(other) => CommonDefaultValue {
+            bool_value: None,
+            str_value: Some(other.display()),
+        },
+        None => CommonDefaultValue {
+            bool_value: None,
+            str_value: None,
+        },
     }
 }
 
-/// Applies the general-configuration overlay on its own through the full
-/// executor transaction (lock → backup → atomic replace → verify).
+fn editor_catalog(target: AppKind) -> Vec<CommonSettingSpec> {
+    ownership::setting_specs(target)
+        .into_iter()
+        .filter(|spec| spec.owner == SettingOwner::Common)
+        .map(|spec| {
+            let (control, options) = match spec.control {
+                SettingControl::Toggle => ("toggle".to_string(), vec![]),
+                SettingControl::Choice { presentation } => (
+                    match presentation {
+                        ChoiceControl::Slider => "slider",
+                        ChoiceControl::Segment => "segment",
+                    }
+                    .to_string(),
+                    spec.allowed_values
+                        .iter()
+                        .map(|option| CommonChoiceOption {
+                            value: option.value.to_string(),
+                            label: option.label.to_string(),
+                        })
+                        .collect(),
+                ),
+                SettingControl::None => unreachable!("common setting must have an editor control"),
+            };
+            CommonSettingSpec {
+                key: spec.key.to_string(),
+                label: spec
+                    .label
+                    .expect("common setting must have a visible label")
+                    .to_string(),
+                group: spec
+                    .group
+                    .expect("common setting must have an editor group")
+                    .to_string(),
+                control,
+                default: default_value(spec.default.as_ref()),
+                options,
+            }
+        })
+        .collect()
+}
+
+fn editor_from_snapshot(target: AppKind, snapshot: CommonSettingsSnapshot) -> CommonSettingsEditor {
+    CommonSettingsEditor {
+        app: target,
+        settings_hash: snapshot.settings_hash,
+        settings: snapshot.settings,
+        groups: ownership::common_groups(target)
+            .iter()
+            .map(|group| group.to_string())
+            .collect(),
+        specs: editor_catalog(target),
+    }
+}
+
+/// Reads the application-owned parameter values and the catalog that can edit
+/// them. This command deliberately does not access the real client
+/// configuration.
 #[tauri::command]
-pub async fn apply_common(
+pub async fn get_common_settings_editor(
     app: AppHandle,
     target: AppKind,
-    patch: CommonConfigPatch,
-    confirm_write: bool,
-) -> Result<SwitchOutcome, CommandError> {
-    observe(RuntimeLogAction::CommonSettingsApplied, async move {
-        require_write_confirmation(confirm_write, "写入通用配置")?;
-        let state = state(&app)?;
-        blocking(move || {
-            patch
-                .validate()
-                .map_err(|error| CommandError::new("common-patch-invalid", error.to_string()))?;
-            let target_path = state
-                .target(target)
-                .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-            let backup_dir = state.backup_dir();
-            let preview = read_common_preview(
-                &FsIo,
-                &CommonRequest {
-                    target: &target_path,
-                    app: target,
-                    common: &patch,
-                    backup_dir: &backup_dir,
-                    expected_hash: "",
-                    expected_rendered_hash: "",
-                },
-            )
-            .map_err(map_common_preview_error)?;
-            let mut outcome = execute_common(
-                &FsIo,
-                &CommonRequest {
-                    target: &target_path,
-                    app: target,
-                    common: &patch,
-                    backup_dir: &backup_dir,
-                    expected_hash: &preview.content_hash,
-                    expected_rendered_hash: &preview.rendered_hash,
-                },
-            )
-            .map_err(CommandError::from)?;
-            outcome.preview.target = target_path.to_string_lossy().to_string();
-            record_audit_or_warn(
-                state.record_switch(SwitchLog {
-                    app: target,
-                    profile_id: None,
-                    profile_name: None,
-                    content_hash: outcome.final_hash.clone(),
-                    backup_id: outcome.backup.id.clone(),
-                    at: outcome.backup.created_at.clone(),
-                    operation: SwitchOp::CommonSettings,
-                }),
-                &mut outcome.warnings,
-            );
-            crate::tray::refresh(&app);
-            Ok(outcome)
-        })
-        .await
+) -> Result<CommonSettingsEditor, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        state
+            .configuration()
+            .get_common_settings(target)
+            .map(|snapshot| editor_from_snapshot(target, snapshot))
+            .map_err(store_error)
     })
     .await
+}
+
+/// Replaces one client's common settings after an optimistic revision check.
+/// Saving here cannot modify either real client config file; the supplier
+/// switch path is the only projection writer.
+#[tauri::command]
+pub async fn save_common_settings(
+    app: AppHandle,
+    target: AppKind,
+    settings: CommonSettings,
+    expected_settings_hash: String,
+) -> Result<CommonSettingsSnapshot, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        state
+            .configuration()
+            .save_common_settings(target, settings, &expected_settings_hash)
+            .map_err(|message| CommandError::new("common-settings-save-failed", message))
+    })
+    .await
+}
+
+/// Renders the editor's current draft as an application-owned common-settings
+/// fragment. It is pure: no client file is read or written, and no provider
+/// data can enter this preview.
+#[tauri::command]
+pub async fn preview_common_settings(
+    target: AppKind,
+    settings: CommonSettings,
+) -> Result<CommonSettingsPreview, CommandError> {
+    blocking(move || {
+        let content =
+            asb_core::adapter::render_common_settings(target, &settings).map_err(|error| {
+                CommandError::new("common-settings-preview-failed", error.to_string())
+            })?;
+        Ok(CommonSettingsPreview {
+            app: target,
+            target: format!("{} 通用配置片段", target.config_label()),
+            content,
+        })
+    })
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn common_settings_catalog_contains_only_common_owned_controls() {
+        for app in [AppKind::Codex, AppKind::Claude] {
+            let catalog = editor_catalog(app);
+            assert!(!catalog.is_empty());
+            for setting in &catalog {
+                assert_eq!(
+                    ownership::owner_for(app, &setting.key),
+                    SettingOwner::Common
+                );
+                assert!(!setting.label.is_empty());
+                assert!(!setting.group.is_empty());
+                assert!(matches!(
+                    setting.control.as_str(),
+                    "toggle" | "slider" | "segment"
+                ));
+                if setting.control == "toggle" {
+                    assert!(setting.options.is_empty());
+                    assert!(setting.default.bool_value.is_some());
+                } else {
+                    assert!(!setting.options.is_empty());
+                    assert!(setting.default.str_value.is_some());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn editor_has_no_client_file_projection_data() {
+        let editor = editor_from_snapshot(
+            AppKind::Codex,
+            CommonSettingsSnapshot {
+                settings: ownership::default_common_settings(AppKind::Codex),
+                settings_hash: "revision".to_string(),
+            },
+        );
+        let json = serde_json::to_value(editor).expect("editor serializes");
+        assert!(json.get("target").is_none());
+        assert!(json.get("content").is_none());
+        assert!(json.get("preview").is_none());
+        // No patch semantics anywhere in the editor contract.
+        let text = serde_json::to_string(&json).unwrap();
+        for forbidden in ["不接管", "移除", "接管", "Leave", "Remove"] {
+            assert!(!text.contains(forbidden));
+        }
+    }
+
+    #[test]
+    fn preview_renders_only_the_common_settings_fragment() {
+        let settings = ownership::default_common_settings(AppKind::Codex);
+        let preview =
+            tauri::async_runtime::block_on(preview_common_settings(AppKind::Codex, settings))
+                .expect("preview");
+        assert_eq!(preview.app, AppKind::Codex);
+        assert!(preview.target.contains("config.toml"));
+        assert!(preview.content.contains("所有通用设置均为默认值"));
+    }
 }

@@ -3,7 +3,8 @@
 //! Every command maps its failures onto [`CommandError`] so the UI receives
 //! a stable code plus a scrubbed, user-readable message.
 
-use crate::local_state::{LocalState, ProfileStoreError};
+use crate::config_store::ProfileStoreError;
+use crate::local_state::LocalState;
 use crate::runtime_log::{self, RuntimeLogAction};
 use asb_core::adapter;
 use serde::Serialize;
@@ -30,6 +31,7 @@ pub(crate) fn store_error(error: ProfileStoreError) -> CommandError {
     let code = match error {
         ProfileStoreError::Unreadable => "store-unreadable",
         ProfileStoreError::Unsupported => "profile-store-unsupported",
+        ProfileStoreError::Migration(_) => "config-migration-failed",
     };
     CommandError::new(code, error.to_string())
 }
@@ -43,6 +45,7 @@ impl From<asb_switch::SwitchError> for CommandError {
             asb_switch::SwitchError::ExternalChange { .. } => "external-change",
             asb_switch::SwitchError::PlanChanged => "preview-stale",
             asb_switch::SwitchError::CommitFailed { .. } => "commit-failed",
+            asb_switch::SwitchError::LockReleaseFailed { .. } => "lock-release-failed",
         };
         CommandError::new(code, error.to_string())
     }
@@ -95,14 +98,6 @@ pub(crate) fn require_write_confirmation(
     ))
 }
 
-const AUDIT_LOG_WARNING: &str = "配置已写入，但本地审计记录保存失败；本次操作无法从应用中撤回";
-
-pub(crate) fn record_audit_or_warn(result: Result<(), String>, warnings: &mut Vec<String>) {
-    if result.is_err() {
-        warnings.push(AUDIT_LOG_WARNING.to_string());
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,15 +121,5 @@ mod tests {
         assert!(error.message.contains("显式确认"));
         assert!(require_write_confirmation(true, "写入配置").is_ok());
         assert!(require_write_confirmation(false, "重置供应商数据").is_err());
-    }
-
-    #[test]
-    fn successful_configuration_write_reports_audit_store_failure_as_a_warning() {
-        let mut warnings = vec![];
-        record_audit_or_warn(Err("store unavailable".to_string()), &mut warnings);
-        assert_eq!(warnings, vec![AUDIT_LOG_WARNING.to_string()]);
-
-        record_audit_or_warn(Ok(()), &mut warnings);
-        assert_eq!(warnings.len(), 1);
     }
 }

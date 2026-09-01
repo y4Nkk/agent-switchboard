@@ -9,7 +9,7 @@
 use crate::display::display_content;
 use crate::io::SwitchIo;
 use crate::lockfile::{self, AcquireOutcome};
-use crate::restore::restore_backup_content;
+use crate::restore::{restore_backup_content, restore_locked};
 use asb_core::{
     adapter, AdapterError, AppKind, BackupRecord, LockStatus, SwitchPlan, SwitchPreview,
 };
@@ -17,6 +17,8 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+
+pub use crate::restore::RestoreOutcome;
 
 pub const PROCESS_NAME: &str = "agent-switchboard";
 
@@ -88,6 +90,13 @@ pub enum SwitchError {
         message: String,
         recovery: RecoveryOutcome,
     },
+    /// The transaction reached another result, but its process-owned lock
+    /// could not be released. The original result remains available instead
+    /// of silently treating a potentially active lock as gone.
+    LockReleaseFailed {
+        message: String,
+        prior: Box<SwitchError>,
+    },
 }
 
 impl std::fmt::Display for SwitchError {
@@ -112,6 +121,9 @@ impl std::fmt::Display for SwitchError {
                     recovery_label(recovery)
                 )
             }
+            SwitchError::LockReleaseFailed { prior, .. } => {
+                write!(f, "写入锁释放失败；原操作结果：{prior}")
+            }
         }
     }
 }
@@ -131,15 +143,23 @@ fn stage_label(stage: &str) -> &'static str {
     match stage {
         "backup-dir" => "准备备份目录",
         "backup" => "创建备份",
+        "backup-verify" => "回读校验备份文件",
         "backup-meta" => "记录备份信息",
         "target-dir" => "准备配置目录",
         "temp-write" => "写入临时文件",
+        "temp-verify" => "回读校验临时文件",
         "temp-validate" => "校验临时文件",
         "atomic-replace" => "替换配置文件",
         "post-verify" => "验证写入结果",
+        "state-save" => "保存应用状态",
+        "lock-release" => "释放写入锁",
         "restore-precheck" => "创建恢复前备份",
+        "restore-backup-verify" => "校验待恢复备份",
+        "restore-precheck-verify" => "回读校验恢复前备份",
         "restore-meta" => "记录恢复前备份信息",
         "restore-write" => "写入恢复临时文件",
+        "restore-temp-verify" => "回读校验恢复临时文件",
+        "restore-temp-validate" => "校验恢复临时文件",
         "restore-replace" => "替换恢复内容",
         "restore-verify" => "验证恢复结果",
         _ => "提交配置",
@@ -168,59 +188,6 @@ pub struct SwitchRequest<'a> {
     pub expected_hash: &'a str,
     /// Hash of the candidate file shown in the preview.
     pub expected_rendered_hash: &'a str,
-}
-
-pub struct CommonRequest<'a> {
-    pub target: &'a Path,
-    pub app: AppKind,
-    pub common: &'a asb_core::CommonConfigPatch,
-    pub backup_dir: &'a Path,
-    /// Hash captured when the toggle change was computed; a mismatch blocks
-    /// the write.
-    pub expected_hash: &'a str,
-    /// Hash of the candidate file shown in the preview.
-    pub expected_rendered_hash: &'a str,
-}
-
-/// One pending overlay write: either a full profile switch or a
-/// general-settings-only apply. The transaction below treats both alike.
-enum Job<'a> {
-    Switch(&'a SwitchPlan),
-    Common {
-        app: AppKind,
-        common: &'a asb_core::CommonConfigPatch,
-    },
-}
-
-impl Job<'_> {
-    fn app(&self) -> AppKind {
-        match self {
-            Job::Switch(plan) => plan.app,
-            Job::Common { app, .. } => *app,
-        }
-    }
-
-    /// Reason recorded on the pre-write backup for this kind of write.
-    fn backup_reason(&self) -> &'static str {
-        match self {
-            Job::Switch(_) => "switch",
-            Job::Common { .. } => "common-settings",
-        }
-    }
-
-    fn preview(&self, current: &str, backup_dir: &str) -> Result<SwitchPreview, AdapterError> {
-        match self {
-            Job::Switch(plan) => adapter::preview(current, plan, backup_dir),
-            Job::Common { common, .. } => adapter::common_preview(current, common, backup_dir),
-        }
-    }
-
-    fn render(&self, current: &str) -> Result<String, AdapterError> {
-        match self {
-            Job::Switch(plan) => adapter::render(current, plan),
-            Job::Common { common, .. } => adapter::common_render(current, common),
-        }
-    }
 }
 
 fn empty_configuration(app: AppKind) -> &'static str {
@@ -270,49 +237,25 @@ pub fn read_preview<Io: SwitchIo>(
     plan: &SwitchPlan,
     backup_dir: &str,
 ) -> Result<FilePreview, SwitchError> {
-    read_preview_for(io, target, &Job::Switch(plan), backup_dir)
-}
-
-/// Same as [`read_preview`] for a general-settings-only apply.
-pub fn read_common_preview<Io: SwitchIo>(
-    io: &Io,
-    req: &CommonRequest,
-) -> Result<FilePreview, SwitchError> {
-    read_preview_for(
-        io,
-        req.target,
-        &Job::Common {
-            app: req.app,
-            common: req.common,
-        },
-        &req.backup_dir.to_string_lossy(),
-    )
-}
-
-fn read_preview_for<Io: SwitchIo>(
-    io: &Io,
-    target: &Path,
-    job: &Job,
-    backup_dir: &str,
-) -> Result<FilePreview, SwitchError> {
+    let app = plan.app();
     let (current, target_existed) =
-        read_current_or_empty(io, target, job.app()).map_err(|e| SwitchError::ReadCurrent {
+        read_current_or_empty(io, target, app).map_err(|e| SwitchError::ReadCurrent {
             message: e.to_string(),
         })?;
     let content_hash = sha256_hex(&current);
-    let mut preview = job.preview(&current, backup_dir).map_err(plan_rejected)?;
+    let mut preview = adapter::preview(&current, plan, backup_dir).map_err(plan_rejected)?;
     if !target_existed {
         preview
             .warnings
             .push("配置文件尚不存在，确认后将创建新的用户级配置".to_string());
     }
-    let rendered = job.render(&current).map_err(plan_rejected)?;
+    let rendered = adapter::render(&current, plan).map_err(plan_rejected)?;
     let rendered_hash = sha256_hex(&rendered);
     Ok(FilePreview {
         preview,
         content_hash,
         rendered_hash,
-        content: display_content(job.app(), &rendered),
+        content: display_content(app, &rendered),
     })
 }
 
@@ -331,45 +274,55 @@ pub(crate) fn timestamp_name<Io: SwitchIo>(io: &Io) -> String {
         .collect()
 }
 
-/// Executes one switch transactionally. All exit paths release the lock.
-pub fn execute<Io: SwitchIo>(io: &Io, req: &SwitchRequest) -> Result<SwitchOutcome, SwitchError> {
-    execute_job(
+/// Executes one provider projection transactionally. A successful client
+/// write is not complete until `commit` records the same fact in application
+/// state; if that commit fails, this function restores the just-created
+/// backup before releasing the lock. There is deliberately no no-commit
+/// execution entry point.
+pub fn execute<Io: SwitchIo, Commit>(
+    io: &Io,
+    req: &SwitchRequest,
+    commit: Commit,
+) -> Result<SwitchOutcome, SwitchError>
+where
+    Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
+{
+    if let Some(parent) = req.target.parent() {
+        io.ensure_dir(parent)
+            .map_err(|error| SwitchError::CommitFailed {
+                stage: "target-dir",
+                message: error.to_string(),
+                recovery: RecoveryOutcome::NotNeeded,
+            })?;
+    }
+    match lockfile::acquire(io, req.target, PROCESS_NAME) {
+        AcquireOutcome::Acquired => {}
+        AcquireOutcome::Busy(status) => return Err(SwitchError::BlockedByLock { status }),
+    }
+    execute_locked(
         io,
         req.target,
         req.backup_dir,
         req.expected_hash,
         req.expected_rendered_hash,
-        &Job::Switch(req.plan),
+        req.plan,
+        commit,
     )
 }
 
-/// Executes a general-settings-only apply through the same transaction:
-/// lock → hash check → preview → render → backup → atomic replace → verify.
-pub fn execute_common<Io: SwitchIo>(
+/// Restores one recorded client configuration backup through the same locked
+/// transaction boundary as provider projection. The caller must commit the
+/// corresponding application write record before this function releases the
+/// lock; a commit failure restores the pre-restore snapshot.
+pub fn restore<Io: SwitchIo, Commit>(
     io: &Io,
-    req: &CommonRequest,
-) -> Result<SwitchOutcome, SwitchError> {
-    execute_job(
-        io,
-        req.target,
-        req.backup_dir,
-        req.expected_hash,
-        req.expected_rendered_hash,
-        &Job::Common {
-            app: req.app,
-            common: req.common,
-        },
-    )
-}
-
-fn execute_job<Io: SwitchIo>(
-    io: &Io,
+    backup: &BackupRecord,
     target: &Path,
-    backup_dir: &Path,
-    expected_hash: &str,
-    expected_rendered_hash: &str,
-    job: &Job,
-) -> Result<SwitchOutcome, SwitchError> {
+    commit: Commit,
+) -> Result<RestoreOutcome, SwitchError>
+where
+    Commit: FnOnce(&RestoreOutcome) -> Result<(), String>,
+{
     if let Some(parent) = target.parent() {
         io.ensure_dir(parent)
             .map_err(|error| SwitchError::CommitFailed {
@@ -379,17 +332,26 @@ fn execute_job<Io: SwitchIo>(
             })?;
     }
     match lockfile::acquire(io, target, PROCESS_NAME) {
-        AcquireOutcome::Acquired => {}
-        AcquireOutcome::Busy(status) => return Err(SwitchError::BlockedByLock { status }),
+        AcquireOutcome::Busy(status) => Err(SwitchError::BlockedByLock { status }),
+        AcquireOutcome::Acquired => {
+            let result = restore_locked(io, backup, target, commit);
+            match lockfile::release(io, target) {
+                Ok(()) => result,
+                Err(message) => match result {
+                    Ok(mut outcome) => {
+                        outcome
+                            .warnings
+                            .push(format!("配置已恢复，但写入锁释放失败：{message}"));
+                        Ok(outcome)
+                    }
+                    Err(prior) => Err(SwitchError::LockReleaseFailed {
+                        message,
+                        prior: Box::new(prior),
+                    }),
+                },
+            }
+        }
     }
-    execute_locked(
-        io,
-        target,
-        backup_dir,
-        expected_hash,
-        expected_rendered_hash,
-        job,
-    )
 }
 
 /// Reads the live file and refuses to continue when its hash no longer
@@ -415,16 +377,39 @@ fn read_unchanged_current<Io: SwitchIo>(
     Ok((current, target_existed, found_hash))
 }
 
+/// Re-reads the target at the last recoverable point before a mutation. The
+/// comparison includes existence because an empty document and a missing file
+/// have the same content hash but different restoration semantics.
+pub(crate) fn verify_live_snapshot<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    app: AppKind,
+    expected_content: &str,
+    expected_existed: bool,
+) -> Result<(), SwitchError> {
+    let (found_content, found_existed) =
+        read_current_or_empty(io, target, app).map_err(|error| SwitchError::ReadCurrent {
+            message: error.to_string(),
+        })?;
+    if found_content == expected_content && found_existed == expected_existed {
+        return Ok(());
+    }
+    Err(SwitchError::ExternalChange {
+        expected_hash: sha256_hex(expected_content),
+        found_hash: sha256_hex(&found_content),
+    })
+}
+
 /// Produces the preview and the exact private candidate rendering, refusing
 /// a plan whose rendering changed after the user saw the preview.
 fn plan_candidate(
-    job: &Job,
+    plan: &SwitchPlan,
     current: &str,
     backup_dir: &str,
     expected_rendered_hash: &str,
 ) -> Result<(SwitchPreview, String), SwitchError> {
-    let preview = job.preview(current, backup_dir).map_err(plan_rejected)?;
-    let rendered = job.render(current).map_err(plan_rejected)?;
+    let preview = adapter::preview(current, plan, backup_dir).map_err(plan_rejected)?;
+    let rendered = adapter::render(current, plan).map_err(plan_rejected)?;
     if sha256_hex(&rendered) != expected_rendered_hash {
         return Err(SwitchError::PlanChanged);
     }
@@ -440,8 +425,9 @@ fn back_up_current<Io: SwitchIo>(
     current: &str,
     found_hash: &str,
     target_existed: bool,
-    job: &Job,
+    plan: &SwitchPlan,
 ) -> Result<BackupRecord, SwitchError> {
+    verify_live_snapshot(io, target, plan.app(), current, target_existed)?;
     io.ensure_dir(backup_dir)
         .map_err(|e| SwitchError::CommitFailed {
             stage: "backup-dir",
@@ -462,15 +448,29 @@ fn back_up_current<Io: SwitchIo>(
             message: e.to_string(),
             recovery: RecoveryOutcome::NotNeeded,
         })?;
+    let backup_text = io
+        .read_file(&backup_path)
+        .map_err(|error| SwitchError::CommitFailed {
+            stage: "backup-verify",
+            message: error.to_string(),
+            recovery: RecoveryOutcome::NotNeeded,
+        })?;
+    if backup_text != current || adapter::validate_syntax(plan.app(), &backup_text).is_err() {
+        return Err(SwitchError::CommitFailed {
+            stage: "backup-verify",
+            message: "备份回读内容或语法不匹配".to_string(),
+            recovery: RecoveryOutcome::NotNeeded,
+        });
+    }
     let backup = BackupRecord {
         id: format!("{}-{ts}", &found_hash[..12.min(found_hash.len())]),
-        app: job.app(),
+        app: plan.app(),
         target_path: target.to_string_lossy().to_string(),
         backup_path: backup_path.to_string_lossy().to_string(),
         created_at,
         content_hash: found_hash.to_string(),
         target_existed,
-        reason: job.backup_reason().to_string(),
+        reason: "provider-projection".to_string(),
     };
     write_backup_metadata(io, &backup, "backup-meta")?;
     Ok(backup)
@@ -485,6 +485,7 @@ fn commit_rendered<Io: SwitchIo>(
     app: AppKind,
     rendered: &str,
     backup: &BackupRecord,
+    expected_current: &str,
 ) -> Result<(), SwitchError> {
     let file_name = target
         .file_name()
@@ -499,13 +500,42 @@ fn commit_rendered<Io: SwitchIo>(
             recovery: RecoveryOutcome::NotNeeded,
         })?;
 
-    if let Err(e) = adapter::validate_syntax(app, rendered) {
+    let temp_text = match io.read_file(&temp_path) {
+        Ok(text) if text == rendered => text,
+        Ok(_) => {
+            let _ = io.remove(&temp_path);
+            return Err(SwitchError::CommitFailed {
+                stage: "temp-verify",
+                message: "临时文件回读内容不匹配".to_string(),
+                recovery: RecoveryOutcome::NotNeeded,
+            });
+        }
+        Err(error) => {
+            let _ = io.remove(&temp_path);
+            return Err(SwitchError::CommitFailed {
+                stage: "temp-verify",
+                message: error.to_string(),
+                recovery: RecoveryOutcome::NotNeeded,
+            });
+        }
+    };
+    if let Err(e) = adapter::validate_syntax(app, &temp_text) {
         let _ = io.remove(&temp_path);
         return Err(SwitchError::CommitFailed {
             stage: "temp-validate",
             message: format!("临时文件校验失败: {e}"),
             recovery: RecoveryOutcome::NotNeeded,
         });
+    }
+
+    // The temp is now known good. Check the live target once more before the
+    // irreversible replacement so a host edit made while creating the backup
+    // cannot be silently overwritten.
+    if let Err(error) =
+        verify_live_snapshot(io, target, app, expected_current, backup.target_existed)
+    {
+        let _ = io.remove(&temp_path);
+        return Err(error);
     }
 
     if let Err(e) = io.rename_replace(&temp_path, target) {
@@ -536,35 +566,56 @@ fn commit_rendered<Io: SwitchIo>(
 
 /// The locked body of one transaction: verify → plan → re-verify → backup →
 /// commit. Every exit path releases the lock through `finish`.
-fn execute_locked<Io: SwitchIo>(
+fn execute_locked<Io: SwitchIo, Commit>(
     io: &Io,
     target: &Path,
     backup_dir: &Path,
     expected_hash: &str,
     expected_rendered_hash: &str,
-    job: &Job,
-) -> Result<SwitchOutcome, SwitchError> {
-    let finish = |result| {
-        lockfile::release(io, target);
-        result
+    plan: &SwitchPlan,
+    commit: Commit,
+) -> Result<SwitchOutcome, SwitchError>
+where
+    Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
+{
+    let finish = |result: Result<SwitchOutcome, SwitchError>| match lockfile::release(io, target) {
+        Ok(()) => result,
+        Err(message) => match result {
+            Ok(mut outcome) => {
+                outcome
+                    .warnings
+                    .push(format!("写入已完成，但无法释放写入锁：{message}"));
+                Ok(outcome)
+            }
+            Err(prior) => Err(SwitchError::LockReleaseFailed {
+                message,
+                prior: Box::new(prior),
+            }),
+        },
     };
 
-    let (current, target_existed, found_hash) =
-        match read_unchanged_current(io, target, job.app(), expected_hash) {
+    let (initial_current, initial_target_existed, _) =
+        match read_unchanged_current(io, target, plan.app(), expected_hash) {
             Ok(verified) => verified,
             Err(error) => return finish(Err(error)),
         };
     let backup_dir_label = backup_dir.to_string_lossy().to_string();
+    let (current, target_existed, found_hash) =
+        match read_unchanged_current(io, target, plan.app(), expected_hash) {
+            Ok(verified) => verified,
+            Err(error) => return finish(Err(error)),
+        };
+    if current != initial_current || target_existed != initial_target_existed {
+        return finish(Err(SwitchError::ExternalChange {
+            expected_hash: sha256_hex(&initial_current),
+            found_hash,
+        }));
+    }
     let (preview, rendered) =
-        match plan_candidate(job, &current, &backup_dir_label, expected_rendered_hash) {
+        match plan_candidate(plan, &current, &backup_dir_label, expected_rendered_hash) {
             Ok(candidate) => candidate,
             Err(error) => return finish(Err(error)),
         };
-    // Re-check immediately before mutation: the file must still hash to the
-    // previewed state.
-    if let Err(error) = read_unchanged_current(io, target, job.app(), expected_hash) {
-        return finish(Err(error));
-    }
     let backup = match back_up_current(
         io,
         target,
@@ -572,16 +623,16 @@ fn execute_locked<Io: SwitchIo>(
         &current,
         &found_hash,
         target_existed,
-        job,
+        plan,
     ) {
         Ok(backup) => backup,
         Err(error) => return finish(Err(error)),
     };
-    if let Err(error) = commit_rendered(io, target, job.app(), &rendered, &backup) {
+    if let Err(error) = commit_rendered(io, target, plan.app(), &rendered, &backup, &current) {
         return finish(Err(error));
     }
 
-    finish(Ok(SwitchOutcome {
+    let outcome = SwitchOutcome {
         lock: LockStatus::Free,
         acquired_at: backup.created_at.clone(),
         changed: vec![target.to_string_lossy().to_string()],
@@ -590,7 +641,17 @@ fn execute_locked<Io: SwitchIo>(
         preview,
         recovery: RecoveryOutcome::NotNeeded,
         final_hash: sha256_hex(&rendered),
-    }))
+    };
+    if let Err(message) = commit(&outcome) {
+        let recovery = restore_backup_content(io, target, &outcome.backup);
+        return finish(Err(SwitchError::CommitFailed {
+            stage: "state-save",
+            message,
+            recovery,
+        }));
+    }
+
+    finish(Ok(outcome))
 }
 
 #[cfg(test)]

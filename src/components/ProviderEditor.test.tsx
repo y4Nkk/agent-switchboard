@@ -37,6 +37,7 @@ describe("ProviderEditor", () => {
         profile={{
           id: "profile-a",
           app: "codex",
+          routeMode: "custom",
           name: "中继 A",
           model: null,
           baseUrl: "https://relay.example/v1",
@@ -92,6 +93,7 @@ describe("ProviderEditor", () => {
 
     expect(onSave).toHaveBeenCalledWith({
       app: "codex",
+      routeMode: "custom",
       name: "本机网关",
       model: "gpt-5.3-codex",
       baseUrl: "https://gateway.example/v1",
@@ -110,6 +112,7 @@ describe("ProviderEditor", () => {
         profile={{
           id: "secret-profile",
           app: "codex",
+          routeMode: "custom",
           name: "密钥档案",
           model: null,
           baseUrl: "https://gateway.example/v1",
@@ -242,6 +245,7 @@ describe("ProviderEditor", () => {
         profile={{
           id: "claude-1m",
           app: "claude",
+          routeMode: "custom",
           name: "已有 Claude 1M",
           model: "claude-opus-4-1",
           baseUrl: "https://relay.example",
@@ -291,6 +295,7 @@ describe("ProviderEditor", () => {
 
     expect(onSave).toHaveBeenCalledWith({
       app: "claude",
+      routeMode: "custom",
       name: "中继 D",
       model: null,
       baseUrl: "https://relay-d.example",
@@ -324,6 +329,7 @@ describe("ProviderEditor", () => {
 
     expect(onSave).toHaveBeenCalledWith({
       app: "claude",
+      routeMode: "custom",
       name: "清除旧映射",
       model: null,
       baseUrl: "https://relay.example",
@@ -362,7 +368,7 @@ describe("ProviderEditor", () => {
     expect(screen.getByLabelText("API 密钥")).toBeInTheDocument();
   });
 
-  it("converts a legacy endpoint-less profile to a custom draft on save", async () => {
+  it("keeps an existing custom profile in the custom draft contract", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     render(
@@ -370,9 +376,10 @@ describe("ProviderEditor", () => {
         profile={{
           id: "legacy-official",
           app: "claude",
-          name: "旧官方 Claude",
+          routeMode: "custom",
+          name: "Claude 中继",
           model: null,
-          baseUrl: null,
+          baseUrl: "https://relay.example",
           apiKey: "sk-test-key",
           modelOptions: null,
         }}
@@ -383,9 +390,7 @@ describe("ProviderEditor", () => {
       />,
     );
 
-    expect(screen.getByLabelText("服务地址")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("服务地址"), "https://relay.example");
-    await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
+    expect(screen.getByLabelText("服务地址")).toHaveValue("https://relay.example");
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
 
     expect(onSave).toHaveBeenCalledWith(
@@ -504,6 +509,7 @@ describe("ProviderEditor", () => {
 
     expect(onSave).toHaveBeenCalledWith({
       app: "claude",
+      routeMode: "custom",
       name: "中继 C",
       model: null,
       baseUrl: "https://relay-c.internal",

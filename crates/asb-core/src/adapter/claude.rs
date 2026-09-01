@@ -7,17 +7,19 @@
 
 use crate::adapter::{AdapterError, OverlayEntry};
 use crate::contracts::{
-    ChangeKind, CommonConfigPatch, KeyChange, ModelOptions, PatchValue, RouteMode, RouteState,
+    ChangeKind, CommonSettings, ConfigValue, KeyChange, ModelOptions, RouteMode, RouteState,
     SwitchPlan, SwitchPreview,
 };
-use crate::ownership::is_owned;
+use crate::ownership::{
+    is_owned, provider_absent_action, setting_specs, ProviderAbsentAction, SettingOwner,
+};
 use crate::redact::redact;
 use crate::AppKind;
 use serde_json::{Map, Value as Json};
 
 /// Deprecated Claude Code model key superseded by
-/// `ANTHROPIC_DEFAULT_HAIKU_MODEL`. The adapter cleans it up on every
-/// switch; the ownership table never claims it.
+/// `ANTHROPIC_DEFAULT_HAIKU_MODEL`. It remains a profile-owned cleanup key
+/// in the ownership directory so it cannot survive a provider switch.
 const DEPRECATED_MODEL_KEY: &str = "env.ANTHROPIC_SMALL_FAST_MODEL";
 /// Environment model key that silently overrides the top-level `model`;
 /// removed whenever a profile declares a primary model.
@@ -65,196 +67,214 @@ fn get<'a>(root: &'a Json, path: &str) -> Option<&'a Json> {
     root.pointer(&pointer(path))
 }
 
-fn set(root: &mut Json, path: &str, value: PatchValue) {
+fn parent_conflict(path: &str, segment: &str) -> AdapterError {
+    AdapterError {
+        message: format!("受管路径 {path} 的父节点 {segment} 不是 JSON 对象，无法安全修改"),
+        line: None,
+    }
+}
+
+fn leaf_conflict(path: &str) -> AdapterError {
+    AdapterError {
+        message: format!("受管键 {path} 当前是 JSON 对象，无法覆盖其宿主内容"),
+        line: None,
+    }
+}
+
+fn validate_path(root: &Json, path: &str) -> Result<(), AdapterError> {
+    let segs: Vec<&str> = path.split('.').collect();
+    let (&last, parents) = segs.split_last().expect("non-empty path");
+    let mut current = root;
+    let mut parent_path = String::new();
+    for &seg in parents {
+        let map = current
+            .as_object()
+            .ok_or_else(|| parent_conflict(path, &parent_path))?;
+        if !parent_path.is_empty() {
+            parent_path.push('.');
+        }
+        parent_path.push_str(seg);
+        match map.get(seg) {
+            Some(child) if child.is_object() => current = child,
+            Some(_) => return Err(parent_conflict(path, &parent_path)),
+            None => return Ok(()),
+        }
+    }
+    let map = current
+        .as_object()
+        .ok_or_else(|| parent_conflict(path, &parent_path))?;
+    if map.get(last).is_some_and(Json::is_object) {
+        return Err(leaf_conflict(path));
+    }
+    Ok(())
+}
+
+fn set(root: &mut Json, path: &str, value: ConfigValue) -> Result<(), AdapterError> {
+    validate_path(root, path)?;
     let segs: Vec<&str> = path.split('.').collect();
     let (&last, parents) = segs.split_last().expect("non-empty path");
     let mut current: &mut Json = root;
+    let mut parent_path = String::new();
     for &seg in parents {
-        if !current.is_object() {
-            *current = Json::Object(Map::new());
+        let map = current
+            .as_object_mut()
+            .ok_or_else(|| parent_conflict(path, &parent_path))?;
+        if !parent_path.is_empty() {
+            parent_path.push('.');
         }
-        let map = current.as_object_mut().expect("object");
+        parent_path.push_str(seg);
         current = map
             .entry(seg.to_string())
             .or_insert_with(|| Json::Object(Map::new()));
         if !current.is_object() {
-            *current = Json::Object(Map::new());
+            return Err(parent_conflict(path, &parent_path));
         }
-    }
-    if !current.is_object() {
-        *current = Json::Object(Map::new());
     }
     current
         .as_object_mut()
-        .expect("object")
+        .ok_or_else(|| parent_conflict(path, &parent_path))?
         .insert(last.to_string(), to_json(value));
+    Ok(())
 }
 
-fn remove(root: &mut Json, path: &str) {
+fn remove(root: &mut Json, path: &str) -> Result<(), AdapterError> {
+    validate_path(root, path)?;
     let segs: Vec<&str> = path.split('.').collect();
     let (&last, parents) = segs.split_last().expect("non-empty path");
     let mut current: &mut Json = root;
     for &seg in parents {
         let Some(map) = current.as_object_mut() else {
-            return;
+            return Err(parent_conflict(path, seg));
         };
         match map.get_mut(seg) {
             Some(child) if child.is_object() => current = child,
-            _ => return,
+            Some(_) => return Err(parent_conflict(path, seg)),
+            None => return Ok(()),
         }
     }
     if let Some(map) = current.as_object_mut() {
         map.remove(last);
     }
+    Ok(())
 }
 
-fn to_json(value: PatchValue) -> Json {
+fn to_json(value: ConfigValue) -> Json {
     match value {
-        PatchValue::Str(s) => Json::String(s),
-        PatchValue::Bool(b) => Json::Bool(b),
-        PatchValue::Number(n) => serde_json::Number::from_f64(n)
+        ConfigValue::Str(s) => Json::String(s),
+        ConfigValue::Bool(b) => Json::Bool(b),
+        ConfigValue::Number(n) => serde_json::Number::from_f64(n)
             .map(Json::Number)
             .unwrap_or(Json::Null),
-        PatchValue::Array(items) => Json::Array(items.into_iter().map(to_json).collect()),
+        ConfigValue::Array(items) => Json::Array(items.into_iter().map(to_json).collect()),
     }
 }
 
-fn tier_entry(key: &str, value: &Option<String>, one_m: bool) -> (String, OverlayEntry) {
-    match value {
-        Some(v) => (
-            key.to_string(),
-            OverlayEntry::Set(PatchValue::Str(crate::claude_model::render_model(v, one_m))),
-        ),
-        None => (key.to_string(), OverlayEntry::RemoveIfPresent),
+fn absent_provider_entry(key: &str) -> OverlayEntry {
+    match provider_absent_action(AppKind::Claude, key) {
+        Some(ProviderAbsentAction::Remove) => OverlayEntry::RemoveIfPresent,
+        None => unreachable!("Claude provider mapping must be declared in the ownership directory"),
     }
 }
 
-/// Builds the overlay entries implied by `plan`.
-fn overlay(plan: &SwitchPlan) -> (Vec<(String, OverlayEntry)>, Vec<String>) {
-    let p = &plan.profile;
-    let mut warnings = Vec::new();
-
-    // Every profile routes to a custom endpoint; validation rejects a
-    // profile without one, the defensive arm keeps old stores loadable.
-    let mut entries = vec![
-        (
-            "env.ANTHROPIC_BASE_URL".to_string(),
-            match &p.base_url {
-                Some(url) => OverlayEntry::Set(PatchValue::Str(url.clone())),
-                None => OverlayEntry::RemoveIfPresent,
-            },
-        ),
-        (
-            "env.ANTHROPIC_AUTH_TOKEN".to_string(),
-            OverlayEntry::Set(PatchValue::Str(p.api_key.clone())),
-        ),
-    ];
-
-    // The deprecated key is superseded by ANTHROPIC_DEFAULT_HAIKU_MODEL and
-    // is cleaned up on every switch.
-    entries.push((
-        DEPRECATED_MODEL_KEY.to_string(),
-        OverlayEntry::RemoveIfPresent,
-    ));
-
-    let claude_settings = match &p.model_options {
+fn claude_settings(
+    profile: &crate::contracts::ProviderProfile,
+) -> Option<&crate::contracts::ClaudeModelSettings> {
+    match &profile.model_options {
         Some(ModelOptions::Claude(settings)) => Some(settings),
-        _ => None,
-    };
-    if let Some(settings) = claude_settings {
-        entries.push(tier_entry(
-            "env.ANTHROPIC_DEFAULT_HAIKU_MODEL",
-            &settings.haiku_model,
-            false,
-        ));
-        entries.push(tier_entry(
-            "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
-            &settings.sonnet_model,
-            settings.sonnet_one_m,
-        ));
-        entries.push(tier_entry(
-            "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
-            &settings.opus_model,
-            settings.opus_one_m,
-        ));
-        entries.push(match &settings.available_models {
-            Some(models) => (
-                "availableModels".to_string(),
-                OverlayEntry::Set(PatchValue::Array(
-                    models.iter().cloned().map(PatchValue::Str).collect(),
-                )),
-            ),
-            None => ("availableModels".to_string(), OverlayEntry::RemoveIfPresent),
-        });
-    }
-
-    // env.ANTHROPIC_MODEL silently overrides the top-level `model`; when a
-    // profile declares a primary model, the override must go for the switch
-    // to take effect.
-    entries.push(match &p.model {
-        Some(m) => {
-            warnings.push(
-                "settings.json 的 env.ANTHROPIC_MODEL 会覆盖 model；切换将移除该键".to_string(),
-            );
-            (
-                "model".to_string(),
-                OverlayEntry::Set(PatchValue::Str(crate::claude_model::render_model(
-                    m,
-                    claude_settings.map_or(false, |settings| settings.primary_one_m),
-                ))),
-            )
+        None => None,
+        Some(ModelOptions::Codex(_)) => {
+            unreachable!("profile validation rejects mismatched options")
         }
-        None => ("model".to_string(), OverlayEntry::Leave),
-    });
-    entries.push((
-        ENV_MODEL_KEY.to_string(),
-        match &p.model {
-            Some(_) => OverlayEntry::RemoveIfPresent,
-            None => OverlayEntry::Leave,
-        },
-    ));
-
-    for entry in &plan.common.entries {
-        entries.push((
-            entry.key.clone(),
-            match &entry.value {
-                Some(value) => OverlayEntry::Set(value.clone()),
-                None => OverlayEntry::RemoveIfPresent,
-            },
-        ));
     }
-    (entries, warnings)
 }
 
-/// Overlay entries for a general-settings-only apply: exactly the patch's
-/// own lines, with no profile routing.
-pub(crate) fn common_overlay(
-    common: &CommonConfigPatch,
-) -> (Vec<(String, OverlayEntry)>, Vec<String>) {
-    let entries = common
-        .entries
-        .iter()
-        .map(|entry| {
-            (
-                entry.key.clone(),
-                match &entry.value {
-                    Some(value) => OverlayEntry::Set(value.clone()),
-                    None => OverlayEntry::RemoveIfPresent,
-                },
-            )
+fn rendered_model(value: Option<&String>, one_m: bool) -> Option<ConfigValue> {
+    value.map(|model| ConfigValue::Str(crate::claude_model::render_model(model, one_m)))
+}
+
+fn provider_value(profile: &crate::contracts::ProviderProfile, key: &str) -> Option<ConfigValue> {
+    if profile.route_mode == crate::contracts::RouteMode::Official {
+        return None;
+    }
+    let settings = claude_settings(profile);
+    match key {
+        "model" => rendered_model(
+            profile.model.as_ref(),
+            settings.is_some_and(|value| value.primary_one_m),
+        ),
+        "availableModels" => settings.and_then(|value| {
+            value.available_models.as_ref().map(|models| {
+                ConfigValue::Array(models.iter().cloned().map(ConfigValue::Str).collect())
+            })
+        }),
+        "env.ANTHROPIC_BASE_URL" => profile.base_url.clone().map(ConfigValue::Str),
+        "env.ANTHROPIC_AUTH_TOKEN" => Some(ConfigValue::Str(profile.api_key.clone())),
+        // This older override must be removed for any current provider.
+        ENV_MODEL_KEY | DEPRECATED_MODEL_KEY => None,
+        "env.ANTHROPIC_DEFAULT_HAIKU_MODEL" => {
+            rendered_model(settings.and_then(|value| value.haiku_model.as_ref()), false)
+        }
+        "env.ANTHROPIC_DEFAULT_SONNET_MODEL" => rendered_model(
+            settings.and_then(|value| value.sonnet_model.as_ref()),
+            settings.is_some_and(|value| value.sonnet_one_m),
+        ),
+        "env.ANTHROPIC_DEFAULT_OPUS_MODEL" => rendered_model(
+            settings.and_then(|value| value.opus_model.as_ref()),
+            settings.is_some_and(|value| value.opus_one_m),
+        ),
+        _ => unreachable!("Claude provider mapping must be declared in the ownership directory"),
+    }
+}
+
+/// One common setting's overlay entry: an explicit non-default value is
+/// written, while the directory default is expressed by omitting the line.
+fn common_entry(spec: &crate::ownership::SettingSpec, value: &ConfigValue) -> OverlayEntry {
+    match spec.default.as_ref() {
+        Some(default) if default == value => OverlayEntry::RemoveIfPresent,
+        _ => OverlayEntry::Set(value.clone()),
+    }
+}
+
+fn common_overlay(common: &CommonSettings) -> Vec<(String, OverlayEntry)> {
+    setting_specs(AppKind::Claude)
+        .into_iter()
+        .filter(|spec| spec.owner == SettingOwner::Common)
+        .map(|spec| {
+            let value = common
+                .value(spec.key)
+                .expect("common-settings validation guarantees every catalog key");
+            (spec.key.to_string(), common_entry(&spec, value))
         })
-        .collect();
-    (entries, vec![])
+        .collect()
+}
+
+/// Builds all changes by iterating the ownership directory. Literal keys only
+/// map the declared slots to plan data; ownership and cleanup actions
+/// themselves remain owned by that directory.
+fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
+    setting_specs(AppKind::Claude)
+        .into_iter()
+        .map(|spec| {
+            let entry = match spec.owner {
+                SettingOwner::Provider => provider_value(&plan.profile, spec.key)
+                    .map(OverlayEntry::Set)
+                    .unwrap_or_else(|| absent_provider_entry(spec.key)),
+                SettingOwner::Common => {
+                    let value = plan
+                        .common
+                        .value(spec.key)
+                        .expect("plan validation guarantees complete common settings");
+                    common_entry(&spec, value)
+                }
+                SettingOwner::Host => unreachable!("host keys never appear in the directory"),
+            };
+            (spec.key.to_string(), entry)
+        })
+        .collect()
 }
 
 pub(crate) fn check_syntax(text: &str) -> Result<(), AdapterError> {
     parse(text).map(|_| ())
-}
-
-/// Textual value at an owned dotted path, for toggle-state reads.
-pub(crate) fn parse_owned_scalar(text: &str, key: &str) -> Result<Option<String>, AdapterError> {
-    let root = parse(text)?;
-    Ok(get(&root, key).and_then(scalar_repr))
 }
 
 /// Collects every owned scalar or array path and its textual value.
@@ -338,17 +358,26 @@ pub(crate) fn preview(
     plan: &SwitchPlan,
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
-    let (entries, warnings) = overlay(plan);
-    preview_entries(current, entries, warnings, backup_dir)
+    let mut warnings = Vec::new();
+    let root = parse(current)?;
+    if plan.profile.model.is_some() && get(&root, ENV_MODEL_KEY).is_some() {
+        warnings
+            .push("settings.json 的 env.ANTHROPIC_MODEL 会覆盖 model；切换将移除该键".to_string());
+    }
+    preview_entries_from_root(root, overlay(plan), warnings, backup_dir)
 }
 
-pub(crate) fn preview_entries(
-    current: &str,
+fn preview_entries_from_root(
+    root: Json,
     entries: Vec<(String, OverlayEntry)>,
     warnings: Vec<String>,
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
-    let root = parse(current)?;
+    for (key, entry) in &entries {
+        if !matches!(entry, OverlayEntry::Leave) {
+            validate_path(&root, key)?;
+        }
+    }
 
     let mut changes = Vec::new();
     for (key, entry) in entries {
@@ -392,8 +421,11 @@ pub(crate) fn preview_entries(
 }
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
-    let (entries, _) = overlay(plan);
-    render_entries(current, entries)
+    render_entries(current, overlay(plan))
+}
+
+pub(crate) fn render_common_settings(common: &CommonSettings) -> Result<String, AdapterError> {
+    render_entries("{}", common_overlay(common))
 }
 
 pub(crate) fn render_entries(
@@ -403,10 +435,10 @@ pub(crate) fn render_entries(
     let mut root = parse(current)?;
     for (key, entry) in entries {
         match entry {
-            OverlayEntry::Set(value) => set(&mut root, &key, value),
+            OverlayEntry::Set(value) => set(&mut root, &key, value)?,
             OverlayEntry::Leave => {}
             OverlayEntry::RemoveIfPresent => {
-                remove(&mut root, &key);
+                remove(&mut root, &key)?;
             }
         }
     }
@@ -419,17 +451,16 @@ pub(crate) fn render_entries(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{
-        ClaudeModelSettings, CommonConfigPatch, ModelOptions, PatchEntry, ProviderProfile,
-    };
+    use crate::contracts::{ClaudeModelSettings, ModelOptions, ProviderProfile};
+    use crate::ownership::default_common_settings;
     use crate::test_support::CLAUDE_JSON;
 
     fn plan_b() -> SwitchPlan {
         SwitchPlan {
-            app: AppKind::Claude,
             profile: ProviderProfile {
                 id: "c2".into(),
                 app: AppKind::Claude,
+                route_mode: crate::contracts::RouteMode::Custom,
                 name: "Relay C".into(),
                 model: Some("claude-opus-4".into()),
                 base_url: Some("https://relay-c.internal".into()),
@@ -450,10 +481,7 @@ mod tests {
                 website_url: None,
                 usage_query: None,
             },
-            common: CommonConfigPatch {
-                app: AppKind::Claude,
-                entries: vec![],
-            },
+            common: default_common_settings(AppKind::Claude),
         }
     }
 
@@ -462,87 +490,6 @@ mod tests {
         assert!(parse(CLAUDE_JSON).is_ok());
         let err = parse("{\n  \"model\": oops\n}").unwrap_err();
         assert!(err.line.is_some());
-    }
-
-    fn common(entries: Vec<PatchEntry>) -> CommonConfigPatch {
-        CommonConfigPatch {
-            app: AppKind::Claude,
-            entries,
-        }
-    }
-
-    fn toggle(key: &str, value: Option<PatchValue>) -> PatchEntry {
-        PatchEntry {
-            key: key.into(),
-            value,
-        }
-    }
-
-    #[test]
-    fn common_only_render_sets_and_removes_toggle_lines() {
-        let set = crate::adapter::common_render(
-            CLAUDE_JSON,
-            &common(vec![
-                toggle("alwaysThinkingEnabled", Some(PatchValue::Bool(true))),
-                toggle("attribution.coAuthoredBy", Some(PatchValue::Bool(false))),
-            ]),
-        )
-        .unwrap();
-        assert!(set.contains("\"alwaysThinkingEnabled\": true"));
-        assert!(set.contains("\"coAuthoredBy\": false"));
-        // Host content outside the patch survives untouched.
-        assert!(set.contains("statusLine"));
-
-        let removed = crate::adapter::common_render(
-            &set,
-            &common(vec![
-                toggle("alwaysThinkingEnabled", None),
-                toggle("attribution.coAuthoredBy", None),
-            ]),
-        )
-        .unwrap();
-        assert!(!removed.contains("alwaysThinkingEnabled"));
-        assert!(!removed.contains("coAuthoredBy"));
-        assert!(removed.contains("statusLine"));
-    }
-
-    #[test]
-    fn common_only_preview_reports_only_patch_changes() {
-        let preview = crate::adapter::common_preview(
-            CLAUDE_JSON,
-            &common(vec![toggle(
-                "spinnerTipsEnabled",
-                Some(PatchValue::Bool(false)),
-            )]),
-            "F:/backups",
-        )
-        .unwrap();
-        assert_eq!(preview.changes.len(), 1);
-        assert_eq!(preview.changes[0].key, "spinnerTipsEnabled");
-        assert_eq!(preview.changes[0].after.as_deref(), Some("false"));
-        assert_eq!(preview.app, AppKind::Claude);
-    }
-
-    #[test]
-    fn toggle_is_active_reflects_the_line_value() {
-        assert!(crate::adapter::toggle_is_active(
-            AppKind::Claude,
-            "{ \"spinnerTipsEnabled\": false }",
-            "spinnerTipsEnabled",
-            false
-        ));
-        assert!(!crate::adapter::toggle_is_active(
-            AppKind::Claude,
-            "{ }",
-            "spinnerTipsEnabled",
-            false
-        ));
-        assert!(!crate::adapter::toggle_is_active(
-            AppKind::Claude,
-            "{ broken",
-            "spinnerTipsEnabled",
-            false
-        ));
     }
 
     #[test]
@@ -564,6 +511,22 @@ mod tests {
         assert_eq!(preview.backup_dir, "/backups");
         // Host keys stay untouched — asserted on the rendered text in
         // render_updates_owned_keys_and_keeps_host_blocks.
+    }
+
+    #[test]
+    fn official_route_removes_managed_custom_keys_and_keeps_host_keys() {
+        let mut plan = plan_b();
+        plan.profile.route_mode = RouteMode::Official;
+        plan.profile.model = None;
+        plan.profile.base_url = None;
+        plan.profile.api_key.clear();
+        plan.profile.model_options = None;
+
+        let rendered = render(CLAUDE_JSON, &plan).expect("official render");
+        assert!(!rendered.contains("ANTHROPIC_AUTH_TOKEN"));
+        assert!(!rendered.contains("ANTHROPIC_BASE_URL"));
+        assert!(!rendered.contains("ANTHROPIC_MODEL"));
+        assert!(rendered.contains("permissions"));
     }
 
     #[test]
@@ -604,29 +567,66 @@ mod tests {
     }
 
     #[test]
-    fn token_key_is_profile_owned_and_switch_writes_it() {
+    fn token_key_is_provider_owned_and_common_settings_cannot_claim_it() {
         let current = CLAUDE_JSON.replace(
             "\"ANTHROPIC_MODEL\": \"claude-sonnet-4\"",
             "\"ANTHROPIC_AUTH_TOKEN\": \"sk-live-old-secret\"",
         );
         let mut plan = plan_b();
-        plan.common.entries.push(PatchEntry {
-            key: "env.ANTHROPIC_AUTH_TOKEN".into(),
-            value: Some(PatchValue::Str("sk-live-forbidden".into())),
-        });
+        plan.common.settings.insert(
+            "env.ANTHROPIC_AUTH_TOKEN".into(),
+            ConfigValue::Str("sk-live-forbidden".into()),
+        );
         let err = crate::adapter::preview(&current, &plan, "/b").unwrap_err();
-        assert!(err.message.contains("供应商档案管理"));
+        assert!(err.message.contains("不是"));
 
         let preview = preview(&current, &plan_b(), "/b").unwrap();
         let change = preview
             .changes
             .iter()
             .find(|change| change.key == "env.ANTHROPIC_AUTH_TOKEN")
-            .expect("profile token change");
+            .expect("provider token change");
         assert_eq!(change.before.as_deref(), Some(crate::redact::REDACTED));
         assert_eq!(change.after.as_deref(), Some(crate::redact::REDACTED));
         let rendered = render(&current, &plan_b()).unwrap();
         assert!(rendered.contains("test-api-key"));
+    }
+
+    #[test]
+    fn non_default_common_settings_write_their_value_and_defaults_omit_the_line() {
+        let mut plan = plan_b();
+        plan.common
+            .settings
+            .insert("alwaysThinkingEnabled".into(), ConfigValue::Bool(true));
+        let current = "{}";
+        let rendered = render(current, &plan).unwrap();
+        let parsed: Json = serde_json::from_str(&rendered).unwrap();
+        assert_eq!(parsed["alwaysThinkingEnabled"], Json::Bool(true));
+
+        // The default value leaves the file without the line.
+        let mut defaulted = plan_b();
+        defaulted
+            .common
+            .settings
+            .insert("alwaysThinkingEnabled".into(), ConfigValue::Bool(false));
+        let with_line = "{\"alwaysThinkingEnabled\": true}";
+        let rendered = render(with_line, &defaulted).unwrap();
+        let parsed: Json = serde_json::from_str(&rendered).unwrap();
+        assert!(parsed.get("alwaysThinkingEnabled").is_none());
+    }
+
+    #[test]
+    fn env_parent_conflict_is_rejected_without_overwriting_host_content() {
+        let current = r#"{
+  "env": "host-owned scalar",
+  "permissions": { "allow": ["Bash(*)"] }
+}"#;
+
+        let preview_error = preview(current, &plan_b(), "/b").unwrap_err();
+        assert!(preview_error.message.contains("父节点 env"));
+        let render_error = render(current, &plan_b()).unwrap_err();
+        assert!(render_error.message.contains("父节点 env"));
+        assert!(current.contains("host-owned scalar"));
     }
 
     #[test]

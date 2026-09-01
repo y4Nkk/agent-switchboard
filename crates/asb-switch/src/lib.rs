@@ -15,8 +15,8 @@ mod prompt_documents;
 mod restore;
 
 pub use executor::{
-    execute, execute_common, read_common_preview, read_preview, sha256_hex, CommonRequest,
-    FilePreview, RecoveryOutcome, SwitchError, SwitchOutcome, SwitchRequest,
+    execute, read_preview, restore, sha256_hex, FilePreview, RecoveryOutcome, RestoreOutcome,
+    SwitchError, SwitchOutcome, SwitchRequest,
 };
 pub use io::{FsIo, SwitchIo};
 pub use lockfile::{
@@ -27,4 +27,4 @@ pub use prompt_documents::{
     read_global_prompt_document, write_global_prompt_document, GlobalPromptDocumentOutcome,
     GlobalPromptDocumentRequest,
 };
-pub use restore::{list_backups, restore, RestoreOutcome};
+pub use restore::list_backups;

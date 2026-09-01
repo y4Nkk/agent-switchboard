@@ -80,8 +80,6 @@ pub enum RuntimeLogAction {
     ProfileDeleted,
     ProfilesReordered,
     ProfileImported,
-    CommonSettingsSaved,
-    CommonSettingsApplied,
     GlobalPromptDocumentSaved,
     ConfigurationSwitched,
     BackupRestored,

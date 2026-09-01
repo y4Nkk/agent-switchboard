@@ -1,15 +1,16 @@
 //! Native Windows system-tray integration.
 //!
-//! This module owns tray IDs, menu construction, and window restoration. It
-//! only reports current routing; it never writes client configuration or
-//! bypasses the preview/confirmation transaction.
+//! The menu exposes the same two-client provider selection as the main
+//! surface. A tray click first creates the established switch preview, then
+//! passes its hashes to the existing transaction executor; this module never
+//! renders or writes a client configuration by itself.
 
-use crate::commands::config_status_report;
+use crate::commands::{config_status_report, ConfigFileStatus};
 use crate::local_state::{AppSettings, CloseBehavior, LocalState};
+use asb_core::contracts::{AppKind, MatchStatus, ProviderProfile, ProviderRecord, UsageSummary};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, Wry,
 };
@@ -17,23 +18,18 @@ use tauri::{
 const TRAY_ID: &str = "agent-switchboard-tray";
 const MENU_SHOW: &str = "tray-show-window";
 const MENU_QUIT: &str = "tray-quit";
-const MENU_CODEX_STATUS: &str = "tray-codex-status";
-const MENU_CLAUDE_STATUS: &str = "tray-claude-status";
+const MENU_SWITCH_PREFIX: &str = "tray-switch:";
+const MENU_CODEX: &str = "tray-codex";
+const MENU_CLAUDE: &str = "tray-claude";
 
-static STATUS_ITEMS: OnceLock<(MenuItem<Wry>, MenuItem<Wry>)> = OnceLock::new();
 static TRAY_READY: AtomicBool = AtomicBool::new(false);
 static EXPLICIT_EXIT: AtomicBool = AtomicBool::new(false);
+static SWITCHING: AtomicBool = AtomicBool::new(false);
 
-/// Whether the tray icon actually exists right now. Hiding a window is only
-/// safe while the tray can bring it back; without it the app would be lost.
 pub fn is_ready() -> bool {
     TRAY_READY.load(Ordering::Relaxed)
 }
 
-/// The single keep-alive decision shared by window close and process exit:
-/// absorb the request only while the tray exists. An unreadable settings file
-/// fails toward hiding (the tray can still restore the window), never toward
-/// exit — an error must never take the whole app down.
 pub(crate) fn keep_alive(tray_ready: bool, stored: Result<AppSettings, String>) -> bool {
     if !tray_ready {
         return false;
@@ -43,113 +39,197 @@ pub(crate) fn keep_alive(tray_ready: bool, stored: Result<AppSettings, String>) 
         .unwrap_or(true)
 }
 
-/// Marks the menu's "退出" as an intentional process exit. Tauri emits an
-/// ExitRequested event for app.exit, so the lifecycle guard consumes this
-/// marker and lets exactly that request through.
 pub fn request_explicit_exit() {
     EXPLICIT_EXIT.store(true, Ordering::Relaxed);
 }
 
-/// Consumes the intentional-exit marker once.
 pub fn take_explicit_exit() -> bool {
     EXPLICIT_EXIT.swap(false, Ordering::Relaxed)
 }
 
-/// Reads settings and applies the shared decision. Used by both event hooks.
 pub(crate) fn should_absorb(app: &AppHandle<Wry>) -> bool {
     let stored = LocalState::from_app(app).and_then(|state| state.get_app_settings());
     keep_alive(is_ready(), stored)
 }
 
-fn route_label(status: &crate::commands::ConfigFileStatus) -> String {
-    let client = match status.app {
-        asb_core::AppKind::Codex => "Codex",
-        asb_core::AppKind::Claude => "Claude",
-    };
-    let route_state = status.route.as_ref();
-    let route = route_state
-        .and_then(|route| route.provider_name.as_deref())
-        .unwrap_or_else(|| {
-            if status.read_error.is_some() {
-                "配置不可读"
-            } else if !status.exists {
-                "未加载"
-            } else if matches!(
-                route_state.map(|route| route.route_mode),
-                Some(asb_core::RouteMode::Custom)
-            ) {
-                "自定义服务"
-            } else {
-                "官方登录"
-            }
-        });
-    format!("{client} · {route}")
-}
-
-fn show_main_window(app: &AppHandle<Wry>) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
+fn client_name(app: AppKind) -> &'static str {
+    match app {
+        AppKind::Codex => "Codex",
+        AppKind::Claude => "Claude",
     }
 }
 
-fn status_texts(app: &AppHandle<Wry>) -> (String, String) {
-    let statuses = crate::local_state::LocalState::from_app(app)
-        .ok()
-        .and_then(|state| config_status_report(&state).ok());
-    match statuses {
-        Some(statuses) => {
-            let codex = statuses
-                .iter()
-                .find(|status| status.app == asb_core::AppKind::Codex)
-                .map(route_label)
-                .unwrap_or_else(|| "Codex · 未加载".to_string());
-            let claude = statuses
-                .iter()
-                .find(|status| status.app == asb_core::AppKind::Claude)
-                .map(route_label)
-                .unwrap_or_else(|| "Claude · 未加载".to_string());
-            (claude, codex)
+fn submenu_id(app: AppKind) -> &'static str {
+    match app {
+        AppKind::Codex => MENU_CODEX,
+        AppKind::Claude => MENU_CLAUDE,
+    }
+}
+
+fn switch_menu_id(profile_id: &str) -> String {
+    format!("{MENU_SWITCH_PREFIX}{profile_id}")
+}
+
+fn profile_id_from_menu(event_id: &str) -> Option<&str> {
+    let profile_id = event_id.strip_prefix(MENU_SWITCH_PREFIX)?;
+    (!profile_id.is_empty()).then_some(profile_id)
+}
+
+fn number(value: f64) -> String {
+    let rounded = format!("{value:.2}");
+    rounded
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_string()
+}
+
+fn usage_suffix(summary: &UsageSummary) -> Option<String> {
+    let reading = summary.readings.first()?;
+    let (kind, main) = match (reading.remaining, reading.used) {
+        (Some(remaining), _) => ("余", remaining),
+        (None, Some(used)) => ("用", used),
+        (None, None) => return None,
+    };
+    let plan = reading
+        .plan_name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+        .map(|name| format!("{} ", name.trim()))
+        .unwrap_or_default();
+    let total = reading
+        .total
+        .map(|value| format!("/{}", number(value)))
+        .unwrap_or_default();
+    let unit = reading
+        .unit
+        .as_deref()
+        .filter(|unit| !unit.trim().is_empty())
+        .map(|unit| format!(" {}", unit.trim()))
+        .unwrap_or_default();
+    let more = (summary.readings.len() > 1)
+        .then(|| format!(" +{}", summary.readings.len() - 1))
+        .unwrap_or_default();
+    Some(format!("{plan}{kind}{}{total}{unit}{more}", number(main)))
+}
+
+fn active_profile_id(statuses: &[ConfigFileStatus], app: AppKind) -> Option<&str> {
+    statuses
+        .iter()
+        .find(|status| status.app == app)
+        .and_then(|status| match &status.match_status {
+            MatchStatus::MatchesProfile { profile_id, .. } => Some(profile_id.as_str()),
+            _ => None,
+        })
+}
+
+fn fallback_title(statuses: &[ConfigFileStatus], app: AppKind) -> &'static str {
+    let Some(status) = statuses.iter().find(|status| status.app == app) else {
+        return "未加载";
+    };
+    if status.read_error.is_some() {
+        "配置不可读"
+    } else if !status.exists {
+        "未加载"
+    } else {
+        "未由供应商管理"
+    }
+}
+
+fn menu_title(
+    statuses: &[ConfigFileStatus],
+    app: AppKind,
+    active: Option<&ProviderProfile>,
+) -> String {
+    let client = client_name(app);
+    match active {
+        Some(profile) => {
+            let usage = crate::usage_cache::get(profile)
+                .as_ref()
+                .and_then(usage_suffix)
+                .map(|suffix| format!(" · {suffix}"))
+                .unwrap_or_default();
+            format!("{client} · {}{usage}", profile.name)
         }
-        None => ("Claude · 未加载".to_string(), "Codex · 未加载".to_string()),
+        None => format!("{client} · {}", fallback_title(statuses, app)),
     }
 }
 
-/// Rebuilds the status labels from the current live configuration. The two
-/// items retain stable handles created by `setup`.
-pub fn refresh(app: &AppHandle<Wry>) {
-    let Some((claude_item, codex_item)) = STATUS_ITEMS.get() else {
-        return;
-    };
-    let (claude, codex) = status_texts(app);
-    let _ = claude_item.set_text(claude);
-    let _ = codex_item.set_text(codex);
+fn app_submenu(
+    app: &AppHandle<Wry>,
+    kind: AppKind,
+    records: &[ProviderRecord],
+    statuses: &[ConfigFileStatus],
+) -> tauri::Result<Submenu<Wry>> {
+    let active_id = active_profile_id(statuses, kind);
+    let active = active_id.and_then(|id| {
+        records
+            .iter()
+            .find(|record| record.profile.id == id)
+            .map(|record| &record.profile)
+    });
+    let submenu = Submenu::with_id(
+        app,
+        submenu_id(kind),
+        menu_title(statuses, kind, active),
+        true,
+    )?;
+    if records.is_empty() {
+        let empty = MenuItem::with_id(
+            app,
+            format!("tray-{}-empty", submenu_id(kind)),
+            "尚无供应商",
+            false,
+            None::<&str>,
+        )?;
+        submenu.append(&empty)?;
+        return Ok(submenu);
+    }
+
+    for record in records {
+        let active = active_id == Some(record.profile.id.as_str());
+        let usage = crate::usage_cache::get(&record.profile)
+            .as_ref()
+            .and_then(usage_suffix)
+            .map(|suffix| format!(" · {suffix}"))
+            .unwrap_or_default();
+        let item = CheckMenuItem::with_id(
+            app,
+            switch_menu_id(&record.profile.id),
+            format!("{}{}", record.profile.name, usage),
+            !active,
+            active,
+            None::<&str>,
+        )?;
+        submenu.append(&item)?;
+    }
+    Ok(submenu)
 }
 
-/// Creates the always-visible tray icon. Left click restores the main window;
-/// right click opens the native menu: one window affordance, two disabled
-/// route facts, and one explicit process-exit command. Menu state must come
-/// from the existing real configuration state; it is never a switching entry.
-pub fn setup(app: &AppHandle<Wry>) -> tauri::Result<()> {
+fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
+    let state = LocalState::from_app(app).map_err(tauri::Error::AssetNotFound)?;
+    let records = state
+        .configuration()
+        .list_providers()
+        .map_err(|error| tauri::Error::AssetNotFound(error.to_string()))?;
+    let statuses =
+        config_status_report(&state).map_err(|error| tauri::Error::AssetNotFound(error.message))?;
     let show = MenuItem::with_id(app, MENU_SHOW, "打开主界面", true, None::<&str>)?;
-    let claude = MenuItem::with_id(
-        app,
-        MENU_CLAUDE_STATUS,
-        "Claude · 未加载",
-        false,
-        None::<&str>,
-    )?;
-    let codex = MenuItem::with_id(
-        app,
-        MENU_CODEX_STATUS,
-        "Codex · 未加载",
-        false,
-        None::<&str>,
-    )?;
+    let claude_records = records
+        .iter()
+        .filter(|record| record.profile.app == AppKind::Claude)
+        .cloned()
+        .collect::<Vec<_>>();
+    let codex_records = records
+        .iter()
+        .filter(|record| record.profile.app == AppKind::Codex)
+        .cloned()
+        .collect::<Vec<_>>();
+    let claude = app_submenu(app, AppKind::Claude, &claude_records, &statuses)?;
+    let codex = app_submenu(app, AppKind::Codex, &codex_records, &statuses)?;
     let separator_one = PredefinedMenuItem::separator(app)?;
     let separator_two = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, MENU_QUIT, "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(
+    Menu::with_items(
         app,
         &[
             &show,
@@ -159,8 +239,84 @@ pub fn setup(app: &AppHandle<Wry>) -> tauri::Result<()> {
             &separator_two,
             &quit,
         ],
+    )
+}
+
+/// Keeps the native recovery route available even if app-owned data is
+/// currently unreadable. A later refresh replaces it with the live menu.
+fn recovery_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
+    let show = MenuItem::with_id(app, MENU_SHOW, "打开主界面", true, None::<&str>)?;
+    let unavailable = MenuItem::with_id(
+        app,
+        "tray-provider-data-unavailable",
+        "供应商数据不可读",
+        false,
+        None::<&str>,
     )?;
-    let _ = STATUS_ITEMS.set((claude.clone(), codex.clone()));
+    let separator_one = PredefinedMenuItem::separator(app)?;
+    let separator_two = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, MENU_QUIT, "退出", true, None::<&str>)?;
+    Menu::with_items(
+        app,
+        &[&show, &separator_one, &unavailable, &separator_two, &quit],
+    )
+}
+
+fn show_main_window(app: &AppHandle<Wry>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+async fn switch_from_tray(app: AppHandle<Wry>, profile_id: String) {
+    let result = async {
+        let preview =
+            crate::commands::switching::preview_switch(app.clone(), profile_id.clone()).await?;
+        crate::commands::switching::execute_switch(
+            app.clone(),
+            profile_id,
+            preview.content_hash,
+            preview.rendered_hash,
+            true,
+        )
+        .await
+    }
+    .await;
+    if let Err(error) = result {
+        log::warn!("托盘切换供应商失败: {}", error.message);
+    }
+    SWITCHING.store(false, Ordering::Release);
+    refresh(&app);
+}
+
+fn request_switch(app: &AppHandle<Wry>, profile_id: &str) {
+    if SWITCHING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    tauri::async_runtime::spawn(switch_from_tray(app.clone(), profile_id.to_string()));
+}
+
+/// Rebuilds the dynamic menu from current profiles, real-client status, and
+/// cached usage. No provider query runs here.
+pub fn refresh(app: &AppHandle<Wry>) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let Ok(menu) = build_menu(app).or_else(|_| recovery_menu(app)) else {
+        return;
+    };
+    let _ = tray.set_menu(Some(menu));
+}
+
+/// Creates the always-visible tray icon. Left click restores the main window;
+/// right click opens Codex and Claude provider submenus. Selecting a provider
+/// is an explicit user write confirmation routed through the shared executor.
+pub fn setup(app: &AppHandle<Wry>) -> tauri::Result<()> {
+    let menu = build_menu(app).or_else(|_| recovery_menu(app))?;
     let icon = app
         .default_window_icon()
         .cloned()
@@ -177,7 +333,11 @@ pub fn setup(app: &AppHandle<Wry>) -> tauri::Result<()> {
                 request_explicit_exit();
                 app.exit(0);
             }
-            _ => {}
+            event_id => {
+                if let Some(profile_id) = profile_id_from_menu(event_id) {
+                    request_switch(app, profile_id);
+                }
+            }
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -191,7 +351,6 @@ pub fn setup(app: &AppHandle<Wry>) -> tauri::Result<()> {
         })
         .build(app)?;
     TRAY_READY.store(true, Ordering::Relaxed);
-    refresh(app);
     Ok(())
 }
 
@@ -200,6 +359,7 @@ mod tests {
     use super::*;
     use crate::local_state::{MotionPreference, ThemePreference};
     use crate::runtime_log::RuntimeLogLevel;
+    use asb_core::contracts::UsageReading;
 
     #[test]
     fn settings_error_keeps_the_app_recoverable_when_tray_exists() {
@@ -233,5 +393,42 @@ mod tests {
         request_explicit_exit();
         assert!(take_explicit_exit());
         assert!(!take_explicit_exit());
+    }
+
+    #[test]
+    fn tray_menu_ids_accept_only_nonempty_provider_ids() {
+        assert_eq!(
+            profile_id_from_menu("tray-switch:provider-a"),
+            Some("provider-a")
+        );
+        assert_eq!(profile_id_from_menu("tray-switch:"), None);
+        assert_eq!(profile_id_from_menu("other:provider-a"), None);
+    }
+
+    #[test]
+    fn usage_suffix_is_compact_and_uses_only_cached_numbers() {
+        let summary = UsageSummary {
+            readings: vec![
+                UsageReading {
+                    plan_name: Some("主套餐".to_string()),
+                    remaining: Some(3932.0),
+                    used: Some(68.0),
+                    total: Some(4000.0),
+                    unit: Some("次".to_string()),
+                },
+                UsageReading {
+                    plan_name: Some("附加".to_string()),
+                    remaining: Some(2.0),
+                    used: None,
+                    total: Some(3.0),
+                    unit: Some("次".to_string()),
+                },
+            ],
+            at: "2026-09-01T08:00:00Z".to_string(),
+        };
+        assert_eq!(
+            usage_suffix(&summary),
+            Some("主套餐 余3932/4000 次 +1".to_string())
+        );
     }
 }

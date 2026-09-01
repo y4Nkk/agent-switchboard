@@ -31,6 +31,7 @@ describe("DualRelay", () => {
     render(
       <DualRelay
         routes={{ codex: route("codex", "中继 A", "gpt-5.1"), claude: null }}
+        providerNames={{ codex: "中继 A", claude: "未加载" }}
         selectedProfile={null}
         canSwitch={false}
         busy={false}
@@ -51,13 +52,14 @@ describe("DualRelay", () => {
     expect(document.querySelectorAll(".asb-route-card:not(.is-on) .asb-card-particle-canvas").length).toBe(1);
   });
 
-  it("names the routing mode when no provider name is available", () => {
+  it("shows the matched profile name instead of the connection mode", () => {
     render(
       <DualRelay
         routes={{
           codex: route("codex", null, null, "custom"),
           claude: route("claude", null, null, "official"),
         }}
+        providerNames={{ codex: "智谱 GLM", claude: "官方登录" }}
         selectedProfile={null}
         canSwitch={false}
         busy={false}
@@ -65,7 +67,7 @@ describe("DualRelay", () => {
         onSwitch={() => {}}
       />,
     );
-    expect(screen.getByText("自定义服务")).toBeInTheDocument();
+    expect(screen.getByText("智谱 GLM")).toBeInTheDocument();
     expect(screen.getAllByText("官方登录").length).toBeGreaterThan(0);
   });
 
@@ -73,6 +75,7 @@ describe("DualRelay", () => {
     render(
       <DualRelay
         routes={{ codex: route("codex", "中继 A", "gpt-5.1"), claude: null }}
+        providerNames={{ codex: "中继 A", claude: "未加载" }}
         selectedProfile={null}
         canSwitch={false}
         busy={false}

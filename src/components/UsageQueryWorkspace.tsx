@@ -3,6 +3,7 @@ import {
   testUsageQuery,
   type DeclarativeUsageQuery,
   type UsageQuery,
+  type UsageReading,
   type UsageSummary,
 } from "../api/client";
 import { Input } from "./Input";
@@ -63,6 +64,19 @@ function Metric({ label, value, unit }: { label: string; value: number | null; u
       <strong>{value ?? "—"}</strong>
       {unit && <small>{unit}</small>}
     </div>
+  );
+}
+
+function Reading({ reading }: { reading: UsageReading }) {
+  return (
+    <section className="asb-usage-reading">
+      {reading.planName && <h3 className="asb-usage-reading-title">{reading.planName}</h3>}
+      <div className="asb-usage-metrics">
+        <Metric label="余额" value={reading.remaining} unit={reading.unit} />
+        <Metric label="已用" value={reading.used} unit={reading.unit} />
+        <Metric label="总量" value={reading.total} unit={reading.unit} />
+      </div>
+    </section>
   );
 }
 
@@ -316,11 +330,9 @@ export function UsageQueryWorkspace({
             <span>本次结果</span>
             <Time iso={summary.at} />
           </div>
-          <div className="asb-usage-metrics">
-            <Metric label="余额" value={summary.remaining} unit={summary.unit} />
-            <Metric label="已用" value={summary.used} unit={summary.unit} />
-            <Metric label="总量" value={summary.total} unit={summary.unit} />
-          </div>
+          {summary.readings.map((reading, index) => (
+            <Reading key={`${reading.planName ?? "默认"}-${index}`} reading={reading} />
+          ))}
         </section>
       )}
       {error && <p className="asb-warn-text" role="alert">{error}</p>}

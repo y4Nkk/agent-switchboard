@@ -1,12 +1,29 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { createWebDevelopmentBrowserPlugin } from "./src/dev/vite-browser-launch.ts";
+import tauriConfig from "./src-tauri/tauri.conf.json" with { type: "json" };
+
+const developmentUrl = new URL(tauriConfig.build.devUrl);
+const browserDevelopment = Object.freeze({
+  origin: developmentUrl.origin,
+  host: developmentUrl.hostname,
+  port: Number(developmentUrl.port),
+});
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    createWebDevelopmentBrowserPlugin({
+      enabled: process.env.ASB_WEB_DEVELOPMENT === "1",
+      healthUrl: "http://127.0.0.1:1422/health",
+      origin: browserDevelopment.origin,
+    }),
+  ],
   clearScreen: false,
   server: {
-    port: 1420,
+    host: browserDevelopment.host,
+    port: browserDevelopment.port,
     strictPort: true,
     open: false,
     proxy: {

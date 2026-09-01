@@ -610,6 +610,9 @@ button:disabled {
 /* Prompt management uses a near-solid work surface rather than another
    frosted layer, keeping editable Markdown high contrast. */
 .asb-prompt-manager {
+  --asb-prompt-editor-min-height: 20rem;
+  --asb-prompt-editor-max-height: clamp(20rem, 58dvh, 40rem);
+
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-3);
@@ -630,10 +633,6 @@ button:disabled {
   margin: 0 0 var(--asb-space-1);
   font: var(--asb-text-body);
   font-weight: 700;
-}
-
-.asb-prompt-manager .asb-scope-note {
-  margin: 0;
 }
 
 .asb-prompt-document-tabs {
@@ -678,12 +677,18 @@ button:disabled {
 }
 
 .asb-prompt-editor {
-  min-height: 320px;
+  inline-size: 100%;
+  height: var(--asb-prompt-editor-min-height);
+  min-height: var(--asb-prompt-editor-min-height);
+  max-height: var(--asb-prompt-editor-max-height);
   padding: var(--asb-space-3);
   border-color: var(--asb-hairline-strong);
   background: var(--asb-content);
   color: var(--asb-text);
   line-height: 1.6;
+  overflow-y: auto;
+  resize: none;
+  scrollbar-gutter: stable;
   tab-size: 2;
 }
 
@@ -694,13 +699,12 @@ button:disabled {
   gap: var(--asb-space-2);
 }
 
-.asb-prompt-state {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
 @media (max-width: 680px) {
+  .asb-prompt-manager {
+    --asb-prompt-editor-min-height: 15rem;
+    --asb-prompt-editor-max-height: clamp(15rem, 56dvh, 32rem);
+  }
+
   .asb-prompt-manager-heading {
     flex-direction: column;
   }
@@ -758,38 +762,18 @@ button:disabled {
   background: var(--asb-row-selected);
 }
 
-/* Live-matched row: the same ring at full stops and the emphasis pace —
-   intensity plus motion mark the one row that matches the real config. */
+/* An unfolded preview turns the card into a reading surface: hover stops
+   tinting it (user directive 2026-09-01). :where keeps this exception at
+   the base rule's specificity so the is-live card below still wins. */
+.asb-row-item:where(.is-previewing):hover {
+  background: var(--asb-content);
+}
+
+/* Live-matched rows use a quiet fill and shadow; the status badge carries the
+   state, so module edges remain neutral. */
 .asb-row-item.is-live {
-  border-color: var(--asb-action);
   background: var(--asb-row-selected);
-  box-shadow: var(--asb-accent-shadow);
-  background:
-    linear-gradient(var(--asb-row-selected), var(--asb-row-selected)) padding-box,
-    conic-gradient(
-      from var(--asb-accent-border-angle),
-      var(--asb-accent-border-stops-active)
-    )
-      border-box;
-  animation: asb-accent-border-flow var(--asb-accent-border-duration) linear infinite;
-}
-
-@property --asb-accent-border-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 135deg;
-}
-
-@keyframes asb-accent-border-flow {
-  to {
-    --asb-accent-border-angle: 495deg;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .asb-row-item.is-live {
-    animation: none;
-  }
+  box-shadow: var(--asb-live-shadow);
 }
 
 /* The selectable region: avatar + texts. A reset button, visually flat —
@@ -850,8 +834,6 @@ button:disabled {
   gap: var(--asb-space-2);
   padding: var(--asb-space-3);
   border-top: 1px solid var(--asb-hairline);
-  border-left: 2px solid var(--asb-action);
-  background: var(--asb-code-bg);
 }
 
 .asb-provider-usage-head,
@@ -898,7 +880,7 @@ button:disabled {
   padding: 0 var(--asb-space-2);
   border: 1px solid var(--asb-hairline-strong);
   border-radius: var(--asb-radius-action);
-  background: var(--asb-content);
+  background: transparent;
   font: var(--asb-text-label);
   font-weight: 600;
 }
@@ -918,48 +900,82 @@ button:disabled {
   color: var(--asb-action);
 }
 
-.asb-provider-usage-ledger {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0;
+.asb-provider-usage-readings {
   border-top: 1px solid var(--asb-hairline);
-  border-bottom: 1px solid var(--asb-hairline);
 }
 
-.asb-provider-usage-metric {
+.asb-provider-usage-reading + .asb-provider-usage-reading {
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-provider-usage-reading-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-2) 0;
+}
+
+.asb-provider-usage-reading h4 {
   min-width: 0;
-  padding: var(--asb-space-2);
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 600;
 }
 
-.asb-provider-usage-metric + .asb-provider-usage-metric {
-  border-left: 1px solid var(--asb-hairline);
+.asb-provider-usage-reading-values,
+.asb-provider-usage-primary {
+  display: flex;
+  align-items: baseline;
 }
 
-.asb-provider-usage-metric dt {
+.asb-provider-usage-reading-values {
+  flex: none;
+  justify-content: flex-end;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-provider-usage-primary {
+  gap: var(--asb-space-unit);
+}
+
+.asb-provider-usage-primary > span,
+.asb-provider-usage-secondary,
+.asb-provider-usage-total {
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
 
-.asb-provider-usage-metric dd {
-  display: flex;
-  align-items: baseline;
-  gap: var(--asb-space-unit);
-  min-width: 0;
-  margin: var(--asb-space-unit) 0 0;
-}
-
-.asb-provider-usage-metric strong {
+.asb-provider-usage-primary strong {
   overflow: hidden;
   font: var(--asb-text-title);
   color: var(--asb-text);
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.asb-provider-usage-metric small,
+.asb-provider-usage-primary small,
 .asb-provider-usage-state {
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
+}
+
+.asb-provider-usage-progress {
+  height: 3px;
+  overflow: hidden;
+  margin: 0 0 var(--asb-space-2);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-hairline);
+}
+
+.asb-provider-usage-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--asb-action);
 }
 
 .asb-provider-usage-state {
@@ -972,13 +988,16 @@ button:disabled {
     flex-direction: column;
   }
 
-  .asb-provider-usage-ledger {
-    grid-template-columns: minmax(0, 1fr);
+  .asb-provider-usage-reading-line {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--asb-space-1);
   }
 
-  .asb-provider-usage-metric + .asb-provider-usage-metric {
-    border-top: 1px solid var(--asb-hairline);
-    border-left: 0;
+  .asb-provider-usage-reading-values {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: var(--asb-space-2);
   }
 }
 
@@ -1032,8 +1051,8 @@ button:disabled {
 
 /* The row-level 启用 entry reuses the shared primary button; rows add
    icon/text centering on top of it. The button renders on every non-live
-   row but stays hidden until the card is hovered, keyboard-focused, or
-   selected (user directive 2026-08-31; reveal states are CSS-owned here).
+   row but stays hidden until the card is hovered. Selecting a row must not
+   leave this transient action visible (user directive 2026-09-01).
    The hovered/selected surface would swallow the solid action fill, so
    the CTA carries the ported gradient identity (spiralcoder primary
    button; white text and glow token-owned). */
@@ -1055,16 +1074,13 @@ button:disabled {
 }
 
 /* Reveal rules sit after the shared primary rules so the hidden default
-   wins at equal specificity; hover keeps the mouse path, :focus-within
-   keeps the keyboard path, and the semantic selection attribute keeps an
-   already-chosen row's action available after the pointer leaves. */
+   wins at equal specificity. This primary action is pointer-only: the
+   always-visible preview icon remains the keyboard-accessible path. */
 .asb-row-item .asb-row-activate {
   display: none;
 }
 
-.asb-row-item:hover .asb-row-activate,
-.asb-row-item:focus-within .asb-row-activate,
-.asb-row[aria-selected="true"] + .asb-row-activate {
+.asb-row-item:hover .asb-row-activate {
   display: inline-flex;
 }
 
@@ -1230,7 +1246,6 @@ button:disabled {
   margin: 0;
   padding: var(--asb-space-2);
   list-style: none;
-  border-left: 2px solid var(--asb-warning);
   color: var(--asb-text);
   font: var(--asb-text-label);
 }
@@ -1535,6 +1550,18 @@ button:disabled {
   padding: 0;
 }
 
+.asb-toggle-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+}
+
+.asb-toggle-group-head .asb-btn-secondary {
+  min-height: calc(var(--asb-touch-target) - 8px);
+  padding: 0 var(--asb-space-3);
+}
+
 .asb-toggle-group-title {
   margin: 0;
   font: var(--asb-text-label);
@@ -1592,6 +1619,9 @@ button:disabled {
 }
 
 .asb-seg-opt {
+  /* Own the visually hidden radio's absolute coordinates so focus can only
+     scroll the page's actual scroll surface, never #root. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1654,6 +1684,47 @@ button:disabled {
   margin-top: var(--asb-space-3);
   padding-top: var(--asb-space-3);
   border-top: 1px solid var(--asb-hairline);
+}
+
+/* One page-owned footer gives whole-form reset, save status, and save action
+   a shared alignment line. Individual groups keep their own local reset. */
+.asb-general-settings-actions,
+.asb-general-settings-actions-main {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-general-settings-actions {
+  justify-content: space-between;
+  margin-top: var(--asb-space-4);
+}
+
+.asb-general-settings-actions-main {
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.asb-general-settings-actions-main .asb-field-help,
+.asb-general-settings-actions-main .asb-field-error {
+  margin: 0;
+  text-align: right;
+}
+
+@media (max-width: 680px) {
+  .asb-general-settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .asb-general-settings-actions-main {
+    justify-content: space-between;
+  }
+
+  .asb-general-settings-actions-main .asb-field-help,
+  .asb-general-settings-actions-main .asb-field-error {
+    text-align: left;
+  }
 }
 
 /* Pretty-printed candidate configuration file */
@@ -2284,6 +2355,8 @@ button:disabled {
 
 /* Generic tick-box control (spiralcoder structure, Frosted Relay tokens) */
 .asb-checkbox {
+  /* Keep the native input's focus box attached to the drawn checkbox. */
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--asb-space-2);
@@ -2361,6 +2434,8 @@ button:disabled {
    spiralcoder primary-button gradient with its inset glow; hover strengthens
    the glow, exactly like the provider-row activate button. */
 .asb-switch {
+  /* Keep the native input's focus box attached to the drawn switch. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   padding: var(--asb-space-1) 0;
@@ -2573,7 +2648,6 @@ button:disabled {
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--asb-space-1) var(--asb-space-3);
   padding: var(--asb-space-3);
-  border-left: 2px solid var(--asb-action);
   background: var(--asb-code-bg);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -2622,6 +2696,17 @@ button:disabled {
 .asb-usage-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.asb-usage-reading + .asb-usage-reading {
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-reading-title {
+  margin: 0;
+  padding: var(--asb-space-2) var(--asb-space-3) 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
 }
 
 .asb-usage-metric {
@@ -2816,7 +2901,6 @@ button:disabled {
 .asb-runtime-log-notice {
   margin: 0 0 var(--asb-space-3);
   padding: var(--asb-space-2);
-  border-left: 2px solid var(--asb-danger);
   color: var(--asb-text);
   font: var(--asb-text-label);
 }

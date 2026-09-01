@@ -9,6 +9,7 @@ import {
   type CommandError,
   type ProviderDraft,
   type ProviderProfile,
+  type ProviderRecord,
   type UsageQuery,
 } from "../api/client";
 
@@ -18,7 +19,10 @@ interface ProvidersDeps {
   busy: boolean;
   appFilter: AppKind;
   setAppFilter: (app: AppKind) => void;
-  selectedProfile: ProviderProfile | null;
+  /** Storage revision of the provider file being edited; a save refuses to
+   * overwrite a file changed outside the application. */
+  selectedRecord: ProviderRecord | null;
+  records: ProviderRecord[];
   selectedId: string | null;
   onError: (error: CommandError) => void;
   clearError: () => void;
@@ -27,7 +31,7 @@ interface ProvidersDeps {
   retractPreview: () => void;
   refresh: () => Promise<void>;
   selectProfile: (profileId: string) => Promise<void> | void;
-  setProfiles: (profiles: ProviderProfile[]) => void;
+  setRecords: (records: ProviderRecord[]) => void;
   setSelectedId: (id: string | null) => void;
 }
 
@@ -40,7 +44,8 @@ export function useProviders({
   busy,
   appFilter,
   setAppFilter,
-  selectedProfile,
+  selectedRecord,
+  records,
   selectedId,
   onError,
   clearError,
@@ -49,7 +54,7 @@ export function useProviders({
   retractPreview,
   refresh,
   selectProfile,
-  setProfiles,
+  setRecords,
   setSelectedId,
 }: ProvidersDeps) {
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
@@ -76,20 +81,28 @@ export function useProviders({
     [retractPreview, setAppFilter, setSelectedId],
   );
 
-  /** Persists a drag reorder of the visible client's profiles. The store's
-   * profiles vector is the single owner of display order; the returned list
-   * is the same source of truth after the write. */
+  /** Persists a drag reorder of the visible client's provider files. Each
+   * file carries its own sort position; the returned list is the same source
+   * of truth after the write. */
   const dragReorderProfiles = useCallback(
     async (orderedIds: string[]) => {
       if (busy) return;
+      const expectedFileHashes = Object.fromEntries(
+        records
+          .filter((record) => record.profile.app === appFilter)
+          .map((record) => [record.profile.id, record.fileHash]),
+      );
+      setBusy(true);
       clearError();
       try {
-        setProfiles(await reorderProfiles(appFilter, orderedIds));
+        setRecords(await reorderProfiles(appFilter, orderedIds, expectedFileHashes));
       } catch (caught) {
         onError(caught as CommandError);
+      } finally {
+        setBusy(false);
       }
     },
-    [appFilter, busy, clearError, onError, setProfiles],
+    [appFilter, busy, clearError, onError, records, setBusy, setRecords],
   );
 
   const saveProfile = useCallback(
@@ -99,13 +112,13 @@ export function useProviders({
       clearError();
       try {
         const saved =
-          editorMode === "edit" && selectedProfile
-            ? await updateProfile(selectedProfile.id, draft)
+          editorMode === "edit" && selectedRecord
+            ? await updateProfile(selectedRecord.profile.id, draft, selectedRecord.fileHash)
             : await createProfile(draft);
-        setAppFilter(saved.app);
+        setAppFilter(saved.profile.app);
         setEditorMode(null);
         await refresh();
-        await selectProfile(saved.id);
+        await selectProfile(saved.profile.id);
       } catch (caught) {
         onError(caught as CommandError);
       } finally {
@@ -119,7 +132,7 @@ export function useProviders({
       onError,
       refresh,
       selectProfile,
-      selectedProfile,
+      selectedRecord,
       setAppFilter,
       setBusy,
     ],
@@ -128,11 +141,13 @@ export function useProviders({
   const saveProfileUsageQuery = useCallback(
     async (profile: ProviderProfile, usageQuery: UsageQuery | null): Promise<boolean> => {
       if (busy) return false;
+      const record = records.find((candidate) => candidate.profile.id === profile.id);
+      if (!record) return false;
       setBusy(true);
       clearError();
       try {
         const { id, ...draft } = profile;
-        await updateProfile(id, { ...draft, usageQuery });
+        await updateProfile(id, { ...draft, usageQuery }, record.fileHash);
         await refresh();
         return true;
       } catch (caught) {
@@ -142,18 +157,23 @@ export function useProviders({
         setBusy(false);
       }
     },
-    [busy, clearError, onError, refresh, setBusy],
+    [busy, clearError, onError, records, refresh, setBusy],
   );
 
   const runDelete = useCallback(async () => {
     if (busy || !deletePending) return;
     const target = deletePending;
+    const record = records.find((candidate) => candidate.profile.id === target.id);
     setDeletePending(null);
+    if (!record) {
+      onError({ code: "profile-not-found", message: "供应商已不存在，请重新读取" });
+      return;
+    }
     invalidateCandidates();
     setBusy(true);
     clearError();
     try {
-      await deleteProfile(target.id);
+      await deleteProfile(target.id, record.fileHash);
       if (selectedId === target.id) {
         setSelectedId(null);
       }
@@ -170,6 +190,7 @@ export function useProviders({
     deletePending,
     invalidateCandidates,
     onError,
+    records,
     refresh,
     selectedId,
     setBusy,

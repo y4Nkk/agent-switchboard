@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ProviderList } from "./ProviderList";
 import type { ProviderProfile } from "../api/client";
@@ -11,11 +14,16 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import { invoke } from "@tauri-apps/api/core";
 
 const invokeMock = vi.mocked(invoke);
+const baseCss = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../styles/base.css"),
+  "utf8",
+);
 
 const profiles: ProviderProfile[] = [
   {
     id: "codex-relay-a",
     app: "codex",
+    routeMode: "custom",
     name: "中继 A",
     model: "gpt-5.1",
     baseUrl: "https://relay-a.internal/v1",
@@ -25,6 +33,7 @@ const profiles: ProviderProfile[] = [
   {
     id: "codex-official",
     app: "codex",
+    routeMode: "custom",
     name: "官方 OpenAI",
     model: null,
     baseUrl: "https://api.openai.com/v1",
@@ -147,13 +156,17 @@ describe("ProviderList", () => {
       />,
     );
     const row = screen.getByRole("option", { name: /中继 A/ }).closest("li");
+    expect(row).toHaveClass("is-previewing");
+    expect(screen.getByRole("option", { name: /官方 OpenAI/ }).closest("li")).not.toHaveClass(
+      "is-previewing",
+    );
     expect(row?.querySelector(".asb-row-line + .asb-preview-inline")).toHaveTextContent(
       "预览内容 codex-relay-a",
     );
     expect(screen.getAllByText(/预览内容/)).toHaveLength(1);
   });
 
-  it("unfolds a configured usage readout inside its provider card", async () => {
+  it("shows a configured usage ledger inside its provider card by default", async () => {
     const user = userEvent.setup();
     const configured = {
       ...profiles[0],
@@ -165,10 +178,7 @@ describe("ProviderList", () => {
       },
     };
     invokeMock.mockResolvedValue({
-      remaining: 18.5,
-      used: 7,
-      total: 25.5,
-      unit: "USD",
+      readings: [{ remaining: 18.5, used: 7, total: 25.5, unit: "USD" }],
       at: "2026-08-31T08:00:00Z",
     });
     render(
@@ -180,21 +190,21 @@ describe("ProviderList", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: "查看 中继 A 用量" });
+    const toggle = screen.getByRole("button", { name: "收起 中继 A 用量" });
     expect(toggle).toHaveClass("asb-btn-icon");
     expect(toggle).not.toHaveTextContent("用量");
     expect(toggle.closest(".asb-iconcluster")).toBeTruthy();
-    await user.click(toggle);
-
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByRole("region", { name: "中继 A 用量" })).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("test_usage_query", {
-      query: configured.usageQuery,
-      apiKey: "ASB_RELAY_A_KEY",
-      baseUrl: "https://relay-a.internal/v1",
+    expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", {
+      profileId: "codex-relay-a",
     });
     const row = screen.getByRole("option", { name: /中继 A/ }).closest("li");
     expect(row?.querySelector(".asb-row-line + .asb-provider-usage")).toBeTruthy();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("region", { name: "中继 A 用量" })).not.toBeInTheDocument();
   });
 
   it("uses the same visible card action to configure an unconfigured provider", async () => {
@@ -215,6 +225,7 @@ describe("ProviderList", () => {
     expect(usageButton).toHaveClass("asb-btn-icon");
     expect(usageButton).not.toHaveTextContent("用量");
     expect(usageButton.closest(".asb-iconcluster")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "中继 A 用量" })).not.toBeInTheDocument();
     await user.click(usageButton);
     expect(onConfigureUsage).toHaveBeenCalledWith(profiles[0]);
     expect(onSelect).not.toHaveBeenCalled();
@@ -247,8 +258,35 @@ describe("ProviderList", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("tests a provider endpoint from the icon action without selecting the row", async () => {
-    invokeMock.mockResolvedValueOnce({
+  it("orders card actions as edit, preview, connectivity, usage, then delete", () => {
+    render(
+      <ProviderList
+        profiles={profiles}
+        activeProfileId={null}
+        selectedId={null}
+        onSelect={() => {}}
+        onConfigureUsage={() => {}}
+        onPreview={() => {}}
+        onEdit={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    const labels = Array.from(
+      screen.getByRole("group", { name: "中继 A 操作" }).querySelectorAll("button"),
+      (button) => button.getAttribute("aria-label"),
+    );
+    expect(labels).toEqual([
+      "编辑 中继 A",
+      "预览 中继 A 变更",
+      "测试 中继 A 连通性",
+      "配置 中继 A 用量",
+      "删除 中继 A",
+    ]);
+  });
+
+  it("expands, collapses, then re-runs a provider endpoint test without selecting the row", async () => {
+    invokeMock.mockResolvedValue({
       grade: "ok",
       status: 204,
       latencyMs: 320,
@@ -276,29 +314,61 @@ describe("ProviderList", () => {
     expect(invokeMock).toHaveBeenCalledWith("probe_endpoint", { url: "https://relay-a.internal/v1" });
     expect(await screen.findByText(/连通正常 · HTTP 204 · 320 毫秒/)).toBeInTheDocument();
     expect(button).toHaveAttribute("aria-describedby", "provider-probe-codex-relay-a");
+    expect(button).toHaveAttribute("aria-expanded", "true");
     expect(onSelect).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "收起 中继 A 连通性结果" }));
+    expect(screen.queryByText(/连通正常 · HTTP 204 · 320 毫秒/)).not.toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(button).not.toHaveAttribute("aria-describedby");
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "测试 中继 A 连通性" }));
+    expect(await screen.findByText(/连通正常 · HTTP 204 · 320 毫秒/)).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledTimes(2);
   });
 
-  it("renders row-level 启用 on unselected rows too, routing to the preview flow", async () => {
+  it("collapses a failed provider endpoint result", async () => {
+    invokeMock.mockRejectedValueOnce(new Error("连接超时"));
+    const user = userEvent.setup();
+    render(
+      <ProviderList profiles={profiles} activeProfileId={null} selectedId={null} onSelect={() => {}} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "测试 中继 A 连通性" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("连接超时");
+
+    await user.click(screen.getByRole("button", { name: "收起 中继 A 连通性结果" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("renders row-level 启用 on non-live rows, routing to the preview flow", async () => {
     const user = userEvent.setup();
     const onActivate = vi.fn();
     render(
       <ProviderList
         profiles={profiles}
         activeProfileId="codex-relay-a"
-        selectedId="codex-relay-a"
+        selectedId="codex-official"
         onSelect={() => {}}
         onActivate={onActivate}
       />,
     );
 
-    // Reveal-on-hover/focus/selected is owned by the stylesheet, so the
-    // button is in the tree (and actionable) even before the row is
-    // selected.
+    // The button stays in the tree; its pointer-only reveal is owned by the
+    // stylesheet, and selection never changes that visual state.
     const button = screen.getByRole("button", { name: "启用 官方 OpenAI" });
     expect(button.classList.contains("asb-row-activate")).toBe(true);
     await user.click(button);
     expect(onActivate).toHaveBeenCalledWith(profiles[1]);
+  });
+
+  it("reveals 启用 only while its provider card is hovered", () => {
+    const activationRule = baseCss.match(/\.asb-row-item:hover \.asb-row-activate \{[^}]+\}/)?.[0] ?? "";
+
+    expect(activationRule).toContain("display: inline-flex");
+    expect(baseCss).not.toContain(":focus-within .asb-row-activate");
+    expect(baseCss).not.toContain('[aria-selected="true"] + .asb-row-activate');
   });
 
   it("keeps the live-matched row without a 启用 button even when selected", () => {

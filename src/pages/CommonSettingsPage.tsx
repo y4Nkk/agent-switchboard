@@ -1,11 +1,10 @@
 import { useState } from "react";
 import type {
   AppKind,
-  CommonChoicesState,
-  FilePreview,
+  ConfigFileStatus,
   GlobalPromptDocument,
-  ToggleState,
 } from "../api/client";
+import type { CommonSettingsEditorState } from "../app/useCommonSettings";
 import { ClientLogo } from "../components/ClientLogo";
 import { CodePreview } from "../components/CodePreview";
 import { GeneralSettingsForm } from "../components/GeneralSettingsForm";
@@ -16,12 +15,18 @@ import { clientName } from "../lib/client-name";
 interface CommonSettingsPageProps {
   app: AppKind;
   onSelectApp: (app: AppKind) => void;
-  toggles: ToggleState[] | undefined;
-  choices: CommonChoicesState | undefined;
-  commonPreview: FilePreview | null | undefined;
+  editorState: CommonSettingsEditorState;
   busy: boolean;
-  /** One control = one config line, written through the safe transaction. */
-  onApplyLine: (app: AppKind, key: string, value: boolean | string | null) => void;
+  /** Current real-client state. General settings never write it directly. */
+  configStatus: ConfigFileStatus | undefined;
+  /** Whether this client currently has an applied supplier; when true a
+   * save only takes effect after the supplier is re-applied. */
+  hasActiveProvider: boolean;
+  onValueChange: (app: AppKind, key: string, value: string | number | boolean) => void;
+  onResetGroup: (app: AppKind, group: string | null) => void;
+  onSave: (app: AppKind) => void;
+  onRetryLoad: (app: AppKind) => void;
+  onPreview: (app: AppKind) => void;
   promptApp: AppKind;
   promptDocument: GlobalPromptDocument | undefined;
   promptDraft: string;
@@ -33,16 +38,161 @@ interface CommonSettingsPageProps {
   onReloadPrompt: () => void;
 }
 
-/** General settings: per-client overlay controls plus the live candidate
- * file preview. */
+function SettingsEditor({
+  state,
+  busy,
+  configStatus,
+  hasActiveProvider,
+  onValueChange,
+  onResetGroup,
+  onSave,
+  onRetryLoad,
+  onPreview,
+}: {
+  state: CommonSettingsEditorState;
+  busy: boolean;
+  configStatus: ConfigFileStatus | undefined;
+  hasActiveProvider: boolean;
+  onValueChange: (key: string, value: string | number | boolean) => void;
+  onResetGroup: (group: string | null) => void;
+  onSave: () => void;
+  onRetryLoad: () => void;
+  onPreview: () => void;
+}) {
+  if (state.phase === "idle" || state.phase === "loading") {
+    return <p className="asb-empty">正在读取通用设置</p>;
+  }
+  if (state.phase === "loadError" || !state.editor || !state.draft) {
+    return (
+      <div className="asb-empty" role="alert">
+        <p>无法读取通用设置：{state.error?.message ?? "本地应用数据不可用"}</p>
+        <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onRetryLoad}>
+          重新读取
+        </button>
+      </div>
+    );
+  }
+
+  const canSave = state.phase === "dirty" || state.phase === "saveError";
+  const realConfigStatus = (() => {
+    switch (configStatus?.matchStatus.kind) {
+      case "matchesProfile":
+        return `已应用：真实配置与「${configStatus.matchStatus.profileName}」一致`;
+      case "externallyModified":
+        return "真实配置已被外部修改，请前往供应商页重新应用";
+      case "profileChanged":
+        return `供应商「${configStatus.matchStatus.profileName}」已更新，请重新应用`;
+      case "restoredBackup":
+        return "真实配置已恢复备份，请前往供应商页重新应用";
+      case "unmanaged":
+        return "真实配置尚未由供应商应用管理";
+      case "unknown":
+      case undefined:
+        return null;
+    }
+  })();
+  const actionStatus = (() => {
+    if (state.phase === "dirty") return { message: "有未保存修改", error: false };
+    if (state.phase === "savedPendingReapply") {
+      return {
+        message: hasActiveProvider
+          ? "已保存，重新应用当前供应商后生效"
+          : "已保存，请在供应商页选择并启用供应商后生效",
+        error: false,
+      };
+    }
+    if (realConfigStatus) {
+      return {
+        message: realConfigStatus,
+        error: configStatus?.matchStatus.kind === "externallyModified",
+      };
+    }
+    if (state.phase === "clean") return { message: "已保存到应用数据", error: false };
+    return null;
+  })();
+
+  return (
+    <>
+      <GeneralSettingsForm
+        specs={state.editor.specs}
+        groups={state.editor.groups}
+        values={state.draft}
+        busy={busy}
+        onChange={onValueChange}
+        onResetGroup={onResetGroup}
+      />
+      <div className="asb-general-settings-actions">
+        <button
+          type="button"
+          className="asb-btn-secondary"
+          disabled={busy}
+          onClick={() => onResetGroup(null)}
+        >
+          全部恢复默认值
+        </button>
+        <div className="asb-general-settings-actions-main">
+          {actionStatus ? (
+            <span
+              className={actionStatus.error ? "asb-field-error" : "asb-field-help"}
+              role={actionStatus.error ? "alert" : "status"}
+            >
+              {actionStatus.message}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="asb-btn-primary"
+            disabled={busy || !canSave}
+            onClick={onSave}
+          >
+            {state.phase === "saving" ? "正在保存" : "保存通用设置"}
+          </button>
+        </div>
+      </div>
+      {state.phase === "saveError" ? (
+        <p className="asb-field-error" role="alert">
+          保存失败，修改已保留：{state.error?.message ?? "请重试"}
+        </p>
+      ) : null}
+      <div className="asb-settings-preview">
+        <div className="asb-form-actions">
+          <button
+            type="button"
+            className="asb-btn-secondary"
+            disabled={busy || state.previewing}
+            onClick={onPreview}
+          >
+            {state.previewing ? "正在生成预览" : "查看通用配置预览"}
+          </button>
+        </div>
+        {state.preview ? (
+          <CodePreview target={state.preview.target} content={state.preview.content} />
+        ) : null}
+        {state.previewError ? (
+          <p className="asb-field-error" role="alert">
+            无法生成通用配置预览：{state.previewError.message}
+          </p>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+/** Application-wide general parameters and user-global prompts. Saving
+ * values here is deliberately separate from a supplier activation and the
+ * actual client file produced by it. */
 export function CommonSettingsPage({
   app,
   onSelectApp,
-  toggles,
-  choices,
-  commonPreview,
+  editorState,
   busy,
-  onApplyLine,
+  configStatus,
+  hasActiveProvider,
+  onValueChange,
+  onResetGroup,
+  onSave,
+  onRetryLoad,
+  onPreview,
   promptApp,
   promptDocument,
   promptDraft,
@@ -53,7 +203,7 @@ export function CommonSettingsPage({
   onDiscardPrompt,
   onReloadPrompt,
 }: CommonSettingsPageProps) {
-  const [section, setSection] = useState<"models" | "prompts">("models");
+  const [section, setSection] = useState<"settings" | "prompts">("settings");
   return (
     <section className="asb-panel" aria-label="通用设置">
       <div className="asb-panel-heading">
@@ -63,11 +213,11 @@ export function CommonSettingsPage({
         <button
           type="button"
           role="tab"
-          aria-selected={section === "models"}
-          className={`asb-settings-main-tab${section === "models" ? " is-on" : ""}`}
-          onClick={() => setSection("models")}
+          aria-selected={section === "settings"}
+          className={`asb-settings-main-tab${section === "settings" ? " is-on" : ""}`}
+          onClick={() => setSection("settings")}
         >
-          模型配置
+          通用设置
         </button>
         <button
           type="button"
@@ -79,7 +229,7 @@ export function CommonSettingsPage({
           提示词管理
         </button>
       </div>
-      {section === "models" ? (
+      {section === "settings" ? (
         <>
           <div className="asb-tabs" role="tablist" aria-label="客户端">
             {(["codex", "claude"] as const).map((target) => (
@@ -97,31 +247,17 @@ export function CommonSettingsPage({
               </Tooltip>
             ))}
           </div>
-          <p className="asb-scope-note">
-            勾选即在配置文件写入该行，取消勾选即移除；写入前自动备份并原子替换。仅管理用户级配置，项目级配置与命令行参数可能覆盖此处设置。
-          </p>
-          {toggles && choices ? (
-            <GeneralSettingsForm
-              app={app}
-              toggles={toggles}
-              choices={choices.choices}
-              groups={choices.groups}
-              busy={busy}
-              onToggle={(toggle, checked) =>
-                onApplyLine(app, toggle.key, checked ? toggle.applied : null)
-              }
-              onChoiceChange={(choice, value) => onApplyLine(app, choice.key, value)}
-            />
-          ) : (
-            <p className="asb-empty">加载中</p>
-          )}
-          <div className="asb-settings-preview">
-            {commonPreview ? (
-              <CodePreview target={commonPreview.preview.target} content={commonPreview.content} />
-            ) : (
-              <p className="asb-empty">正在生成配置预览</p>
-            )}
-          </div>
+          <SettingsEditor
+            state={editorState}
+            configStatus={configStatus}
+            hasActiveProvider={hasActiveProvider}
+            busy={busy}
+            onValueChange={(key, value) => onValueChange(app, key, value)}
+            onResetGroup={(group) => onResetGroup(app, group)}
+            onSave={() => onSave(app)}
+            onRetryLoad={() => onRetryLoad(app)}
+            onPreview={() => onPreview(app)}
+          />
         </>
       ) : (
         <GlobalPromptManager

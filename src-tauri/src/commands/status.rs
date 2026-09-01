@@ -4,8 +4,8 @@
 use super::error::{blocking, observe, state, store_error, CommandError};
 use crate::runtime_log::RuntimeLogAction;
 use asb_core::contracts::{
-    AppKind, CommonConfigPatch, MatchStatus, ProviderProfile, RouteState, SwitchLog, SwitchOp,
-    SwitchPlan,
+    AppKind, ConfigWriteRecord, MatchStatus, ProviderProfile, RouteState, SwitchPlan,
+    WriteOperation,
 };
 use asb_core::{adapter, LockStatus};
 use asb_switch::io::{FsIo, SwitchIo};
@@ -25,18 +25,18 @@ pub struct ConfigFileStatus {
     pub route: Option<RouteState>,
     pub read_error: Option<String>,
     pub match_status: MatchStatus,
-    pub last_switch: Option<SwitchLog>,
+    pub last_switch: Option<ConfigWriteRecord>,
 }
 
 fn classify_match_status(
-    last: Option<&SwitchLog>,
+    last: Option<&ConfigWriteRecord>,
     current_hash: &str,
     matching_profile: Option<&ProviderProfile>,
 ) -> MatchStatus {
     if let Some(record) = last {
         if record.content_hash == current_hash
             && record.profile_id.is_none()
-            && record.operation == SwitchOp::Switch
+            && record.operation == WriteOperation::Restore
         {
             return MatchStatus::RestoredBackup {
                 at: record.at.clone(),
@@ -51,20 +51,12 @@ fn classify_match_status(
     }
 
     match last {
-        Some(record) if record.content_hash == current_hash => {
-            if record.operation == SwitchOp::CommonSettings {
-                MatchStatus::MatchesSettings {
-                    at: record.at.clone(),
-                }
-            } else {
-                MatchStatus::ProfileChanged {
-                    profile_name: record
-                        .profile_name
-                        .clone()
-                        .unwrap_or_else(|| "已删除档案".to_string()),
-                }
-            }
-        }
+        Some(record) if record.content_hash == current_hash => MatchStatus::ProfileChanged {
+            profile_name: record
+                .profile_name
+                .clone()
+                .unwrap_or_else(|| "通用设置".to_string()),
+        },
         Some(record) => MatchStatus::ExternallyModified {
             at: record.at.clone(),
         },
@@ -80,32 +72,24 @@ fn match_status_for(
     kind: AppKind,
     text: &str,
 ) -> Result<MatchStatus, CommandError> {
-    let store = state.load_store().map_err(store_error)?;
+    let configuration = state.configuration();
     let hash = sha256_hex(text);
-    let last = store
-        .switch_log
-        .iter()
-        .rev()
-        .find(|entry| entry.app == kind);
+    let last = configuration
+        .latest_config_write(kind)
+        .map_err(store_error)?;
 
-    let common = store
-        .common
-        .iter()
-        .find(|patch| patch.app == kind)
-        .cloned()
-        .unwrap_or(CommonConfigPatch {
-            app: kind,
-            entries: vec![],
-        });
-    let matching_profile = store
-        .profiles
-        .iter()
-        .filter(|p| p.app == kind)
-        .find(|profile| {
-            let profile = *profile;
+    let common = configuration
+        .get_common_settings(kind)
+        .map_err(store_error)?
+        .settings;
+    let matching_profile = configuration
+        .list_providers()
+        .map_err(store_error)?
+        .into_iter()
+        .filter(|record| record.profile.app == kind)
+        .find(|record| {
             let plan = SwitchPlan {
-                app: kind,
-                profile: profile.clone(),
+                profile: record.profile.clone(),
                 common: common.clone(),
             };
             let unchanged = asb_core::validate_plan(&plan.profile, &plan.common).is_ok()
@@ -114,9 +98,14 @@ fn match_status_for(
                     Ok(preview) if preview.changes.is_empty()
                 );
             unchanged
-        });
+        })
+        .map(|record| record.profile);
 
-    Ok(classify_match_status(last, &hash, matching_profile))
+    Ok(classify_match_status(
+        last.as_ref(),
+        &hash,
+        matching_profile.as_ref(),
+    ))
 }
 
 /// The logic owner behind the `config_status` command. Also consumed by the
@@ -131,7 +120,10 @@ pub(crate) fn config_status_report(
             let target = state
                 .target(kind)
                 .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-            let last_switch = state.latest_switch(kind).map_err(store_error)?;
+            let last_switch = state
+                .configuration()
+                .latest_config_write(kind)
+                .map_err(store_error)?;
             let status = match io.read_file(&target) {
                 Ok(text) => match adapter::validate_syntax(kind, &text) {
                     Ok(()) => ConfigFileStatus {
@@ -226,6 +218,7 @@ mod tests {
         ProviderProfile {
             id: "p1".to_string(),
             app: AppKind::Codex,
+            route_mode: asb_core::RouteMode::Custom,
             name: "当前档案".to_string(),
             model: Some("gpt-5.4".to_string()),
             base_url: Some("https://gateway.example/v1".to_string()),
@@ -237,23 +230,28 @@ mod tests {
         }
     }
 
-    fn log(content_hash: &str, profile_id: Option<&str>, profile_name: Option<&str>) -> SwitchLog {
-        SwitchLog {
+    fn log(
+        content_hash: &str,
+        profile_id: Option<&str>,
+        profile_name: Option<&str>,
+    ) -> ConfigWriteRecord {
+        ConfigWriteRecord {
             app: AppKind::Codex,
             profile_id: profile_id.map(str::to_string),
             profile_name: profile_name.map(str::to_string),
             content_hash: content_hash.to_string(),
             backup_id: "b1".to_string(),
             at: "2026-08-26T08:00:00Z".to_string(),
-            operation: SwitchOp::Switch,
+            operation: WriteOperation::Projection,
         }
     }
 
     #[test]
     fn match_status_never_activates_a_restored_backup_or_an_edited_profile() {
         let current = profile();
-        let restored =
-            classify_match_status(Some(&log("same", None, None)), "same", Some(&current));
+        let mut restore_record = log("same", None, None);
+        restore_record.operation = WriteOperation::Restore;
+        let restored = classify_match_status(Some(&restore_record), "same", Some(&current));
         assert!(matches!(restored, MatchStatus::RestoredBackup { .. }));
 
         let stale_profile =

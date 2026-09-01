@@ -86,18 +86,45 @@ export function ProbeFeedback({ id, className, result, error }: FeedbackProps) {
 /** Manual reachability check for the endpoint being edited, ported from the
  * CC Switch pattern: any HTTP answer proves the address is reachable (graded
  * slow past the latency threshold), only network-level failures report as
- * unreachable. The probe sends no model request and carries no credential. */
+ * unreachable. The probe sends no model request and carries no credential.
+ * The button toggles: with the outcome on screen the next click collapses it,
+ * and a collapsed click re-probes before unfolding again. */
 export function ProbePanel({ url }: Props) {
   const probe = useEndpointProbe(url);
+  const [open, setOpen] = useState(false);
+  // A url change clears the outcome in the hook, so a stale open flag can
+  // never show anything on its own.
+  const visible = open && (probe.result !== null || probe.error !== null);
 
   if (!url) return null;
 
   return (
     <>
-      <button type="button" className="asb-btn-secondary" disabled={probe.busy} onClick={() => void probe.run()}>
-        {probe.busy ? "检测中…" : "检测连通"}
+      <button
+        type="button"
+        className="asb-btn-secondary"
+        aria-expanded={visible}
+        aria-controls="editor-probe-feedback"
+        disabled={probe.busy}
+        onClick={() => {
+          if (visible) {
+            setOpen(false);
+            return;
+          }
+          setOpen(true);
+          void probe.run();
+        }}
+      >
+        {probe.busy ? "检测中…" : visible ? "收起结果" : "检测连通"}
       </button>
-      <ProbeFeedback className="asb-editor-probe-feedback" result={probe.result} error={probe.error} />
+      {visible && (
+        <ProbeFeedback
+          id="editor-probe-feedback"
+          className="asb-editor-probe-feedback"
+          result={probe.result}
+          error={probe.error}
+        />
+      )}
     </>
   );
 }

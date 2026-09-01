@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getConfigStatus,
   getLockStatus,
@@ -9,7 +9,7 @@ import {
   type CommandError,
   type ConfigFileStatus,
   type LockStatus,
-  type ProviderProfile,
+  type ProviderRecord,
 } from "../api/client";
 
 interface SnapshotDeps {
@@ -17,22 +17,24 @@ interface SnapshotDeps {
 }
 
 /**
- * The observable client snapshot: file statuses, profiles, backups, and
- * locks, plus the selected profile id. One versioned `refresh` keeps
- * late responses from overwriting newer ones.
+ * The observable client snapshot: file statuses, provider files, backups, and
+ * locks, plus the selected profile id. One versioned `refresh` keeps late
+ * responses from overwriting newer ones.
  */
 export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const [statuses, setStatuses] = useState<ConfigFileStatus[] | null>(null);
-  const [profiles, setProfiles] = useState<ProviderProfile[]>([]);
+  const [records, setRecords] = useState<ProviderRecord[]>([]);
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [locks, setLocks] = useState<Partial<Record<AppKind, LockStatus>>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const refreshVersion = useRef(0);
 
+  const profiles = useMemo(() => records.map((record) => record.profile), [records]);
+
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     try {
-      const [nextStatuses, nextProfiles, nextBackups, codexLock, claudeLock] =
+      const [nextStatuses, nextRecords, nextBackups, codexLock, claudeLock] =
         await Promise.all([
           getConfigStatus(),
           listProfiles(),
@@ -42,11 +44,13 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
         ]);
       if (refreshVersion.current !== version) return;
       setStatuses(nextStatuses);
-      setProfiles(nextProfiles);
+      setRecords(nextRecords);
       setBackups(nextBackups);
       setLocks({ codex: codexLock, claude: claudeLock });
       setSelectedId((current) =>
-        current && !nextProfiles.some((profile) => profile.id === current) ? null : current,
+        current && nextRecords.some((record) => record.profile.id === current)
+          ? current
+          : null,
       );
     } catch (caught) {
       if (refreshVersion.current !== version) return;
@@ -79,8 +83,11 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
 
   return {
     statuses,
+    /** Provider files with their storage revisions; the write boundary. */
+    records,
+    setRecords,
+    /** Display projections of the stored provider files. */
     profiles,
-    setProfiles,
     backups,
     locks,
     selectedId,

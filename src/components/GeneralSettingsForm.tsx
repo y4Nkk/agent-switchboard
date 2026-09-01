@@ -1,156 +1,156 @@
-import type { AppKind } from "../api/client";
-import type { ChoiceState, ToggleState } from "../api/client";
-import { Checkbox } from "./Checkbox";
+import type {
+  CommonSettingSpec,
+  CommonValue,
+} from "../api/client";
 import { Slider } from "./Slider";
-import { Tooltip } from "./Tooltip";
+import { Switch } from "./Switch";
 
 interface Props {
-  app: AppKind;
-  toggles: ToggleState[];
-  choices: ChoiceState[];
-  /** Section order; every catalog entry must name a group from this list. */
+  specs: CommonSettingSpec[];
+  /** Section order comes from the ownership catalog. */
   groups: string[];
+  values: Record<string, CommonValue>;
   busy: boolean;
-  /** Checked = the applied line lands in the config file; unchecked = the
-      line is removed. Applied immediately through the safe write path. */
-  onToggle: (toggle: ToggleState, checked: boolean) => void;
-  /** Selecting an option writes that line; null = 默认 (line removed). */
-  onChoiceChange: (choice: ChoiceState, value: string | null) => void;
+  onChange: (key: string, value: CommonValue) => void;
+  /** Restores one group's directory defaults; `null` restores every group. */
+  onResetGroup: (group: string | null) => void;
 }
 
-const DEFAULT_LABEL = "默认";
-
-function choiceValueLabel(choice: ChoiceState): string {
-  if (choice.value === null) return DEFAULT_LABEL;
-  const option = choice.options.find(({ value }) => value === choice.value);
-  return option ? option.label : `${DEFAULT_LABEL}（${choice.value}）`;
+function choiceIndex(spec: CommonSettingSpec, value: CommonValue): number {
+  const index =
+    typeof value === "string"
+      ? spec.options.findIndex((option) => option.value === value)
+      : -1;
+  return Math.max(index, 0);
 }
 
-function choiceLinePreview(app: AppKind, choice: ChoiceState): string {
-  if (choice.value === null) {
-    return `默认：不写入 ${choice.key}，由客户端内置默认值决定`;
+function RadioOption({
+  name,
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  name: string;
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  onChange: () => void;
+}) {
+  return (
+    <label className={`asb-seg-opt${checked ? " is-active" : ""}`}>
+      <input
+        type="radio"
+        name={name}
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      {label}
+    </label>
+  );
+}
+
+function ChoiceControl({
+  spec,
+  value,
+  busy,
+  onChange,
+}: {
+  spec: Exclude<CommonSettingSpec, { control: "toggle" }>;
+  value: CommonValue;
+  busy: boolean;
+  onChange: (value: CommonValue) => void;
+}) {
+  const name = `${spec.key}-setting`;
+  if (spec.control === "slider") {
+    return (
+      <Slider
+        value={choiceIndex(spec, value)}
+        min={0}
+        max={spec.options.length - 1}
+        step={1}
+        ariaLabel={spec.label}
+        ariaValueText={`${spec.label} ${
+          spec.options[choiceIndex(spec, value)]?.label ?? ""
+        }`}
+        disabled={busy}
+        onValueChange={(index) => onChange(spec.options[index]?.value)}
+      />
+    );
   }
-  return app === "codex"
-    ? `${choice.key} = "${choice.value}"`
-    : `"${choice.key}": "${choice.value}"`;
-}
 
-function optionIndex(choice: ChoiceState): number {
-  const index = choice.options.findIndex(({ value }) => value === choice.value);
-  return index < 0 ? 0 : index + 1;
-}
-
-function optionValue(choice: ChoiceState, index: number): string | null {
-  return index === 0 ? null : choice.options[index - 1].value;
+  return (
+    <div className="asb-segments" role="radiogroup" aria-label={spec.label}>
+      {spec.options.map((option) => (
+        <RadioOption
+          key={option.value}
+          name={name}
+          checked={value === option.value}
+          disabled={busy}
+          label={option.label}
+          onChange={() => onChange(option.value)}
+        />
+      ))}
+    </div>
+  );
 }
 
 /**
- * General-configuration controls over official client settings, grouped into
- * sections. Checkboxes, segments, and the reasoning-effort slider each manage
- * one real config line; changes land in the client's config file through the
- * safe write path. They edit a typed patch; they never produce configuration
- * text. Model routing belongs to provider profiles.
+ * Plain general-parameter controls: every parameter always carries a
+ * concrete value. There is no raw TOML/JSON editor, no client-file preview,
+ * and no patch semantics here — every edit changes only desired application
+ * state, and each group can be restored to its directory defaults. The page
+ * owns the one all-settings restore action alongside saving.
  */
 export function GeneralSettingsForm({
-  app,
-  toggles,
-  choices,
+  specs,
   groups,
+  values,
   busy,
-  onToggle,
-  onChoiceChange,
+  onChange,
+  onResetGroup,
 }: Props) {
   return (
     <div className="asb-toggle-list">
       {groups.map((group) => {
-        const groupToggles = toggles.filter((toggle) => toggle.group === group);
-        const groupChoices = choices.filter((choice) => choice.group === group);
-        if (groupToggles.length === 0 && groupChoices.length === 0) return null;
+        const groupSpecs = specs.filter((spec) => spec.group === group);
+        if (groupSpecs.length === 0) return null;
         return (
           <section className="asb-toggle-group" key={group}>
-            <h3 className="asb-toggle-group-title">{group}</h3>
-            {groupToggles.map((toggle) => (
-              <div className="asb-toggle-row" key={toggle.key}>
-                <Checkbox
-                  label={toggle.label}
-                  checked={toggle.value}
-                  disabled={busy}
-                  onChange={(checked) => onToggle(toggle, checked)}
-                />
-                <code className="asb-toggle-line">{toggle.line}</code>
-              </div>
-            ))}
-            {groupChoices.map((choice) => {
-              const currentLine =
-                choice.value === null ? null : (
-                  <code className="asb-toggle-line">{choiceLinePreview(app, choice)}</code>
-                );
-              return choice.control === "slider" ? (
-                <div className="asb-toggle-row asb-choice-row" key={choice.key}>
+            <div className="asb-toggle-group-head">
+              <h3 className="asb-toggle-group-title">{group}</h3>
+              <button
+                type="button"
+                className="asb-btn-secondary"
+                disabled={busy}
+                onClick={() => onResetGroup(group)}
+              >
+                恢复默认值
+              </button>
+            </div>
+            {groupSpecs.map((spec) => {
+              const value = values[spec.key];
+              return (
+                <div className="asb-toggle-row asb-choice-row" key={spec.key}>
                   <div className="asb-choice-head">
-                    <span className="asb-checkbox-label">{choice.label}</span>
-                    <Tooltip side="left" label={choiceLinePreview(app, choice)}>
-                      <span
-                        className="asb-choice-value"
-                        tabIndex={0}
-                        aria-label={`当前${choice.label} ${choiceValueLabel(choice)}`}
-                      >
-                        {choiceValueLabel(choice)}
-                      </span>
-                    </Tooltip>
+                    <span className="asb-checkbox-label">{spec.label}</span>
                   </div>
-                  <Slider
-                    value={optionIndex(choice)}
-                    min={0}
-                    max={choice.options.length}
-                    step={1}
-                    ariaLabel={choice.label}
-                    ariaValueText={`${choice.label} ${choiceValueLabel(choice)}`}
-                    disabled={busy}
-                    onValueChange={(index) => onChoiceChange(choice, optionValue(choice, index))}
-                  />
-                  {currentLine}
-                </div>
-              ) : (
-                <div className="asb-toggle-row asb-choice-row" key={choice.key}>
-                  <div className="asb-choice-head">
-                    <span className="asb-checkbox-label">{choice.label}</span>
-                    <Tooltip side="left" label={choiceLinePreview(app, choice)}>
-                      <span
-                        className="asb-choice-value"
-                        tabIndex={0}
-                        aria-label={`当前${choice.label} ${choiceValueLabel(choice)}`}
-                      >
-                        {choiceValueLabel(choice)}
-                      </span>
-                    </Tooltip>
-                  </div>
-                  <div className="asb-segments" role="radiogroup" aria-label={choice.label}>
-                    {[null, ...choice.options.map(({ value }) => value)].map((value) => {
-                      const active = choice.value === value;
-                      const label =
-                        value === null
-                          ? DEFAULT_LABEL
-                          : choice.options.find((option) => option.value === value)!.label;
-                      return (
-                        <label
-                          className={`asb-seg-opt${active ? " is-active" : ""}`}
-                          key={value ?? "default"}
-                        >
-                          <input
-                            type="radio"
-                            name={`${app}-${choice.key}`}
-                            value={value ?? ""}
-                            checked={active}
-                            disabled={busy}
-                            onChange={() => onChoiceChange(choice, value)}
-                          />
-                          {label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {currentLine}
+                  {spec.control === "toggle" ? (
+                    <Switch
+                      label={spec.label}
+                      checked={value === true}
+                      disabled={busy}
+                      onChange={(checked) => onChange(spec.key, checked)}
+                    />
+                  ) : (
+                    <ChoiceControl
+                      spec={spec}
+                      value={value}
+                      busy={busy}
+                      onChange={(next) => onChange(spec.key, next)}
+                    />
+                  )}
                 </div>
               );
             })}

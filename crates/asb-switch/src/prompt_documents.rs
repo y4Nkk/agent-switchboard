@@ -168,9 +168,19 @@ fn execute_locked<Io: SwitchIo>(
     io: &Io,
     request: &GlobalPromptDocumentRequest,
 ) -> Result<GlobalPromptDocumentOutcome, SwitchError> {
-    let finish = |result| {
-        lockfile::release(io, request.target);
-        result
+    let finish = |result| match (result, lockfile::release(io, request.target)) {
+        (Ok(outcome), Ok(())) => Ok(outcome),
+        (Ok(_), Err(reason)) => Err(SwitchError::CommitFailed {
+            stage: "lock-release",
+            message: reason,
+            recovery: RecoveryOutcome::NotNeeded,
+        }),
+        (Err(error), Ok(())) => Err(error),
+        (Err(error), Err(reason)) => Err(SwitchError::CommitFailed {
+            stage: "lock-release",
+            message: format!("{error}; {reason}"),
+            recovery: RecoveryOutcome::NotNeeded,
+        }),
     };
     let (current, target_existed, current_hash) =
         match read_expected_current(io, request.target, request.expected_hash) {

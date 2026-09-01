@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkCodexResetStatus,
+  deleteProfile,
+  getCommonSettingsEditor,
   getCloudBackupSettings,
   getCloudBackupSetupSql,
   getAppSettings,
@@ -13,10 +15,14 @@ import {
   listSystemFonts,
   openRuntimeLogDir,
   resetProfileStore,
+  reorderProfiles,
   resumeSession,
   setAppSettings,
   setCloudBackupSettings,
   saveGlobalPromptDocument,
+  saveCommonSettings,
+  previewCommonSettings,
+  queryProfileUsage,
   uploadCloudBackup,
   restoreCloudBackup,
 } from "./client";
@@ -40,6 +46,52 @@ describe("api client boundary", () => {
     await getConfigStatus();
 
     expect(invokeMock).toHaveBeenCalledWith("config_status");
+  });
+
+  it("reads, previews, and saves application-owned general settings without a client-file write command", async () => {
+    invokeMock.mockResolvedValue({});
+
+    await getCommonSettingsEditor("codex");
+    await saveCommonSettings(
+      "codex",
+      { settings: { disable_response_storage: true } },
+      "settings-hash",
+    );
+    await previewCommonSettings("codex", { settings: { disable_response_storage: true } });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "get_common_settings_editor", {
+      target: "codex",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "save_common_settings", {
+      target: "codex",
+      settings: { settings: { disable_response_storage: true } },
+      expectedSettingsHash: "settings-hash",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "preview_common_settings", {
+      target: "codex",
+      settings: { settings: { disable_response_storage: true } },
+    });
+  });
+
+  it("sends the current provider-file revisions for delete and reorder", async () => {
+    invokeMock.mockResolvedValue([]);
+
+    await deleteProfile("codex-gateway", "delete-hash");
+    await reorderProfiles(
+      "codex",
+      ["codex-b", "codex-a"],
+      { "codex-a": "hash-a", "codex-b": "hash-b" },
+    );
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "delete_profile", {
+      profileId: "codex-gateway",
+      expectedFileHash: "delete-hash",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "reorder_profiles", {
+      target: "codex",
+      orderedIds: ["codex-b", "codex-a"],
+      expectedFileHashes: { "codex-a": "hash-a", "codex-b": "hash-b" },
+    });
   });
 
   it("reads application runtime records through their dedicated command", async () => {
@@ -86,6 +138,16 @@ describe("api client boundary", () => {
     await checkCodexResetStatus();
 
     expect(invokeMock).toHaveBeenCalledWith("check_codex_reset_status");
+  });
+
+  it("queries a persisted provider usage summary without passing its credential to the UI", async () => {
+    invokeMock.mockResolvedValue({ readings: [], at: "2026-09-01T08:00:00Z" });
+
+    await queryProfileUsage("codex-relay-a");
+
+    expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", {
+      profileId: "codex-relay-a",
+    });
   });
 
   it("reads the cached Codex reset snapshot without using the network command", async () => {

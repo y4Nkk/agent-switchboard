@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadConfigFromFile } from "vite";
 
 const srcRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = dirname(srcRoot);
 
 function collectSourceFiles(dir: string): string[] {
   const files: string[] = [];
@@ -44,5 +46,20 @@ describe("UI boundary", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("derives the Vite listener from the Tauri development URL", async () => {
+    const tauriConfig = JSON.parse(
+      readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"),
+    ) as { build: { devUrl: string } };
+    const configuredUrl = new URL(tauriConfig.build.devUrl);
+    const loadedViteConfig = await loadConfigFromFile(
+      { command: "serve", mode: "test" },
+      join(repoRoot, "vite.config.ts"),
+    );
+
+    expect(configuredUrl.origin).toBe("http://127.0.0.1:1420");
+    expect(loadedViteConfig?.config.server?.host).toBe(configuredUrl.hostname);
+    expect(loadedViteConfig?.config.server?.port).toBe(Number(configuredUrl.port));
   });
 });

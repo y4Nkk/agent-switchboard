@@ -2,6 +2,7 @@ mod ccswitch_source;
 mod cloud_backup;
 mod codex_reset;
 mod commands;
+mod config_store;
 #[cfg(debug_assertions)]
 mod dev_api;
 mod fonts;
@@ -11,12 +12,18 @@ mod runtime_log;
 mod session_manager;
 mod tray;
 mod update;
+mod usage_cache;
 mod usage_query;
 
 pub use commands::local_config_paths;
 
 const WRY_DEFAULT_WEBVIEW2_BROWSER_ARGS: &str =
     "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+
+#[cfg(debug_assertions)]
+fn web_development_enabled(value: Option<&std::ffi::OsStr>) -> bool {
+    value == Some(std::ffi::OsStr::new("1"))
+}
 
 fn apply_hardware_acceleration(
     windows: &mut [tauri::utils::config::WindowConfig],
@@ -79,13 +86,24 @@ pub fn run() {
             tray::setup(app.handle())?;
             runtime_log::record_started();
             #[cfg(debug_assertions)]
-            if std::env::var_os("ASB_WEB_DEVELOPMENT").is_some() {
-                dev_api::start(app.handle().clone()).map_err(std::io::Error::other)?;
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.hide();
+            {
+                let web_development = std::env::var_os("ASB_WEB_DEVELOPMENT");
+                if web_development_enabled(web_development.as_deref()) {
+                    let development_origin = app
+                        .config()
+                        .build
+                        .dev_url
+                        .as_ref()
+                        .map(|url| url.origin().ascii_serialization())
+                        .ok_or_else(|| std::io::Error::other("缺少浏览器开发地址"))?;
+                    dev_api::start(app.handle().clone(), development_origin)
+                        .map_err(std::io::Error::other)?;
+                    // The persistent Vite process owns the one-shot browser launch;
+                    // Tauri restarts this process for every backend hot reload.
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
                 }
-                use tauri_plugin_opener::OpenerExt;
-                let _ = app.opener().open_url("http://localhost:1420", None::<&str>);
             }
             Ok(())
         })
@@ -111,12 +129,9 @@ pub fn run() {
             commands::delete_profile,
             commands::reorder_profiles,
             commands::import_discovered_profile,
-            commands::common_settings::get_common,
-            commands::common_settings::set_common,
-            commands::common_settings::common_toggles,
-            commands::common_settings::common_choices,
-            commands::common_settings::preview_common,
-            commands::common_settings::apply_common,
+            commands::common_settings::get_common_settings_editor,
+            commands::common_settings::save_common_settings,
+            commands::common_settings::preview_common_settings,
             commands::prompt_management::get_global_prompt_document,
             commands::prompt_management::save_global_prompt_document,
             commands::switching::preview_switch,
@@ -135,6 +150,7 @@ pub fn run() {
             commands::cloud_backup::restore_cloud_backup,
             commands::probe_endpoint,
             commands::test_usage_query,
+            commands::query_profile_usage,
             commands::fetch_provider_models,
             commands::check_update,
             commands::get_cached_codex_reset_status,
@@ -199,5 +215,14 @@ mod tests {
             windows[0].additional_browser_args.as_deref(),
             Some("--autoplay-policy=no-user-gesture-required")
         );
+    }
+
+    #[test]
+    fn web_development_requires_the_exact_enabled_value() {
+        assert!(web_development_enabled(Some(std::ffi::OsStr::new("1"))));
+        assert!(!web_development_enabled(None));
+        assert!(!web_development_enabled(Some(std::ffi::OsStr::new(""))));
+        assert!(!web_development_enabled(Some(std::ffi::OsStr::new("0"))));
+        assert!(!web_development_enabled(Some(std::ffi::OsStr::new("true"))));
     }
 }

@@ -34,9 +34,10 @@ pub(crate) use window::apply_window_settings;
 
 use crate::local_state::{AppSettings, LocalState};
 use crate::runtime_log::RuntimeLogAction;
-use asb_core::contracts::{AppKind, ProviderDraft, ProviderProfile};
+use asb_core::contracts::{AppKind, ProviderDraft, ProviderRecord};
 use asb_core::discovery::{self, DiscoveryPaths, DiscoveryReport};
 use error::{blocking, observe, state, store_error, CommandError};
+use std::collections::BTreeMap;
 
 /// Reads application-runtime settings. This is deliberately separate from the
 /// Codex / Claude common configuration contract.
@@ -82,9 +83,9 @@ pub async fn list_system_fonts() -> Result<Vec<String>, CommandError> {
 }
 
 #[tauri::command]
-pub async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<ProviderProfile>, CommandError> {
+pub async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<ProviderRecord>, CommandError> {
     let state = state(&app)?;
-    blocking(move || state.list_profiles().map_err(store_error)).await
+    blocking(move || state.configuration().list_providers().map_err(store_error)).await
 }
 
 #[tauri::command]
@@ -92,34 +93,47 @@ pub async fn reset_profile_store(
     app: tauri::AppHandle,
     confirm_write: bool,
 ) -> Result<(), CommandError> {
-    observe(RuntimeLogAction::ProfileStoreReset, async move {
+    let refresh_app = app.clone();
+    let result = observe(RuntimeLogAction::ProfileStoreReset, async move {
         error::require_write_confirmation(confirm_write, "重置供应商数据")?;
         let state = state(&app)?;
         blocking(move || {
             state
-                .reset_profile_store()
+                .configuration()
+                .reset()
                 .map_err(|error| CommandError::new("profile-store-reset-failed", error))
         })
         .await
     })
-    .await
+    .await;
+    if result.is_ok() {
+        crate::usage_cache::clear();
+        crate::tray::refresh(&refresh_app);
+    }
+    result
 }
 
 #[tauri::command]
 pub async fn create_profile(
     app: tauri::AppHandle,
     draft: ProviderDraft,
-) -> Result<ProviderProfile, CommandError> {
-    observe(RuntimeLogAction::ProfileCreated, async move {
+) -> Result<ProviderRecord, CommandError> {
+    let refresh_app = app.clone();
+    let result = observe(RuntimeLogAction::ProfileCreated, async move {
         let state = state(&app)?;
         blocking(move || {
             state
-                .create_profile(draft)
+                .configuration()
+                .create_provider(draft)
                 .map_err(|error| CommandError::new("profile-create-failed", error))
         })
         .await
     })
-    .await
+    .await;
+    if result.is_ok() {
+        crate::tray::refresh(&refresh_app);
+    }
+    result
 }
 
 #[tauri::command]
@@ -127,31 +141,52 @@ pub async fn update_profile(
     app: tauri::AppHandle,
     profile_id: String,
     draft: ProviderDraft,
-) -> Result<ProviderProfile, CommandError> {
-    observe(RuntimeLogAction::ProfileUpdated, async move {
+    expected_file_hash: String,
+) -> Result<ProviderRecord, CommandError> {
+    let refresh_app = app.clone();
+    let cache_profile_id = profile_id.clone();
+    let result = observe(RuntimeLogAction::ProfileUpdated, async move {
         let state = state(&app)?;
         blocking(move || {
             state
-                .update_profile(&profile_id, draft)
+                .configuration()
+                .update_provider(&profile_id, draft, &expected_file_hash)
                 .map_err(|error| CommandError::new("profile-update-failed", error))
         })
         .await
     })
-    .await
+    .await;
+    if result.is_ok() {
+        crate::usage_cache::invalidate(&cache_profile_id);
+        crate::tray::refresh(&refresh_app);
+    }
+    result
 }
 
 #[tauri::command]
-pub async fn delete_profile(app: tauri::AppHandle, profile_id: String) -> Result<(), CommandError> {
-    observe(RuntimeLogAction::ProfileDeleted, async move {
+pub async fn delete_profile(
+    app: tauri::AppHandle,
+    profile_id: String,
+    expected_file_hash: String,
+) -> Result<(), CommandError> {
+    let refresh_app = app.clone();
+    let cache_profile_id = profile_id.clone();
+    let result = observe(RuntimeLogAction::ProfileDeleted, async move {
         let state = state(&app)?;
         blocking(move || {
             state
-                .delete_profile(&profile_id)
+                .configuration()
+                .delete_provider(&profile_id, &expected_file_hash)
                 .map_err(|error| CommandError::new("profile-delete-failed", error))
         })
         .await
     })
-    .await
+    .await;
+    if result.is_ok() {
+        crate::usage_cache::invalidate(&cache_profile_id);
+        crate::tray::refresh(&refresh_app);
+    }
+    result
 }
 
 #[tauri::command]
@@ -159,25 +194,33 @@ pub async fn reorder_profiles(
     app: tauri::AppHandle,
     target: AppKind,
     ordered_ids: Vec<String>,
-) -> Result<Vec<ProviderProfile>, CommandError> {
-    observe(RuntimeLogAction::ProfilesReordered, async move {
+    expected_file_hashes: BTreeMap<String, String>,
+) -> Result<Vec<ProviderRecord>, CommandError> {
+    let refresh_app = app.clone();
+    let result = observe(RuntimeLogAction::ProfilesReordered, async move {
         let state = state(&app)?;
         blocking(move || {
             state
-                .reorder_profiles(target, &ordered_ids)
+                .configuration()
+                .reorder_providers(target, &ordered_ids, &expected_file_hashes)
                 .map_err(|error| CommandError::new("profile-reorder-failed", error))
         })
         .await
     })
-    .await
+    .await;
+    if result.is_ok() {
+        crate::tray::refresh(&refresh_app);
+    }
+    result
 }
 
 #[tauri::command]
 pub async fn import_discovered_profile(
     app: tauri::AppHandle,
     target: AppKind,
-) -> Result<ProviderProfile, CommandError> {
-    observe(RuntimeLogAction::ProfileImported, async move {
+) -> Result<ProviderRecord, CommandError> {
+    let refresh_app = app.clone();
+    let result = observe(RuntimeLogAction::ProfileImported, async move {
         let state = state(&app)?;
         blocking(move || {
             let proposal = discovery_report()?
@@ -188,12 +231,17 @@ pub async fn import_discovered_profile(
                     CommandError::new("import-unavailable", "当前配置没有可导入的供应商")
                 })?;
             state
-                .import_profile(proposal.draft)
+                .configuration()
+                .import_provider(proposal.draft)
                 .map_err(|error| CommandError::new("profile-import-failed", error))
         })
         .await
     })
-    .await
+    .await;
+    if result.is_ok() {
+        crate::tray::refresh(&refresh_app);
+    }
+    result
 }
 
 /// Result of one manual endpoint probe. It is informational only: nothing is
@@ -240,6 +288,37 @@ pub async fn test_usage_query(
             .map_err(|error| CommandError::new("usage-query-failed", error))
     })
     .await
+}
+
+/// Runs the persisted query of one provider and records the successful
+/// credential-free summary for the native tray. The renderer passes only the
+/// stable profile id; this backend boundary owns the query and API key.
+#[tauri::command]
+pub async fn query_profile_usage(
+    app: tauri::AppHandle,
+    profile_id: String,
+) -> Result<UsageSummary, CommandError> {
+    let state = state(&app)?;
+    let summary = blocking(move || {
+        let profile = state
+            .configuration()
+            .find_provider(&profile_id)
+            .map_err(|error| CommandError::new("profile-not-found", error))?;
+        let query = profile.usage_query.clone().ok_or_else(|| {
+            CommandError::new("usage-query-not-configured", "该供应商尚未配置用量查询")
+        })?;
+        let summary = crate::usage_query::run_usage_query(
+            &query,
+            &profile.api_key,
+            profile.base_url.as_deref(),
+        )
+        .map_err(|error| CommandError::new("usage-query-failed", error))?;
+        crate::usage_cache::store(&profile, summary.clone());
+        Ok(summary)
+    })
+    .await?;
+    crate::tray::refresh(&app);
+    Ok(summary)
 }
 
 /// Result of one manual update check against the project's GitHub releases.

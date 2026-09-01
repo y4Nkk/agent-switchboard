@@ -90,9 +90,13 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
     let claude_import_error = (app == AppKind::Claude)
         .then(|| claude_import_model_fields(&route).err())
         .flatten();
-    let importable = match app {
-        AppKind::Codex => codex_import_is_supported(text, &route),
-        AppKind::Claude => route.base_url.is_some() && claude_import_error.is_none(),
+    let importable = if route.route_mode == RouteMode::Official {
+        true
+    } else {
+        match app {
+            AppKind::Codex => codex_import_is_supported(text, &route),
+            AppKind::Claude => route.base_url.is_some() && claude_import_error.is_none(),
+        }
     };
     if app == AppKind::Codex && route.route_mode == RouteMode::Custom && !importable {
         warnings.push("当前 Codex 配置无法作为供应商档案导入".to_string());
@@ -241,6 +245,28 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
     if !importable {
         return None;
     }
+    if route.route_mode == RouteMode::Official {
+        let name = match file.app {
+            AppKind::Codex => "Codex 官方登录",
+            AppKind::Claude => "Claude 官方登录",
+        };
+        return Some(ImportProposal {
+            app: file.app,
+            draft: ProviderDraft {
+                app: file.app,
+                route_mode: RouteMode::Official,
+                name: name.to_string(),
+                model: None,
+                base_url: None,
+                api_key: String::new(),
+                model_options: None,
+                notes: None,
+                website_url: None,
+                usage_query: None,
+            },
+            basis: format!("由当前 {name} 状态生成；凭据继续由客户端管理"),
+        });
+    }
     match file.app {
         AppKind::Codex => {
             let doc = text.parse::<toml_edit::DocumentMut>().ok()?;
@@ -258,6 +284,7 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
                 app: AppKind::Codex,
                 draft: ProviderDraft {
                     app: AppKind::Codex,
+                    route_mode: RouteMode::Custom,
                     name: route
                         .provider_name
                         .clone()
@@ -285,6 +312,7 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
                 app: AppKind::Claude,
                 draft: ProviderDraft {
                     app: AppKind::Claude,
+                    route_mode: RouteMode::Custom,
                     name: "当前 Claude 配置".to_string(),
                     model,
                     base_url: route.base_url.clone(),
@@ -515,11 +543,8 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
     }
 
     #[test]
-    fn codex_builtin_openai_route_without_a_token_is_not_imported() {
-        let current = CODEX_TOML.replace(
-            "experimental_bearer_token = \"TEST_CODEX_IMPORT_KEY\"\n",
-            "",
-        );
+    fn codex_official_route_is_imported_without_reading_a_token() {
+        let current = "model = \"gpt-5\"\nthreads = 8\n";
         let file = inspect(AppKind::Codex, "c", Some(&current));
 
         let DiscoveredState::Ok {
@@ -530,11 +555,12 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
         else {
             panic!("should parse");
         };
-        assert!(!importable);
-        assert!(warnings
-            .iter()
-            .any(|warning| warning.contains("无法作为供应商档案导入")));
-        assert!(import_proposal(&file, Some(&current)).is_none());
+        assert!(*importable);
+        assert!(warnings.is_empty());
+        let proposal = import_proposal(&file, Some(&current)).expect("official route imports");
+        assert_eq!(proposal.draft.route_mode, RouteMode::Official);
+        assert!(proposal.draft.api_key.is_empty());
+        assert!(proposal.draft.base_url.is_none());
     }
 
     #[test]
@@ -561,13 +587,15 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
     }
 
     #[test]
-    fn claude_model_tiers_without_an_endpoint_are_not_importable() {
+    fn claude_official_route_discards_custom_model_tiers_on_import() {
         let current = r#"{"env":{"ANTHROPIC_DEFAULT_HAIKU_MODEL":"claude-haiku-4"}}"#;
         let file = inspect(AppKind::Claude, "s", Some(current));
         let DiscoveredState::Ok { importable, .. } = &file.state else {
             panic!("should parse");
         };
-        assert!(!*importable);
-        assert!(import_proposal(&file, Some(&current)).is_none());
+        assert!(*importable);
+        let proposal = import_proposal(&file, Some(current)).expect("official route imports");
+        assert_eq!(proposal.draft.route_mode, RouteMode::Official);
+        assert!(proposal.draft.model.is_none());
     }
 }

@@ -49,6 +49,32 @@ pub(crate) fn parse_optional_model(
     }
 }
 
+/// Decodes a model field stored by CC Switch.
+///
+/// Older CC Switch rows use an uppercase `[1M]` suffix for its 1M checkbox.
+/// That spelling never becomes part of an Agent Switchboard profile or a
+/// Claude Code write: it is normalized here to the same semantic flag as the
+/// canonical Claude Code `[1m]` suffix.
+pub(crate) fn parse_ccswitch_model(
+    raw: Option<&str>,
+    field: &str,
+    supports_one_m: bool,
+) -> Result<(Option<String>, bool), String> {
+    let Some(raw) = raw else {
+        return Ok((None, false));
+    };
+    if let Some(model) = raw.strip_suffix("[1M]") {
+        if model.is_empty() || model != model.trim() || contains_one_m_marker(model) {
+            return Err(invalid_marker(field));
+        }
+        if !supports_one_m {
+            return Err(format!("{field} 不支持 1M 上下文"));
+        }
+        return Ok((Some(model.to_string()), true));
+    }
+    parse_optional_model(Some(raw), field, supports_one_m)
+}
+
 pub(crate) fn contains_one_m_marker(value: &str) -> bool {
     value
         .as_bytes()
@@ -80,5 +106,15 @@ mod tests {
         assert!(parse_model("claude-opus-4-7[1m][1m]", "主模型", true).is_err());
         assert!(parse_model("claude-opus-4-7 [1m]", "主模型", true).is_err());
         assert!(parse_model("claude-opus-4-7[1m ]", "主模型", true).is_err());
+    }
+
+    #[test]
+    fn ccswitch_codec_normalizes_its_legacy_uppercase_marker() {
+        assert_eq!(
+            parse_ccswitch_model(Some("claude-opus-4-7[1M]"), "主模型", true),
+            Ok((Some("claude-opus-4-7".to_string()), true))
+        );
+        assert!(parse_ccswitch_model(Some("claude-opus-4-7 [1M]"), "主模型", true).is_err());
+        assert!(parse_ccswitch_model(Some("claude-opus-4-7[1M]"), "Haiku 档", false).is_err());
     }
 }

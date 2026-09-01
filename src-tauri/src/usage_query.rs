@@ -6,7 +6,7 @@
 //! script can calculate a request and extract JSON, but receives no host I/O;
 //! WinHTTP remains the only process that performs a network request.
 
-use asb_core::contracts::{UsageQuery, UsageSummary};
+use asb_core::contracts::{UsageQuery, UsageReading, UsageSummary};
 use rquickjs::{Context, Runtime};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -68,10 +68,13 @@ fn extract_declarative_summary(
         return Err("响应中未找到任何配置的用量字段，请检查提取路径".to_string());
     }
     Ok(UsageSummary {
-        remaining,
-        used,
-        total,
-        unit,
+        readings: vec![UsageReading {
+            plan_name: None,
+            remaining,
+            used,
+            total,
+            unit,
+        }],
         at,
     })
 }
@@ -126,12 +129,19 @@ struct ScriptRequest {
 }
 
 #[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ScriptExtractOutput {
-    remaining: Option<f64>,
-    used: Option<f64>,
-    total: Option<f64>,
-    unit: Option<String>,
+#[serde(untagged)]
+enum ScriptExtractOutput {
+    One(UsageReading),
+    Many(Vec<UsageReading>),
+}
+
+impl ScriptExtractOutput {
+    fn into_readings(self) -> Vec<UsageReading> {
+        match self {
+            Self::One(reading) => vec![reading],
+            Self::Many(readings) => readings,
+        }
+    }
 }
 
 /// A single source evaluation retained across the request and extract calls.
@@ -198,6 +208,7 @@ impl ScriptProgram {
         function_name: &str,
         input: &T,
         invalid_output: &'static str,
+        allow_array: bool,
     ) -> Result<serde_json::Value, String> {
         let input = serde_json::to_string(input).map_err(|_| invalid_output.to_string())?;
         let input_literal =
@@ -211,7 +222,7 @@ impl ScriptProgram {
                 if (
                     output === null ||
                     typeof output !== "object" ||
-                    Array.isArray(output) ||
+                    (!{allow_array} && Array.isArray(output)) ||
                     typeof output.then === "function"
                 ) {{
                     throw new TypeError("invalid usage query output");
@@ -239,6 +250,7 @@ impl ScriptProgram {
                 api_key,
             },
             "用量查询脚本 request 返回值无效",
+            false,
         )?;
         parse_script_request(value)
     }
@@ -253,19 +265,19 @@ impl ScriptProgram {
             "extract",
             &ScriptExtractInput { body, status },
             "用量查询脚本 extract 返回值无效",
+            true,
         )?;
         let output: ScriptExtractOutput = serde_json::from_value(value)
             .map_err(|_| "用量查询脚本 extract 返回值无效".to_string())?;
-        if output.remaining.is_none() && output.used.is_none() && output.total.is_none() {
-            return Err("用量查询脚本 extract 至少要返回一个数值".to_string());
+        let readings = output.into_readings();
+        if readings.is_empty()
+            || readings.iter().any(|reading| {
+                reading.remaining.is_none() && reading.used.is_none() && reading.total.is_none()
+            })
+        {
+            return Err("用量查询脚本 extract 的每组结果至少要返回一个数值".to_string());
         }
-        Ok(UsageSummary {
-            remaining: output.remaining,
-            used: output.used,
-            total: output.total,
-            unit: output.unit,
-            at,
-        })
+        Ok(UsageSummary { readings, at })
     }
 }
 
@@ -478,10 +490,12 @@ mod tests {
             "t".into(),
         )
         .expect("summary");
-        assert_eq!(summary.remaining, Some(9.5));
-        assert_eq!(summary.used, None);
-        assert_eq!(summary.total, None);
-        assert_eq!(summary.unit.as_deref(), Some("USD"));
+        assert_eq!(summary.readings.len(), 1);
+        let reading = &summary.readings[0];
+        assert_eq!(reading.remaining, Some(9.5));
+        assert_eq!(reading.used, None);
+        assert_eq!(reading.total, None);
+        assert_eq!(reading.unit.as_deref(), Some("USD"));
     }
 
     #[test]
@@ -508,9 +522,104 @@ mod tests {
         let summary = program
             .extract(&response, 201, "t".to_string())
             .expect("extract");
-        assert_eq!(summary.remaining, Some(12.5));
-        assert_eq!(summary.used, Some(201.0));
-        assert_eq!(summary.unit.as_deref(), Some("credits"));
+        assert_eq!(summary.readings.len(), 1);
+        let reading = &summary.readings[0];
+        assert_eq!(reading.remaining, Some(12.5));
+        assert_eq!(reading.used, Some(201.0));
+        assert_eq!(reading.unit.as_deref(), Some("credits"));
+    }
+
+    #[test]
+    fn script_extract_preserves_multiple_named_readings() {
+        let program = ScriptProgram::new(
+            r#"({
+                request() { return { url: "https://relay.example", method: "GET" }; },
+                extract() {
+                    return [
+                        { planName: "主套餐", remaining: 12, unit: "USD" },
+                        { planName: "附加套餐", used: 3, total: 10, unit: "USD" }
+                    ];
+                }
+            })"#,
+        )
+        .expect("script program");
+
+        let summary = program
+            .extract(&serde_json::json!({}), 200, "t".to_string())
+            .expect("multiple readings");
+        assert_eq!(summary.readings.len(), 2);
+        assert_eq!(summary.readings[0].plan_name.as_deref(), Some("主套餐"));
+        assert_eq!(summary.readings[0].remaining, Some(12.0));
+        assert_eq!(summary.readings[1].plan_name.as_deref(), Some("附加套餐"));
+        assert_eq!(summary.readings[1].used, Some(3.0));
+        assert_eq!(summary.readings[1].total, Some(10.0));
+    }
+
+    #[test]
+    fn imported_ccswitch_script_uses_profile_inputs_and_keeps_each_plan() {
+        let row = asb_core::ccswitch::CcSwitchRow {
+            id: "cc-usage".to_string(),
+            app_type: "claude".to_string(),
+            name: "导入测试".to_string(),
+            settings_config: r#"{
+                "env": {
+                    "ANTHROPIC_BASE_URL": "https://relay.example/v1",
+                    "ANTHROPIC_AUTH_TOKEN": "<placeholder>"
+                }
+            }"#
+            .to_string(),
+            website_url: None,
+            notes: None,
+            meta: Some(
+                serde_json::json!({
+                    "usage_script": {
+                        "enabled": true,
+                        "language": "javascript",
+                        "code": r#"({
+                            request: {
+                                url: "{{baseUrl}}/balance",
+                                method: "GET",
+                                headers: { Authorization: "Bearer {{apiKey}}" }
+                            },
+                            extractor: function(response) {
+                                return [
+                                    { isValid: true, planName: "主套餐", remaining: response.main, unit: "USD" },
+                                    { isValid: true, planName: "附加套餐", total: response.total, used: response.used, unit: "USD" }
+                                ];
+                            }
+                        })"#
+                    }
+                })
+                .to_string(),
+            ),
+        };
+        let proposal = asb_core::ccswitch::map_row(&row).expect("mapped provider");
+        let Some(UsageQuery::Script { source }) = proposal.draft.usage_query else {
+            panic!("query script should import");
+        };
+
+        let program = ScriptProgram::new(&source).expect("native script");
+        let request = program
+            .request("profile-key", Some("https://relay.example/v1/"))
+            .expect("request");
+        assert_eq!(request.url, "https://relay.example/v1/balance");
+        assert_eq!(
+            request.headers.get("Authorization"),
+            Some(&"Bearer profile-key".to_string())
+        );
+        let summary = program
+            .extract(
+                &serde_json::json!({ "main": 12, "used": 3, "total": 20 }),
+                200,
+                "t".to_string(),
+            )
+            .expect("summary");
+        assert_eq!(summary.readings.len(), 2);
+        assert_eq!(summary.readings[0].plan_name.as_deref(), Some("主套餐"));
+        assert_eq!(summary.readings[0].remaining, Some(12.0));
+        assert_eq!(summary.readings[1].plan_name.as_deref(), Some("附加套餐"));
+        assert_eq!(summary.readings[1].used, Some(3.0));
+        assert_eq!(summary.readings[1].total, Some(20.0));
     }
 
     #[test]

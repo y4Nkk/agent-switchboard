@@ -73,12 +73,12 @@ export function useDiscovery({
       setBusy(true);
       clearError();
       try {
-        const profile = await importDiscoveredProfile(app);
-        setAppFilter(profile.app);
+        const record = await importDiscoveredProfile(app);
+        setAppFilter(record.profile.app);
         setPage("供应商");
         setDiscovery(null);
         await refresh();
-        await selectProfile(profile.id);
+        await selectProfile(record.profile.id);
       } catch (caught) {
         onError(caught as CommandError);
       } finally {

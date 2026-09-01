@@ -2,12 +2,13 @@
 //! executor transaction and records an audit entry so it can be undone.
 
 use super::error::{
-    blocking, observe, record_audit_or_warn, require_write_confirmation, state, store_error,
-    CommandError,
+    blocking, observe, require_write_confirmation, state, store_error, CommandError,
 };
 use crate::runtime_log::RuntimeLogAction;
 use asb_core::adapter;
-use asb_core::contracts::{AppKind, BackupRecord, KeyChange, SwitchLog, SwitchOp, SwitchPlan};
+use asb_core::contracts::{
+    AppKind, BackupRecord, ConfigWriteRecord, KeyChange, SwitchPlan, WriteOperation,
+};
 use asb_switch::io::{FsIo, SwitchIo};
 use asb_switch::{
     execute, list_backups as scan_backups, read_preview, restore, sha256_hex, RestoreOutcome,
@@ -21,15 +22,15 @@ fn build_plan(
     state: &crate::local_state::LocalState,
     profile_id: &str,
 ) -> Result<SwitchPlan, CommandError> {
-    let profile = state
-        .find_profile(profile_id)
+    let configuration = state.configuration();
+    let profile = configuration
+        .find_provider(profile_id)
         .map_err(|error| CommandError::new("profile-not-found", error))?;
-    let common = state.get_common(profile.app).map_err(store_error)?;
-    let plan = SwitchPlan {
-        app: profile.app,
-        profile,
-        common,
-    };
+    let common = configuration
+        .get_common_settings(profile.app)
+        .map_err(store_error)?
+        .settings;
+    let plan = SwitchPlan { profile, common };
     asb_core::validate_plan(&plan.profile, &plan.common)
         .map_err(|error| CommandError::new("invalid-plan", error.to_string()))?;
     Ok(plan)
@@ -44,7 +45,7 @@ pub async fn preview_switch(
     blocking(move || {
         let plan = build_plan(&state, &profile_id)?;
         let target = state
-            .target(plan.app)
+            .target(plan.app())
             .map_err(|error| CommandError::new("config-path-unavailable", error))?;
         let backup_dir = state.backup_dir();
         let mut preview = read_preview(&FsIo, &target, &plan, &backup_dir.to_string_lossy())
@@ -69,9 +70,18 @@ pub async fn execute_switch(
         blocking(move || {
             let plan = build_plan(&state, &profile_id)?;
             let target = state
-                .target(plan.app)
+                .target(plan.app())
                 .map_err(|error| CommandError::new("config-path-unavailable", error))?;
             let backup_dir = state.backup_dir();
+            let record = ConfigWriteRecord {
+                app: plan.app(),
+                profile_id: Some(plan.profile.id.clone()),
+                profile_name: Some(plan.profile.name.clone()),
+                content_hash: String::new(),
+                backup_id: String::new(),
+                at: String::new(),
+                operation: WriteOperation::Projection,
+            };
             let mut outcome = execute(
                 &FsIo,
                 &asb_switch::SwitchRequest {
@@ -81,21 +91,19 @@ pub async fn execute_switch(
                     expected_hash: &expected_hash,
                     expected_rendered_hash: &expected_rendered_hash,
                 },
+                move |outcome| {
+                    state
+                        .configuration()
+                        .record_config_write(ConfigWriteRecord {
+                            content_hash: outcome.final_hash.clone(),
+                            backup_id: outcome.backup.id.clone(),
+                            at: outcome.backup.created_at.clone(),
+                            ..record
+                        })
+                },
             )
             .map_err(CommandError::from)?;
             outcome.preview.target = target.to_string_lossy().to_string();
-            record_audit_or_warn(
-                state.record_switch(SwitchLog {
-                    app: plan.app,
-                    profile_id: Some(plan.profile.id.clone()),
-                    profile_name: Some(plan.profile.name.clone()),
-                    content_hash: outcome.final_hash.clone(),
-                    backup_id: outcome.backup.id.clone(),
-                    at: outcome.backup.created_at.clone(),
-                    operation: SwitchOp::Switch,
-                }),
-                &mut outcome.warnings,
-            );
             crate::tray::refresh(&app);
             Ok(outcome)
         })
@@ -158,20 +166,26 @@ fn run_restore(
             "备份不属于当前本机配置路径，已拒绝恢复",
         ));
     }
-    let mut outcome = restore(&FsIo, record, &target).map_err(CommandError::from)?;
-    record_audit_or_warn(
-        state.record_switch(SwitchLog {
-            app: record.app,
-            profile_id: None,
-            profile_name: None,
-            content_hash: outcome.restored_hash.clone(),
-            backup_id: outcome.pre_restore_backup.id.clone(),
-            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            operation: SwitchOp::Switch,
-        }),
-        &mut outcome.warnings,
-    );
-    Ok(outcome)
+    let write_record = ConfigWriteRecord {
+        app: record.app,
+        profile_id: None,
+        profile_name: None,
+        content_hash: String::new(),
+        backup_id: String::new(),
+        at: String::new(),
+        operation: WriteOperation::Restore,
+    };
+    restore(&FsIo, record, &target, move |outcome| {
+        state
+            .configuration()
+            .record_config_write(ConfigWriteRecord {
+                content_hash: outcome.restored_hash.clone(),
+                backup_id: outcome.pre_restore_backup.id.clone(),
+                at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                ..write_record
+            })
+    })
+    .map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -207,7 +221,8 @@ pub async fn undo_last_switch(
         let state = state(&app)?;
         blocking(move || {
             let last = state
-                .latest_switch(target)
+                .configuration()
+                .latest_config_write(target)
                 .map_err(store_error)?
                 .ok_or_else(|| {
                     CommandError::new("undo-unavailable", "该客户端没有可撤回的切换记录")

@@ -5,6 +5,7 @@ import { Tooltip } from "./Tooltip";
 
 interface Props {
   routes: { codex: RouteState | null; claude: RouteState | null };
+  providerNames: Partial<Record<AppKind, string>>;
   selectedProfile: ProviderProfile | null;
   canSwitch: boolean;
   busy: boolean;
@@ -21,10 +22,6 @@ function hostLabel(url: string | null): string | null {
   }
 }
 
-function providerName(route: RouteState | null): string {
-  return route?.providerName ?? (route?.routeMode === "custom" ? "自定义服务" : route ? "官方登录" : "未加载");
-}
-
 /** Real routing facts only; the product has no traffic or usage data source. */
 function accessLabel(route: RouteState | null): string {
   if (!route) return "—";
@@ -32,7 +29,15 @@ function accessLabel(route: RouteState | null): string {
   return route.apiKey ? `$${route.apiKey}` : "自定义";
 }
 
-function RouteCard({ app, route }: { app: AppKind; route: RouteState | null }) {
+function RouteCard({
+  app,
+  route,
+  providerName,
+}: {
+  app: AppKind;
+  route: RouteState | null;
+  providerName: string;
+}) {
   const client = app === "codex" ? "Codex" : "Claude";
   const host = hostLabel(route?.baseUrl ?? null);
   const on = route !== null;
@@ -54,7 +59,7 @@ function RouteCard({ app, route }: { app: AppKind; route: RouteState | null }) {
             <ClientLogo app={app} className="asb-route-logo" />
             <span className="asb-route-client">{client}</span>
           </div>
-          <h3 className="asb-route-provider">{providerName(route)}</h3>
+          <h3 className="asb-route-provider">{providerName}</h3>
         </div>
         <dl className="asb-route-values">
           <div>
@@ -76,13 +81,29 @@ function RouteCard({ app, route }: { app: AppKind; route: RouteState | null }) {
 }
 
 /** The Dual Relay: the one intentionally expressive control (DESIGN.md §4). */
-export function DualRelay({ routes, selectedProfile, canSwitch, busy, onPreview, onSwitch }: Props) {
+export function DualRelay({
+  routes,
+  providerNames,
+  selectedProfile,
+  canSwitch,
+  busy,
+  onPreview,
+  onSwitch,
+}: Props) {
   return (
     <section className="asb-routebar asb-surface-rail" aria-label="当前路由">
       <h2 className="asb-panel-title">当前路由</h2>
       <div className="asb-route-cards">
-        <RouteCard app="codex" route={routes.codex} />
-        <RouteCard app="claude" route={routes.claude} />
+        <RouteCard
+          app="codex"
+          route={routes.codex}
+          providerName={providerNames.codex ?? "未加载"}
+        />
+        <RouteCard
+          app="claude"
+          route={routes.claude}
+          providerName={providerNames.claude ?? "未加载"}
+        />
       </div>
       <div className="asb-routebar-actions">
         <Tooltip

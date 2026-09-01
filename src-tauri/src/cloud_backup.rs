@@ -6,7 +6,10 @@
 //! leaves this device. No Supabase secret/service key, sign-in password, or
 //! access token is persisted locally.
 
-use crate::local_state::{CloudBackupSettings, LocalState, ProfileStore};
+use crate::config_store::snapshot::{
+    enable_snapshot, read_configuration_snapshot, ConfigurationSnapshot,
+};
+use crate::local_state::{CloudBackupSettings, LocalState};
 use crate::probe::http_request;
 use aes_gcm::aead::{
     rand_core::{OsRng, RngCore},
@@ -125,8 +128,9 @@ pub fn upload(
     let settings = configured_settings(state)?;
     validate_passwords(account_password, backup_password)?;
     let user = authenticate(&settings, account_password)?;
-    let store = state.load_store().map_err(|error| error.to_string())?;
-    let payload = encrypt(&store, backup_password)?;
+    let snapshot =
+        read_configuration_snapshot(&state.configuration()).map_err(|error| error.to_string())?;
+    let payload = encrypt(&snapshot, backup_password)?;
     let updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let body = serde_json::to_vec(&UploadRecord {
         user_id: &user.id,
@@ -149,7 +153,7 @@ pub fn upload(
     }
     Ok(CloudBackupResult {
         updated_at,
-        profile_count: store.profiles.len(),
+        profile_count: snapshot.provider_count(),
     })
 }
 
@@ -176,13 +180,23 @@ pub fn restore(
         .next()
         .ok_or_else(|| "云端没有可恢复的备份".to_string())?;
     let mut cleartext = decrypt(&record.payload, backup_password)?;
-    let store = state.restore_cloud_backup_store_bytes(&cleartext);
+    let restored = restore_snapshot(&state, &cleartext);
     cleartext.fill(0);
-    let store = store?;
+    let snapshot = restored?;
     Ok(CloudBackupResult {
         updated_at: record.updated_at,
-        profile_count: store.profiles.len(),
+        profile_count: snapshot.provider_count(),
     })
+}
+
+/// Restores a decrypted snapshot through the same staging, verification, and
+/// directory-swap path as the legacy migration. The live layout survives a
+/// failed restore untouched.
+fn restore_snapshot(state: &LocalState, cleartext: &[u8]) -> Result<ConfigurationSnapshot, String> {
+    let snapshot: ConfigurationSnapshot = serde_json::from_slice(cleartext)
+        .map_err(|_| "云端备份不是当前支持的配置数据格式".to_string())?;
+    enable_snapshot(&state.configuration(), &snapshot)?;
+    Ok(snapshot)
 }
 
 fn configured_settings(state: &LocalState) -> Result<CloudBackupSettings, String> {
@@ -251,9 +265,9 @@ fn decode_json<T: DeserializeOwned>(body: &str, message: &str) -> Result<T, Stri
     serde_json::from_str(body).map_err(|_| message.to_string())
 }
 
-fn encrypt(store: &ProfileStore, password: &str) -> Result<EncryptedBackup, String> {
+fn encrypt(snapshot: &ConfigurationSnapshot, password: &str) -> Result<EncryptedBackup, String> {
     let mut cleartext =
-        serde_json::to_vec(store).map_err(|_| "供应商存储序列化失败".to_string())?;
+        serde_json::to_vec(snapshot).map_err(|_| "配置快照序列化失败".to_string())?;
     let mut salt = [0u8; SALT_LENGTH];
     let mut nonce = [0u8; NONCE_LENGTH];
     OsRng.fill_bytes(&mut salt);
@@ -331,22 +345,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encrypted_backup_round_trips_the_complete_profile_store() {
-        let store = ProfileStore::default();
+    fn encrypted_backup_round_trips_the_complete_configuration_snapshot() {
+        let snapshot = ConfigurationSnapshot {
+            providers: Default::default(),
+            common: Default::default(),
+            history: Default::default(),
+        };
 
-        let encrypted = encrypt(&store, "cloud-backup-password").expect("encrypt");
+        let encrypted = encrypt(&snapshot, "cloud-backup-password").expect("encrypt");
         let mut cleartext = decrypt(&encrypted, "cloud-backup-password").expect("decrypt");
-        let restored: ProfileStore = serde_json::from_slice(&cleartext).expect("profile store");
+        let restored: ConfigurationSnapshot =
+            serde_json::from_slice(&cleartext).expect("configuration snapshot");
         cleartext.fill(0);
 
-        assert_eq!(restored, store);
+        assert_eq!(restored, snapshot);
         assert_ne!(encrypted.ciphertext, "{}");
     }
 
     #[test]
-    fn incorrect_backup_password_never_decrypts_the_store() {
-        let encrypted =
-            encrypt(&ProfileStore::default(), "cloud-backup-password").expect("encrypt");
+    fn incorrect_backup_password_never_decrypts_the_snapshot() {
+        let snapshot = ConfigurationSnapshot {
+            providers: Default::default(),
+            common: Default::default(),
+            history: Default::default(),
+        };
+        let encrypted = encrypt(&snapshot, "cloud-backup-password").expect("encrypt");
 
         assert_eq!(
             decrypt(&encrypted, "wrong-password").expect_err("wrong password"),

@@ -47,6 +47,17 @@ describe("token ownership", () => {
     );
   });
 
+  it("keeps module perimeters neutral instead of using colored decorative strips", () => {
+    const tokens = readFileSync(join(srcRoot, tokenOwner), "utf8");
+    const base = readFileSync(join(srcRoot, "styles/base.css"), "utf8");
+
+    expect(tokens).not.toMatch(/--asb-accent-(?:ring|border)-/);
+    expect(base).not.toMatch(/conic-gradient\(/);
+    expect(base).not.toMatch(
+      /border-left:\s*\d+px\s+solid\s+var\(--asb-(?:action|warning|danger)\)/,
+    );
+  });
+
   it("supports explicit theme and motion overrides without a second stylesheet owner", () => {
     const tokens = readFileSync(join(srcRoot, tokenOwner), "utf8");
     expect(tokens).toContain(':root:not([data-theme="light"])');

@@ -28,9 +28,6 @@
   --asb-surface-rail: #eef0f7;
   --asb-surface-menu: #f5f6fa;
   --asb-surface-sheet: #f2f3f8;
-  /* Opaque by design: the ring gradient paints the border-box, so a
-     translucent surface would let it bleed through the card face (the
-     removed center-ray artifact). */
   --asb-row-selected: color-mix(in srgb, var(--asb-action) 8%, white);
   --asb-danger: #d70015;
   --asb-warning: #b25000;
@@ -43,23 +40,10 @@
   --asb-diff-remove-bg: rgba(215, 0, 21, 0.08);
   --asb-diff-add-bg: rgba(30, 142, 62, 0.1);
 
-  /* Row emphasis: tinted lift shadow (cc-switch reference) plus the ported
-     spiralcoder gradient system (user directive 2026-08-28): the live-row
-     four-stop ring and the primary-button gradient with its inner glow.
-     Fixed brand palette — defined once here; dark mode inherits unchanged. */
-  --asb-accent-shadow: 0 8px 24px rgba(10, 132, 255, 0.2),
+  /* Live rows keep a quiet tinted lift; their status is conveyed by the
+     accompanying text badge rather than a colored perimeter. */
+  --asb-live-shadow: 0 8px 24px rgba(10, 132, 255, 0.2),
     0 1px 2px rgba(10, 132, 255, 0.1);
-  --asb-accent-ring-blue: #046aff;
-  --asb-accent-ring-violet: #7f66f8;
-  --asb-accent-ring-mauve: #c39cad;
-  --asb-accent-ring-gold: #ffe6b6;
-  --asb-accent-border-stops-active:
-    var(--asb-accent-ring-blue) 0deg,
-    var(--asb-accent-ring-violet) 108deg,
-    var(--asb-accent-ring-mauve) 216deg,
-    var(--asb-accent-ring-gold) 320deg,
-    var(--asb-accent-ring-blue) 360deg;
-  --asb-accent-border-duration: 4s;
   --asb-gradient-button: linear-gradient(
     88deg,
     #52e1ff -15.8%,
@@ -180,7 +164,7 @@
     --asb-diff-add-text: #4cd964;
     --asb-diff-remove-bg: rgba(255, 69, 58, 0.16);
     --asb-diff-add-bg: rgba(48, 209, 88, 0.14);
-    --asb-accent-shadow: 0 8px 24px rgba(10, 132, 255, 0.32),
+    --asb-live-shadow: 0 8px 24px rgba(10, 132, 255, 0.32),
       0 1px 2px rgba(0, 0, 0, 0.24);
     --asb-scrollbar-thumb: rgba(237, 240, 247, 0.3);
     --asb-scrollbar-thumb-hover: rgba(237, 240, 247, 0.48);
@@ -221,7 +205,7 @@
     --asb-diff-add-text: #4cd964;
     --asb-diff-remove-bg: rgba(255, 69, 58, 0.16);
     --asb-diff-add-bg: rgba(48, 209, 88, 0.14);
-    --asb-accent-shadow: 0 8px 24px rgba(10, 132, 255, 0.32),
+    --asb-live-shadow: 0 8px 24px rgba(10, 132, 255, 0.32),
       0 1px 2px rgba(0, 0, 0, 0.24);
     --asb-scrollbar-thumb: rgba(237, 240, 247, 0.3);
     --asb-scrollbar-thumb-hover: rgba(237, 240, 247, 0.48);
