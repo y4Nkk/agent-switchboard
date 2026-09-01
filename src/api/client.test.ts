@@ -23,6 +23,7 @@ import {
   saveGlobalPromptDocument,
   saveCommonSettings,
   previewCommonSettings,
+  queryCodexOfficialQuota,
   queryProfileUsage,
   uploadCloudBackup,
   restoreCloudBackup,
@@ -148,6 +149,16 @@ describe("api client boundary", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", {
       profileId: "codex-relay-a",
+    });
+  });
+
+  it("queries Codex official quota with only the stable official profile id", async () => {
+    invokeMock.mockResolvedValue({ status: "available", windows: [], at: null, stale: false });
+
+    await queryCodexOfficialQuota("codex-official");
+
+    expect(invokeMock).toHaveBeenCalledWith("query_codex_official_quota", {
+      profileId: "codex-official",
     });
   });
 

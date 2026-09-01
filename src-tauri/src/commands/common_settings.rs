@@ -10,7 +10,9 @@ use super::error::{blocking, state, store_error, CommandError};
 use asb_core::contracts::{
     AppKind, CommonSettings, CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue,
 };
-use asb_core::ownership::{self, ChoiceControl, SettingControl, SettingOwner};
+use asb_core::ownership::{
+    self, ChoiceControl, OfficialSettingDisposition, SettingControl, SettingOwner,
+};
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -47,6 +49,19 @@ pub struct CommonSettingSpec {
     pub options: Vec<CommonChoiceOption>,
 }
 
+/// One official configuration family and its actual ownership boundary. This
+/// gives the renderer an exhaustive directory without handing it arbitrary
+/// file paths or a second write mechanism.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfficialSettingDirectoryEntry {
+    pub title: String,
+    pub paths: Vec<String>,
+    /// `direct`, `separateModule`, or `preserveOnly`.
+    pub disposition: String,
+    pub detail: String,
+}
+
 /// Complete typed input required by the common settings page for one client.
 /// `settings` and `settings_hash` are application state only, not a rendered
 /// client configuration candidate.
@@ -58,6 +73,27 @@ pub struct CommonSettingsEditor {
     pub settings_hash: String,
     pub groups: Vec<String>,
     pub specs: Vec<CommonSettingSpec>,
+    pub directory: Vec<OfficialSettingDirectoryEntry>,
+}
+
+fn directory_catalog(target: AppKind) -> Vec<OfficialSettingDirectoryEntry> {
+    ownership::official_setting_directory(target)
+        .into_iter()
+        .map(|entry| OfficialSettingDirectoryEntry {
+            title: entry.title.to_string(),
+            paths: std::iter::once(entry.path)
+                .chain(entry.related_paths.iter().copied())
+                .map(str::to_string)
+                .collect(),
+            disposition: match entry.disposition {
+                OfficialSettingDisposition::Direct => "direct",
+                OfficialSettingDisposition::SeparateModule => "separateModule",
+                OfficialSettingDisposition::PreserveOnly => "preserveOnly",
+            }
+            .to_string(),
+            detail: entry.detail.to_string(),
+        })
+        .collect()
 }
 
 fn default_value(default: Option<&ConfigValue>) -> CommonDefaultValue {
@@ -132,6 +168,7 @@ fn editor_from_snapshot(target: AppKind, snapshot: CommonSettingsSnapshot) -> Co
             .map(|group| group.to_string())
             .collect(),
         specs: editor_catalog(target),
+        directory: directory_catalog(target),
     }
 }
 
@@ -240,9 +277,11 @@ mod tests {
         assert!(json.get("target").is_none());
         assert!(json.get("content").is_none());
         assert!(json.get("preview").is_none());
-        // No patch semantics anywhere in the editor contract.
+        // The official directory may name a path family and its ownership
+        // boundary, but it never carries a rendered client-file candidate or
+        // patch instruction.
         let text = serde_json::to_string(&json).unwrap();
-        for forbidden in ["不接管", "移除", "接管", "Leave", "Remove"] {
+        for forbidden in ["Leave", "Remove", "backupPath", "renderedHash"] {
             assert!(!text.contains(forbidden));
         }
     }

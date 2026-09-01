@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -43,6 +43,26 @@ const cleanSettings: CommonSettingsEditorState = {
         control: "toggle",
         default: { boolValue: false },
         options: [],
+      },
+    ],
+    directory: [
+      {
+        title: "隐藏推理摘要",
+        paths: ["hide_agent_reasoning"],
+        disposition: "direct",
+        detail: "通过基础参数编辑。",
+      },
+      {
+        title: "全局指令",
+        paths: ["$CODEX_HOME/AGENTS.md"],
+        disposition: "separateModule",
+        detail: "通过独立文档事务管理。",
+      },
+      {
+        title: "MCP 服务器",
+        paths: ["mcp_servers.<id>"],
+        disposition: "preserveOnly",
+        detail: "当前保留但不写入。",
       },
     ],
   },
@@ -111,23 +131,25 @@ function PromptHarness({
 }
 
 describe("CommonSettingsPage", () => {
-  it("keeps parameter settings and prompt management behind independent main tabs", async () => {
+  it("keeps base parameters and the official settings directory behind independent main tabs", async () => {
     const user = userEvent.setup();
     render(<PromptHarness configStatus={appliedStatus} />);
 
-    expect(screen.getByRole("tab", { name: "通用设置", selected: true })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "基础参数", selected: true })).toBeInTheDocument();
     expect(screen.getByText("隐藏推理摘要")).toBeInTheDocument();
     expect(screen.getByText("已应用：真实配置与「网关」一致")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看通用配置预览" })).toHaveClass(
       "asb-btn-secondary",
     );
 
-    await user.click(screen.getByRole("tab", { name: "提示词管理" }));
+    await user.click(screen.getByRole("tab", { name: "官方设置目录" }));
+    expect(screen.getByRole("region", { name: "官方设置目录" })).toHaveTextContent("MCP 服务器");
+    expect(screen.getByText("保留不写入")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "AGENTS.md 内容" })).toHaveValue(
       "# Codex global instructions\n",
     );
 
-    await user.click(screen.getByRole("tab", { name: "Claude" }));
+    await user.click(within(screen.getByRole("region", { name: "全局指令" })).getByRole("tab", { name: "Claude" }));
     expect(screen.getByRole("textbox", { name: "CLAUDE.md 内容" })).toHaveValue(
       "# Claude global instructions\n",
     );
@@ -212,7 +234,7 @@ describe("CommonSettingsPage", () => {
     const onSave = vi.fn();
     render(<PromptHarness onSave={onSave} />);
 
-    await user.click(screen.getByRole("tab", { name: "提示词管理" }));
+    await user.click(screen.getByRole("tab", { name: "官方设置目录" }));
     await user.type(screen.getByRole("textbox", { name: "AGENTS.md 内容" }), "- Keep scope narrow.\n");
     await user.click(screen.getByRole("button", { name: "保存 AGENTS.md" }));
     expect(onSave).toHaveBeenCalledWith("codex");

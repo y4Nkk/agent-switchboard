@@ -67,10 +67,10 @@ export function GlobalPromptManager({
   }, []);
 
   return (
-    <section className="asb-prompt-manager" aria-label="提示词管理">
+    <section className="asb-prompt-manager" aria-label="全局指令">
       <div className="asb-prompt-manager-heading">
         <div>
-          <h3 className="asb-prompt-manager-title">全局提示词</h3>
+          <h3 className="asb-prompt-manager-title">全局指令</h3>
         </div>
         <div className="asb-prompt-document-tabs" role="tablist" aria-label="全局提示词文档">
           {(["codex", "claude"] as const).map((target) => (

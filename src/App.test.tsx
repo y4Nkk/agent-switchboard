@@ -184,6 +184,7 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
               options: [],
             },
           ],
+          directory: [],
         });
       case "save_common_settings":
         return Promise.resolve({
@@ -615,6 +616,7 @@ describe("App integration with the typed client boundary", () => {
           settingsHash: "settings-hash",
           groups: [],
           specs: [],
+          directory: [],
         });
       }
       return Promise.resolve([]);

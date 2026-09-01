@@ -226,6 +226,40 @@ describe("ProviderList", () => {
     expect(screen.queryByRole("region", { name: "中继 A 用量" })).not.toBeInTheDocument();
   });
 
+  it("renders an official Codex quota ledger without custom usage settings", async () => {
+    const official = {
+      ...profiles[1],
+      routeMode: "official" as const,
+      baseUrl: null,
+      apiKey: "",
+    };
+    invokeMock.mockResolvedValue({
+      status: "available",
+      windows: [{ label: "5 小时", usedPercent: 24, resetsAt: "2026-09-01T08:00:00Z" }],
+      at: "2026-09-01T03:00:00Z",
+      stale: false,
+    });
+
+    render(
+      <ProviderList
+        profiles={[profiles[0], official]}
+        activeProfileId={null}
+        selectedId={null}
+        onSelect={() => {}}
+        onConfigureUsage={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("region", { name: "官方 OpenAI 官方订阅额度" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "5 小时" })).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("query_codex_official_quota", {
+      profileId: "codex-official",
+    });
+    expect(screen.queryByRole("button", { name: "配置 官方 OpenAI 用量" })).not.toBeInTheDocument();
+  });
+
   it("uses the same visible card action to configure an unconfigured provider", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

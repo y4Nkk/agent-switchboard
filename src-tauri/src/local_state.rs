@@ -200,6 +200,22 @@ impl LocalState {
         ))
     }
 
+    /// Resolves the existing Codex login cache without reading, creating, or
+    /// modifying it. Codex honors an explicit CODEX_HOME for this user-owned
+    /// state just as it does for its global instruction document.
+    pub fn codex_auth_path() -> Result<PathBuf, String> {
+        let home = std::env::var_os("USERPROFILE")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+        let codex_home = std::env::var_os("CODEX_HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Ok(codex_auth_path_in_home(
+            Path::new(&home),
+            codex_home.as_deref(),
+        ))
+    }
+
     pub fn backup_dir(&self) -> PathBuf {
         self.root.join("backups")
     }
@@ -344,6 +360,13 @@ fn global_prompt_target_in_home(home: &Path, codex_home: Option<&Path>, app: App
     }
 }
 
+fn codex_auth_path_in_home(home: &Path, codex_home: Option<&Path>) -> PathBuf {
+    match codex_home {
+        Some(directory) => directory.join("auth.json"),
+        None => home.join(".codex").join("auth.json"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,6 +420,24 @@ mod tests {
             global_prompt_target_in_home(&home, None, AppKind::Claude),
             home.join(".claude").join("CLAUDE.md")
         );
+    }
+
+    #[test]
+    fn codex_auth_target_uses_the_same_home_resolution_without_creating_it() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let home = directory.path().join("home");
+        let codex_home = directory.path().join("alternate-codex-home");
+
+        assert_eq!(
+            codex_auth_path_in_home(&home, None),
+            home.join(".codex").join("auth.json")
+        );
+        assert_eq!(
+            codex_auth_path_in_home(&home, Some(&codex_home)),
+            codex_home.join("auth.json")
+        );
+        assert!(!home.exists());
+        assert!(!codex_home.exists());
     }
 
     #[test]

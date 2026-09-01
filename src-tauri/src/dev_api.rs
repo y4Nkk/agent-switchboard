@@ -310,6 +310,10 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
                 app.clone(),
                 argument(&request.args, "profileId")?,
             )),
+            "query_codex_official_quota" => command!(commands::query_codex_official_quota(
+                app.clone(),
+                argument(&request.args, "profileId")?,
+            )),
             "check_update" => command!(commands::check_update(app.clone())),
             "get_cached_codex_reset_status" => {
                 command!(commands::get_cached_codex_reset_status(app.clone()))

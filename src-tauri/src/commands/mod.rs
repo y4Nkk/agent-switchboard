@@ -34,7 +34,7 @@ pub(crate) use window::apply_desktop_settings;
 
 use crate::local_state::{AppSettings, LocalState};
 use crate::runtime_log::RuntimeLogAction;
-use asb_core::contracts::{AppKind, ProviderDraft, ProviderRecord};
+use asb_core::contracts::{AppKind, ProviderDraft, ProviderRecord, RouteMode};
 use asb_core::discovery::{self, DiscoveryPaths, DiscoveryReport};
 use error::{blocking, observe, state, store_error, CommandError};
 use std::collections::BTreeMap;
@@ -125,6 +125,7 @@ pub async fn reset_profile_store(
     .await;
     if result.is_ok() {
         crate::usage_cache::clear();
+        crate::codex_official_quota::clear();
         crate::tray::refresh(&refresh_app);
     }
     result
@@ -175,6 +176,7 @@ pub async fn update_profile(
     .await;
     if result.is_ok() {
         crate::usage_cache::invalidate(&cache_profile_id);
+        crate::codex_official_quota::invalidate(&cache_profile_id);
         crate::tray::refresh(&refresh_app);
     }
     result
@@ -201,6 +203,7 @@ pub async fn delete_profile(
     .await;
     if result.is_ok() {
         crate::usage_cache::invalidate(&cache_profile_id);
+        crate::codex_official_quota::invalidate(&cache_profile_id);
         crate::tray::refresh(&refresh_app);
     }
     result
@@ -336,6 +339,34 @@ pub async fn query_profile_usage(
     .await?;
     crate::tray::refresh(&app);
     Ok(summary)
+}
+
+/// Reads the native Codex ChatGPT-login quota for one official Codex profile.
+/// This is intentionally a separate contract from provider usage scripts:
+/// the renderer supplies only a stable profile id and receives no OAuth
+/// credential, account identifier, endpoint, or raw upstream response.
+#[tauri::command]
+pub async fn query_codex_official_quota(
+    app: tauri::AppHandle,
+    profile_id: String,
+) -> Result<asb_core::contracts::CodexOfficialQuota, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let profile = state
+            .configuration()
+            .find_provider(&profile_id)
+            .map_err(|error| CommandError::new("profile-not-found", error))?;
+        if profile.app != AppKind::Codex || profile.route_mode != RouteMode::Official {
+            return Err(CommandError::new(
+                "official-codex-quota-unavailable",
+                "此档案不是 Codex 官方登录",
+            ));
+        }
+        let auth_path = LocalState::codex_auth_path()
+            .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
+        Ok(crate::codex_official_quota::query(&profile.id, &auth_path))
+    })
+    .await
 }
 
 /// Result of one manual update check against the project's GitHub releases.

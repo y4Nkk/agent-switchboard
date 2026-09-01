@@ -18,6 +18,37 @@ pub enum SettingOwner {
     Host,
 }
 
+/// How one official configuration family is exposed by Agent Switchboard.
+///
+/// This is deliberately broader than [`SettingOwner`]. `SettingOwner` answers
+/// whether a concrete key participates in a provider projection; this enum
+/// tells the settings directory whether a family has a safe editor, belongs
+/// to a separate first-class module, or must stay with the client/organization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OfficialSettingDisposition {
+    /// A typed user-level value edited in the parameter form and projected by
+    /// the normal supplier transaction.
+    Direct,
+    /// A user-level resource with its own contract and transaction. It must
+    /// not be flattened into the parameter form.
+    SeparateModule,
+    /// A project, local, managed, credential, runtime, or not-yet-modelled
+    /// structure that the application intentionally preserves without writing.
+    PreserveOnly,
+}
+
+/// One visible official-setting family in the settings directory. This is the
+/// public coverage map: every entry states its real write boundary instead of
+/// letting an unlisted official key look accidentally unsupported.
+#[derive(Debug, Clone, Copy)]
+pub struct OfficialSettingEntry {
+    pub title: &'static str,
+    pub path: &'static str,
+    pub related_paths: &'static [&'static str],
+    pub disposition: OfficialSettingDisposition,
+    pub detail: &'static str,
+}
+
 /// The value shape adapters and editor controls must preserve for a managed
 /// key. The app does not infer a type from a client file at run time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -593,6 +624,144 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
     },
 ];
 
+/// Official user-level configuration families that require a dedicated
+/// contract, or are intentionally preserved because their scope is not the
+/// user's global preferences. The parameter form receives only `Direct`
+/// entries derived from `setting_specs`; this table prevents the rest of the
+/// official surface from silently becoming an accidental "unknown key".
+const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
+    OfficialSettingEntry {
+        title: "全局指令",
+        path: "$CODEX_HOME/AGENTS.md",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::SeparateModule,
+        detail: "在“官方设置目录”中通过独立文档事务管理。",
+    },
+    OfficialSettingEntry {
+        title: "自定义模型提供商",
+        path: "model_providers.<id>",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::SeparateModule,
+        detail: "由供应商档案与切换事务拥有，不能与通用参数重复写入。",
+    },
+    OfficialSettingEntry {
+        title: "MCP 服务器",
+        path: "mcp_servers.<id>",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "服务器、OAuth、工具授权与环境映射是结构化资源；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "Hooks、Skills 与插件",
+        path: "hooks",
+        related_paths: &["skills.config", "plugins.<id>", "apps.<id>"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "命令、路径与事件规则需独立契约；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "权限配置与高级沙箱",
+        path: "permissions.<name>",
+        related_paths: &["sandbox_workspace_write", "default_permissions"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "权限配置档、可写路径与网络规则不能压扁为普通开关；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "Shell 环境与网络代理",
+        path: "shell_environment_policy",
+        related_paths: &["features.network_proxy"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "环境过滤、注入和域名规则具有结构与凭据边界；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "TUI 键位与布局",
+        path: "tui.keymap",
+        related_paths: &["tui.status_line", "tui.terminal_title"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "有序布局和按上下文键位映射需要专用编辑器；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "项目配置与信任状态",
+        path: ".codex/config.toml",
+        related_paths: &["projects.<path>.trust_level"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "属于具体项目，不作为跨项目用户基座写入。",
+    },
+    OfficialSettingEntry {
+        title: "受管要求、登录与运行状态",
+        path: "requirements.toml",
+        related_paths: &["auth.json", "SQLite / 会话状态"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "属于组织策略、官方登录或运行态；应用只观测必要状态，绝不接管。",
+    },
+];
+
+const CLAUDE_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
+    OfficialSettingEntry {
+        title: "全局指令",
+        path: "~/.claude/CLAUDE.md",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::SeparateModule,
+        detail: "在“官方设置目录”中通过独立文档事务管理。",
+    },
+    OfficialSettingEntry {
+        title: "权限规则",
+        path: "permissions",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "allow / ask / deny 规则具有合并与优先级语义；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "Hooks",
+        path: "hooks",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "事件、匹配器和命令构成规则集合；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "环境变量",
+        path: "env",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail:
+            "供应商拥有的 ANTHROPIC 路由字段与其他环境变量不能混为一个表单；当前保留未声明字段。",
+    },
+    OfficialSettingEntry {
+        title: "模型映射与选择器",
+        path: "modelOverrides",
+        related_paths: &["modelSettings", "modelPicker", "fallbackModel"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "模型映射和回退链是有序结构，不能与供应商主模型形成双重所有权。",
+    },
+    OfficialSettingEntry {
+        title: "MCP 与插件",
+        path: "~/.claude.json",
+        related_paths: &[".mcp.json", "enabledPlugins", "extraKnownMarketplaces"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "MCP、插件市场和登录所在文件具有独立作用域；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "语音与外部凭据脚本",
+        path: "voice",
+        related_paths: &["apiKeyHelper", "otelHeadersHelper"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "语音对象和会执行外部命令的凭据/遥测脚本需要独立契约；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "项目、本地与受管配置",
+        path: ".claude/settings.json",
+        related_paths: &[".claude/settings.local.json", "managed-settings.json"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "分别属于仓库、项目个人例外和组织策略，不作为全局设置写入。",
+    },
+    OfficialSettingEntry {
+        title: "官方登录与运行状态",
+        path: "~/.claude/.credentials.json",
+        related_paths: &["~/.claude.json"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "官方身份、项目信任和运行态不由应用复制、修改或导入为供应商档案。",
+    },
+];
+
 /// The common toggle entries for one client. They are a projection of the
 /// ownership directory, not a second owned-key list.
 pub fn common_toggles(app: AppKind) -> &'static [ToggleSpec] {
@@ -623,6 +792,33 @@ pub fn common_groups(app: AppKind) -> &'static [&'static str] {
         ],
         AppKind::Claude => &["模型行为", "界面与交互", "文件与 Git"],
     }
+}
+
+/// Complete official-settings coverage map for one client.
+///
+/// Direct parameter entries are derived from the same ownership directory
+/// that validates and projects them. Structured, project-scoped and managed
+/// families are listed alongside them with their truthful boundary, so the UI
+/// never implies that a preserved resource is an editable scalar preference.
+pub fn official_setting_directory(app: AppKind) -> Vec<OfficialSettingEntry> {
+    let mut entries: Vec<OfficialSettingEntry> = setting_specs(app)
+        .into_iter()
+        .filter(|spec| spec.owner == SettingOwner::Common)
+        .map(|spec| OfficialSettingEntry {
+            title: spec
+                .label
+                .expect("common setting must have a visible label"),
+            path: spec.key,
+            related_paths: &[],
+            disposition: OfficialSettingDisposition::Direct,
+            detail: "通过“基础参数”编辑，保存后随供应商重新应用写入用户级配置。",
+        })
+        .collect();
+    entries.extend_from_slice(match app {
+        AppKind::Codex => CODEX_DIRECTORY_FAMILIES,
+        AppKind::Claude => CLAUDE_DIRECTORY_FAMILIES,
+    });
+    entries
 }
 
 /// The catalog spec for a choice key, if the key is one.
@@ -773,6 +969,28 @@ mod tests {
                     "{} must offer at least one value",
                     choice.key
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn official_directory_exposes_direct_and_preserved_boundaries() {
+        for app in [AppKind::Codex, AppKind::Claude] {
+            let directory = official_setting_directory(app);
+            assert!(directory
+                .iter()
+                .any(|entry| { entry.disposition == OfficialSettingDisposition::Direct }));
+            assert!(directory
+                .iter()
+                .any(|entry| { entry.disposition == OfficialSettingDisposition::PreserveOnly }));
+            assert!(directory.iter().all(|entry| !entry.title.is_empty()
+                && !entry.path.is_empty()
+                && !entry.detail.is_empty()));
+            for entry in directory
+                .iter()
+                .filter(|entry| entry.disposition == OfficialSettingDisposition::Direct)
+            {
+                assert_eq!(owner_for(app, entry.path), SettingOwner::Common);
             }
         }
     }

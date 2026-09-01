@@ -607,6 +607,109 @@ button:disabled {
   border-bottom-color: var(--asb-action);
 }
 
+/* Official settings coverage is an audit surface: compact, solid, and
+   deliberately separate from editable parameter rows. */
+.asb-official-directory {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  margin-bottom: var(--asb-space-4);
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+.asb-official-directory-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+}
+
+.asb-official-directory-title,
+.asb-official-directory-entry h4,
+.asb-official-directory-note,
+.asb-official-directory-paths,
+.asb-official-directory-detail {
+  margin: 0;
+}
+
+.asb-official-directory-title {
+  font: var(--asb-text-body);
+  font-weight: 700;
+}
+
+.asb-official-directory-note,
+.asb-official-directory-detail {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-official-directory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-official-directory-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border-right: 1px solid var(--asb-hairline);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-official-directory-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-official-directory-entry h4 {
+  font: var(--asb-text-label);
+  font-weight: 700;
+}
+
+.asb-official-directory-status {
+  flex: none;
+  padding: 2px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-pill);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-official-directory-status.is-direct {
+  border-color: var(--asb-action);
+  color: var(--asb-action);
+}
+
+.asb-official-directory-status.is-separateModule {
+  border-color: var(--asb-claude);
+  color: var(--asb-claude);
+}
+
+.asb-official-directory-paths {
+  overflow-wrap: anywhere;
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+}
+
+@media (max-width: 680px) {
+  .asb-official-directory-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asb-official-directory-entry {
+    border-right: 0;
+  }
+}
+
 /* Prompt management uses a near-solid work surface rather than another
    frosted layer, keeping editable Markdown high contrast. */
 .asb-prompt-manager {
@@ -980,6 +1083,77 @@ button:disabled {
 
 .asb-provider-usage-state {
   margin: 0;
+}
+
+/* Official Codex subscription quota is its own read-only ledger: it shares
+   the provider card's rhythm and progress rail, but never inherits a custom
+   provider usage query or its credentials. */
+.asb-official-quota {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3) var(--asb-space-4) var(--asb-space-4);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-official-quota-windows {
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-official-quota-window + .asb-official-quota-window {
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-official-quota-window-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-2) 0;
+}
+
+.asb-official-quota-window h4 {
+  min-width: 0;
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-official-quota-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-official-quota-value strong {
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.asb-official-quota-value small {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .asb-official-quota-window-line {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--asb-space-1);
+  }
+
+  .asb-official-quota-value {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 720px) {

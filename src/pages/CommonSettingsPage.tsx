@@ -9,6 +9,7 @@ import { ClientLogo } from "../components/ClientLogo";
 import { CodePreview } from "../components/CodePreview";
 import { GeneralSettingsForm } from "../components/GeneralSettingsForm";
 import { GlobalPromptManager } from "../components/GlobalPromptManager";
+import { OfficialSettingsDirectory } from "../components/OfficialSettingsDirectory";
 import { Tooltip } from "../components/Tooltip";
 import { clientName } from "../lib/client-name";
 
@@ -209,6 +210,22 @@ export function CommonSettingsPage({
       <div className="asb-panel-heading">
         <h2 className="asb-panel-title">通用设置</h2>
       </div>
+      <div className="asb-tabs" role="tablist" aria-label="客户端">
+        {(["codex", "claude"] as const).map((target) => (
+          <Tooltip key={target} label={clientName(target)} side="bottom">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={app === target}
+              aria-label={clientName(target)}
+              className={`asb-tab${app === target ? " is-on" : ""}`}
+              onClick={() => onSelectApp(target)}
+            >
+              <ClientLogo app={target} className="asb-tab-logo" />
+            </button>
+          </Tooltip>
+        ))}
+      </div>
       <div className="asb-settings-main-tabs" role="tablist" aria-label="通用设置内容">
         <button
           type="button"
@@ -217,7 +234,7 @@ export function CommonSettingsPage({
           className={`asb-settings-main-tab${section === "settings" ? " is-on" : ""}`}
           onClick={() => setSection("settings")}
         >
-          通用设置
+          基础参数
         </button>
         <button
           type="button"
@@ -226,27 +243,11 @@ export function CommonSettingsPage({
           className={`asb-settings-main-tab${section === "prompts" ? " is-on" : ""}`}
           onClick={() => setSection("prompts")}
         >
-          提示词管理
+          官方设置目录
         </button>
       </div>
       {section === "settings" ? (
         <>
-          <div className="asb-tabs" role="tablist" aria-label="客户端">
-            {(["codex", "claude"] as const).map((target) => (
-              <Tooltip key={target} label={clientName(target)} side="bottom">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={app === target}
-                  aria-label={clientName(target)}
-                  className={`asb-tab${app === target ? " is-on" : ""}`}
-                  onClick={() => onSelectApp(target)}
-                >
-                  <ClientLogo app={target} className="asb-tab-logo" />
-                </button>
-              </Tooltip>
-            ))}
-          </div>
           <SettingsEditor
             state={editorState}
             configStatus={configStatus}
@@ -260,18 +261,21 @@ export function CommonSettingsPage({
           />
         </>
       ) : (
-        <GlobalPromptManager
-          app={promptApp}
-          document={promptDocument}
-          draft={promptDraft}
-          dirty={promptDirty}
-          busy={busy}
-          onSelectApp={onSelectPromptApp}
-          onChange={onPromptDraftChange}
-          onSave={onSavePrompt}
-          onDiscard={onDiscardPrompt}
-          onReload={onReloadPrompt}
-        />
+        <>
+          <OfficialSettingsDirectory app={app} entries={editorState.editor?.directory ?? []} />
+          <GlobalPromptManager
+            app={promptApp}
+            document={promptDocument}
+            draft={promptDraft}
+            dirty={promptDirty}
+            busy={busy}
+            onSelectApp={onSelectPromptApp}
+            onChange={onPromptDraftChange}
+            onSave={onSavePrompt}
+            onDiscard={onDiscardPrompt}
+            onReload={onReloadPrompt}
+          />
+        </>
       )}
     </section>
   );

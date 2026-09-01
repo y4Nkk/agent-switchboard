@@ -1,5 +1,6 @@
 mod ccswitch_source;
 mod cloud_backup;
+mod codex_official_quota;
 mod codex_reset;
 mod commands;
 mod config_store;
@@ -155,6 +156,7 @@ pub fn run() {
             commands::probe_endpoint,
             commands::test_usage_query,
             commands::query_profile_usage,
+            commands::query_codex_official_quota,
             commands::fetch_provider_models,
             commands::check_update,
             commands::get_cached_codex_reset_status,

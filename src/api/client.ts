@@ -109,6 +109,27 @@ export interface UsageSummary {
   at: string;
 }
 
+/** Renderer-safe state of the read-only Codex ChatGPT-login quota service. */
+export type CodexOfficialQuotaStatus =
+  | "available"
+  | "signInRequired"
+  | "reauthenticationRequired"
+  | "unavailable";
+
+export interface CodexOfficialQuotaWindow {
+  label: string;
+  usedPercent: number;
+  resetsAt: string | null;
+}
+
+/** OAuth credentials and account identifiers never appear in this type. */
+export interface CodexOfficialQuota {
+  status: CodexOfficialQuotaStatus;
+  windows: CodexOfficialQuotaWindow[];
+  at: string | null;
+  stale: boolean;
+}
+
 export interface ProviderProfile {
   id: string;
   app: AppKind;
@@ -200,6 +221,16 @@ export type CommonSettingSpec =
       options: CommonChoiceOption[];
     };
 
+/** One official configuration family with its real editing boundary. Paths
+ * are labels from the typed backend directory, never renderer-supplied file
+ * targets. */
+export interface OfficialSettingDirectoryEntry {
+  title: string;
+  paths: string[];
+  disposition: "direct" | "separateModule" | "preserveOnly";
+  detail: string;
+}
+
 /** Full typed general-settings editing model. `settingsHash` is the
  * optimistic application-store revision; it is unrelated to client-file
  * hashes. */
@@ -209,6 +240,7 @@ export interface CommonSettingsEditor {
   settingsHash: string;
   groups: string[];
   specs: CommonSettingSpec[];
+  directory: OfficialSettingDirectoryEntry[];
 }
 
 export interface CommonSettingsSnapshot {
@@ -743,6 +775,12 @@ export function testUsageQuery(
  * Successful summaries are retained by the desktop runtime for tray display. */
 export function queryProfileUsage(profileId: string): Promise<UsageSummary> {
   return invoke<UsageSummary>("query_profile_usage", { profileId });
+}
+
+/** Reads the current native Codex official-login quota without accepting any
+ * renderer credential, endpoint, or raw OAuth account data. */
+export function queryCodexOfficialQuota(profileId: string): Promise<CodexOfficialQuota> {
+  return invoke<CodexOfficialQuota>("query_codex_official_quota", { profileId });
 }
 
 /** Result of one manual app-update check; informational only. */

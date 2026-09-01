@@ -157,6 +157,44 @@ pub struct UsageSummary {
     pub at: String,
 }
 
+/// The renderer-safe status of one Codex official-subscription quota read.
+/// OAuth credentials and account identifiers are intentionally absent from
+/// this contract; the desktop service owns them for the duration of a single
+/// request only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CodexOfficialQuotaStatus {
+    Available,
+    SignInRequired,
+    ReauthenticationRequired,
+    Unavailable,
+}
+
+/// One server-declared Codex subscription limit window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexOfficialQuotaWindow {
+    /// A user-facing name derived from the server's window duration.
+    pub label: String,
+    /// Percentage already consumed in the current window, from 0 to 100.
+    pub used_percent: f64,
+    /// RFC 3339 UTC reset time when supplied by the server.
+    pub resets_at: Option<String>,
+}
+
+/// A normalized read of the existing Codex ChatGPT-login quota. On a failed
+/// refresh, `windows` can retain the most recent in-process successful read
+/// and `stale` makes that fact explicit.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexOfficialQuota {
+    pub status: CodexOfficialQuotaStatus,
+    pub windows: Vec<CodexOfficialQuotaWindow>,
+    /// RFC 3339 UTC timestamp of the latest successful service response.
+    pub at: Option<String>,
+    pub stale: bool,
+}
+
 /// A provider profile. It is a small overlay, never a full copy of a user's
 /// configuration file. `route_mode` is the one routing owner: custom profiles
 /// own an endpoint and API key; official profiles represent the client's

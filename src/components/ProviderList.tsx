@@ -29,6 +29,7 @@ import {
   UsageIcon,
 } from "./icons";
 import { ProbeFeedback, useEndpointProbe } from "./ProbePanel";
+import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { Tooltip } from "./Tooltip";
 
@@ -285,6 +286,13 @@ function ProviderRow({
           profile={profile}
           query={profile.usageQuery}
           onConfigure={onConfigureUsage}
+        />
+      )}
+      {official && profile.app === "codex" && (
+        <CodexOfficialQuotaPanel
+          id={`codex-official-quota-${profile.id}`}
+          profileId={profile.id}
+          profileName={profile.name}
         />
       )}
       {previewOpen && renderPreview && renderPreview(profile)}
