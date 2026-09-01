@@ -1,7 +1,7 @@
 {
   "name": "agent-switchboard",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "set ASB_WEB_DEVELOPMENT=1&& tauri dev",
