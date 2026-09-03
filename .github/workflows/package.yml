@@ -98,6 +98,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install p7zip
 
+      - name: 测试发布产物扫描器
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: pwsh
+        run: .\scripts\assert-release-secret-free.test.ps1
+
       - name: 安装前端依赖
         run: npm ci
 

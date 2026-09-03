@@ -29,8 +29,43 @@ $rules = [ordered]@{
   'JWT-like token' = '\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b'
 }
 
+function Test-VerifiedSystemSharedLibrary {
+  param(
+    [Parameter(Mandatory)]
+    [IO.FileInfo]$File
+  )
+
+  if (-not $IsLinux -or $File.Name -notmatch '\.so(?:\.\d+)*$') {
+    return $false
+  }
+
+  $ldconfig = Get-Command ldconfig -ErrorAction SilentlyContinue
+  if ($null -eq $ldconfig) {
+    return $false
+  }
+
+  $escapedName = [regex]::Escape($File.Name)
+  $artifactHash = (Get-FileHash -LiteralPath $File.FullName -Algorithm SHA256).Hash
+  foreach ($line in @(& $ldconfig.Source -p 2>$null)) {
+    if ($line -notmatch "^\s*$escapedName\s+\([^)]+\)\s+=>\s+(?<path>.+)$") {
+      continue
+    }
+    $systemPath = $Matches.path.Trim()
+    if (-not (Test-Path -LiteralPath $systemPath -PathType Leaf)) {
+      continue
+    }
+    if ($artifactHash -ceq (Get-FileHash -LiteralPath $systemPath -Algorithm SHA256).Hash) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
 $scanRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-switchboard-release-scan-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $scanRoot -ErrorAction Stop | Out-Null
+$scanSource = $scanRoot
+$mountedDmg = $null
 
 try {
   switch ($extension) {
@@ -50,13 +85,12 @@ try {
     '.dmg' {
       $mountPoint = Join-Path $scanRoot 'mount'
       New-Item -ItemType Directory -Path $mountPoint | Out-Null
-      hdiutil attach -readonly -nobrowse -mountpoint $mountPoint $resolvedArtifact | Out-Null
-      try {
-        Copy-Item -Path (Join-Path $mountPoint '*') -Destination $scanRoot -Recurse -Force
+      & hdiutil attach -readonly -nobrowse -mountpoint $mountPoint $resolvedArtifact | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        throw "hdiutil could not mount the disk image (exit code $LASTEXITCODE)."
       }
-      finally {
-        hdiutil detach $mountPoint -Force | Out-Null
-      }
+      $mountedDmg = $mountPoint
+      $scanSource = $mountPoint
     }
     '.appimage' {
       # --appimage-extract is built in and needs no FUSE; it unpacks into
@@ -105,13 +139,19 @@ try {
   }
 
   $findings = [System.Collections.Generic.List[object]]::new()
-  foreach ($file in @(Get-ChildItem -LiteralPath $scanRoot -Recurse -File)) {
+  foreach ($file in @(Get-ChildItem -LiteralPath $scanSource -Recurse -File | Where-Object {
+      [string]::IsNullOrEmpty($_.LinkType)
+    })) {
     $content = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($file.FullName))
+    $verifiedSystemLibrary = $extension -ieq '.appimage' -and (Test-VerifiedSystemSharedLibrary $file)
     foreach ($entry in $rules.GetEnumerator()) {
+      if ($verifiedSystemLibrary -and $entry.Key -eq 'Private key block') {
+        continue
+      }
       foreach ($match in [regex]::Matches($content, $entry.Value)) {
         $findings.Add([pscustomobject]@{
           Rule = $entry.Key
-          Path = $file.FullName.Substring($scanRoot.Length + 1)
+          Path = $file.FullName.Substring($scanSource.Length + 1)
           Offset = $match.Index
           Length = $match.Length
         })
@@ -129,6 +169,9 @@ try {
   "Release artifact credential scan passed: $([IO.Path]::GetFileName($resolvedArtifact))"
 }
 finally {
+  if ($null -ne $mountedDmg) {
+    & hdiutil detach $mountedDmg -Force | Out-Null
+  }
   if (Test-Path -LiteralPath $scanRoot) {
     [IO.Directory]::Delete($scanRoot, $true)
   }
