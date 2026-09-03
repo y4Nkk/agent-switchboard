@@ -1111,8 +1111,8 @@ fn held_lock_blocks_and_stale_lock_recovery_is_explicit() {
     // The held lock was not deleted.
     assert!(lock_path.exists());
 
-    // Use a Windows-invalid PID instead of a just-reaped one: the OS can
-    // immediately reuse an exited PID and make this assertion flaky.
+    // Use a PID outside the supported platform range instead of a just-reaped
+    // one: the OS can immediately reuse an exited PID and make this assertion flaky.
     let dead_pid = u32::MAX;
     let stale = serde_json::json!({
         "pid": dead_pid,

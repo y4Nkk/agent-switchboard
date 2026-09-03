@@ -252,6 +252,15 @@ pub(crate) mod fake_oauth {
         }
     }
 
+    fn content_length(headers: &str) -> Option<usize> {
+        headers.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse().ok())
+                .flatten()
+        })
+    }
+
     fn read_request(stream: &mut std::net::TcpStream) -> Option<String> {
         let mut request = Vec::new();
         let mut chunk = [0u8; 512];
@@ -263,17 +272,18 @@ pub(crate) mod fake_oauth {
             request.extend_from_slice(&chunk[..read]);
             if let Some(headers_end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
                 let headers = String::from_utf8_lossy(&request[..headers_end]);
-                let content_length = headers
-                    .lines()
-                    .find_map(|line| line.strip_prefix("Content-Length:"))
-                    .map(str::trim)
-                    .and_then(|value| value.parse::<usize>().ok())
-                    .unwrap_or(0);
+                let content_length = content_length(&headers).unwrap_or(0);
                 if request.len() >= headers_end + 4 + content_length {
                     return Some(String::from_utf8_lossy(&request).into_owned());
                 }
             }
         }
+    }
+
+    #[test]
+    fn content_length_field_name_is_case_insensitive() {
+        assert_eq!(content_length("Content-Length: 42"), Some(42));
+        assert_eq!(content_length("content-length: 42"), Some(42));
     }
 }
 

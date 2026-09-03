@@ -1,4 +1,4 @@
-//! Operating-system pid liveness probe (Windows).
+//! Operating-system PID liveness probe for supported desktop platforms.
 
 use asb_core::PidLiveness;
 
@@ -23,29 +23,38 @@ pub fn pid_liveness(pid: u32) -> PidLiveness {
     }
 }
 
-#[cfg(not(windows))]
-pub fn pid_liveness(_pid: u32) -> PidLiveness {
-    PidLiveness::Unknown
+#[cfg(unix)]
+pub fn pid_liveness(pid: u32) -> PidLiveness {
+    if pid == 0 {
+        return PidLiveness::Dead;
+    }
+    let Ok(pid) = libc::pid_t::try_from(pid) else {
+        return PidLiveness::Dead;
+    };
+
+    if unsafe { libc::kill(pid, 0) } == 0 {
+        return PidLiveness::Alive;
+    }
+
+    match std::io::Error::last_os_error().raw_os_error() {
+        Some(libc::EPERM) => PidLiveness::Alive,
+        Some(libc::ESRCH) => PidLiveness::Dead,
+        _ => PidLiveness::Unknown,
+    }
 }
 
-#[cfg(windows)]
+#[cfg(not(any(windows, unix)))]
+compile_error!("Agent Switchboard supports only Windows, macOS, and Linux.");
+
 #[test]
 fn own_pid_is_alive() {
     let pid = std::process::id();
     assert_eq!(pid_liveness(pid), PidLiveness::Alive);
 }
 
-#[cfg(windows)]
 #[test]
 fn impossible_pid_is_dead() {
-    // PID -1 is not a valid Windows process identifier; unlike a
-    // recently exited child it cannot be reused between assertions.
+    // This is not representable as a PID on supported platforms, so it
+    // cannot be reused between assertions.
     assert_eq!(pid_liveness(u32::MAX), PidLiveness::Dead);
-}
-
-#[cfg(not(windows))]
-#[test]
-fn non_windows_liveness_stays_unknown() {
-    assert_eq!(pid_liveness(std::process::id()), PidLiveness::Unknown);
-    assert_eq!(pid_liveness(u32::MAX), PidLiveness::Unknown);
 }

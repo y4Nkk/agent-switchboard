@@ -13,12 +13,14 @@ thiserror = { workspace = true }
 toml_edit = "0.22"
 
 [target.'cfg(windows)'.dependencies]
-# OpenProcess liveness probing in `pids`; the Unix build answers Unknown
-# without touching any OS API.
+# OpenProcess liveness probing in `pids`.
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Threading",
 ] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 asb-core = { path = "../asb-core", features = ["test-support"] }

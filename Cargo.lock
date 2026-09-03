@@ -173,6 +173,7 @@ version = "0.1.2"
 dependencies = [
  "asb-core",
  "chrono",
+ "libc",
  "serde",
  "serde_json",
  "sha2",
