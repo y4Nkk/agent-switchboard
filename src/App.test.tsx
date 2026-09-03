@@ -127,6 +127,7 @@ const defaultSettings = {
   hardwareAcceleration: true,
   interfaceFont: "Noto Sans SC",
   runtimeLogLevel: "info",
+  collapsedUsageIds: [] as string[],
 };
 
 function targetFrom(args: unknown): "codex" | "claude" {
@@ -179,7 +180,7 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
       case "get_common_settings_editor":
         return Promise.resolve({
           app: targetFrom(args),
-          settings: { settings: { hide_agent_reasoning: false } },
+          settings: { settings: { hide_agent_reasoning: { mode: "automatic" } } },
           settingsHash: `${targetFrom(args)}-settings-hash`,
           groups: ["模型行为", "安全与审批", "隐私与数据"],
           specs: [
@@ -188,7 +189,6 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
               label: "隐藏推理摘要",
               group: "模型行为",
               control: "toggle",
-              default: { boolValue: false },
               options: [],
             },
           ],
@@ -244,8 +244,12 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         });
       case "discover_local":
         return Promise.resolve({ codex: {}, claude: {}, importProposals: [] });
+      case "discover_cached":
+        return Promise.resolve(null);
       case "window_is_maximized":
         return Promise.resolve(false);
+      case "get_cached_codex_official_reset":
+        return Promise.resolve(null);
       default:
         return Promise.resolve([]);
     }
@@ -300,7 +304,9 @@ describe("App integration with the typed client boundary", () => {
     expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
     const previewPanel = await screen.findByRole("region", { name: "变更预览" });
-    expect(within(previewPanel).getByText("gpt-5.3-codex")).toBeInTheDocument();
+    // The live model shows twice here: the 当前启用模型 summary and the diff's
+    // before-value.
+    expect(within(previewPanel).getAllByText("gpt-5.3-codex").length).toBeGreaterThan(0);
     expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
 
     // The preview unfolds under the provider list, inside the same panel,
@@ -308,13 +314,21 @@ describe("App integration with the typed client boundary", () => {
     expect(screen.getByRole("region", { name: "供应商工作区" })).toContainElement(previewPanel);
     await user.click(screen.getByRole("button", { name: "收起 备用网关 预览" }));
     expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
+
+    // The preview header's cancel button retracts it without switching.
+    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
+    await screen.findByRole("region", { name: "变更预览" });
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
+    expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain("execute_switch");
+
     await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
     await screen.findByRole("region", { name: "变更预览" });
 
-    // The switch affordance lives on the overview only.
-    await user.click(screen.getByRole("button", { name: "概览" }));
-    await user.click(screen.getByRole("button", { name: "安全切换" }));
-    await user.click(await screen.findByRole("button", { name: "确认切换" }));
+    // The switch confirms from the provider page's inline preview.
+    await user.click(screen.getByRole("button", { name: "确认切换" }));
+    const sheet = await screen.findByRole("dialog", { name: "确认切换" });
+    await user.click(within(sheet).getByRole("button", { name: "确认切换" }));
 
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("execute_switch", {
@@ -367,7 +381,7 @@ describe("App integration with the typed client boundary", () => {
 
     expect(await screen.findByText(/与上次切换 .* 不符，配置可能被外部修改/)).toBeInTheDocument();
     const lastSwitchRow = screen.getByText("上次切换").closest(".asb-status-row");
-    expect(lastSwitchRow).toHaveTextContent("2026-08-26 16:00:00");
+    expect(lastSwitchRow).toHaveTextContent("2026年08月26日 16：00");
     expect(screen.getAllByText("本机网关 · gpt-5.3-codex").length).toBeGreaterThan(0);
     expect(screen.getAllByText("官方登录 · claude-sonnet-4").length).toBeGreaterThan(0);
   });
@@ -488,25 +502,29 @@ describe("App integration with the typed client boundary", () => {
     await user.click(await screen.findByRole("option", { name: /备用网关/ }));
     await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
     const previewPanel = await screen.findByRole("region", { name: "变更预览" });
-    expect(within(previewPanel).getByText("gpt-5.3-codex")).toBeInTheDocument();
+    expect(within(previewPanel).getAllByText("gpt-5.3-codex").length).toBeGreaterThan(0);
     expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "通用设置" }));
-    await user.click(await screen.findByRole("switch", { name: "隐藏推理摘要" }));
+    await user.click((await screen.findAllByRole("radio", { name: "开启" }))[0]);
     expect(screen.getByText("有未保存修改")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "保存通用设置" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("save_common_settings", {
         target: "codex",
-        settings: { settings: { hide_agent_reasoning: true } },
+        settings: {
+          settings: { hide_agent_reasoning: { mode: "explicit", value: true } },
+        },
         expectedSettingsHash: "codex-settings-hash",
       }),
     );
     expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain("execute_switch");
 
-    // The switch affordance lives on the overview only.
-    await user.click(screen.getByRole("button", { name: "概览" }));
-    expect(screen.getByRole("button", { name: "安全切换" })).toBeDisabled();
+    // Saving general settings invalidated the supplier preview, so the
+    // switch entry point is gone until a new preview is generated.
+    await user.click(screen.getByRole("button", { name: "供应商" }));
+    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认切换" })).not.toBeInTheDocument();
   });
 
   it("loads, applies, and saves complete application settings", async () => {
@@ -531,6 +549,7 @@ describe("App integration with the typed client boundary", () => {
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
+          collapsedUsageIds: [],
         },
       }),
     );
@@ -548,6 +567,7 @@ describe("App integration with the typed client boundary", () => {
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
+          collapsedUsageIds: [],
         },
       }),
     );
@@ -564,6 +584,7 @@ describe("App integration with the typed client boundary", () => {
           hardwareAcceleration: false,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
+          collapsedUsageIds: [],
         },
       }),
     );
@@ -591,10 +612,81 @@ describe("App integration with the typed client boundary", () => {
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
+          collapsedUsageIds: [],
         },
       }),
     );
     expect(await screen.findByRole("button", { name: "取消置顶" })).toBeDefined();
+  });
+
+  const usageProfileRecord: ProviderRecord = {
+    profile: {
+      ...profiles[0].profile,
+      usageQuery: {
+        kind: "declarative",
+        url: "{{baseUrl}}/balance",
+        remainingPath: "balance",
+        usedPath: null,
+        totalPath: null,
+        refreshIntervalMinutes: 0,
+        unit: "USD",
+      },
+    },
+    fileHash: "provider-file-hash",
+  };
+
+  /** Primes the shared backend with one usage-configured provider and the
+   * given application settings, so collapse state can be exercised end to
+   * end through the one save path. */
+  function primeUsageCollapseBackend(settings: typeof defaultSettings) {
+    primeBackend();
+    const backend = invokeMock.getMockImplementation();
+    expect(backend).toBeDefined();
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_profiles") return Promise.resolve([usageProfileRecord]);
+      if (command === "get_app_settings") return Promise.resolve(settings);
+      if (command === "query_profile_usage") {
+        return Promise.resolve({
+          readings: [{ remaining: 18.5, used: 7, total: 25.5, unit: "USD" }],
+          at: "2026-09-01T08:00:00Z",
+        });
+      }
+      return backend!(command, args as never);
+    });
+    invokeMock.mockClear();
+  }
+
+  it("供应商用量面板的收起选择经应用设置持久化", async () => {
+    primeUsageCollapseBackend(defaultSettings);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "供应商" }));
+    expect(await screen.findByRole("region", { name: "备用网关 用量" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "收起 备用网关 用量" }));
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
+        settings: { ...defaultSettings, collapsedUsageIds: ["codex-gateway"] },
+      }),
+    );
+    expect(await screen.findByRole("button", { name: "查看 备用网关 用量" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "备用网关 用量" })).not.toBeInTheDocument();
+  });
+
+  it("重启后已持久化的用量收起状态保持收起", async () => {
+    primeUsageCollapseBackend({ ...defaultSettings, collapsedUsageIds: ["codex-gateway"] });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "供应商" }));
+    const toggle = await screen.findByRole("button", { name: "查看 备用网关 用量" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("region", { name: "备用网关 用量" })).not.toBeInTheDocument();
+    const usageQueries = invokeMock.mock.calls.filter(
+      ([command]) => command === "query_profile_usage",
+    );
+    expect(usageQueries).toHaveLength(0);
   });
 
   it("keeps the applied appearance when saving a replacement setting fails", async () => {
@@ -610,6 +702,7 @@ describe("App integration with the typed client boundary", () => {
           hardwareAcceleration: true,
           interfaceFont: "Noto Sans SC",
           runtimeLogLevel: "info",
+          collapsedUsageIds: [],
         });
       }
       if (command === "set_app_settings") return Promise.reject({ message: "保存失败" });
@@ -668,6 +761,7 @@ describe("App integration with the typed client boundary", () => {
           hardwareAcceleration: true,
           interfaceFont: "Microsoft YaHei",
           runtimeLogLevel: "info",
+          collapsedUsageIds: [],
         },
       }),
     );
@@ -701,6 +795,89 @@ describe("App integration with the typed client boundary", () => {
     expect(await screen.findByRole("radiogroup", { name: "界面主题" })).toBeInTheDocument();
   });
 
+  it("设置加载失败时一键修复以默认值重建设置", async () => {
+    primeBackend();
+    const defaults = {
+      closeBehavior: "hideToTray",
+      theme: "system",
+      motion: "system",
+      alwaysOnTop: false,
+      launchAtLogin: false,
+      hardwareAcceleration: true,
+      interfaceFont: "Noto Sans SC",
+      runtimeLogLevel: "info",
+      collapsedUsageIds: [],
+    };
+    const backend = invokeMock.getMockImplementation();
+    invokeMock.mockImplementation((command: string, args?: Parameters<typeof invoke>[1]) => {
+      if (command === "get_app_settings") {
+        return Promise.reject({ code: "app-settings-unavailable", message: "应用设置格式无效" });
+      }
+      if (command === "repair_app_settings") return Promise.resolve(defaults);
+      return backend?.(command, args) ?? Promise.resolve([]);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "设置" }));
+    expect(await screen.findByText("设置加载失败：应用设置格式无效")).toBeInTheDocument();
+
+    // Both the settings-page failure row and the global banner offer the
+    // same repair; this test exercises the settings-page view of it.
+    const failureRow = screen
+      .getByText("设置加载失败：应用设置格式无效")
+      .closest('[role="alert"]') as HTMLElement;
+    await user.click(within(failureRow).getByRole("button", { name: "一键修复" }));
+
+    expect(await screen.findByRole("radiogroup", { name: "界面主题" })).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("repair_app_settings");
+    expect(
+      document.documentElement.style.getPropertyValue("--asb-font-user"),
+    ).toBe('"Noto Sans SC"');
+  });
+
+  it("在任意页面显示设置失败横幅并支持一键修复", async () => {
+    primeBackend();
+    const defaults = {
+      closeBehavior: "hideToTray" as const,
+      theme: "system" as const,
+      motion: "system" as const,
+      alwaysOnTop: false,
+      launchAtLogin: false,
+      hardwareAcceleration: true,
+      interfaceFont: "Noto Sans SC",
+      runtimeLogLevel: "info" as const,
+      collapsedUsageIds: [] as string[],
+    };
+    let settingsBroken = true;
+    const backend = invokeMock.getMockImplementation();
+    invokeMock.mockImplementation((command: string, args?: Parameters<typeof invoke>[1]) => {
+      if (command === "get_app_settings" && settingsBroken) {
+        return Promise.reject({ code: "app-settings-unavailable", message: "应用设置格式无效" });
+      }
+      if (command === "repair_app_settings") {
+        settingsBroken = false;
+        return Promise.resolve(defaults);
+      }
+      return backend?.(command, args) ?? Promise.resolve([]);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    // The banner appears without leaving the default providers page, where
+    // settings-backed actions (usage collapse) silently wait.
+    expect(
+      await screen.findByRole("alert", { name: "应用设置不可用" }),
+    ).toHaveTextContent("应用设置不可用：应用设置格式无效");
+
+    await user.click(screen.getByRole("button", { name: "一键修复" }));
+
+    expect(invokeMock).toHaveBeenCalledWith("repair_app_settings");
+    await waitFor(() =>
+      expect(screen.queryByRole("alert", { name: "应用设置不可用" })).not.toBeInTheDocument(),
+    );
+  });
+
   it("marks keyboard focus and clears it on pointer interaction", async () => {
     primeBackend();
     render(<App />);
@@ -731,6 +908,7 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
+      if (command === "discover_cached") return Promise.resolve(null);
       if (command === "discover_local") {
         return Promise.resolve({
           codex: {
@@ -766,6 +944,7 @@ describe("App integration with the typed client boundary", () => {
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
+      if (command === "discover_cached") return Promise.resolve(null);
       if (command === "discover_local") {
         return Promise.resolve({
           codex: {
@@ -845,10 +1024,81 @@ describe("App integration with the typed client boundary", () => {
     );
   });
 
+  it("shows the previous scan from cache and relabels the action to refresh", async () => {
+    primeBackend();
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "config_status") return Promise.resolve(statuses);
+      if (command === "list_profiles") return Promise.resolve(profiles);
+      if (command === "list_backups") return Promise.resolve([]);
+      if (command === "lock_status") return Promise.resolve({ state: "free" });
+      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
+      if (command === "discover_cached") {
+        return Promise.resolve({
+          codex: {
+            app: "codex",
+            path: "C:/Users/test/.codex/config.toml",
+            exists: true,
+            state: {
+              kind: "ok",
+              route: statuses[0].route,
+              managed: true,
+              warnings: [],
+              importable: false,
+            },
+          },
+          claude: {
+            app: "claude",
+            path: "C:/Users/test/.claude/settings.json",
+            exists: false,
+            state: { kind: "missing" },
+          },
+          importProposals: [],
+        });
+      }
+      if (command === "discover_local") {
+        return Promise.resolve({
+          codex: {
+            app: "codex",
+            path: "C:/Users/test/.codex/config.toml",
+            exists: true,
+            state: {
+              kind: "ok",
+              route: statuses[0].route,
+              managed: true,
+              warnings: [],
+              importable: false,
+            },
+          },
+          claude: {
+            app: "claude",
+            path: "C:/Users/test/.claude/settings.json",
+            exists: false,
+            state: { kind: "missing" },
+          },
+          importProposals: [],
+        });
+      }
+      return Promise.resolve([]);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    expect(invokeMock).toHaveBeenCalledWith("discover_cached");
+
+    await user.click(await screen.findByRole("button", { name: "发现" }));
+    // The cached scan renders without any user scan in this session.
+    const codexCard = await screen.findByLabelText("Codex 扫描结果");
+    expect(within(codexCard).getByText("配置正常")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新配置" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "刷新配置" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("discover_local"));
+  });
+
   it("scans CC Switch read-only, previews providers, and imports the selection", async () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
+      if (command === "discover_cached") return Promise.resolve(null);
       if (command === "scan_ccswitch") return Promise.resolve(ccScan);
       if (command === "import_ccswitch_profiles") {
         return Promise.resolve({

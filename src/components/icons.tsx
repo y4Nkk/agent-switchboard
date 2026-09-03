@@ -135,6 +135,22 @@ export function GripIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function MoreIcon({ size = 18 }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <circle cx="5.5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="18.5" cy="12" r="1.6" />
+    </svg>
+  );
+}
+
 export function PlayIcon({ size = 16 }: IconProps) {
   return svg(<path d="M8 5.3v13.4L19 12Z" />, size);
 }

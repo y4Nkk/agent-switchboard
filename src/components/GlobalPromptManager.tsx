@@ -1,16 +1,13 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import type { AppKind, GlobalPromptDocument } from "../api/client";
-import { clientName } from "../lib/client-name";
-import { ClientLogo } from "./ClientLogo";
+import type { GlobalPromptDocument } from "../api/client";
+import { Button } from "./Button";
 import { Textarea } from "./Textarea";
 
 interface GlobalPromptManagerProps {
-  app: AppKind;
   document: GlobalPromptDocument | undefined;
   draft: string;
   dirty: boolean;
   busy: boolean;
-  onSelectApp: (app: AppKind) => void;
   onChange: (content: string) => void;
   onSave: () => void;
   onDiscard: () => void;
@@ -38,14 +35,13 @@ function fitPromptEditor(textarea: HTMLTextAreaElement) {
 /**
  * Direct editor for the two supported user-global instruction files. It has
  * no prompt-template store: the file itself is the single source of truth.
+ * The edited client follows the page-level client tabs.
  */
 export function GlobalPromptManager({
-  app,
   document,
   draft,
   dirty,
   busy,
-  onSelectApp,
   onChange,
   onSave,
   onDiscard,
@@ -68,27 +64,6 @@ export function GlobalPromptManager({
 
   return (
     <section className="asb-prompt-manager" aria-label="全局指令">
-      <div className="asb-prompt-manager-heading">
-        <div>
-          <h3 className="asb-prompt-manager-title">全局指令</h3>
-        </div>
-        <div className="asb-prompt-document-tabs" role="tablist" aria-label="全局提示词文档">
-          {(["codex", "claude"] as const).map((target) => (
-            <button
-              key={target}
-              type="button"
-              role="tab"
-              aria-selected={app === target}
-              className={`asb-prompt-document-tab${app === target ? " is-on" : ""}`}
-              disabled={busy}
-              onClick={() => onSelectApp(target)}
-            >
-              <ClientLogo app={target} className="asb-tab-logo" />
-              <span>{clientName(target)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
       <label className="asb-prompt-editor-field">
         <span className="asb-prompt-file-name">{fileName}</span>
         <Textarea
@@ -103,22 +78,21 @@ export function GlobalPromptManager({
         />
       </label>
       <div className="asb-prompt-actions">
-        <button
-          type="button"
-          className="asb-btn-secondary"
+        <Button
+          variant="secondary"
           disabled={busy || dirty}
           onClick={onReload}
         >
           重新读取
-        </button>
+        </Button>
         {dirty && (
-          <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onDiscard}>
+          <Button variant="secondary" disabled={busy} onClick={onDiscard}>
             放弃草稿
-          </button>
+          </Button>
         )}
-        <button type="button" className="asb-btn-primary" disabled={busy || !document || !dirty} onClick={onSave}>
+        <Button variant="primary" disabled={busy || !document || !dirty} onClick={onSave}>
           {busy ? "保存中" : `保存 ${fileName}`}
-        </button>
+        </Button>
       </div>
     </section>
   );

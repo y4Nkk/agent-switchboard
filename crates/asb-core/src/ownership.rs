@@ -5,7 +5,7 @@
 //! byte-for-byte. Patches referencing a host-owned key are rejected at
 //! validation time, never silently dropped.
 
-use crate::contracts::{AppKind, CommonSettings, ConfigValue};
+use crate::contracts::{AppKind, CommonSettingValue, CommonSettings, ConfigValue};
 use std::collections::BTreeMap;
 
 /// The one ownership decision for a client configuration key. Unknown keys
@@ -79,7 +79,8 @@ pub enum SettingControl {
 
 /// One strongly typed entry in the ownership directory. `setting_spec` and
 /// `setting_specs` are the only APIs consumers should use for ownership,
-/// value constraints, defaults, UI metadata, and provider cleanup decisions.
+/// value constraints, legacy-migration baselines, UI metadata, and provider
+/// cleanup decisions.
 #[derive(Debug, Clone)]
 pub struct SettingSpec {
     pub app: AppKind,
@@ -88,9 +89,10 @@ pub struct SettingSpec {
     pub value_type: SettingValueType,
     pub allowed_values: &'static [ChoiceOption],
     pub control: SettingControl,
-    /// The directory-defined default for a common setting. Provider and host
-    /// settings have no default here.
-    pub default: Option<ConfigValue>,
+    /// Baseline emitted by the pre-automatic-value contract, used only for a
+    /// one-time data migration. Runtime projection never treats it as a
+    /// client default. Provider and host settings have no baseline here.
+    pub legacy_default: Option<ConfigValue>,
     pub label: Option<&'static str>,
     pub group: Option<&'static str>,
     pub provider_absent_action: Option<ProviderAbsentAction>,
@@ -179,13 +181,13 @@ const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
 ];
 
 /// One boolean general setting from the client's official configuration
-/// reference. `default` is the value the client uses when the line is
-/// absent; the editor always stores an explicit value.
+/// reference. `legacy_default` is the old application contract's emitted
+/// baseline and is used only while upgrading stored application state.
 #[derive(Debug, Clone, Copy)]
 pub struct ToggleSpec {
     pub key: &'static str,
     pub label: &'static str,
-    pub default: bool,
+    pub legacy_default: bool,
     pub group: &'static str,
 }
 
@@ -205,14 +207,15 @@ pub enum ChoiceControl {
 }
 
 /// One multi-value general setting from the client's official configuration
-/// reference. `default` is the value the client uses when the line is absent.
+/// reference. `legacy_default` is the old application contract's emitted
+/// baseline and is used only while upgrading stored application state.
 #[derive(Debug, Clone, Copy)]
 pub struct ChoiceSpec {
     pub key: &'static str,
     pub label: &'static str,
     pub group: &'static str,
     pub control: ChoiceControl,
-    pub default: &'static str,
+    pub legacy_default: &'static str,
     pub options: &'static [ChoiceOption],
 }
 
@@ -222,173 +225,323 @@ pub const CODEX_TOGGLES: &[ToggleSpec] = &[
     ToggleSpec {
         key: "hide_agent_reasoning",
         label: "在界面中隐藏推理摘要",
-        default: false,
+        legacy_default: false,
         group: "模型行为",
     },
     ToggleSpec {
         key: "show_raw_agent_reasoning",
         label: "显示模型的原始推理内容",
-        default: false,
+        legacy_default: false,
         group: "模型行为",
-    },
-    ToggleSpec {
-        key: "disable_response_storage",
-        label: "OpenAI 服务端不保存你的请求与响应",
-        default: false,
-        group: "隐私与数据",
     },
     ToggleSpec {
         key: "tui.animations",
         label: "终端动画（欢迎页与加载动效）",
-        default: true,
+        legacy_default: true,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.show_tooltips",
         label: "欢迎页功能引导提示",
-        default: true,
+        legacy_default: true,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.notifications",
         label: "终端通知（回合结束时）",
-        default: false,
+        legacy_default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.raw_output_mode",
         label: "原始滚动模式（不切换交替屏幕）",
-        default: false,
+        legacy_default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tui.vim_mode_default",
         label: "默认启用 Vim 输入模式",
-        default: false,
+        legacy_default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "disable_paste_burst",
         label: "关闭多行粘贴突发检测",
-        default: false,
+        legacy_default: false,
         group: "终端界面",
     },
     ToggleSpec {
         key: "tools.view_image",
         label: "启用本地图片查看工具",
-        default: false,
+        legacy_default: false,
         group: "工具与功能",
     },
     ToggleSpec {
         key: "features.memories",
         label: "启用 Memories 跨会话记忆",
-        default: false,
+        legacy_default: false,
         group: "工具与功能",
     },
     ToggleSpec {
         key: "features.prevent_idle_sleep",
         label: "会话运行期间阻止系统休眠",
-        default: false,
+        legacy_default: false,
         group: "工具与功能",
     },
     ToggleSpec {
         key: "check_for_update_on_startup",
         label: "启动时检查更新",
-        default: true,
+        legacy_default: true,
         group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "allow_login_shell",
+        label: "允许登录 Shell 环境",
+        legacy_default: false,
+        group: "安全与审批",
+    },
+    ToggleSpec {
+        key: "sandbox_workspace_write.network_access",
+        label: "工作区沙箱允许网络访问",
+        legacy_default: false,
+        group: "安全与审批",
+    },
+    ToggleSpec {
+        key: "sandbox_workspace_write.exclude_tmpdir_env_var",
+        label: "工作区沙箱忽略 TMPDIR 环境变量",
+        legacy_default: false,
+        group: "安全与审批",
+    },
+    ToggleSpec {
+        key: "sandbox_workspace_write.exclude_slash_tmp",
+        label: "工作区沙箱不映射 /tmp",
+        legacy_default: false,
+        group: "安全与审批",
+    },
+    ToggleSpec {
+        key: "windows.sandbox_private_desktop",
+        label: "Windows 沙箱使用私有桌面",
+        legacy_default: false,
+        group: "安全与审批",
+    },
+    ToggleSpec {
+        key: "feedback.enabled",
+        label: "允许提交产品反馈",
+        legacy_default: true,
+        group: "隐私与数据",
+    },
+    ToggleSpec {
+        key: "analytics.enabled",
+        label: "允许使用分析数据",
+        legacy_default: true,
+        group: "隐私与数据",
+    },
+    ToggleSpec {
+        key: "tui.alternate_screen",
+        label: "使用终端交替屏幕",
+        legacy_default: true,
+        group: "终端界面",
+    },
+    ToggleSpec {
+        key: "tui.resume_cwd",
+        label: "恢复会话时沿用工作目录",
+        legacy_default: true,
+        group: "终端界面",
+    },
+    ToggleSpec {
+        key: "features.apps",
+        label: "启用 Apps",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.hooks",
+        label: "启用 Hooks",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.shell_tool",
+        label: "启用 Shell 工具",
+        legacy_default: true,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.enable_request_compression",
+        label: "启用请求压缩",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.skill_mcp_dependency_install",
+        label: "允许 Skill 安装 MCP 依赖",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.fast_mode",
+        label: "启用快速模式",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.shell_snapshot",
+        label: "启用 Shell 快照",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.unified_exec",
+        label: "启用统一执行器",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.multi_agent",
+        label: "启用多智能体协作",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.goals",
+        label: "启用目标管理",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.remote_plugin",
+        label: "启用远程插件",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "features.personality",
+        label: "启用助手个性设置",
+        legacy_default: true,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "agents.enabled",
+        label: "启用多智能体执行",
+        legacy_default: false,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "agents.allow_interrupt",
+        label: "允许中断子智能体",
+        legacy_default: true,
+        group: "工具与功能",
+    },
+    ToggleSpec {
+        key: "memories.generate_memories",
+        label: "自动生成记忆",
+        legacy_default: false,
+        group: "隐私与数据",
+    },
+    ToggleSpec {
+        key: "memories.use_memories",
+        label: "在会话中使用记忆",
+        legacy_default: false,
+        group: "隐私与数据",
+    },
+    ToggleSpec {
+        key: "memories.disable_on_external_context",
+        label: "外部上下文时禁用记忆",
+        legacy_default: true,
+        group: "隐私与数据",
     },
 ];
 
 pub const CLAUDE_TOGGLES: &[ToggleSpec] = &[
     ToggleSpec {
         key: "alwaysThinkingEnabled",
-        label: "每次会话默认开启扩展思考",
-        default: false,
+        label: "默认开启扩展思考",
+        legacy_default: false,
         group: "模型行为",
     },
     ToggleSpec {
         key: "autoCompactEnabled",
         label: "上下文自动压缩",
-        default: true,
+        legacy_default: true,
         group: "模型行为",
     },
     ToggleSpec {
         key: "showThinkingSummaries",
         label: "思考过程摘要",
-        default: true,
+        legacy_default: true,
         group: "模型行为",
     },
     ToggleSpec {
         key: "spinnerTipsEnabled",
         label: "加载动画提示语",
-        default: true,
+        legacy_default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "autoScrollEnabled",
         label: "输出自动滚动",
-        default: true,
+        legacy_default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "emojiCompletionEnabled",
         label: "输入框表情补全",
-        default: true,
+        legacy_default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "promptSuggestionEnabled",
         label: "提示词建议",
-        default: true,
+        legacy_default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "showTurnDuration",
         label: "显示每轮回复耗时",
-        default: false,
+        legacy_default: false,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "syntaxHighlightingDisabled",
         label: "关闭输出语法高亮",
-        default: false,
+        legacy_default: false,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "terminalProgressBarEnabled",
         label: "终端底部进度条",
-        default: true,
+        legacy_default: true,
         group: "界面与交互",
     },
     ToggleSpec {
         key: "fileCheckpointingEnabled",
         label: "文件检查点（对话内回滚）",
-        default: true,
+        legacy_default: true,
         group: "文件与 Git",
     },
     ToggleSpec {
         key: "respectGitignore",
         label: "文件选择遵守 .gitignore 规则",
-        default: true,
+        legacy_default: true,
         group: "文件与 Git",
     },
     ToggleSpec {
         key: "includeGitInstructions",
         label: "注入内置 Git 使用指南",
-        default: true,
-        group: "文件与 Git",
-    },
-    ToggleSpec {
-        key: "attribution.coAuthoredBy",
-        label: "提交与 PR 添加 Claude 署名",
-        default: true,
+        legacy_default: true,
         group: "文件与 Git",
     },
     ToggleSpec {
         key: "autoMemoryEnabled",
         label: "自动记忆",
-        default: true,
+        legacy_default: true,
         group: "文件与 Git",
+    },
+    ToggleSpec {
+        key: "ultracode",
+        label: "Ultracode 动态工作流",
+        legacy_default: false,
+        group: "模型行为",
     },
 ];
 
@@ -398,8 +551,41 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "推理强度",
         group: "模型行为",
         control: ChoiceControl::Slider,
-        default: "medium",
+        legacy_default: "medium",
         options: &[
+            ChoiceOption {
+                value: "minimal",
+                label: "极低",
+            },
+            ChoiceOption {
+                value: "low",
+                label: "低",
+            },
+            ChoiceOption {
+                value: "medium",
+                label: "中",
+            },
+            ChoiceOption {
+                value: "high",
+                label: "高",
+            },
+            ChoiceOption {
+                value: "xhigh",
+                label: "极高",
+            },
+        ],
+    },
+    ChoiceSpec {
+        key: "plan_mode_reasoning_effort",
+        label: "计划模式推理强度",
+        group: "模型行为",
+        control: ChoiceControl::Slider,
+        legacy_default: "medium",
+        options: &[
+            ChoiceOption {
+                value: "none",
+                label: "无",
+            },
             ChoiceOption {
                 value: "minimal",
                 label: "极低",
@@ -427,7 +613,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "推理摘要",
         group: "模型行为",
         control: ChoiceControl::Segment,
-        default: "auto",
+        legacy_default: "auto",
         options: &[
             ChoiceOption {
                 value: "auto",
@@ -452,7 +638,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "回复详细度",
         group: "模型行为",
         control: ChoiceControl::Segment,
-        default: "medium",
+        legacy_default: "medium",
         options: &[
             ChoiceOption {
                 value: "low",
@@ -473,7 +659,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "助手个性",
         group: "模型行为",
         control: ChoiceControl::Segment,
-        default: "friendly",
+        legacy_default: "friendly",
         options: &[
             ChoiceOption {
                 value: "none",
@@ -494,7 +680,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "网页搜索",
         group: "模型行为",
         control: ChoiceControl::Segment,
-        default: "disabled",
+        legacy_default: "disabled",
         options: &[
             ChoiceOption {
                 value: "disabled",
@@ -519,7 +705,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "沙箱模式",
         group: "安全与审批",
         control: ChoiceControl::Segment,
-        default: "read-only",
+        legacy_default: "read-only",
         options: &[
             ChoiceOption {
                 value: "read-only",
@@ -540,7 +726,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "批准策略",
         group: "安全与审批",
         control: ChoiceControl::Segment,
-        default: "untrusted",
+        legacy_default: "untrusted",
         options: &[
             ChoiceOption {
                 value: "untrusted",
@@ -557,11 +743,45 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         ],
     },
     ChoiceSpec {
+        key: "approvals_reviewer",
+        label: "审批复核方式",
+        group: "安全与审批",
+        control: ChoiceControl::Segment,
+        legacy_default: "user",
+        options: &[
+            ChoiceOption {
+                value: "user",
+                label: "用户",
+            },
+            ChoiceOption {
+                value: "auto_review",
+                label: "自动复核",
+            },
+        ],
+    },
+    ChoiceSpec {
+        key: "windows.sandbox",
+        label: "Windows 沙箱权限",
+        group: "安全与审批",
+        control: ChoiceControl::Segment,
+        legacy_default: "unelevated",
+        options: &[
+            ChoiceOption {
+                value: "unelevated",
+                label: "非提升",
+            },
+            ChoiceOption {
+                value: "elevated",
+                label: "提升权限",
+            },
+        ],
+    },
+    ChoiceSpec {
         key: "history.persistence",
         label: "会话历史",
         group: "隐私与数据",
         control: ChoiceControl::Segment,
-        default: "save-all",
+        legacy_default: "save-all",
         options: &[
             ChoiceOption {
                 value: "save-all",
@@ -573,26 +793,84 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
             },
         ],
     },
+    ChoiceSpec {
+        key: "file_opener",
+        label: "文件打开方式",
+        group: "工具与功能",
+        control: ChoiceControl::Segment,
+        legacy_default: "vscode",
+        options: &[
+            ChoiceOption {
+                value: "vscode",
+                label: "VS Code",
+            },
+            ChoiceOption {
+                value: "vscode-insiders",
+                label: "VS Code Insiders",
+            },
+            ChoiceOption {
+                value: "windsurf",
+                label: "Windsurf",
+            },
+            ChoiceOption {
+                value: "cursor",
+                label: "Cursor",
+            },
+            ChoiceOption {
+                value: "none",
+                label: "不打开",
+            },
+        ],
+    },
 ];
 
 pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
+    ChoiceSpec {
+        key: "effortLevel",
+        label: "推理强度",
+        group: "模型行为",
+        control: ChoiceControl::Slider,
+        legacy_default: "high",
+        options: &[
+            ChoiceOption {
+                value: "low",
+                label: "低",
+            },
+            ChoiceOption {
+                value: "medium",
+                label: "中",
+            },
+            ChoiceOption {
+                value: "high",
+                label: "高",
+            },
+            ChoiceOption {
+                value: "xhigh",
+                label: "极高",
+            },
+        ],
+    },
     ChoiceSpec {
         key: "outputStyle",
         label: "输出风格",
         group: "模型行为",
         control: ChoiceControl::Segment,
-        default: "default",
+        legacy_default: "Explanatory",
         options: &[
             ChoiceOption {
-                value: "default",
-                label: "标准",
+                value: "Proactive",
+                label: "主动",
             },
             ChoiceOption {
-                value: "explanatory",
+                value: "Concise",
+                label: "简洁",
+            },
+            ChoiceOption {
+                value: "Explanatory",
                 label: "讲解",
             },
             ChoiceOption {
-                value: "learning",
+                value: "Learning",
                 label: "学习",
             },
         ],
@@ -602,7 +880,7 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
         label: "通知渠道",
         group: "界面与交互",
         control: ChoiceControl::Segment,
-        default: "auto",
+        legacy_default: "auto",
         options: &[
             ChoiceOption {
                 value: "auto",
@@ -615,6 +893,18 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
             ChoiceOption {
                 value: "iterm2",
                 label: "iTerm2",
+            },
+            ChoiceOption {
+                value: "iterm2_with_bell",
+                label: "iTerm2 + 铃声",
+            },
+            ChoiceOption {
+                value: "kitty",
+                label: "Kitty",
+            },
+            ChoiceOption {
+                value: "ghostty",
+                label: "Ghostty",
             },
             ChoiceOption {
                 value: "notifications_disabled",
@@ -680,6 +970,27 @@ const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         detail: "有序布局和按上下文键位映射需要专用编辑器；当前保留但不写入。",
     },
     OfficialSettingEntry {
+        title: "运行限额与终端超时",
+        path: "model_auto_compact_token_limit",
+        related_paths: &[
+            "model_auto_compact_token_limit_scope",
+            "history.max_bytes",
+            "tool_output_token_limit",
+            "background_terminal_max_timeout",
+            "agents.max_concurrent_agents",
+            "memories.*_limit",
+        ],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "数值限额与保留策略需在同一资源预算契约中校验；当前保留但不写入。",
+    },
+    OfficialSettingEntry {
+        title: "通知规则与终端状态",
+        path: "tui.notification_method",
+        related_paths: &["tui.notification_conditions", "tui.status_line"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "通知方法和条件为关联结构；普通偏好之外的部分当前保留但不写入。",
+    },
+    OfficialSettingEntry {
         title: "项目配置与信任状态",
         path: ".codex/config.toml",
         related_paths: &["projects.<path>.trust_level"],
@@ -691,7 +1002,8 @@ const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         path: "requirements.toml",
         related_paths: &["auth.json", "SQLite / 会话状态"],
         disposition: OfficialSettingDisposition::PreserveOnly,
-        detail: "属于组织策略、官方登录或运行态；应用只观测必要状态，绝不接管。",
+        detail:
+            "属于组织策略与运行态；通用设置只观测不写入。auth.json 仅在用户发起官方登录或重新登录时由专用登录流程写入，其余时间只读观测。",
     },
 ];
 
@@ -733,6 +1045,20 @@ const CLAUDE_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         detail: "模型映射和回退链是有序结构，不能与供应商主模型形成双重所有权。",
     },
     OfficialSettingEntry {
+        title: "按模型推理强度",
+        path: "modelSettings.<model>.effortLevel",
+        related_paths: &["modelSettings.<model>.fastMode"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "Claude 按模型保存的推理偏好和快速模式属于模型映射；全局 effortLevel 与 Ultracode 由基础参数直接管理。",
+    },
+    OfficialSettingEntry {
+        title: "自定义输出风格",
+        path: "outputStyles.<name>",
+        related_paths: &["outputStyle"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "内置输出风格可直接选择；自定义风格是命名文档资源，当前保留但不写入。",
+    },
+    OfficialSettingEntry {
         title: "MCP 与插件",
         path: "~/.claude.json",
         related_paths: &[".mcp.json", "enabledPlugins", "extraKnownMarketplaces"],
@@ -758,7 +1084,8 @@ const CLAUDE_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         path: "~/.claude/.credentials.json",
         related_paths: &["~/.claude.json"],
         disposition: OfficialSettingDisposition::PreserveOnly,
-        detail: "官方身份、项目信任和运行态不由应用复制、修改或导入为供应商档案。",
+        detail:
+            "官方身份、项目信任和运行态不由应用复制或导入为供应商档案；.credentials.json 仅在用户发起官方登录或重新登录时由专用登录流程写入，其余时间只读观测。",
     },
 ];
 
@@ -847,7 +1174,7 @@ pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
                 value_type: spec.value_type,
                 allowed_values: &[],
                 control: SettingControl::None,
-                default: None,
+                legacy_default: None,
                 label: None,
                 group: None,
                 provider_absent_action: Some(ProviderAbsentAction::Remove),
@@ -860,7 +1187,7 @@ pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
         value_type: SettingValueType::Bool,
         allowed_values: &[],
         control: SettingControl::Toggle,
-        default: Some(ConfigValue::Bool(spec.default)),
+        legacy_default: Some(ConfigValue::Bool(spec.legacy_default)),
         label: Some(spec.label),
         group: Some(spec.group),
         provider_absent_action: None,
@@ -874,7 +1201,7 @@ pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
         control: SettingControl::Choice {
             presentation: spec.control,
         },
-        default: Some(ConfigValue::Str(spec.default.to_string())),
+        legacy_default: Some(ConfigValue::Str(spec.legacy_default.to_string())),
         label: Some(spec.label),
         group: Some(spec.group),
         provider_absent_action: None,
@@ -917,19 +1244,17 @@ pub fn is_provider_owned(app: AppKind, key: &str) -> bool {
     owner_for(app, key) == SettingOwner::Provider
 }
 
-/// The complete default common settings for one client, built from this
-/// directory. It is the value a fresh installation exposes before any save
-/// and the target of every "恢复默认值" action.
+/// The complete automatic common-settings intent for one client, built from
+/// this directory. A fresh installation and every "恢复默认值" action leave
+/// each client key to the host and active model rather than writing a guessed
+/// value into the real configuration file.
 pub fn default_common_settings(app: AppKind) -> CommonSettings {
     let mut settings = BTreeMap::new();
     for spec in setting_specs(app)
         .into_iter()
         .filter(|spec| spec.owner == SettingOwner::Common)
     {
-        let default = spec
-            .default
-            .expect("every common setting declares a directory default");
-        settings.insert(spec.key.to_string(), default);
+        settings.insert(spec.key.to_string(), CommonSettingValue::Automatic);
     }
     CommonSettings { settings }
 }
@@ -1031,15 +1356,15 @@ mod tests {
     }
 
     #[test]
-    fn every_default_is_one_of_the_offered_choice_values() {
+    fn every_legacy_baseline_is_one_of_the_offered_choice_values() {
         for app in [AppKind::Codex, AppKind::Claude] {
             for choice in common_choices(app) {
                 assert!(
                     choice
                         .options
                         .iter()
-                        .any(|option| option.value == choice.default),
-                    "{} 的默认值必须是可选值之一",
+                        .any(|option| option.value == choice.legacy_default),
+                    "{} 的旧版基线必须是可选值之一",
                     choice.key
                 );
             }
@@ -1047,7 +1372,7 @@ mod tests {
     }
 
     #[test]
-    fn default_common_settings_cover_exactly_the_catalog_keys() {
+    fn automatic_common_settings_cover_exactly_the_catalog_keys() {
         for app in [AppKind::Codex, AppKind::Claude] {
             let defaults = default_common_settings(app);
             let catalog_keys: Vec<&str> = setting_specs(app)
@@ -1059,15 +1384,8 @@ mod tests {
             for key in catalog_keys {
                 let value = defaults
                     .value(key)
-                    .expect("every catalog key has a default value");
-                if matches!(
-                    setting_spec(app, key).expect("spec").control,
-                    SettingControl::Toggle
-                ) {
-                    assert!(matches!(value, ConfigValue::Bool(_)));
-                } else {
-                    assert!(matches!(value, ConfigValue::Str(_)));
-                }
+                    .expect("every catalog key has an automatic value");
+                assert!(matches!(value, CommonSettingValue::Automatic));
             }
         }
     }
@@ -1096,6 +1414,18 @@ mod tests {
             "env.ANTHROPIC_DEFAULT_OPUS_MODEL"
         ));
         assert!(is_owned(AppKind::Claude, "availableModels"));
+    }
+
+    #[test]
+    fn claude_ultracode_is_an_independent_setting_not_an_effort_level() {
+        let effort = choice_spec(AppKind::Claude, "effortLevel").expect("effort level");
+        assert!(matches!(effort.control, ChoiceControl::Slider));
+        assert!(effort
+            .options
+            .iter()
+            .all(|option| option.value != "ultracode"));
+        let ultracode = toggle_spec(AppKind::Claude, "ultracode").expect("ultracode toggle");
+        assert_eq!(ultracode.group, "模型行为");
     }
 
     #[test]
@@ -1130,10 +1460,6 @@ mod tests {
         assert!(is_provider_owned(
             AppKind::Codex,
             "experimental_bearer_token"
-        ));
-        assert!(!is_provider_owned(
-            AppKind::Codex,
-            "disable_response_storage"
         ));
         assert_eq!(owner_for(AppKind::Codex, "threads"), SettingOwner::Host);
     }

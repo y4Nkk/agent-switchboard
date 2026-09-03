@@ -1,6 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ReactNode } from "react";
 import type { UpdateCheck } from "../api/client";
+import { Button } from "./Button";
 import { Time } from "./Time";
 
 /** Software-update state on the settings page. The startup lookup is silent;
@@ -36,17 +37,16 @@ export function UpdateSection({
         </div>
         <div className="asb-panel-actions">
           {result?.updateAvailable === true && (
-            <button
-              type="button"
-              className="asb-btn-primary"
+            <Button
+              variant="primary"
               onClick={() => void openUrl(result.releaseUrl)}
             >
               打开下载页面
-            </button>
+            </Button>
           )}
-          <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onCheck}>
+          <Button variant="secondary" disabled={busy} onClick={onCheck}>
             检查更新
-          </button>
+          </Button>
         </div>
       </div>
     </section>

@@ -74,6 +74,7 @@ static ACTIVE_LOG_LEVEL: AtomicU8 = AtomicU8::new(RuntimeLogLevel::Info.as_code(
 pub enum RuntimeLogAction {
     AppStarted,
     AppSettingsSaved,
+    AppSettingsRepaired,
     ProfileStoreReset,
     ProfileCreated,
     ProfileUpdated,
@@ -90,6 +91,7 @@ pub enum RuntimeLogAction {
     CloudBackupRestored,
     SessionResumed,
     CcSwitchProfilesImported,
+    OfficialLoginCompleted,
 }
 
 /// One persisted, renderer-safe runtime event.

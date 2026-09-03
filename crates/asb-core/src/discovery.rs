@@ -58,6 +58,19 @@ pub struct DiscoveryReport {
     pub import_proposals: Vec<ImportProposal>,
 }
 
+impl DiscoveryReport {
+    /// The copy persisted in the app-owned discovery cache: identical display
+    /// facts with credentials cleared. Import always re-derives the draft from
+    /// the live files, so a cached proposal never needs the secret.
+    pub fn cached_display(&self) -> DiscoveryReport {
+        let mut copy = self.clone();
+        for proposal in &mut copy.import_proposals {
+            proposal.draft.api_key = String::new();
+        }
+        copy
+    }
+}
+
 /// Inspects configuration content and classifies it. `text` is the raw file
 /// content, already read by the caller.
 pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
@@ -440,6 +453,17 @@ mod tests {
             .find(|proposal| proposal.app == AppKind::Claude)
             .expect("claude proposal");
         assert_eq!(claude_proposal.draft.api_key, "TEST_CLAUDE_IMPORT_KEY");
+
+        // Only the cache copy is redacted; the live report keeps its keys.
+        let cached = report.cached_display();
+        assert_eq!(cached.codex, report.codex);
+        assert_eq!(cached.claude, report.claude);
+        for proposal in &cached.import_proposals {
+            assert_eq!(proposal.draft.api_key, "");
+        }
+        for proposal in &report.import_proposals {
+            assert!(!proposal.draft.api_key.is_empty());
+        }
     }
 
     #[test]

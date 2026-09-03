@@ -9,6 +9,7 @@
 //! - [`window`]: title-bar window controls and the inspector toggle
 //! - [`status`]: read-only configuration status and lock observation
 //! - [`common_settings`]: general-configuration overlay commands
+//! - [`official_login`]: official client login start/poll/cancel commands
 //! - [`prompt_management`]: global AGENTS.md / CLAUDE.md document commands
 //! - [`switching`]: switch, backup, restore, and undo commands
 //!
@@ -22,6 +23,7 @@
 pub(crate) mod cloud_backup;
 pub(crate) mod common_settings;
 pub(crate) mod error;
+pub(crate) mod official_login;
 pub(crate) mod prompt_management;
 pub(crate) mod runtime_log;
 pub(crate) mod status;
@@ -93,6 +95,27 @@ pub async fn set_app_settings(
     Ok(saved)
 }
 
+/// One-click repair for an invalid app-settings file: replaces it with
+/// validated defaults. Persisting runs before the live desktop settings are
+/// applied so a repair is never lost to a window-state failure.
+#[tauri::command]
+pub async fn repair_app_settings(app: tauri::AppHandle) -> Result<AppSettings, CommandError> {
+    let app_for_apply = app.clone();
+    let repaired = observe(RuntimeLogAction::AppSettingsRepaired, async move {
+        let state = state(&app)?;
+        blocking(move || {
+            state
+                .repair_app_settings()
+                .map_err(|error| CommandError::new("app-settings-repair-failed", error))
+        })
+        .await
+    })
+    .await?;
+    apply_desktop_settings(&app_for_apply, &repaired)?;
+    crate::runtime_log::set_level(repaired.runtime_log_level);
+    Ok(repaired)
+}
+
 /// Installed system font families, offered by the interface-font picker.
 #[tauri::command]
 pub async fn list_system_fonts() -> Result<Vec<String>, CommandError> {
@@ -124,7 +147,11 @@ pub async fn reset_profile_store(
     })
     .await;
     if result.is_ok() {
-        crate::usage_cache::clear();
+        if let Ok(state) = LocalState::from_app(&refresh_app) {
+            if let Err(error) = crate::usage_cache::clear(&state) {
+                log::warn!("无法清除托盘用量缓存: {error}");
+            }
+        }
         crate::codex_official_quota::clear();
         crate::tray::refresh(&refresh_app);
     }
@@ -175,7 +202,11 @@ pub async fn update_profile(
     })
     .await;
     if result.is_ok() {
-        crate::usage_cache::invalidate(&cache_profile_id);
+        if let Ok(state) = LocalState::from_app(&refresh_app) {
+            if let Err(error) = crate::usage_cache::invalidate(&state, &cache_profile_id) {
+                log::warn!("无法清除更新供应商的托盘用量缓存: {error}");
+            }
+        }
         crate::codex_official_quota::invalidate(&cache_profile_id);
         crate::tray::refresh(&refresh_app);
     }
@@ -202,7 +233,11 @@ pub async fn delete_profile(
     })
     .await;
     if result.is_ok() {
-        crate::usage_cache::invalidate(&cache_profile_id);
+        if let Ok(state) = LocalState::from_app(&refresh_app) {
+            if let Err(error) = crate::usage_cache::invalidate(&state, &cache_profile_id) {
+                log::warn!("无法清除已删除供应商的托盘用量缓存: {error}");
+            }
+        }
         crate::codex_official_quota::invalidate(&cache_profile_id);
         crate::tray::refresh(&refresh_app);
     }
@@ -259,6 +294,12 @@ pub async fn import_discovered_profile(
     })
     .await;
     if result.is_ok() {
+        // The imported configuration no longer matches the scanned snapshot.
+        if let Ok(state) = LocalState::from_app(&refresh_app) {
+            if let Err(error) = state.clear_discovery_cache() {
+                log::warn!("无法清除导入后的发现扫描缓存: {error}");
+            }
+        }
         crate::tray::refresh(&refresh_app);
     }
     result
@@ -276,17 +317,17 @@ pub async fn probe_endpoint(url: String) -> Result<ProbeResult, CommandError> {
     .await
 }
 
-/// Model ids from the provider's OpenAI-compatible `/v1/models` endpoint.
-/// The current editor draft supplies its API key. The key travels only in
-/// request headers and is never included in errors or persisted by this
-/// command.
+/// Models (id plus optional vendor) from the provider's OpenAI-compatible
+/// `/v1/models` endpoint. The current editor draft supplies its API key. The
+/// key travels only in request headers and is never included in errors or
+/// persisted by this command.
 #[tauri::command]
 pub async fn fetch_provider_models(
     url: String,
     api_key: String,
-) -> Result<Vec<String>, CommandError> {
+) -> Result<Vec<crate::probe::ProviderModel>, CommandError> {
     blocking(move || {
-        crate::probe::fetch_models(&url, &api_key, "当前供应商档案")
+        crate::probe::fetch_models(&url, &api_key)
             .map_err(|error| CommandError::new("models-fetch-failed", error))
     })
     .await
@@ -333,7 +374,9 @@ pub async fn query_profile_usage(
             profile.base_url.as_deref(),
         )
         .map_err(|error| CommandError::new("usage-query-failed", error))?;
-        crate::usage_cache::store(&profile, summary.clone());
+        if let Err(error) = crate::usage_cache::store(&state, &profile, summary.clone()) {
+            log::warn!("用量查询成功，但无法保存托盘用量快照: {error}");
+        }
         Ok(summary)
     })
     .await?;
@@ -364,7 +407,79 @@ pub async fn query_codex_official_quota(
         }
         let auth_path = LocalState::codex_auth_path()
             .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
-        Ok(crate::codex_official_quota::query(&profile.id, &auth_path))
+        let (mut quota, marker) = crate::codex_official_quota::query(&profile.id, &auth_path);
+        if quota.status == asb_core::contracts::CodexOfficialQuotaStatus::Available {
+            quota.last_reset = record_official_reset_read(&state, marker, &quota);
+        }
+        Ok(quota)
+    })
+    .await
+}
+
+/// Records one successful official read in the persisted detection baseline
+/// and returns the latest locally detected reset. The baseline is a
+/// regenerable derived cache: an unreadable or corrupt file self-heals on the
+/// next save instead of hiding the fresh quota.
+fn record_official_reset_read(
+    state: &LocalState,
+    marker: Option<String>,
+    quota: &asb_core::contracts::CodexOfficialQuota,
+) -> Option<asb_core::contracts::CodexOfficialQuotaReset> {
+    let baseline = state.load_codex_quota_baseline().unwrap_or_else(|error| {
+        log::warn!("Codex 官方额度基线不可读，将从本次读取重建: {error}");
+        None
+    });
+    let at = quota.at.clone().unwrap_or_default();
+    let (baseline, _) = crate::codex_official_quota::apply_read(baseline, marker, quota, &at);
+    if let Err(error) = state.save_codex_quota_baseline(&baseline) {
+        log::warn!("官方额度读取成功，但无法保存重置检测基线: {error}");
+    }
+    baseline.last_reset
+}
+
+/// Reads the persisted baseline's last successful official read without
+/// contacting the network. An absent baseline is a normal first-run result.
+#[tauri::command]
+pub async fn get_cached_codex_official_reset(
+    app: tauri::AppHandle,
+) -> Result<Option<asb_core::contracts::CodexOfficialQuota>, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let baseline = state
+            .load_codex_quota_baseline()
+            .map_err(|error| CommandError::new("codex-official-reset-cache-unavailable", error))?;
+        Ok(baseline.and_then(|baseline| {
+            baseline
+                .last_read
+                .map(|read| asb_core::contracts::CodexOfficialQuota {
+                    status: asb_core::contracts::CodexOfficialQuotaStatus::Available,
+                    windows: read.windows,
+                    at: Some(read.at),
+                    stale: false,
+                    last_reset: baseline.last_reset,
+                })
+        }))
+    })
+    .await
+}
+
+/// One explicit read of the machine's Codex official login for the overview.
+/// The result is account-scoped and profile-independent; failed reads are
+/// returned as statuses for the panel to render.
+#[tauri::command]
+pub async fn refresh_codex_official_reset(
+    app: tauri::AppHandle,
+) -> Result<asb_core::contracts::CodexOfficialQuota, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let auth_path = LocalState::codex_auth_path().map_err(|error| {
+            CommandError::new("codex-official-reset-refresh-unavailable", error)
+        })?;
+        let (mut quota, marker) = crate::codex_official_quota::query_login(&auth_path);
+        if quota.status == asb_core::contracts::CodexOfficialQuotaStatus::Available {
+            quota.last_reset = record_official_reset_read(&state, marker, &quota);
+        }
+        Ok(quota)
     })
     .await
 }
@@ -448,10 +563,35 @@ fn discovery_report() -> Result<DiscoveryReport, CommandError> {
 }
 
 /// Read-only discovery of local Codex and Claude Code configuration. Reads at
-/// most two files; never writes, creates, or locks either target.
+/// most two files; never writes, creates, or locks either target. A successful
+/// scan replaces the local display cache; a cache-write failure is logged and
+/// never hides the fresh result.
 #[tauri::command]
-pub async fn discover_local() -> Result<DiscoveryReport, CommandError> {
-    blocking(discovery_report).await
+pub async fn discover_local(app: tauri::AppHandle) -> Result<DiscoveryReport, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let report = discovery_report()?;
+        if let Err(error) = state.save_discovery_cache(&report) {
+            log::warn!("无法保存发现扫描缓存: {error}");
+        }
+        Ok(report)
+    })
+    .await
+}
+
+/// The previous successful scan, shown before the next one runs. Null before
+/// the first scan ever completed.
+#[tauri::command]
+pub async fn discover_cached(
+    app: tauri::AppHandle,
+) -> Result<Option<DiscoveryReport>, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        state
+            .load_discovery_cache()
+            .map_err(|error| CommandError::new("discovery-cache-unavailable", error))
+    })
+    .await
 }
 
 /// Read-only scan of the local Codex and Claude Code JSONL session stores.

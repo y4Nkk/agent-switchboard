@@ -174,9 +174,17 @@ fn recovery_label(recovery: &RecoveryOutcome) -> &'static str {
     }
 }
 
+/// SHA-256 digest bytes for one content string; [`sha256_hex`] is its hex
+/// rendering.
+pub fn sha256_digest(content: &str) -> Vec<u8> {
+    Sha256::digest(content.as_bytes()).to_vec()
+}
+
 pub fn sha256_hex(content: &str) -> String {
-    let digest = Sha256::digest(content.as_bytes());
-    digest.iter().map(|b| format!("{b:02x}")).collect()
+    sha256_digest(content)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 pub struct SwitchRequest<'a> {

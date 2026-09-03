@@ -218,20 +218,18 @@ body {
   background: transparent;
   color: var(--asb-text-muted);
   font: var(--asb-text-body);
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
 
 .asb-nav button:hover {
-  background: var(--asb-row-selected);
   color: var(--asb-text);
 }
 
 .asb-nav button[aria-current="page"] {
-  background: var(--asb-row-selected);
-  border-color: var(--asb-hairline-strong);
   color: var(--asb-text);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* Workspace: banner overlay layer + the scrolling page area. Banners float
@@ -341,37 +339,6 @@ body {
   padding: var(--asb-space-4);
 }
 
-.asb-route-badge {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--asb-space-unit);
-  padding: 2px var(--asb-space-2);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
-  background: var(--asb-content);
-  font: var(--asb-text-label);
-  font-weight: 700;
-  color: var(--asb-text-muted);
-}
-
-.asb-route-badge-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--asb-hairline-strong);
-}
-
-.asb-route-card.is-on .asb-route-badge {
-  border-color: rgba(255, 255, 255, 0.8);
-  background: var(--asb-text-on-action);
-  color: var(--asb-route-pill-text);
-}
-
-.asb-route-card.is-on .asb-route-badge-dot {
-  background: var(--asb-safe);
-}
-
 .asb-route-ident {
   display: flex;
   align-items: center;
@@ -381,7 +348,8 @@ body {
 /* Fixed-light tile, same treatment as the active status badge, so the dark
    OpenAI vector stays legible on dark surfaces in both themes. */
 .asb-route-logo,
-.asb-status-logo {
+.asb-status-logo,
+.asb-edit-logo {
   flex: none;
   width: 24px;
   height: 24px;
@@ -390,6 +358,18 @@ body {
   border-radius: var(--asb-radius-action);
   background: var(--asb-text-on-action);
   object-fit: contain;
+}
+
+/* The editor's client field keeps its brand mark beside the picker. */
+.asb-client-control {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-control .asb-select-trigger {
+  flex: 1;
+  min-width: 0;
 }
 
 .asb-route-client {
@@ -402,7 +382,9 @@ body {
 }
 
 .asb-route-provider {
-  margin: 0;
+  margin: 2px 0 0;
+  /* Aligned with the client name text, not the logo tile beside it. */
+  padding-inline-start: calc(24px + var(--asb-space-unit));
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -417,7 +399,8 @@ body {
 
 .asb-route-values {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Model name and host are the long values; access mode is always short. */
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr);
   gap: var(--asb-space-2);
   width: 100%;
   margin: 0;
@@ -454,13 +437,9 @@ body {
   }
 }
 
-.asb-routebar-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--asb-space-2);
-}
-
-/* Buttons */
+/* Buttons. The Button component owns the geometry contract: it always emits
+   .asb-btn plus exactly one variant surface class below; base.css owns the
+   surfaces and the per-variant geometry deltas. */
 button {
   font: var(--asb-text-body);
   cursor: pointer;
@@ -471,23 +450,26 @@ button:disabled {
   opacity: 0.45;
 }
 
-.asb-btn-primary {
+.asb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: var(--asb-touch-target);
   min-width: 88px;
   padding: 0 var(--asb-space-3);
-  border: 0;
   border-radius: var(--asb-radius-action);
+}
+
+.asb-btn-primary {
+  border: 0;
   background: var(--asb-action);
   color: var(--asb-text-on-action);
   font-weight: 600;
 }
 
 .asb-btn-secondary {
-  min-height: var(--asb-touch-target);
-  min-width: 88px;
-  padding: 0 var(--asb-space-3);
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-action);
   background: var(--asb-content);
   color: var(--asb-text);
 }
@@ -498,11 +480,7 @@ button:disabled {
 }
 
 .asb-btn-danger {
-  min-height: var(--asb-touch-target);
-  min-width: 88px;
-  padding: 0 var(--asb-space-3);
   border: 1px solid var(--asb-danger);
-  border-radius: var(--asb-radius-action);
   background: var(--asb-danger);
   color: var(--asb-text-on-action);
   font-weight: 600;
@@ -510,6 +488,66 @@ button:disabled {
 
 .asb-btn-danger:hover:not(:disabled) {
   border-color: var(--asb-danger);
+}
+
+/* Icon-only variant: square touch target. Row cards own the contextual
+   hover/active surfaces on top of this resting state. */
+.asb-btn-icon {
+  min-width: 0;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--asb-radius-control) - 6px);
+  background: transparent;
+  color: var(--asb-text);
+}
+
+.asb-btn-icon:hover {
+  background: var(--asb-surface-rail);
+  color: var(--asb-text);
+}
+
+/* Expanded card actions use a quiet tint; their icon and aria-expanded carry
+   the state, never color alone. */
+.asb-btn-icon.is-active {
+  background: var(--asb-row-selected);
+  color: var(--asb-action);
+}
+
+/* New-provider pill: tab-minus touch height; carbon-black premium surface
+   with the violet energy zone (spiralcoder premium button; white text and
+   glow token-owned, no drop shadow). */
+.asb-btn-plus {
+  min-height: calc(var(--asb-touch-target) - 8px);
+  border: 0;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-gradient-premium-button);
+  color: var(--asb-text-on-action);
+  font-weight: 600;
+  box-shadow: var(--asb-gradient-premium-button-glow);
+  transition:
+    box-shadow var(--asb-motion-fast) var(--asb-easing),
+    filter var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-btn-plus:not(:disabled):hover {
+  box-shadow: var(--asb-gradient-premium-button-glow-hover);
+  filter: brightness(var(--asb-premium-button-hover-brightness));
+}
+
+/* Page-level back icon button in the provider editor header. */
+.asb-btn-back {
+  min-width: 0;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  padding: 0;
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 /* Workspace panels */
@@ -538,8 +576,7 @@ button:disabled {
   margin-bottom: 0;
 }
 
-/* Right-aligned heading actions: the client switch pill sits directly left
-   of the round + button (user directive 2026-08-28). */
+/* Right-aligned heading actions group. */
 .asb-panel-actions {
   display: flex;
   align-items: center;
@@ -555,6 +592,21 @@ button:disabled {
   margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-body);
+}
+
+/* Client switch row: segmented tabs left, the primary new-provider action
+   right — one row, equal tab touch height (user directive 2026-09-02). */
+.asb-tabs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-tabs-bar .asb-tabs {
+  align-self: center;
+  margin-bottom: 0;
 }
 
 /* Client tabs — segmented pill: active page is a raised white card with a
@@ -744,49 +796,6 @@ button:disabled {
   background: var(--asb-code-bg);
 }
 
-.asb-prompt-manager-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--asb-space-3);
-}
-
-.asb-prompt-manager-title {
-  margin: 0 0 var(--asb-space-1);
-  font: var(--asb-text-body);
-  font-weight: 700;
-}
-
-.asb-prompt-document-tabs {
-  display: inline-flex;
-  flex: none;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-surface-rail);
-}
-
-.asb-prompt-document-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--asb-space-1);
-  min-height: calc(var(--asb-touch-target) - 8px);
-  padding: 0 var(--asb-space-2);
-  border: 1px solid transparent;
-  border-radius: calc(var(--asb-radius-control) - 4px);
-  background: transparent;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-prompt-document-tab.is-on {
-  border-color: var(--asb-action);
-  background: var(--asb-content);
-  color: var(--asb-text);
-  font-weight: 600;
-}
-
 .asb-prompt-editor-field {
   display: flex;
   flex-direction: column;
@@ -825,19 +834,6 @@ button:disabled {
   .asb-prompt-manager {
     --asb-prompt-editor-min-height: 15rem;
     --asb-prompt-editor-max-height: clamp(15rem, 56dvh, 32rem);
-  }
-
-  .asb-prompt-manager-heading {
-    flex-direction: column;
-  }
-
-  .asb-prompt-document-tabs {
-    width: 100%;
-  }
-
-  .asb-prompt-document-tab {
-    flex: 1;
-    justify-content: center;
   }
 
   .asb-prompt-actions > .asb-btn-primary {
@@ -914,40 +910,14 @@ button:disabled {
   text-align: left;
 }
 
-/* Icon-action cluster — inside the card, not beside it. */
+/* Icon-action cluster — ghost buttons inside the card: no resting fill, so
+   solid-ink icons stay readable on white and on the tinted live card; the
+   surface only appears on hover. */
 .asb-iconcluster {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--asb-space-1);
   flex: none;
-  padding: 3px;
-  border-radius: calc(var(--asb-radius-control) - 4px);
-  background: var(--asb-surface-rail);
-}
-
-.asb-row-item .asb-btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--asb-touch-target);
-  height: var(--asb-touch-target);
-  padding: 0;
-  border: 0;
-  border-radius: calc(var(--asb-radius-control) - 6px);
-  background: transparent;
-  color: var(--asb-text-muted);
-}
-
-.asb-row-item .asb-btn-icon:hover {
-  background: var(--asb-canvas);
-  color: var(--asb-text);
-}
-
-/* Expanded card actions use a quiet tint; their icon and aria-expanded carry
-   the state, never color alone. */
-.asb-row-item .asb-btn-icon.is-active {
-  background: var(--asb-row-selected);
-  color: var(--asb-action);
 }
 
 .asb-provider-usage {
@@ -979,14 +949,6 @@ button:disabled {
   margin: 0;
   font: var(--asb-text-body);
   font-weight: 600;
-}
-
-.asb-provider-usage-title span {
-  padding: 2px var(--asb-space-1);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
 }
 
 .asb-provider-usage-actions {
@@ -1022,73 +984,16 @@ button:disabled {
   color: var(--asb-action);
 }
 
-.asb-provider-usage-readings {
-  border-top: 1px solid var(--asb-hairline);
-}
-
-.asb-provider-usage-reading + .asb-provider-usage-reading {
-  border-top: 1px solid var(--asb-hairline);
-}
-
-.asb-provider-usage-reading-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-2) 0;
-}
-
-.asb-provider-usage-reading h4 {
-  min-width: 0;
-  margin: 0;
-  color: var(--asb-text);
-  font: var(--asb-text-body);
-  font-weight: 600;
-}
-
-.asb-provider-usage-reading-values,
-.asb-provider-usage-primary {
-  display: flex;
-  align-items: baseline;
-}
-
-.asb-provider-usage-reading-values {
-  flex: none;
-  justify-content: flex-end;
-  gap: var(--asb-space-3);
-  min-width: 0;
-}
-
-.asb-provider-usage-primary {
-  gap: var(--asb-space-unit);
-}
-
-.asb-provider-usage-primary > span,
-.asb-provider-usage-secondary,
-.asb-provider-usage-total {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-provider-usage-primary strong {
-  overflow: hidden;
-  font: var(--asb-text-title);
-  color: var(--asb-text);
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asb-provider-usage-primary small,
 .asb-provider-usage-state {
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
 
+/* The shared progress rail for usage tables; it owns geometry only — the
+   table cell owns its placement. */
 .asb-provider-usage-progress {
   height: 3px;
   overflow: hidden;
-  margin: 0 0 var(--asb-space-2);
   border-radius: var(--asb-radius-pill);
   background: var(--asb-hairline);
 }
@@ -1104,9 +1009,40 @@ button:disabled {
   margin: 0;
 }
 
-/* Official Codex subscription quota is its own read-only ledger: it shares
-   the provider card's rhythm and progress rail, but never inherits a custom
-   provider usage query or its credentials. */
+/* Official login pending state: the device-code line and the wait line each
+   stay one aligned flex row — text, code chip, and actions share a baseline
+   instead of drifting across loose paragraphs. */
+.asb-official-login {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--asb-space-1);
+}
+
+.asb-official-login-code {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-1);
+}
+
+.asb-official-login-code > code {
+  padding: 2px var(--asb-space-1);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-code-bg);
+  font: var(--asb-text-code);
+}
+
+.asb-official-login-wait {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+/* Official Codex subscription quota is the native read-only panel: its
+   windows render through the shared QuotaWindowsTable and it never inherits
+   a custom provider usage query or its credentials. */
 .asb-official-quota {
   display: flex;
   flex-direction: column;
@@ -1115,82 +1051,10 @@ button:disabled {
   border-top: 1px solid var(--asb-hairline);
 }
 
-.asb-official-quota-windows {
-  border-top: 1px solid var(--asb-hairline);
-}
-
-.asb-official-quota-window + .asb-official-quota-window {
-  border-top: 1px solid var(--asb-hairline);
-}
-
-.asb-official-quota-window-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-2) 0;
-}
-
-.asb-official-quota-window h4 {
-  min-width: 0;
-  margin: 0;
-  color: var(--asb-text);
-  font: var(--asb-text-body);
-  font-weight: 600;
-}
-
-.asb-official-quota-value {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: var(--asb-space-1);
-  min-width: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-official-quota-value strong {
-  color: var(--asb-text);
-  font: var(--asb-text-title);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.asb-official-quota-value small {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-  white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .asb-official-quota-window-line {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--asb-space-1);
-  }
-
-  .asb-official-quota-value {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-}
-
 @media (max-width: 720px) {
   .asb-provider-usage-head {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .asb-provider-usage-reading-line {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--asb-space-1);
-  }
-
-  .asb-provider-usage-reading-values {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: var(--asb-space-2);
   }
 }
 
@@ -1242,18 +1106,15 @@ button:disabled {
   box-shadow: var(--asb-route-shadow);
 }
 
-/* The row-level 启用 entry reuses the shared primary button; rows add
-   icon/text centering on top of it. The button renders on every non-live
-   row but stays hidden until the card is hovered. Selecting a row must not
-   leave this transient action visible (user directive 2026-09-01).
-   The hovered/selected surface would swallow the solid action fill, so
-   the CTA carries the ported gradient identity (spiralcoder primary
-   button; white text and glow token-owned). */
+/* Row-level action entries (启用 primary, 官方 重新登录 secondary) share
+   .asb-row-activate, and the reveal rule below owns their flex layout.
+   The buttons render on every non-live row but stay hidden until the card
+   is hovered. Selecting a row must not leave this transient action visible
+   (user directive 2026-09-01). The hovered/selected surface would swallow
+   the solid action fill, so the primary CTA carries the ported gradient
+   identity (spiralcoder primary button; white text and glow token-owned);
+   its icon/text spacing lives here. */
 .asb-row-item .asb-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   min-width: 0;
 }
 
@@ -1266,6 +1127,48 @@ button:disabled {
   box-shadow: var(--asb-gradient-button-glow-hover);
 }
 
+/* The three-dot more trigger anchors a small action menu (delete lives
+   there). The menu reuses the app's floating-surface language. */
+.asb-row-more {
+  position: relative;
+  display: inline-flex;
+}
+
+.asb-row-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 128px;
+  padding: var(--asb-space-1);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-menu);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+}
+
+.asb-row-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-height: 36px;
+  padding: 0 var(--asb-space-2);
+  border: 0;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  color: var(--asb-danger);
+  font: var(--asb-text-label);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.asb-row-menu-item:hover {
+  background: var(--asb-surface-rail);
+}
+
 /* Reveal rules sit after the shared primary rules so the hidden default
    wins at equal specificity. This primary action is pointer-only: the
    always-visible preview icon remains the keyboard-accessible path. */
@@ -1275,21 +1178,8 @@ button:disabled {
 
 .asb-row-item:hover .asb-row-activate {
   display: inline-flex;
-}
-
-/* Round primary "new provider" action in the panel heading. */
-.asb-btn-plus {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: var(--asb-action);
-  color: var(--asb-text-on-action);
-  box-shadow: var(--asb-route-shadow);
 }
 
 .asb-row-item.is-live .asb-avatar {
@@ -1343,15 +1233,16 @@ button:disabled {
   color: var(--asb-text-muted);
 }
 
-/* The service-address line is a real link: it opens the system browser via
-   the opener plugin (wry blocks in-webview new windows). */
-.asb-row-meta.is-url {
-  color: var(--asb-action);
+/* The host is a quiet link, muted until hover: it opens the system browser
+   via the opener plugin (wry blocks in-webview new windows). */
+.asb-row-host {
+  color: inherit;
   cursor: pointer;
   text-decoration: none;
 }
 
-.asb-row-meta.is-url:hover {
+.asb-row-host:hover {
+  color: var(--asb-action);
   text-decoration: underline;
 }
 
@@ -1674,6 +1565,16 @@ button:disabled {
   outline: var(--asb-focus-ring);
 }
 
+/* The official account-reset summary sources from the machine's own Codex
+   login; its windows render through the shared QuotaWindowsTable. */
+.asb-official-reset-meta,
+.asb-official-reset-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
 /* Application-runtime settings: same compact, solid information surface as
    client settings, without claiming to write a client config line. */
 .asb-app-settings {
@@ -1798,6 +1699,18 @@ button:disabled {
   font: var(--asb-text-label);
   font-weight: 700;
   color: var(--asb-text);
+}
+
+.asb-slider-control {
+  display: grid;
+  min-width: min(22rem, 46vw);
+  gap: var(--asb-space-1);
+}
+
+.asb-choice-current {
+  justify-self: end;
+  font: var(--asb-text-caption);
+  color: var(--asb-text-muted);
 }
 
 /* Detent segments: shared-base pill row in the client-tab language. */
@@ -1996,9 +1909,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-/* Discrete-detent slider — full spiralcoder replica (2026-08-28 user
-   directive): pill track, energy-gradient fill clipped to the value,
-   glimmer particles inside the fill, ticks and a white thumb over a
+/* Discrete-detent slider: pill track, energy-gradient fill clipped to the
+   value, glimmer particles inside the fill, ticks and a white thumb over a
    transparent native range input. */
 .asb-slider {
   --asb-slider-motion-duration: var(--asb-motion-node);
@@ -2118,11 +2030,22 @@ button:disabled {
   transform: translate(-50%, -50%);
   transition:
     left var(--asb-slider-motion-duration) var(--asb-easing),
-    box-shadow var(--asb-motion-fast) var(--asb-easing);
+    box-shadow var(--asb-motion-fast) var(--asb-easing),
+    scale var(--asb-motion-fast) var(--asb-ease-out-back);
 }
 
 .asb-slider:hover:not([data-disabled="true"]) .asb-slider-thumb {
   box-shadow: 0 2px 7px rgb(20 22 27 / 0.2);
+}
+
+/* While the native input is held, the thumb follows the pointer faster and
+   presses in; release returns to the node duration (spiralcoder contract). */
+.asb-slider:has(.asb-slider-input:active) {
+  --asb-slider-motion-duration: var(--asb-motion-press);
+}
+
+.asb-slider:has(.asb-slider-input:active) .asb-slider-thumb {
+  scale: 0.96;
 }
 
 .asb-slider-input {
@@ -2174,14 +2097,6 @@ button:disabled {
   gap: var(--asb-space-1);
 }
 
-/* Inline affordances under one field, e.g. the model fetch button. */
-.asb-field-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--asb-space-2);
-  flex-wrap: wrap;
-}
-
 /* A credential stays masked until the user explicitly reveals it. */
 .asb-secret-control {
   display: flex;
@@ -2195,23 +2110,51 @@ button:disabled {
 }
 
 .asb-secret-control .asb-btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   gap: var(--asb-space-1);
 }
 
-/* The model field keeps its model ID input on the left and endpoint and
-   model-list actions on its right edge. */
+/* A model mapping field: the ID input with the quick picker beside it. */
+.asb-input-with-picker {
+  display: flex;
+  align-items: stretch;
+  gap: var(--asb-space-2);
+}
+
+.asb-input-with-picker .asb-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.asb-input-with-picker .asb-model-picker {
+  flex: none;
+}
+
+/* The model field keeps its model ID input on the left with the quick picker
+   and endpoint/model-list actions beside it; probe feedback wraps to a
+   full-width line below. Flex, not grid: definite-row grid items would claim
+   the 1fr track and squeeze every button row after it. */
 .asb-model-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--asb-space-2);
   align-items: stretch;
 }
 
-.asb-model-control .asb-input {
+.asb-model-control > .asb-input {
+  flex: 1 1 16rem;
   min-width: 0;
+}
+
+.asb-model-control > .asb-model-picker {
+  flex: none;
+}
+
+/* The inline 1M flag sits beside its model at natural width, vertically
+   centered against the input. */
+.asb-model-control > .asb-checkbox,
+.asb-input-with-picker > .asb-checkbox {
+  flex: none;
+  align-self: center;
 }
 
 .asb-model-actions {
@@ -2219,7 +2162,7 @@ button:disabled {
 }
 
 .asb-model-actions > button {
-  grid-row: 1;
+  flex: none;
 }
 
 .asb-input {
@@ -2373,7 +2316,8 @@ button:disabled {
 }
 
 /* Interface-font picker: select-language trigger plus a searchable menu whose
-   every option previews its own family. Same material as the select menu. */
+   every option previews its own family. Same material as the select menu.
+   The model picker shares this menu material via the combined selectors. */
 .asb-font-picker {
   position: relative;
 }
@@ -2389,7 +2333,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-.asb-font-menu {
+.asb-font-menu,
+.asb-model-menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
@@ -2405,7 +2350,8 @@ button:disabled {
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
 }
 
-.asb-font-search {
+.asb-font-search,
+.asb-model-search {
   display: flex;
   align-items: center;
   gap: var(--asb-space-2);
@@ -2418,18 +2364,21 @@ button:disabled {
   transition: border-color var(--asb-motion-press) var(--asb-easing);
 }
 
-.asb-font-search:focus-within {
+.asb-font-search:focus-within,
+.asb-model-search:focus-within {
   border-color: var(--asb-action);
 }
 
-.asb-font-search svg {
+.asb-font-search svg,
+.asb-model-search svg {
   flex: none;
   width: 16px;
   height: 16px;
   color: var(--asb-text-muted);
 }
 
-.asb-font-search input {
+.asb-font-search input,
+.asb-model-search input {
   flex: 1;
   min-width: 0;
   border: none;
@@ -2437,13 +2386,18 @@ button:disabled {
   color: var(--asb-text);
   font: var(--asb-text-body);
   outline: none;
+  /* The wrapping search label draws the focus border via :focus-within;
+     the global :focus-visible ring on the bare input would duplicate it. */
+  box-shadow: none;
 }
 
-.asb-font-search input::placeholder {
+.asb-font-search input::placeholder,
+.asb-model-search input::placeholder {
   color: var(--asb-text-muted);
 }
 
-.asb-font-options {
+.asb-font-options,
+.asb-model-options {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2453,7 +2407,8 @@ button:disabled {
   scrollbar-gutter: stable;
 }
 
-.asb-font-option {
+.asb-font-option,
+.asb-model-option {
   display: flex;
   align-items: center;
   gap: var(--asb-space-2);
@@ -2468,11 +2423,14 @@ button:disabled {
 }
 
 .asb-font-option:hover,
-.asb-font-option:focus-visible {
+.asb-font-option:focus-visible,
+.asb-model-option:hover,
+.asb-model-option:focus-visible {
   background: var(--asb-row-selected);
 }
 
-.asb-font-option-name {
+.asb-font-option-name,
+.asb-model-option-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -2488,7 +2446,8 @@ button:disabled {
 
 /* Fixed trailing slot on every row: samples line up and the current item's
    check does not shift the sample column. */
-.asb-font-check {
+.asb-font-check,
+.asb-model-check {
   flex: none;
   display: flex;
   width: 14px;
@@ -2496,14 +2455,55 @@ button:disabled {
   color: var(--asb-text);
 }
 
-.asb-font-check svg {
+.asb-font-check svg,
+.asb-model-check svg {
   display: block;
   width: 14px;
   height: 14px;
 }
 
-.asb-font-empty {
+.asb-font-empty,
+.asb-model-empty {
   padding: var(--asb-space-2);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+/* Quick model picker: the same searchable-menu material as the font picker,
+   fed by the provider's fetched model list and grouped by vendor. */
+.asb-model-picker {
+  position: relative;
+}
+
+.asb-model-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-canvas);
+  color: var(--asb-text-muted);
+  cursor: pointer;
+  transition: border-color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-model-trigger:hover:not(:disabled),
+.asb-model-trigger[aria-expanded="true"] {
+  border-color: var(--asb-action);
+  color: var(--asb-text);
+}
+
+.asb-model-trigger:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.asb-model-group {
+  margin: 0;
+  padding: var(--asb-space-2) var(--asb-space-2) var(--asb-space-1);
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
 }
@@ -2528,18 +2528,10 @@ button:disabled {
   gap: var(--asb-space-2);
 }
 
-.asb-btn-back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--asb-touch-target);
-  height: var(--asb-touch-target);
-  border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-content);
-  color: var(--asb-text);
-  font-size: 1.25rem;
-  line-height: 1;
+/* The shared panel title's bottom margin would offset the text against the
+   centered back button; the flex header owns the spacing. */
+.asb-edit-header .asb-panel-title {
+  margin-bottom: 0;
 }
 
 .asb-edit-panel {
@@ -2709,6 +2701,13 @@ button:disabled {
   display: inline-flex;
 }
 
+/* Chromium does not dispatch pointer events from disabled controls, so the
+   anchor span carrying the tooltip never sees the click that must dismiss
+   the label. Let the span take every pointer event instead. */
+.asb-tooltip-anchor > button:disabled {
+  pointer-events: none;
+}
+
 .asb-tooltip {
   z-index: 60;
   max-width: min(20rem, calc(100vw - 2rem));
@@ -2750,10 +2749,9 @@ button:disabled {
   gap: var(--asb-space-2);
 }
 
-/* Editor feedback occupies the second row of the model-control grid. */
+/* Editor feedback occupies the full-width line under the model-control row. */
 .asb-editor-probe-feedback {
-  grid-column: 1 / -1;
-  grid-row: 2;
+  flex: 1 1 100%;
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
@@ -2767,8 +2765,7 @@ button:disabled {
 }
 
 /* Usage query workspace — a dedicated provider subview entered from its card.
-   Its measurement-strip result is intentionally one ledger surface, not three
-   dashboard cards. */
+   Its result is the shared UsageReadingsTable under one "本次结果" label. */
 .asb-usage-workspace {
   display: flex;
   flex-direction: column;
@@ -2869,100 +2866,25 @@ button:disabled {
   gap: var(--asb-space-1);
 }
 
+/* The workspace result surface: a plain labelled column — the framed,
+   rounded table itself is the visual boundary. */
 .asb-usage-readout {
-  overflow: hidden;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
 }
 
 .asb-usage-readout-head {
   display: flex;
   justify-content: space-between;
   gap: var(--asb-space-2);
-  padding: var(--asb-space-2) var(--asb-space-3);
-  border-bottom: 1px solid var(--asb-hairline);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
-}
-
-.asb-usage-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.asb-usage-reading + .asb-usage-reading {
-  border-top: 1px solid var(--asb-hairline);
-}
-
-.asb-usage-reading-title {
-  margin: 0;
-  padding: var(--asb-space-2) var(--asb-space-3) 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-usage-metric {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--asb-space-1);
-  align-items: baseline;
-  min-width: 0;
-  padding: var(--asb-space-3);
-}
-
-.asb-usage-metric + .asb-usage-metric {
-  border-left: 1px solid var(--asb-hairline);
-}
-
-.asb-usage-metric > span,
-.asb-usage-metric > small {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-usage-metric > strong {
-  grid-column: 1 / -1;
-  overflow: hidden;
-  font: var(--asb-text-title);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asb-usage-metric > small {
-  justify-self: end;
 }
 
 @media (max-width: 720px) {
-  .asb-model-control {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .asb-model-actions {
-    display: flex;
-    grid-column: 1;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: var(--asb-space-2);
-  }
-
-  .asb-editor-probe-feedback {
-    grid-column: auto;
-    grid-row: auto;
-    flex-basis: 100%;
-  }
-
   .asb-usage-paths {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .asb-usage-metrics {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .asb-usage-metric + .asb-usage-metric {
-    border-top: 1px solid var(--asb-hairline);
-    border-left: 0;
   }
 }
 
@@ -2987,25 +2909,60 @@ button:disabled {
   min-width: 240px;
 }
 
-/* Backup table */
+/* Data tables — markup is owned by the global Table component (§8); the
+   treatment replicates the spiralcoder data table (user-directed
+   2026-09-02): a full-width muted label band, then airy borderless rows
+   carried by spacing alone, every column left-aligned. Rows lift on hover.
+   The table carries its own hairline border and control-radius corner frame
+   (2026-09-02 user directive); the band and the last row's hover surface
+   clip to those corners. Separate borders keep the sticky band pinned.
+   Scroll ownership stays with each module's own region (.asb-backups,
+   .asb-runtime-log-table-wrap). */
 .asb-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
   font: var(--asb-text-body);
 }
 
 .asb-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  background: var(--asb-content-muted);
   text-align: left;
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
-  font-weight: 400;
-  padding: var(--asb-space-1) var(--asb-space-2);
-  border-bottom: 1px solid var(--asb-hairline);
+  white-space: nowrap;
 }
 
 .asb-table td {
-  padding: var(--asb-space-2);
-  border-bottom: 1px solid var(--asb-hairline);
+  padding: var(--asb-space-3);
+  overflow-wrap: anywhere;
+}
+
+.asb-table tbody tr:hover {
+  background: var(--asb-row-selected);
+}
+
+.asb-table th:first-child {
+  border-top-left-radius: calc(var(--asb-radius-control) - 1px);
+}
+
+.asb-table th:last-child {
+  border-top-right-radius: calc(var(--asb-radius-control) - 1px);
+}
+
+.asb-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: calc(var(--asb-radius-control) - 1px);
+}
+
+.asb-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: calc(var(--asb-radius-control) - 1px);
 }
 
 .asb-table .asb-btn-secondary {
@@ -3113,19 +3070,11 @@ button:disabled {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-content-muted);
   scrollbar-gutter: stable;
 }
 
 .asb-runtime-log-table {
   min-width: 680px;
-}
-
-.asb-runtime-log-table td:first-child {
-  color: var(--asb-text-muted);
-  white-space: nowrap;
 }
 
 .asb-runtime-log-action {
@@ -3961,31 +3910,12 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-/* CC Switch import scan list */
+/* CC Switch import scan: the data table plus its selection action share one
+   shell; the panel heading's own margin separates them from the heading. */
 .asb-ccscan {
   display: flex;
   flex-direction: column;
-  gap: var(--asb-space-2);
-  margin-top: var(--asb-space-3);
-}
-
-.asb-ccscan-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--asb-space-1) 0;
-  border-top: 1px solid var(--asb-hairline);
-}
-
-.asb-ccscan-name {
-  font: var(--asb-text-body);
-  font-weight: 600;
-  color: var(--asb-text);
-}
-
-.asb-ccscan-meta {
-  font: var(--asb-text-label);
-  color: var(--asb-text-muted);
+  gap: var(--asb-space-3);
 }
 
 .asb-warn-text {

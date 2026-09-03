@@ -22,8 +22,8 @@ pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchRow, CcSwitchSkip};
 
 pub use adapter::{preview, render, route_state, validate_syntax, AdapterError};
 pub use contracts::{
-    AppKind, BackupRecord, ChangeKind, ClaudeModelSettings, CodexModelSettings, CommonSettings,
-    CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue, ConfigWriteRecord,
+    AppKind, BackupRecord, ChangeKind, ClaudeModelSettings, CodexModelSettings, CommonSettingValue,
+    CommonSettings, CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue, ConfigWriteRecord,
     GlobalPromptDocument, KeyChange, MatchStatus, ModelOptions, ProviderDraft, ProviderFile,
     ProviderProfile, ProviderRecord, RouteMode, RouteState, SwitchPlan, SwitchPreview,
     WriteOperation,

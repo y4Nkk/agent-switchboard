@@ -21,7 +21,7 @@ const preview: FilePreview = {
 
 describe("PreviewInspector", () => {
   it("names every changed key with before and after values", () => {
-    render(<PreviewInspector filePreview={preview} />);
+    render(<PreviewInspector filePreview={preview} activeModel={null} />);
     expect(screen.getByText("model")).toBeInTheDocument();
     expect(screen.getByText("experimental_bearer_token")).toBeInTheDocument();
     expect(screen.getByText("gpt-5.1")).toBeInTheDocument();
@@ -31,7 +31,7 @@ describe("PreviewInspector", () => {
   });
 
   it("renders the pretty-printed candidate file so preserved host keys stay visible in place", () => {
-    render(<PreviewInspector filePreview={preview} />);
+    render(<PreviewInspector filePreview={preview} activeModel={null} />);
     const fileView = screen.getByLabelText("~/.codex/config.toml 配置预览");
     expect(fileView).toHaveTextContent('model = "gpt-5.2"');
     expect(fileView).toHaveTextContent('[projects]');
@@ -42,15 +42,27 @@ describe("PreviewInspector", () => {
   });
 
   it("never renders raw config text or paths it was not given", () => {
-    render(<PreviewInspector filePreview={preview} />);
+    render(<PreviewInspector filePreview={preview} activeModel={null} />);
     expect(screen.queryByText(/config\.toml\.tmp/)).toBeNull();
     expect(screen.queryByText(/writeFile/)).toBeNull();
+  });
+
+  it("shows the currently enabled model, with an em dash when none is live", () => {
+    const { rerender } = render(
+      <PreviewInspector filePreview={preview} activeModel="glm-4.6" />,
+    );
+    expect(screen.getByText("当前启用模型")).toBeInTheDocument();
+    expect(screen.getByText("glm-4.6")).toBeInTheDocument();
+
+    rerender(<PreviewInspector filePreview={preview} activeModel={null} />);
+    expect(screen.getByText("当前启用模型")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 });
 
 describe("PreviewInspector empty states", () => {
   it("shows an explicit empty state without inventing data", () => {
-    render(<PreviewInspector filePreview={null} />);
+    render(<PreviewInspector filePreview={null} activeModel={null} />);
     expect(screen.getByText("选择供应商后生成预览")).toBeInTheDocument();
   });
 });

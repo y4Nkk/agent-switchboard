@@ -5,7 +5,8 @@ import { CodePreview } from "./CodePreview";
 const toml = [
   '# host comment',
   'threads = 8',
-  'disable_response_storage = true',
+  'model_reasoning_effort = "high"',
+  'tui.notifications = true',
   'base_url = "https://relay.example.internal/v1"',
   '[model_providers.openai]',
   '{}',
@@ -16,9 +17,9 @@ describe("CodePreview", () => {
     render(<CodePreview target="~/.codex/config.toml" content={toml} />);
 
     expect(screen.getByLabelText("~/.codex/config.toml 配置预览")).toBeInTheDocument();
-    expect(screen.getByText("6 行")).toBeInTheDocument();
+    expect(screen.getByText("7 行")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByText("6")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
     // Values the overlay writes stay the anchor: booleans green, tables bold.
     expect(screen.getByText("true")).toHaveClass("asb-tok-bool");
     expect(screen.getByText("[model_providers.openai]")).toHaveClass("asb-tok-section");

@@ -7,9 +7,7 @@
 //! selected supplier's switch transaction.
 
 use super::error::{blocking, state, store_error, CommandError};
-use asb_core::contracts::{
-    AppKind, CommonSettings, CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue,
-};
+use asb_core::contracts::{AppKind, CommonSettings, CommonSettingsPreview, CommonSettingsSnapshot};
 use asb_core::ownership::{
     self, ChoiceControl, OfficialSettingDisposition, SettingControl, SettingOwner,
 };
@@ -24,16 +22,6 @@ pub struct CommonChoiceOption {
     pub label: String,
 }
 
-/// The directory-defined default for one parameter. The renderer shows it as
-/// the target of the group's "恢复默认值" action; it is a plain value, never
-/// a remove instruction.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommonDefaultValue {
-    pub bool_value: Option<bool>,
-    pub str_value: Option<String>,
-}
-
 /// One editor-safe projection of the ownership directory. The renderer never
 /// receives a client path or arbitrary config key: every parameter comes from
 /// the shared catalog and is therefore known to be a general setting.
@@ -45,7 +33,6 @@ pub struct CommonSettingSpec {
     pub group: String,
     /// `toggle`, `slider`, or `segment`.
     pub control: String,
-    pub default: CommonDefaultValue,
     pub options: Vec<CommonChoiceOption>,
 }
 
@@ -96,27 +83,6 @@ fn directory_catalog(target: AppKind) -> Vec<OfficialSettingDirectoryEntry> {
         .collect()
 }
 
-fn default_value(default: Option<&ConfigValue>) -> CommonDefaultValue {
-    match default {
-        Some(ConfigValue::Bool(value)) => CommonDefaultValue {
-            bool_value: Some(*value),
-            str_value: None,
-        },
-        Some(ConfigValue::Str(value)) => CommonDefaultValue {
-            bool_value: None,
-            str_value: Some(value.clone()),
-        },
-        Some(other) => CommonDefaultValue {
-            bool_value: None,
-            str_value: Some(other.display()),
-        },
-        None => CommonDefaultValue {
-            bool_value: None,
-            str_value: None,
-        },
-    }
-}
-
 fn editor_catalog(target: AppKind) -> Vec<CommonSettingSpec> {
     ownership::setting_specs(target)
         .into_iter()
@@ -151,7 +117,6 @@ fn editor_catalog(target: AppKind) -> Vec<CommonSettingSpec> {
                     .expect("common setting must have an editor group")
                     .to_string(),
                 control,
-                default: default_value(spec.default.as_ref()),
                 options,
             }
         })
@@ -255,10 +220,8 @@ mod tests {
                 ));
                 if setting.control == "toggle" {
                     assert!(setting.options.is_empty());
-                    assert!(setting.default.bool_value.is_some());
                 } else {
                     assert!(!setting.options.is_empty());
-                    assert!(setting.default.str_value.is_some());
                 }
             }
         }
@@ -294,6 +257,6 @@ mod tests {
                 .expect("preview");
         assert_eq!(preview.app, AppKind::Codex);
         assert!(preview.target.contains("config.toml"));
-        assert!(preview.content.contains("所有通用设置均为默认值"));
+        assert!(preview.content.contains("所有通用设置均为自动"));
     }
 }

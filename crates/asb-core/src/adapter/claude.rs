@@ -7,8 +7,8 @@
 
 use crate::adapter::{AdapterError, OverlayEntry};
 use crate::contracts::{
-    ChangeKind, CommonSettings, ConfigValue, KeyChange, ModelOptions, RouteMode, RouteState,
-    SwitchPlan, SwitchPreview,
+    ChangeKind, CommonSettingValue, CommonSettings, ConfigValue, KeyChange, ModelOptions,
+    RouteMode, RouteState, SwitchPlan, SwitchPreview,
 };
 use crate::ownership::{
     is_owned, provider_absent_action, setting_specs, ProviderAbsentAction, SettingOwner,
@@ -226,12 +226,12 @@ fn provider_value(profile: &crate::contracts::ProviderProfile, key: &str) -> Opt
     }
 }
 
-/// One common setting's overlay entry: an explicit non-default value is
-/// written, while the directory default is expressed by omitting the line.
-fn common_entry(spec: &crate::ownership::SettingSpec, value: &ConfigValue) -> OverlayEntry {
-    match spec.default.as_ref() {
-        Some(default) if default == value => OverlayEntry::RemoveIfPresent,
-        _ => OverlayEntry::Set(value.clone()),
+/// Common-setting intent is explicit: automatic removes a previously managed
+/// key, while an explicit value is always written.
+fn common_entry(value: &CommonSettingValue) -> OverlayEntry {
+    match value {
+        CommonSettingValue::Automatic => OverlayEntry::RemoveIfPresent,
+        CommonSettingValue::Explicit { value } => OverlayEntry::Set(value.clone()),
     }
 }
 
@@ -243,7 +243,7 @@ fn common_overlay(common: &CommonSettings) -> Vec<(String, OverlayEntry)> {
             let value = common
                 .value(spec.key)
                 .expect("common-settings validation guarantees every catalog key");
-            (spec.key.to_string(), common_entry(&spec, value))
+            (spec.key.to_string(), common_entry(value))
         })
         .collect()
 }
@@ -264,7 +264,7 @@ fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
                         .common
                         .value(spec.key)
                         .expect("plan validation guarantees complete common settings");
-                    common_entry(&spec, value)
+                    common_entry(value)
                 }
                 SettingOwner::Host => unreachable!("host keys never appear in the directory"),
             };
@@ -575,7 +575,9 @@ mod tests {
         let mut plan = plan_b();
         plan.common.settings.insert(
             "env.ANTHROPIC_AUTH_TOKEN".into(),
-            ConfigValue::Str("sk-live-forbidden".into()),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Str("sk-live-forbidden".into()),
+            },
         );
         let err = crate::adapter::preview(&current, &plan, "/b").unwrap_err();
         assert!(err.message.contains("不是"));
@@ -593,26 +595,29 @@ mod tests {
     }
 
     #[test]
-    fn non_default_common_settings_write_their_value_and_defaults_omit_the_line() {
+    fn explicit_ultracode_writes_its_own_key_and_automatic_removes_it() {
         let mut plan = plan_b();
-        plan.common
-            .settings
-            .insert("alwaysThinkingEnabled".into(), ConfigValue::Bool(true));
+        plan.common.settings.insert(
+            "ultracode".into(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Bool(true),
+            },
+        );
         let current = "{}";
         let rendered = render(current, &plan).unwrap();
         let parsed: Json = serde_json::from_str(&rendered).unwrap();
-        assert_eq!(parsed["alwaysThinkingEnabled"], Json::Bool(true));
+        assert_eq!(parsed["ultracode"], Json::Bool(true));
 
-        // The default value leaves the file without the line.
+        // Automatic behavior leaves the file without the line.
         let mut defaulted = plan_b();
         defaulted
             .common
             .settings
-            .insert("alwaysThinkingEnabled".into(), ConfigValue::Bool(false));
-        let with_line = "{\"alwaysThinkingEnabled\": true}";
+            .insert("ultracode".into(), CommonSettingValue::Automatic);
+        let with_line = "{\"ultracode\": true}";
         let rendered = render(with_line, &defaulted).unwrap();
         let parsed: Json = serde_json::from_str(&rendered).unwrap();
-        assert!(parsed.get("alwaysThinkingEnabled").is_none());
+        assert!(parsed.get("ultracode").is_none());
     }
 
     #[test]

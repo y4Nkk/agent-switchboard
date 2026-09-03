@@ -2,7 +2,8 @@
 //! directories; no real user configuration is ever touched.
 
 use asb_core::contracts::{
-    AppKind, ClaudeModelSettings, ConfigValue, ModelOptions, ProviderProfile, SwitchPlan,
+    AppKind, ClaudeModelSettings, CommonSettingValue, ConfigValue, ModelOptions, ProviderProfile,
+    SwitchPlan,
 };
 use asb_core::ownership::default_common_settings;
 use asb_core::test_support::{CLAUDE_JSON, CODEX_TOML};
@@ -16,9 +17,12 @@ use std::path::{Path, PathBuf};
 
 fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> SwitchPlan {
     let mut common = default_common_settings(AppKind::Codex);
-    common
-        .settings
-        .insert("disable_response_storage".into(), ConfigValue::Bool(true));
+    common.settings.insert(
+        "model_reasoning_effort".into(),
+        CommonSettingValue::Explicit {
+            value: ConfigValue::Str("xhigh".into()),
+        },
+    );
     SwitchPlan {
         profile: ProviderProfile {
             id: format!("id-{name}"),
@@ -39,9 +43,12 @@ fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> SwitchPlan
 
 fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
     let mut common = default_common_settings(AppKind::Claude);
-    common
-        .settings
-        .insert("alwaysThinkingEnabled".into(), ConfigValue::Bool(true));
+    common.settings.insert(
+        "ultracode".into(),
+        CommonSettingValue::Explicit {
+            value: ConfigValue::Bool(true),
+        },
+    );
     SwitchPlan {
         profile: ProviderProfile {
             id: format!("id-{name}"),
@@ -261,7 +268,7 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
     assert!(switched.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
     assert!(switched.contains("model_provider = \"openai\""));
     assert!(switched.contains("openai_base_url = \"https://relay-b.internal/v1\""));
-    assert!(switched.contains("disable_response_storage = true"));
+    assert!(switched.contains("model_reasoning_effort = \"xhigh\""));
     assert!(!switched.contains("[model_providers"));
     assert!(switched.contains("https://relay-b.internal/v1"));
     for host in ["threads = 8", "history_persistence", "trusted = true"] {
@@ -305,7 +312,7 @@ fn claude_switch_round_trips_with_a_redacted_preview() {
     assert!(text.contains("claude-opus-4"));
     assert!(text.contains("Bash(npm run test:*)"));
     assert!(text.contains("\"ANTHROPIC_AUTH_TOKEN\": \"test-api-key\""));
-    assert!(text.contains("\"alwaysThinkingEnabled\": true"));
+    assert!(text.contains("\"ultracode\": true"));
 }
 
 #[test]
@@ -670,7 +677,7 @@ fn switching_to_codex_profile_without_one_m_clears_the_previous_profile_window()
 
     let rendered = fs::read_to_string(&target).unwrap();
     assert!(!rendered.contains("model_context_window"));
-    assert!(rendered.contains("disable_response_storage = true"));
+    assert!(rendered.contains("model_reasoning_effort = \"xhigh\""));
 }
 
 #[test]

@@ -6,6 +6,7 @@ import type {
   UsageQuery,
 } from "../api/client";
 import { useState } from "react";
+import { Button } from "../components/Button";
 import { ClientLogo } from "../components/ClientLogo";
 import { PlusIcon } from "../components/icons";
 import { PreviewInspector } from "../components/PreviewInspector";
@@ -20,11 +21,15 @@ interface ProvidersPageProps {
   profiles: ProviderProfile[];
   appFilter: AppKind;
   activeProfileId: string | null;
+  /** Model currently live in this client's real configuration. */
+  activeModel: string | null;
   selectedId: string | null;
   selectedProfile: ProviderProfile | null;
   editorMode: EditorMode;
   preview: { profileId: string; file: FilePreview } | null;
   busy: boolean;
+  /** Persisted profile ids whose usage panel is collapsed. */
+  collapsedUsageIds: string[];
   onSelectApp: (app: AppKind) => void;
   onNew: () => void;
   onCloseEditor: () => void;
@@ -32,11 +37,14 @@ interface ProvidersPageProps {
   onSaveUsageQuery: (profile: ProviderProfile, usageQuery: UsageQuery | null) => Promise<boolean>;
   onSelect: (profileId: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  /** Persists the flipped usage-panel state for the profile. */
+  onToggleUsage: (profile: ProviderProfile) => void;
   onActivate: (profile: ProviderProfile) => void;
   onTogglePreview: (profile: ProviderProfile) => void;
   onEdit: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
   onRequestSwitch: () => void;
+  onCancelPreview: () => void;
 }
 
 /** Provider workspace: client tabs, the list with its inline preview, and
@@ -45,11 +53,13 @@ export function ProvidersPage({
   profiles,
   appFilter,
   activeProfileId,
+  activeModel,
   selectedId,
   selectedProfile,
   editorMode,
   preview,
   busy,
+  collapsedUsageIds,
   onSelectApp,
   onNew,
   onCloseEditor,
@@ -61,9 +71,15 @@ export function ProvidersPage({
   onTogglePreview,
   onEdit,
   onDelete,
+  onToggleUsage,
   onRequestSwitch,
+  onCancelPreview,
 }: ProvidersPageProps) {
   const [usageProfile, setUsageProfile] = useState<ProviderProfile | null>(null);
+  /** Clients that already own their single official profile. */
+  const officialTakenApps = profiles
+    .filter((profile) => profile.routeMode === "official")
+    .map((profile) => profile.app);
 
   if (usageProfile) {
     return (
@@ -92,15 +108,14 @@ export function ProvidersPage({
     return (
       <div className="asb-edit-view">
         <div className="asb-edit-header">
-          <button
-            type="button"
-            className="asb-btn-back"
+          <Button
+            variant="back"
             aria-label="返回供应商列表"
             disabled={busy}
             onClick={onCloseEditor}
           >
             ←
-          </button>
+          </Button>
           <h2 className="asb-panel-title">
             {editorMode === "new" ? "新建供应商" : "编辑供应商"}
           </h2>
@@ -110,6 +125,8 @@ export function ProvidersPage({
             profile={editorMode === "edit" ? selectedProfile : null}
             initialApp={appFilter}
             busy={busy}
+            officialTakenApps={officialTakenApps}
+            activeModel={activeModel}
             onSave={onSave}
             onCancel={onCloseEditor}
           />
@@ -123,45 +140,42 @@ export function ProvidersPage({
     <section className="asb-panel" aria-label="供应商工作区">
       <div className="asb-panel-heading">
         <h2 className="asb-panel-title">供应商</h2>
-        <div className="asb-panel-actions">
-          <div className="asb-tabs" role="tablist" aria-label="客户端">
-            {(["codex", "claude"] as const).map((app) => (
-              <Tooltip key={app} label={clientName(app)} side="bottom">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={appFilter === app}
-                  aria-label={clientName(app)}
-                  className={`asb-tab${appFilter === app ? " is-on" : ""}`}
-                  onClick={() => onSelectApp(app)}
-                >
-                  <ClientLogo app={app} className="asb-tab-logo" />
-                </button>
-              </Tooltip>
-            ))}
-          </div>
-          <Tooltip label="新建供应商" side="bottom">
-            <span className="asb-tooltip-anchor">
+      </div>
+      <div className="asb-tabs-bar">
+        <div className="asb-tabs" role="tablist" aria-label="客户端">
+          {(["codex", "claude"] as const).map((app) => (
+            <Tooltip key={app} label={clientName(app)} side="bottom">
               <button
                 type="button"
-                className="asb-btn-plus"
-                aria-label="新建供应商"
-                disabled={busy}
-                onClick={onNew}
+                role="tab"
+                aria-selected={appFilter === app}
+                aria-label={clientName(app)}
+                className={`asb-tab${appFilter === app ? " is-on" : ""}`}
+                onClick={() => onSelectApp(app)}
               >
-                <PlusIcon />
+                <ClientLogo app={app} className="asb-tab-logo" />
               </button>
-            </span>
-          </Tooltip>
+            </Tooltip>
+          ))}
         </div>
+        <Button
+          variant="plus"
+          disabled={busy}
+          onClick={onNew}
+        >
+          <PlusIcon />
+          新建供应商
+        </Button>
       </div>
       <ProviderList
         profiles={visibleProfiles}
         activeProfileId={activeProfileId}
         selectedId={selectedId}
         openPreviewId={preview?.profileId ?? null}
+        collapsedUsageIds={collapsedUsageIds}
         onSelect={onSelect}
         onReorder={onReorder}
+        onToggleUsage={onToggleUsage}
         onActivate={onActivate}
         onPreview={onTogglePreview}
         onEdit={onEdit}
@@ -172,16 +186,24 @@ export function ProvidersPage({
             <section className="asb-preview-inline" aria-label="变更预览">
               <div className="asb-panel-heading">
                 <h3 className="asb-panel-title">变更预览</h3>
-                <button
-                  type="button"
-                  className="asb-btn-primary"
-                  disabled={busy}
-                  onClick={onRequestSwitch}
-                >
-                  确认切换
-                </button>
+                <div className="asb-panel-actions">
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={onCancelPreview}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={busy}
+                    onClick={onRequestSwitch}
+                  >
+                    确认切换
+                  </Button>
+                </div>
               </div>
-              <PreviewInspector filePreview={preview.file} />
+              <PreviewInspector filePreview={preview.file} activeModel={activeModel} />
             </section>
           )
         }

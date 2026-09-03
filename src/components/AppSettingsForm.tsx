@@ -1,9 +1,11 @@
+import { useState } from "react";
 import type {
   AppSettings,
   CloseBehavior,
   MotionPreference,
   ThemePreference,
 } from "../api/client";
+import { Button } from "./Button";
 import { FontPicker } from "./FontPicker";
 import { Switch } from "./Switch";
 
@@ -92,6 +94,13 @@ export function AppSettingsForm({
   onHardwareAccelerationChange,
   onRestart,
 }: Props) {
+  const [hardwareAccelerationRestartRequired, setHardwareAccelerationRestartRequired] = useState(false);
+
+  const handleHardwareAccelerationChange = (value: boolean) => {
+    onHardwareAccelerationChange(value);
+    setHardwareAccelerationRestartRequired(true);
+  };
+
   return (
     <div className="asb-app-settings">
       <section className="asb-app-settings-group" aria-labelledby="appearance-settings">
@@ -165,17 +174,19 @@ export function AppSettingsForm({
             label="启用硬件加速"
             checked={settings.hardwareAcceleration}
             disabled={busy}
-            onChange={onHardwareAccelerationChange}
+            onChange={handleHardwareAccelerationChange}
           />
         </div>
-        <div className="asb-app-setting-row">
-          <div className="asb-app-setting-copy">
-            <span className="asb-checkbox-label">重启以应用硬件加速</span>
+        {hardwareAccelerationRestartRequired && (
+          <div className="asb-app-setting-row">
+            <div className="asb-app-setting-copy">
+              <span className="asb-checkbox-label">重启以应用硬件加速</span>
+            </div>
+            <Button variant="secondary" disabled={busy} onClick={onRestart}>
+              重启应用
+            </Button>
           </div>
-          <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onRestart}>
-            重启应用
-          </button>
-        </div>
+        )}
       </section>
     </div>
   );

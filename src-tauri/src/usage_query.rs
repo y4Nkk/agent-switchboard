@@ -385,7 +385,7 @@ fn run_script_query(
 /// prove it produces both required functions before LocalState writes it.
 pub(crate) fn validate_persisted(query: &UsageQuery) -> Result<(), String> {
     asb_core::validate::validate_usage_query(query).map_err(|error| error.to_string())?;
-    if let UsageQuery::Script { source } = query {
+    if let UsageQuery::Script { source, .. } = query {
         ScriptProgram::new(source).map(|_| ())?;
     }
     Ok(())
@@ -408,6 +408,7 @@ pub fn run_usage_query(
             used_path,
             total_path,
             unit,
+            ..
         } => run_declarative_query(
             url,
             remaining_path.as_deref(),
@@ -417,7 +418,7 @@ pub fn run_usage_query(
             api_key,
             base_url,
         ),
-        UsageQuery::Script { source } => run_script_query(source, api_key, base_url),
+        UsageQuery::Script { source, .. } => run_script_query(source, api_key, base_url),
     }
 }
 
@@ -437,6 +438,7 @@ mod tests {
             used_path: used.map(str::to_string),
             total_path: total.map(str::to_string),
             unit: None,
+            refresh_interval_minutes: 0,
         }
     }
 
@@ -594,7 +596,7 @@ mod tests {
             ),
         };
         let proposal = asb_core::ccswitch::map_row(&row).expect("mapped provider");
-        let Some(UsageQuery::Script { source }) = proposal.draft.usage_query else {
+        let Some(UsageQuery::Script { source, .. }) = proposal.draft.usage_query else {
             panic!("query script should import");
         };
 
@@ -626,6 +628,7 @@ mod tests {
     fn script_validation_requires_both_functions_without_leaking_source() {
         let query = UsageQuery::Script {
             source: "({ request() {} })".to_string(),
+            refresh_interval_minutes: 0,
         };
         let error = validate_persisted(&query).expect_err("missing extract");
         assert_eq!(error, SCRIPT_PROGRAM_INVALID);

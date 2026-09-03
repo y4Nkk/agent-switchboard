@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type {
   AppKind,
+  CommonValue,
   ConfigFileStatus,
   GlobalPromptDocument,
 } from "../api/client";
@@ -9,6 +10,7 @@ import { ClientLogo } from "../components/ClientLogo";
 import { CodePreview } from "../components/CodePreview";
 import { GeneralSettingsForm } from "../components/GeneralSettingsForm";
 import { GlobalPromptManager } from "../components/GlobalPromptManager";
+import { Button } from "../components/Button";
 import { OfficialSettingsDirectory } from "../components/OfficialSettingsDirectory";
 import { Tooltip } from "../components/Tooltip";
 import { clientName } from "../lib/client-name";
@@ -23,16 +25,14 @@ interface CommonSettingsPageProps {
   /** Whether this client currently has an applied supplier; when true a
    * save only takes effect after the supplier is re-applied. */
   hasActiveProvider: boolean;
-  onValueChange: (app: AppKind, key: string, value: string | number | boolean) => void;
+  onValueChange: (app: AppKind, key: string, value: CommonValue) => void;
   onResetGroup: (app: AppKind, group: string | null) => void;
   onSave: (app: AppKind) => void;
   onRetryLoad: (app: AppKind) => void;
   onPreview: (app: AppKind) => void;
-  promptApp: AppKind;
   promptDocument: GlobalPromptDocument | undefined;
   promptDraft: string;
   promptDirty: boolean;
-  onSelectPromptApp: (app: AppKind) => void;
   onPromptDraftChange: (content: string) => void;
   onSavePrompt: () => void;
   onDiscardPrompt: () => void;
@@ -54,12 +54,19 @@ function SettingsEditor({
   busy: boolean;
   configStatus: ConfigFileStatus | undefined;
   hasActiveProvider: boolean;
-  onValueChange: (key: string, value: string | number | boolean) => void;
+  onValueChange: (key: string, value: CommonValue) => void;
   onResetGroup: (group: string | null) => void;
   onSave: () => void;
   onRetryLoad: () => void;
   onPreview: () => void;
 }) {
+  // One control owns the preview's whole lifecycle (ProbePanel idiom):
+  // first click renders the draft, later clicks fold the shown fragment
+  // away and back out. A draft edit clears the fragment in the hook, so a
+  // stale open flag can never display content on its own.
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewVisible = previewOpen && state.preview !== undefined;
+
   if (state.phase === "idle" || state.phase === "loading") {
     return <p className="asb-empty">正在读取通用设置</p>;
   }
@@ -67,9 +74,9 @@ function SettingsEditor({
     return (
       <div className="asb-empty" role="alert">
         <p>无法读取通用设置：{state.error?.message ?? "本地应用数据不可用"}</p>
-        <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onRetryLoad}>
+        <Button variant="secondary" disabled={busy} onClick={onRetryLoad}>
           重新读取
-        </button>
+        </Button>
       </div>
     );
   }
@@ -112,6 +119,14 @@ function SettingsEditor({
     return null;
   })();
 
+  const previewLabel = state.previewing
+    ? "正在生成预览"
+    : previewVisible
+      ? "收起通用配置预览"
+      : state.preview
+        ? "展开通用配置预览"
+        : "查看通用配置预览";
+
   return (
     <>
       <GeneralSettingsForm
@@ -123,14 +138,13 @@ function SettingsEditor({
         onResetGroup={onResetGroup}
       />
       <div className="asb-general-settings-actions">
-        <button
-          type="button"
-          className="asb-btn-secondary"
+        <Button
+          variant="secondary"
           disabled={busy}
           onClick={() => onResetGroup(null)}
         >
           全部恢复默认值
-        </button>
+        </Button>
         <div className="asb-general-settings-actions-main">
           {actionStatus ? (
             <span
@@ -140,14 +154,13 @@ function SettingsEditor({
               {actionStatus.message}
             </span>
           ) : null}
-          <button
-            type="button"
-            className="asb-btn-primary"
+          <Button
+            variant="primary"
             disabled={busy || !canSave}
             onClick={onSave}
           >
             {state.phase === "saving" ? "正在保存" : "保存通用设置"}
-          </button>
+          </Button>
         </div>
       </div>
       {state.phase === "saveError" ? (
@@ -157,17 +170,29 @@ function SettingsEditor({
       ) : null}
       <div className="asb-settings-preview">
         <div className="asb-form-actions">
-          <button
-            type="button"
-            className="asb-btn-secondary"
+          <Button
+            variant="secondary"
+            aria-expanded={previewVisible}
+            aria-controls="general-settings-preview"
             disabled={busy || state.previewing}
-            onClick={onPreview}
+            onClick={() => {
+              if (previewVisible) {
+                setPreviewOpen(false);
+                return;
+              }
+              setPreviewOpen(true);
+              // A cached fragment is never stale (a draft edit clears it in
+              // the hook), so only the first render needs the backend.
+              if (!state.preview) onPreview();
+            }}
           >
-            {state.previewing ? "正在生成预览" : "查看通用配置预览"}
-          </button>
+            {previewLabel}
+          </Button>
         </div>
-        {state.preview ? (
-          <CodePreview target={state.preview.target} content={state.preview.content} />
+        {previewVisible && state.preview ? (
+          <div id="general-settings-preview">
+            <CodePreview target={state.preview.target} content={state.preview.content} />
+          </div>
         ) : null}
         {state.previewError ? (
           <p className="asb-field-error" role="alert">
@@ -194,17 +219,15 @@ export function CommonSettingsPage({
   onSave,
   onRetryLoad,
   onPreview,
-  promptApp,
   promptDocument,
   promptDraft,
   promptDirty,
-  onSelectPromptApp,
   onPromptDraftChange,
   onSavePrompt,
   onDiscardPrompt,
   onReloadPrompt,
 }: CommonSettingsPageProps) {
-  const [section, setSection] = useState<"settings" | "prompts">("settings");
+  const [section, setSection] = useState<"settings" | "directory" | "prompts">("settings");
   return (
     <section className="asb-panel" aria-label="通用设置">
       <div className="asb-panel-heading">
@@ -239,43 +262,47 @@ export function CommonSettingsPage({
         <button
           type="button"
           role="tab"
+          aria-selected={section === "directory"}
+          className={`asb-settings-main-tab${section === "directory" ? " is-on" : ""}`}
+          onClick={() => setSection("directory")}
+        >
+          官方设置目录
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={section === "prompts"}
           className={`asb-settings-main-tab${section === "prompts" ? " is-on" : ""}`}
           onClick={() => setSection("prompts")}
         >
-          官方设置目录
+          全局指令
         </button>
       </div>
       {section === "settings" ? (
-        <>
-          <SettingsEditor
-            state={editorState}
-            configStatus={configStatus}
-            hasActiveProvider={hasActiveProvider}
-            busy={busy}
-            onValueChange={(key, value) => onValueChange(app, key, value)}
-            onResetGroup={(group) => onResetGroup(app, group)}
-            onSave={() => onSave(app)}
-            onRetryLoad={() => onRetryLoad(app)}
-            onPreview={() => onPreview(app)}
-          />
-        </>
+        <SettingsEditor
+          state={editorState}
+          configStatus={configStatus}
+          hasActiveProvider={hasActiveProvider}
+          busy={busy}
+          onValueChange={(key, value) => onValueChange(app, key, value)}
+          onResetGroup={(group) => onResetGroup(app, group)}
+          onSave={() => onSave(app)}
+          onRetryLoad={() => onRetryLoad(app)}
+          onPreview={() => onPreview(app)}
+        />
+      ) : section === "directory" ? (
+        <OfficialSettingsDirectory app={app} entries={editorState.editor?.directory ?? []} />
       ) : (
-        <>
-          <OfficialSettingsDirectory app={app} entries={editorState.editor?.directory ?? []} />
-          <GlobalPromptManager
-            app={promptApp}
-            document={promptDocument}
-            draft={promptDraft}
-            dirty={promptDirty}
-            busy={busy}
-            onSelectApp={onSelectPromptApp}
-            onChange={onPromptDraftChange}
-            onSave={onSavePrompt}
-            onDiscard={onDiscardPrompt}
-            onReload={onReloadPrompt}
-          />
-        </>
+        <GlobalPromptManager
+          document={promptDocument}
+          draft={promptDraft}
+          dirty={promptDirty}
+          busy={busy}
+          onChange={onPromptDraftChange}
+          onSave={onSavePrompt}
+          onDiscard={onDiscardPrompt}
+          onReload={onReloadPrompt}
+        />
       )}
     </section>
   );

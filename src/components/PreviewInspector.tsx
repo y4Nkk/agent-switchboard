@@ -4,6 +4,8 @@ import { DiffView } from "./DiffView";
 
 interface Props {
   filePreview: FilePreview | null;
+  /** Model currently live in the client's real configuration. */
+  activeModel: string | null;
 }
 
 /**
@@ -12,13 +14,17 @@ interface Props {
  * host keys are not listed flat — they stay visible in place inside the
  * pretty-printed candidate file.
  */
-export function PreviewInspector({ filePreview }: Props) {
+export function PreviewInspector({ filePreview, activeModel }: Props) {
   if (!filePreview) {
     return <p className="asb-empty">选择供应商后生成预览</p>;
   }
   const { preview } = filePreview;
   return (
     <div className="asb-inspector">
+      <div className="asb-kv">
+        <span className="asb-kv-label">当前启用模型</span>
+        <span className="asb-kv-value asb-code">{activeModel ?? "—"}</span>
+      </div>
       {preview.changes.length === 0 && <p className="asb-empty">无变更</p>}
       <DiffView changes={preview.changes} label="变更键" />
       {preview.warnings.length > 0 && (

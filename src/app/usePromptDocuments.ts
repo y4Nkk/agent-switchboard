@@ -23,7 +23,7 @@ const SUPPORTED_APPS: readonly AppKind[] = ["codex", "claude"];
 /**
  * Owns prompt-management drafts independently from model configuration. Each
  * document has its own request generation so a delayed response can never
- * replace a newer save or a document selected in the other client tab.
+ * replace a newer save. The selected client follows the common-settings page.
  */
 export function usePromptDocuments({
   active,
@@ -32,7 +32,6 @@ export function usePromptDocuments({
   clearError,
   setBusy,
 }: PromptDocumentsDeps) {
-  const [promptApp, setPromptApp] = useState<AppKind>("codex");
   const [documents, setDocuments] = useState<DocumentMap>({});
   const [drafts, setDrafts] = useState<DraftMap>({});
   const documentsRef = useRef<DocumentMap>({});
@@ -140,8 +139,6 @@ export function usePromptDocuments({
   );
 
   return {
-    promptApp,
-    setPromptApp,
     documents,
     drafts,
     setPromptDraft,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { probeEndpoint, type ProbeResult } from "../api/client";
+import { Button } from "./Button";
 import { Time } from "./Time";
 
 interface Props {
@@ -100,9 +101,8 @@ export function ProbePanel({ url }: Props) {
 
   return (
     <>
-      <button
-        type="button"
-        className="asb-btn-secondary"
+      <Button
+        variant="secondary"
         aria-expanded={visible}
         aria-controls="editor-probe-feedback"
         disabled={probe.busy}
@@ -116,7 +116,7 @@ export function ProbePanel({ url }: Props) {
         }}
       >
         {probe.busy ? "检测中…" : visible ? "收起结果" : "检测连通"}
-      </button>
+      </Button>
       {visible && (
         <ProbeFeedback
           id="editor-probe-feedback"

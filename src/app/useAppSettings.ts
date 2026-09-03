@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   getAppSettings,
+  repairAppSettings,
   restartApplication,
   setAppSettings,
   type AppSettings,
@@ -39,6 +40,22 @@ export function useAppSettings({ busy, onError, clearError, setBusy }: AppSettin
   }, [onError, reload]);
 
   const retryLoad = useCallback(() => setReload((count) => count + 1), []);
+
+  /** One-click repair: an invalid settings file is replaced with defaults
+   * and the repaired settings become the loaded state. */
+  const repairSettings = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    clearError();
+    try {
+      setAppSettingsState(await repairAppSettings());
+      setLoadError(null);
+    } catch (caught) {
+      onError(caught as CommandError);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, clearError, onError, setBusy]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -105,5 +122,28 @@ export function useAppSettings({ busy, onError, clearError, setBusy }: AppSettin
       }
     : null;
 
-  return { appSettings, loadError, retryLoad, saveAppSettings, saveSettingsPatch, restart, pin };
+  /** Persists one provider's usage-panel collapse flip. No-op until the
+   * settings load, matching the other save paths. */
+  const toggleUsageCollapsed = useCallback(
+    (profileId: string) => {
+      if (!appSettings) return;
+      const collapsedUsageIds = appSettings.collapsedUsageIds.includes(profileId)
+        ? appSettings.collapsedUsageIds.filter((id) => id !== profileId)
+        : [...appSettings.collapsedUsageIds, profileId];
+      void saveSettingsPatch({ collapsedUsageIds });
+    },
+    [appSettings, saveSettingsPatch],
+  );
+
+  return {
+    appSettings,
+    loadError,
+    retryLoad,
+    repairSettings,
+    saveAppSettings,
+    saveSettingsPatch,
+    restart,
+    pin,
+    toggleUsageCollapsed,
+  };
 }

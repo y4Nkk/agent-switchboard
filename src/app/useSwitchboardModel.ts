@@ -30,7 +30,6 @@ export function useSwitchboardModel() {
   const { selectedId, setSelectedId, refresh, activeProfileId, records } = snapshot;
   const switchPreview = useSwitchPreview({
     busy,
-    selectedId,
     setSelectedId,
     onError: reportError,
     clearError,

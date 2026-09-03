@@ -6,6 +6,7 @@ import {
   type CodexResetRead,
   type ResetSignal,
 } from "../api/client";
+import { Button } from "./Button";
 import { Time } from "./Time";
 
 function errorMessage(reason: unknown): string {
@@ -103,14 +104,13 @@ export function CodexResetPanel() {
               {snapshot.freshness === "cached" ? "本地缓存" : "刚刚刷新"}
             </span>
           )}
-          <button
-            type="button"
-            className="asb-btn-secondary"
+          <Button
+            variant="secondary"
             disabled={loading}
             onClick={() => void readStatus()}
           >
             {loading ? "读取中…" : "刷新重置信号"}
-          </button>
+          </Button>
         </div>
       </div>
       {cacheLoading && status === null && <p className="asb-empty" role="status">正在读取本地缓存</p>}
@@ -167,13 +167,12 @@ export function CodexResetPanel() {
                     <span className="asb-codex-reset-detail">
                       <Time iso={status.latestRelevantTiboPost.announcedAt} />
                     </span>
-                    <button
-                      type="button"
-                      className="asb-btn-secondary"
+                    <Button
+                      variant="secondary"
                       onClick={() => void openUrl(status.latestRelevantTiboPost!.url)}
                     >
                       查看原帖
-                    </button>
+                    </Button>
                   </div>
                 </>
               ) : (

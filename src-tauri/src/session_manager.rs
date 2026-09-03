@@ -7,6 +7,7 @@ use asb_core::contracts::AppKind;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::os::windows::process::CommandExt;
@@ -179,13 +180,21 @@ fn scan_session_source_roots(
 ) -> (Vec<SessionSource>, Vec<SessionIssue>) {
     let mut sources = Vec::new();
     let mut issues = Vec::new();
+    let mut seen = HashSet::new();
 
     for (app, root) in roots {
         match collect_jsonl_files(root) {
             Ok(paths) => {
                 for path in paths {
                     if let Ok(meta) = parse_session(*app, &path) {
-                        sources.push(SessionSource { meta, path });
+                        // Roots are deliberately ordered: a live Codex
+                        // session owns its identity ahead of an archived
+                        // copy. The same identity cannot appear twice in a
+                        // scan, so list rendering and session resolution use
+                        // the identical source contract.
+                        if seen.insert((meta.app, meta.session_id.clone())) {
+                            sources.push(SessionSource { meta, path });
+                        }
                     }
                 }
             }
@@ -224,6 +233,7 @@ fn collect_jsonl_files(root: &Path) -> io::Result<Vec<PathBuf>> {
         }
     }
 
+    paths.sort();
     Ok(paths)
 }
 
@@ -493,6 +503,36 @@ mod tests {
         assert_eq!(claude.title, "归档整理");
         assert_eq!(claude.resume_command, "claude --resume claude-456");
         assert_eq!(codex.resume_command, "codex resume codex-123");
+    }
+
+    #[test]
+    fn duplicate_session_ids_keep_the_first_configured_source() {
+        let temp = tempdir().expect("temp");
+        let active_root = temp.path().join("codex").join("sessions");
+        let archived_root = temp.path().join("codex").join("archived_sessions");
+        write(
+            &active_root.join("active.jsonl"),
+            concat!(
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"codex-duplicate\",\"cwd\":\"C:/work/relay\",\"timestamp\":\"2026-08-01T10:00:00Z\"}}\n",
+                "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"活动会话\"}}\n"
+            ),
+        );
+        write(
+            &archived_root.join("archived.jsonl"),
+            concat!(
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"codex-duplicate\",\"cwd\":\"C:/work/relay\",\"timestamp\":\"2026-07-01T10:00:00Z\"}}\n",
+                "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"归档副本\"}}\n"
+            ),
+        );
+
+        let scan = scan_session_roots(&[
+            (AppKind::Codex, active_root),
+            (AppKind::Codex, archived_root),
+        ]);
+
+        assert_eq!(scan.sessions.len(), 1);
+        assert_eq!(scan.sessions[0].session_id, "codex-duplicate");
+        assert_eq!(scan.sessions[0].title, "活动会话");
     }
 
     #[test]

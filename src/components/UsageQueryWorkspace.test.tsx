@@ -104,7 +104,59 @@ describe("UsageQueryWorkspace", () => {
       usedPath: null,
       totalPath: null,
       unit: "USD",
+      refreshIntervalMinutes: 0,
     });
+  });
+
+  it("saves the configured auto-refresh interval with the query", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockResolvedValue({
+      readings: [{ remaining: 4, used: null, total: null, unit: "USD" }],
+      at: "2026-08-31T08:00:00Z",
+    });
+    const onSave = renderWorkspace({
+      kind: "declarative",
+      url: "{{baseUrl}}/balance",
+      remainingPath: "data/balance",
+      refreshIntervalMinutes: 0,
+    });
+
+    await screen.findByRole("region", { name: "本次用量结果" });
+    const input = screen.getByRole("spinbutton", { name: /自动刷新间隔/ });
+    expect(input).toHaveValue(0);
+    await user.clear(input);
+    await user.type(input, "15");
+    await user.tab();
+    await user.click(screen.getByRole("button", { name: "保存查询" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ refreshIntervalMinutes: 15 }),
+    );
+  });
+
+  it("reverts an out-of-range auto-refresh interval without saving it", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockResolvedValue({
+      readings: [{ remaining: 4, used: null, total: null, unit: "USD" }],
+      at: "2026-08-31T08:00:00Z",
+    });
+    const onSave = renderWorkspace({
+      kind: "declarative",
+      url: "{{baseUrl}}/balance",
+      remainingPath: "data/balance",
+      refreshIntervalMinutes: 5,
+    });
+
+    await screen.findByRole("region", { name: "本次用量结果" });
+    const input = screen.getByRole("spinbutton", { name: /自动刷新间隔/ });
+    await user.clear(input);
+    await user.type(input, "1441");
+    await user.tab();
+    await user.click(screen.getByRole("button", { name: "保存查询" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ refreshIntervalMinutes: 5 }),
+    );
   });
 
   it("clears an optional declarative query when its fields are saved blank", async () => {
@@ -117,6 +169,7 @@ describe("UsageQueryWorkspace", () => {
       kind: "declarative",
       url: "{{baseUrl}}/balance",
       remainingPath: "data/balance",
+      refreshIntervalMinutes: 0,
     });
 
     await screen.findByRole("region", { name: "本次用量结果" });
@@ -134,6 +187,7 @@ describe("UsageQueryWorkspace", () => {
       kind: "declarative",
       url: "{{baseUrl}}/balance",
       remainingPath: "balance",
+      refreshIntervalMinutes: 0,
     });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("用量查询返回 HTTP 402");

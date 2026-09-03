@@ -24,7 +24,7 @@ function collectSourceFiles(dir: string): string[] {
 describe("Time", () => {
   it("renders the local time without an offset suffix", () => {
     render(<Time iso="2026-08-26T08:00:00.000+00:00" />);
-    const node = screen.getByText("2026-08-26 16:00:00");
+    const node = screen.getByText("2026年08月26日 16：00");
     expect(node).toBeInTheDocument();
     expect(node).toHaveAttribute("datetime", "2026-08-26T08:00:00.000+00:00");
   });

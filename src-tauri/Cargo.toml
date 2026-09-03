@@ -32,11 +32,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 # `common-controls-v6` stays off: it only embeds the manifest into bins, and
 # our build.rs embeds one for every target (tests included) via windres.
+# `devtools` stays off: release builds must not expose the WebView inspector
+# (F12/Ctrl+Shift+I). Debug builds get devtools automatically.
 tauri = { version = "2", default-features = false, features = [
     "wry",
     "compression",
     "dynamic-acl",
-    "devtools",
     "tray-icon",
 ] }
 # Opens provider service URLs in the system browser. wry silently blocks

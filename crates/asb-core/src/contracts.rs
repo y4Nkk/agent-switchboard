@@ -128,10 +128,39 @@ pub enum UsageQuery {
         /// Display unit for the extracted numbers, e.g. `USD`.
         #[serde(skip_serializing_if = "Option::is_none")]
         unit: Option<String>,
+        /// Minutes between automatic re-queries of an expanded usage panel;
+        /// 0 keeps the panel manual-only. A required field like every other:
+        /// provider files saved before it existed are upgraded to 0 at the
+        /// store's read boundary, never defaulted on parse.
+        refresh_interval_minutes: u32,
     },
     /// JavaScript source that evaluates to `{ request(input), extract(input) }`.
     /// It is compiled and executed only by the constrained desktop runtime.
-    Script { source: String },
+    Script {
+        source: String,
+        /// Minutes between automatic re-queries of an expanded usage panel;
+        /// 0 keeps the panel manual-only. A required field like every other:
+        /// provider files saved before it existed are upgraded to 0 at the
+        /// store's read boundary, never defaulted on parse.
+        refresh_interval_minutes: u32,
+    },
+}
+
+impl UsageQuery {
+    /// The auto-refresh cadence is mode-independent, so both variants carry
+    /// the same field and expose it through this one accessor.
+    pub fn refresh_interval_minutes(&self) -> u32 {
+        match self {
+            UsageQuery::Declarative {
+                refresh_interval_minutes,
+                ..
+            }
+            | UsageQuery::Script {
+                refresh_interval_minutes,
+                ..
+            } => *refresh_interval_minutes,
+        }
+    }
 }
 
 /// One named or unnamed set of numbers picked out of a usage-query response.
@@ -182,6 +211,28 @@ pub struct CodexOfficialQuotaWindow {
     pub resets_at: Option<String>,
 }
 
+/// How a locally detected Codex quota reset relates to the previously
+/// declared window schedule. `Scheduled` means the previous reset time had
+/// already passed; `Early` means usage dropped while it was still ahead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexOfficialQuotaResetKind {
+    Scheduled,
+    Early,
+}
+
+/// One locally detected Codex quota reset, observed by comparing consecutive
+/// successful official reads of the 7-day window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexOfficialQuotaReset {
+    /// RFC 3339 UTC timestamp of the read that first saw the new window.
+    pub observed_at: String,
+    pub kind: CodexOfficialQuotaResetKind,
+    /// The new window's server-declared reset time, when supplied.
+    pub resets_at: Option<String>,
+}
+
 /// A normalized read of the existing Codex ChatGPT-login quota. On a failed
 /// refresh, `windows` can retain the most recent in-process successful read
 /// and `stale` makes that fact explicit.
@@ -193,6 +244,9 @@ pub struct CodexOfficialQuota {
     /// RFC 3339 UTC timestamp of the latest successful service response.
     pub at: Option<String>,
     pub stale: bool,
+    /// The most recent locally detected reset known when this read was
+    /// recorded. Absent on reads that never ran the comparison.
+    pub last_reset: Option<CodexOfficialQuotaReset>,
 }
 
 /// A provider profile. It is a small overlay, never a full copy of a user's
@@ -370,10 +424,9 @@ pub struct ProviderRecord {
     pub file_hash: String,
 }
 
-/// A plain configuration value. General settings store one of these for every
-/// supported parameter; there is deliberately no null or remove state. The
-/// array shape exists for provider-owned lists such as `availableModels` and
-/// can never pass common-settings validation.
+/// A plain configuration value. The array shape exists for provider-owned
+/// lists such as `availableModels` and can never pass common-settings
+/// validation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ConfigValue {
@@ -405,17 +458,32 @@ impl ConfigValue {
     }
 }
 
-/// The complete general-parameter values for exactly one client, persisted as
-/// `common/{client}.json`. Every supported parameter carries a concrete
-/// value; defaults come from the ownership directory, never from this file.
+/// The application-owned intent for one officially supported common setting.
+///
+/// `Automatic` deliberately means that Agent Switchboard does not emit the
+/// setting into the client configuration. It is not a synthetic host value:
+/// the client and active model choose their own documented default. `Explicit`
+/// writes exactly the value the user selected, including a value that happens
+/// to match a documented default.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "camelCase")]
+pub enum CommonSettingValue {
+    Automatic,
+    Explicit { value: ConfigValue },
+}
+
+/// The complete common-setting intent for exactly one client, persisted as
+/// `common/{client}.json`. Every supported parameter has one tagged intent so
+/// an absent client-file key can never be confused with an explicit false or
+/// a guessed application default.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CommonSettings {
-    pub settings: BTreeMap<String, ConfigValue>,
+    pub settings: BTreeMap<String, CommonSettingValue>,
 }
 
 impl CommonSettings {
-    pub fn value(&self, key: &str) -> Option<&ConfigValue> {
+    pub fn value(&self, key: &str) -> Option<&CommonSettingValue> {
         self.settings.get(key)
     }
 }
@@ -631,7 +699,8 @@ mod tests {
             "url": "{{baseUrl}}/user/balance",
             "remainingPath": "data/balance",
             "totalPath": "data/total",
-            "unit": "USD"
+            "unit": "USD",
+            "refreshIntervalMinutes": 0
         }"#;
         let query: UsageQuery = serde_json::from_str(json).expect("usage query");
         assert!(matches!(
@@ -650,6 +719,28 @@ mod tests {
             r#"{"kind":"script","source":"({})","url":"u"}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn usage_query_auto_refresh_interval_is_required_and_round_trips() {
+        // The interval is a strict required field; upgrading files saved
+        // before it existed belongs to the store, not to the contract.
+        assert!(serde_json::from_str::<UsageQuery>(
+            r#"{"kind":"declarative","url":"u","remainingPath":"x"}"#
+        )
+        .is_err());
+        assert!(
+            serde_json::from_str::<UsageQuery>(r#"{"kind":"script","source":"({})"}"#).is_err()
+        );
+
+        let timed: UsageQuery =
+            serde_json::from_str(r#"{"kind":"script","source":"({})","refreshIntervalMinutes":5}"#)
+                .expect("timed usage query");
+        assert_eq!(timed.refresh_interval_minutes(), 5);
+        assert_eq!(
+            serde_json::to_value(&timed).expect("serialized"),
+            serde_json::json!({"kind":"script","source":"({})","refreshIntervalMinutes":5})
+        );
     }
 
     #[test]
@@ -693,16 +784,23 @@ mod tests {
     }
 
     #[test]
-    fn common_settings_store_plain_values_only() {
-        let json = r#"{ "settings": { "model_reasoning_effort": "high", "disable_response_storage": true } }"#;
+    fn common_settings_store_automatic_or_explicit_values_only() {
+        let json = r#"{
+            "settings": {
+                "model_reasoning_effort": { "mode": "explicit", "value": "high" },
+                "hide_agent_reasoning": { "mode": "automatic" }
+            }
+        }"#;
         let settings: CommonSettings = serde_json::from_str(json).expect("common settings");
         assert_eq!(
             settings.value("model_reasoning_effort"),
-            Some(&ConfigValue::Str("high".into()))
+            Some(&CommonSettingValue::Explicit {
+                value: ConfigValue::Str("high".into())
+            })
         );
         assert_eq!(
-            settings.value("disable_response_storage"),
-            Some(&ConfigValue::Bool(true))
+            settings.value("hide_agent_reasoning"),
+            Some(&CommonSettingValue::Automatic)
         );
         // The file shape is fixed: no extra members are accepted.
         assert!(

@@ -4,12 +4,13 @@ import type {
   ConfigFileStatus,
   LockStatus,
   MatchStatus,
-  ProviderProfile,
   RouteState,
 } from "../api/client";
 import { ClientLogo } from "../components/ClientLogo";
+import { CodexOfficialResetPanel } from "../components/CodexOfficialResetPanel";
 import { CodexResetPanel } from "../components/CodexResetPanel";
 import { DualRelay } from "../components/DualRelay";
+import { Button } from "../components/Button";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
@@ -17,13 +18,9 @@ import { currentProviderName } from "../lib/current-provider-name";
 interface OverviewPageProps {
   statuses: ConfigFileStatus[] | null;
   locks: Partial<Record<AppKind, LockStatus>>;
-  selectedProfile: ProviderProfile | null;
-  canSwitch: boolean;
   busy: boolean;
   /** The relay stays hidden while the provider editor is open. */
   relayHidden: boolean;
-  onPreview: () => void;
-  onRequestSwitch: () => void;
   onRefresh: () => void;
   onRecoverLock: (app: AppKind) => void;
 }
@@ -172,14 +169,13 @@ function ConfigStatusCard({
       </dl>
       {lock?.state === "stale" && (
         <div className="asb-kv-actions">
-          <button
-            type="button"
-            className="asb-btn-secondary"
+          <Button
+            variant="secondary"
             disabled={busy}
             onClick={() => onRecoverLock(status.app)}
           >
             清理遗留锁
-          </button>
+          </Button>
         </div>
       )}
     </article>
@@ -190,12 +186,8 @@ function ConfigStatusCard({
 export function OverviewPage({
   statuses,
   locks,
-  selectedProfile,
-  canSwitch,
   busy,
   relayHidden,
-  onPreview,
-  onRequestSwitch,
   onRefresh,
   onRecoverLock,
 }: OverviewPageProps) {
@@ -205,19 +197,14 @@ export function OverviewPage({
         <DualRelay
           routes={routesFrom(statuses ?? [])}
           providerNames={providerNamesFrom(statuses ?? [])}
-          selectedProfile={selectedProfile}
-          canSwitch={canSwitch}
-          busy={busy}
-          onPreview={onPreview}
-          onSwitch={onRequestSwitch}
         />
       )}
       <section className="asb-panel" aria-label="配置状态">
         <div className="asb-panel-heading">
           <h2 className="asb-panel-title">配置状态</h2>
-          <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onRefresh}>
+          <Button variant="secondary" disabled={busy} onClick={onRefresh}>
             刷新状态
-          </button>
+          </Button>
         </div>
         <div className="asb-status-grid">
           {(statuses ?? []).map((status) => (
@@ -233,6 +220,7 @@ export function OverviewPage({
         {statuses === null && <p className="asb-empty">加载中</p>}
       </section>
       <CodexResetPanel />
+      <CodexOfficialResetPanel />
     </>
   );
 }

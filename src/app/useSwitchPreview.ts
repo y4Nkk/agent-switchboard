@@ -8,7 +8,6 @@ import {
 
 interface SwitchPreviewDeps {
   busy: boolean;
-  selectedId: string | null;
   setSelectedId: (id: string) => void;
   onError: (error: CommandError) => void;
   clearError: () => void;
@@ -21,7 +20,6 @@ interface SwitchPreviewDeps {
  */
 export function useSwitchPreview({
   busy,
-  selectedId,
   setSelectedId,
   onError,
   clearError,
@@ -103,20 +101,6 @@ export function useSwitchPreview({
     [preview, previewProfile, retractPreview],
   );
 
-  const runPreview = useCallback(async () => {
-    if (busy || !selectedId) return;
-    const version = ++previewVersion.current;
-    const profileId = selectedId;
-    clearError();
-    setPreview(null);
-    try {
-      const file = await requestSwitchPreview(profileId);
-      if (previewVersion.current === version) setPreview({ profileId, file });
-    } catch (caught) {
-      if (previewVersion.current === version) onError(caught as CommandError);
-    }
-  }, [busy, clearError, onError, requestSwitchPreview, selectedId]);
-
   return {
     preview,
     retractPreview,
@@ -124,6 +108,5 @@ export function useSwitchPreview({
     selectProfile,
     previewProfile,
     togglePreviewProfile,
-    runPreview,
   };
 }

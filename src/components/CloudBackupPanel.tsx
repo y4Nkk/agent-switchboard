@@ -4,6 +4,7 @@ import {
   type CloudBackupSettings,
   type CommandError,
 } from "../api/client";
+import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { toast } from "./use-toast";
 
@@ -135,12 +136,12 @@ export function CloudBackupPanel({
               />
             </label>
             <div className="asb-form-actions">
-              <button type="button" className="asb-btn-secondary" disabled={busy} onClick={revealSetupSql}>
+              <Button variant="secondary" disabled={busy} onClick={revealSetupSql}>
                 {setupSql === null ? "显示初始化 SQL" : "收起初始化 SQL"}
-              </button>
-              <button type="submit" className="asb-btn-primary" disabled={busy}>
+              </Button>
+              <Button type="submit" variant="primary" disabled={busy}>
                 保存连接
-              </button>
+              </Button>
             </div>
           </form>
           {setupSql !== null && (
@@ -180,22 +181,20 @@ export function CloudBackupPanel({
               />
             </label>
             <div className="asb-form-actions">
-              <button
-                type="button"
-                className="asb-btn-secondary"
+              <Button
+                variant="secondary"
                 disabled={busy || settings === null}
                 onClick={() => setPending("restore")}
               >
                 从云端恢复
-              </button>
-              <button
-                type="button"
-                className="asb-btn-primary"
+              </Button>
+              <Button
+                variant="primary"
                 disabled={busy || settings === null}
                 onClick={() => setPending("upload")}
               >
                 备份到云端
-              </button>
+              </Button>
             </div>
           </fieldset>
         </>

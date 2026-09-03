@@ -4,8 +4,8 @@
 //! switch executor refuses to receive anything that has not passed.
 
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, CodexModelSettings, CommonSettings, ConfigValue, ModelOptions,
-    ProviderDraft, ProviderProfile, RouteMode, UsageQuery,
+    AppKind, ClaudeModelSettings, CodexModelSettings, CommonSettingValue, CommonSettings,
+    ConfigValue, ModelOptions, ProviderDraft, ProviderProfile, RouteMode, UsageQuery,
 };
 use crate::ownership::{setting_spec, SettingControl, SettingOwner};
 use thiserror::Error;
@@ -67,10 +67,14 @@ pub enum ValidationError {
     EmptyUsageQueryScript,
     #[error("用量查询脚本最长 {0} 个字符")]
     UsageQueryScriptTooLong(usize),
+    #[error("自动刷新间隔须为 0–{0} 分钟，0 表示关闭")]
+    UsageQueryRefreshIntervalTooLarge(u32),
 }
 
 /// Metadata fields shared by draft and profile; kept short and local-only.
 const MAX_NOTES_LEN: usize = 500;
+/// Upper bound of a usage query's auto-refresh interval, in minutes (a day).
+pub const MAX_USAGE_QUERY_REFRESH_INTERVAL: u32 = 1440;
 
 impl ProviderProfile {
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -194,6 +198,11 @@ const MAX_USAGE_QUERY_SOURCE_LEN: usize = 65_536;
 /// owns no JavaScript engine; the store runs that additional validation for
 /// every persisted provider before it accepts or writes a file.
 pub fn validate_usage_query(query: &UsageQuery) -> Result<(), ValidationError> {
+    if query.refresh_interval_minutes() > MAX_USAGE_QUERY_REFRESH_INTERVAL {
+        return Err(ValidationError::UsageQueryRefreshIntervalTooLarge(
+            MAX_USAGE_QUERY_REFRESH_INTERVAL,
+        ));
+    }
     match query {
         UsageQuery::Declarative {
             url,
@@ -201,6 +210,7 @@ pub fn validate_usage_query(query: &UsageQuery) -> Result<(), ValidationError> {
             used_path,
             total_path,
             unit,
+            ..
         } => {
             let url = url.trim();
             if url.is_empty() {
@@ -230,7 +240,7 @@ pub fn validate_usage_query(query: &UsageQuery) -> Result<(), ValidationError> {
             }
             Ok(())
         }
-        UsageQuery::Script { source } => {
+        UsageQuery::Script { source, .. } => {
             if source.trim().is_empty() {
                 return Err(ValidationError::EmptyUsageQueryScript);
             }
@@ -332,7 +342,7 @@ impl CommonSettings {
     /// must be exactly the ownership directory's common parameters, and every
     /// value must match its control's shape and allowed values.
     pub fn validate_for(&self, app: AppKind) -> Result<(), ValidationError> {
-        for (key, value) in &self.settings {
+        for (key, setting) in &self.settings {
             let Some(spec) = setting_spec(app, key) else {
                 return Err(ValidationError::UnknownCommonKey {
                     app,
@@ -345,6 +355,9 @@ impl CommonSettings {
                     key: key.clone(),
                 });
             }
+            let CommonSettingValue::Explicit { value } = setting else {
+                continue;
+            };
             if let ConfigValue::Number(number) = value {
                 if !number.is_finite() {
                     return Err(ValidationError::NonFiniteNumber { key: key.clone() });
@@ -626,17 +639,23 @@ mod tests {
         }
 
         let mut settings = default_common_settings(AppKind::Codex);
-        settings
-            .settings
-            .insert("threads".to_string(), ConfigValue::Bool(true));
+        settings.settings.insert(
+            "threads".to_string(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Bool(true),
+            },
+        );
         let error = settings.validate_for(AppKind::Codex).unwrap_err();
         assert!(matches!(error, ValidationError::UnknownCommonKey { .. }));
         assert!(error.to_string().contains("threads"));
 
         let mut provider_key = default_common_settings(AppKind::Claude);
-        provider_key
-            .settings
-            .insert("model".to_string(), ConfigValue::Str("m".into()));
+        provider_key.settings.insert(
+            "model".to_string(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Str("m".into()),
+            },
+        );
         assert!(matches!(
             provider_key.validate_for(AppKind::Claude),
             Err(ValidationError::UnknownCommonKey { .. })
@@ -661,13 +680,17 @@ mod tests {
         let mut settings = default_common_settings(AppKind::Codex);
         settings.settings.insert(
             "model_reasoning_effort".to_string(),
-            ConfigValue::Str("xhigh".into()),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Str("xhigh".into()),
+            },
         );
         assert!(settings.validate_for(AppKind::Codex).is_ok());
 
         settings.settings.insert(
             "model_reasoning_effort".to_string(),
-            ConfigValue::Str("extreme".into()),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Str("extreme".into()),
+            },
         );
         let error = settings.validate_for(AppKind::Codex).unwrap_err();
         assert!(matches!(error, ValidationError::BadCommonValue { .. }));
@@ -675,7 +698,9 @@ mod tests {
 
         settings.settings.insert(
             "model_reasoning_effort".to_string(),
-            ConfigValue::Bool(true),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Bool(true),
+            },
         );
         assert!(matches!(
             settings.validate_for(AppKind::Codex),
@@ -685,7 +710,9 @@ mod tests {
         let mut toggled = default_common_settings(AppKind::Claude);
         toggled.settings.insert(
             "autoCompactEnabled".to_string(),
-            ConfigValue::Str("on".into()),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Str("on".into()),
+            },
         );
         assert!(matches!(
             toggled.validate_for(AppKind::Claude),
@@ -694,11 +721,19 @@ mod tests {
 
         // Both polarities are legal: the parameter is a plain value.
         let mut both = default_common_settings(AppKind::Claude);
-        both.settings
-            .insert("autoCompactEnabled".to_string(), ConfigValue::Bool(false));
+        both.settings.insert(
+            "autoCompactEnabled".to_string(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Bool(false),
+            },
+        );
         assert!(both.validate_for(AppKind::Claude).is_ok());
-        both.settings
-            .insert("autoCompactEnabled".to_string(), ConfigValue::Bool(true));
+        both.settings.insert(
+            "autoCompactEnabled".to_string(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Bool(true),
+            },
+        );
         assert!(both.validate_for(AppKind::Claude).is_ok());
     }
 
@@ -720,6 +755,7 @@ mod tests {
             used_path: None,
             total_path: None,
             unit: Some("USD".to_string()),
+            refresh_interval_minutes: 0,
         };
         assert!(validate_usage_query(&valid).is_ok());
 
@@ -729,6 +765,7 @@ mod tests {
             used_path: None,
             total_path: None,
             unit: None,
+            refresh_interval_minutes: 0,
         };
         assert_eq!(
             validate_usage_query(&empty_paths),
@@ -737,10 +774,29 @@ mod tests {
 
         let blank_script = UsageQuery::Script {
             source: " \n".to_string(),
+            refresh_interval_minutes: 0,
         };
         assert_eq!(
             validate_usage_query(&blank_script),
             Err(ValidationError::EmptyUsageQueryScript)
         );
+    }
+
+    #[test]
+    fn usage_query_contract_bounds_the_auto_refresh_interval() {
+        let too_large = UsageQuery::Script {
+            source: "({})".to_string(),
+            refresh_interval_minutes: 1441,
+        };
+        assert_eq!(
+            validate_usage_query(&too_large),
+            Err(ValidationError::UsageQueryRefreshIntervalTooLarge(1440))
+        );
+
+        let at_bound = UsageQuery::Script {
+            source: "({})".to_string(),
+            refresh_interval_minutes: 1440,
+        };
+        assert!(validate_usage_query(&at_bound).is_ok());
     }
 }

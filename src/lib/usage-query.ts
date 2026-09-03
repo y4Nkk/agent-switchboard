@@ -10,7 +10,9 @@ export function normalizeUsageQuery(query: UsageQuery | null | undefined): Usage
   if (!query) return null;
   if (query.kind === "script") {
     const source = query.source.trim();
-    return source ? { kind: "script", source } : null;
+    return source
+      ? { kind: "script", source, refreshIntervalMinutes: query.refreshIntervalMinutes }
+      : null;
   }
 
   const url = optional(query.url);
@@ -26,5 +28,6 @@ export function normalizeUsageQuery(query: UsageQuery | null | undefined): Usage
     usedPath: optional(query.usedPath ?? ""),
     totalPath: optional(query.totalPath ?? ""),
     unit: optional(query.unit ?? ""),
+    refreshIntervalMinutes: query.refreshIntervalMinutes,
   };
 }

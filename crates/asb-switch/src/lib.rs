@@ -15,8 +15,8 @@ mod prompt_documents;
 mod restore;
 
 pub use executor::{
-    execute, read_preview, restore, sha256_hex, FilePreview, RecoveryOutcome, RestoreOutcome,
-    SwitchError, SwitchOutcome, SwitchRequest,
+    execute, read_preview, restore, sha256_digest, sha256_hex, FilePreview, RecoveryOutcome,
+    RestoreOutcome, SwitchError, SwitchOutcome, SwitchRequest,
 };
 pub use io::{FsIo, SwitchIo};
 pub use lockfile::{

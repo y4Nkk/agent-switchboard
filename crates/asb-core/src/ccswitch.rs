@@ -270,6 +270,9 @@ fn map_usage_query(meta: Option<&str>, warnings: &mut Vec<String>) -> Option<Usa
     }
     Some(UsageQuery::Script {
         source: compile_usage_script(source),
+        // CC Switch's own autoQueryInterval lands in the unsupported-key
+        // warnings; the imported query starts manual-only.
+        refresh_interval_minutes: 0,
     })
 }
 
@@ -596,7 +599,7 @@ mod tests {
         ));
 
         let outcome = map_row(&source).expect("custom provider should map");
-        let Some(UsageQuery::Script { source }) = outcome.draft.usage_query else {
+        let Some(UsageQuery::Script { source, .. }) = outcome.draft.usage_query else {
             panic!("usage script should be imported");
         };
         assert!(source.contains("const cc = ("));

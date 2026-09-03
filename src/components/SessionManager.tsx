@@ -9,6 +9,7 @@ import {
   type SessionMeta,
 } from "../api/client";
 import { ClientLogo } from "./ClientLogo";
+import { Button } from "./Button";
 import { Input } from "./Input";
 import { Time } from "./Time";
 import { toast } from "./use-toast";
@@ -398,9 +399,9 @@ export function SessionManager({ active }: { active: boolean }) {
             );
           })}
         </div>
-        <button type="button" className="asb-btn-secondary" disabled={scanning} onClick={() => void refresh()}>
+        <Button variant="secondary" disabled={scanning} onClick={() => void refresh()}>
           刷新会话
-        </button>
+        </Button>
       </div>
       {issues.length > 0 && (
         <ul className="asb-session-issues" aria-label="会话扫描提示">
@@ -462,24 +463,22 @@ export function SessionManager({ active }: { active: boolean }) {
                   <h3>{selected.title}</h3>
                 </div>
                 <div className="asb-session-actions">
-                  <button type="button" className="asb-btn-primary" disabled={resuming} onClick={() => void resume()}>
+                  <Button variant="primary" disabled={resuming} onClick={() => void resume()}>
                     {resuming ? "正在启动" : "在命令提示符中恢复"}
-                  </button>
-                  <button
-                    type="button"
-                    className="asb-btn-secondary"
+                  </Button>
+                  <Button
+                    variant="secondary"
                     onClick={() => void copy(selected.resumeCommand, "恢复命令")}
                   >
                     复制恢复命令
-                  </button>
-                  <button
-                    type="button"
-                    className="asb-btn-secondary"
+                  </Button>
+                  <Button
+                    variant="secondary"
                     disabled={!selected.projectDir}
                     onClick={() => selected.projectDir && void copy(selected.projectDir, "工作目录")}
                   >
                     复制工作目录
-                  </button>
+                  </Button>
                 </div>
               </header>
               <p className="asb-session-meta-line">

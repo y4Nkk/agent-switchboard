@@ -7,7 +7,10 @@
 
 use crate::commands::{config_status_report, ConfigFileStatus};
 use crate::local_state::{AppSettings, CloseBehavior, LocalState};
-use asb_core::contracts::{AppKind, MatchStatus, ProviderProfile, ProviderRecord, UsageSummary};
+use asb_core::contracts::{
+    AppKind, MatchStatus, ProviderProfile, ProviderRecord, UsageReading, UsageSummary,
+};
+use chrono::{DateTime, Local};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -83,33 +86,78 @@ fn number(value: f64) -> String {
         .to_string()
 }
 
-fn usage_suffix(summary: &UsageSummary) -> Option<String> {
-    let reading = summary.readings.first()?;
-    let (kind, main) = match (reading.remaining, reading.used) {
-        (Some(remaining), _) => ("余", remaining),
-        (None, Some(used)) => ("用", used),
-        (None, None) => return None,
-    };
+fn number_with_unit(value: f64, unit: Option<&str>) -> String {
+    let value = number(value);
+    match unit.map(str::trim).filter(|unit| !unit.is_empty()) {
+        Some("%") => format!("{value}%"),
+        Some(unit) => format!("{value} {unit}"),
+        None => value,
+    }
+}
+
+fn usage_reading_label(reading: &UsageReading) -> Option<String> {
     let plan = reading
         .plan_name
         .as_deref()
         .filter(|name| !name.trim().is_empty())
-        .map(|name| format!("{} ", name.trim()))
-        .unwrap_or_default();
-    let total = reading
-        .total
-        .map(|value| format!("/{}", number(value)))
-        .unwrap_or_default();
-    let unit = reading
-        .unit
+        .unwrap_or("用量");
+    let unit = reading.unit.as_deref();
+    let mut values = Vec::new();
+    if let Some(remaining) = reading.remaining {
+        values.push(format!("余 {}", number_with_unit(remaining, unit)));
+    }
+    if let Some(used) = reading.used {
+        values.push(format!("已用 {}", number_with_unit(used, unit)));
+    }
+    if let Some(total) = reading.total {
+        values.push(format!("总 {}", number_with_unit(total, unit)));
+    }
+    (!values.is_empty()).then(|| format!("{plan} · {}", values.join(" · ")))
+}
+
+fn compact_usage_reading_label(reading: &UsageReading) -> Option<String> {
+    let plan = reading
+        .plan_name
         .as_deref()
-        .filter(|unit| !unit.trim().is_empty())
-        .map(|unit| format!(" {}", unit.trim()))
-        .unwrap_or_default();
-    let more = (summary.readings.len() > 1)
-        .then(|| format!(" +{}", summary.readings.len() - 1))
-        .unwrap_or_default();
-    Some(format!("{plan}{kind}{}{total}{unit}{more}", number(main)))
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("用量");
+    let unit = reading.unit.as_deref();
+    if let Some(remaining) = reading.remaining {
+        return Some(format!("{plan} 余 {}", number_with_unit(remaining, unit)));
+    }
+    if let Some(used) = reading.used {
+        return Some(format!("{plan} 已用 {}", number_with_unit(used, unit)));
+    }
+    reading
+        .total
+        .map(|total| format!("{plan} 总 {}", number_with_unit(total, unit)))
+}
+
+fn usage_updated_label(summary: &UsageSummary) -> String {
+    DateTime::parse_from_rfc3339(&summary.at)
+        .map(|timestamp| {
+            format!(
+                "更新于 {}",
+                timestamp.with_timezone(&Local).format("%m-%d %H:%M")
+            )
+        })
+        .unwrap_or_else(|_| "最近成功结果".to_string())
+}
+
+/// Returns every profile whose last successful query still belongs to its
+/// current query definition. The tray treats this as a client-wide section;
+/// the active profile only controls its selection checkmark.
+fn cached_usage_profiles<'a>(
+    state: &LocalState,
+    records: &'a [ProviderRecord],
+) -> Vec<(&'a ProviderProfile, UsageSummary)> {
+    records
+        .iter()
+        .filter_map(|record| {
+            crate::usage_cache::get(state, &record.profile)
+                .map(|summary| (&record.profile, summary))
+        })
+        .collect()
 }
 
 fn active_profile_id(statuses: &[ConfigFileStatus], app: AppKind) -> Option<&str> {
@@ -139,17 +187,24 @@ fn menu_title(
     statuses: &[ConfigFileStatus],
     app: AppKind,
     active: Option<&ProviderProfile>,
+    cached_usage: &[(&ProviderProfile, UsageSummary)],
 ) -> String {
     let client = client_name(app);
+    let balances = cached_usage
+        .iter()
+        .filter_map(|(profile, summary)| {
+            summary
+                .readings
+                .iter()
+                .find_map(compact_usage_reading_label)
+                .map(|reading| format!("{} · {reading}", profile.name))
+        })
+        .collect::<Vec<_>>();
+    if !balances.is_empty() {
+        return format!("{client} · {}", balances.join(" · "));
+    }
     match active {
-        Some(profile) => {
-            let usage = crate::usage_cache::get(profile)
-                .as_ref()
-                .and_then(usage_suffix)
-                .map(|suffix| format!(" · {suffix}"))
-                .unwrap_or_default();
-            format!("{client} · {}{usage}", profile.name)
-        }
+        Some(profile) => format!("{client} · {}", profile.name),
         None => format!("{client} · {}", fallback_title(statuses, app)),
     }
 }
@@ -159,6 +214,7 @@ fn app_submenu(
     kind: AppKind,
     records: &[ProviderRecord],
     statuses: &[ConfigFileStatus],
+    state: &LocalState,
 ) -> tauri::Result<Submenu<Wry>> {
     let active_id = active_profile_id(statuses, kind);
     let active = active_id.and_then(|id| {
@@ -167,10 +223,11 @@ fn app_submenu(
             .find(|record| record.profile.id == id)
             .map(|record| &record.profile)
     });
+    let cached_usage = cached_usage_profiles(state, records);
     let submenu = Submenu::with_id(
         app,
         submenu_id(kind),
-        menu_title(statuses, kind, active),
+        menu_title(statuses, kind, active, &cached_usage),
         true,
     )?;
     if records.is_empty() {
@@ -187,20 +244,51 @@ fn app_submenu(
 
     for record in records {
         let active = active_id == Some(record.profile.id.as_str());
-        let usage = crate::usage_cache::get(&record.profile)
-            .as_ref()
-            .and_then(usage_suffix)
-            .map(|suffix| format!(" · {suffix}"))
-            .unwrap_or_default();
         let item = CheckMenuItem::with_id(
             app,
             switch_menu_id(&record.profile.id),
-            format!("{}{}", record.profile.name, usage),
+            record.profile.name.clone(),
             !active,
             active,
             None::<&str>,
         )?;
         submenu.append(&item)?;
+    }
+
+    if !cached_usage.is_empty() {
+        let separator = PredefinedMenuItem::separator(app)?;
+        let heading = MenuItem::with_id(
+            app,
+            format!("tray-usage-heading:{}", submenu_id(kind)),
+            "最近查询的用量",
+            false,
+            None::<&str>,
+        )?;
+        submenu.append(&separator)?;
+        submenu.append(&heading)?;
+        for (profile, summary) in cached_usage {
+            let provider = MenuItem::with_id(
+                app,
+                format!("tray-usage-provider:{}", profile.id),
+                format!("{} · {}", profile.name, usage_updated_label(&summary)),
+                false,
+                None::<&str>,
+            )?;
+            submenu.append(&provider)?;
+            for (index, reading) in summary.readings.iter().enumerate() {
+                let Some(label) = usage_reading_label(reading) else {
+                    continue;
+                };
+                let item = MenuItem::with_id(
+                    app,
+                    format!("tray-usage-reading:{}:{index}", profile.id),
+                    label,
+                    false,
+                    None::<&str>,
+                )?;
+                submenu.append(&item)?;
+            }
+        }
     }
     Ok(submenu)
 }
@@ -224,8 +312,8 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
         .filter(|record| record.profile.app == AppKind::Codex)
         .cloned()
         .collect::<Vec<_>>();
-    let claude = app_submenu(app, AppKind::Claude, &claude_records, &statuses)?;
-    let codex = app_submenu(app, AppKind::Codex, &codex_records, &statuses)?;
+    let claude = app_submenu(app, AppKind::Claude, &claude_records, &statuses, &state)?;
+    let codex = app_submenu(app, AppKind::Codex, &codex_records, &statuses, &state)?;
     let separator_one = PredefinedMenuItem::separator(app)?;
     let separator_two = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, MENU_QUIT, "退出", true, None::<&str>)?;
@@ -265,6 +353,12 @@ fn recovery_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
 fn show_main_window(app: &AppHandle<Wry>) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
+        // Close-to-tray can hide the window while it is minimized; SW_SHOW
+        // keeps that state, so the restore must be explicit. A zoomed window
+        // must not be restored here, or it would lose its maximized size.
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.unminimize();
+        }
         let _ = window.set_focus();
     }
 }
@@ -359,7 +453,45 @@ mod tests {
     use super::*;
     use crate::local_state::{MotionPreference, ThemePreference};
     use crate::runtime_log::RuntimeLogLevel;
-    use asb_core::contracts::UsageReading;
+    use asb_core::contracts::{ProviderDraft, RouteMode, UsageQuery, UsageReading};
+
+    fn profile(id: &str, name: &str) -> ProviderProfile {
+        ProviderProfile::from_draft(
+            id.to_string(),
+            ProviderDraft {
+                app: AppKind::Claude,
+                route_mode: RouteMode::Custom,
+                name: name.to_string(),
+                model: None,
+                base_url: Some("https://example.invalid".to_string()),
+                api_key: "test-key".to_string(),
+                model_options: None,
+                notes: None,
+                website_url: None,
+                usage_query: Some(UsageQuery::Declarative {
+                    url: "{{baseUrl}}/usage".to_string(),
+                    remaining_path: Some("/remaining".to_string()),
+                    used_path: None,
+                    total_path: None,
+                    unit: Some("%".to_string()),
+                    refresh_interval_minutes: 0,
+                }),
+            },
+        )
+    }
+
+    fn summary(at: &str) -> UsageSummary {
+        UsageSummary {
+            readings: vec![UsageReading {
+                plan_name: Some("额度".to_string()),
+                remaining: Some(92.0),
+                used: Some(8.0),
+                total: Some(100.0),
+                unit: Some("%".to_string()),
+            }],
+            at: at.to_string(),
+        }
+    }
 
     #[test]
     fn settings_error_keeps_the_app_recoverable_when_tray_exists() {
@@ -379,6 +511,7 @@ mod tests {
                 hardware_acceleration: true,
                 interface_font: "Noto Sans SC".to_string(),
                 runtime_log_level: RuntimeLogLevel::Info,
+                collapsed_usage_ids: Vec::new(),
             })
         ));
     }
@@ -407,29 +540,56 @@ mod tests {
     }
 
     #[test]
-    fn usage_suffix_is_compact_and_uses_only_cached_numbers() {
-        let summary = UsageSummary {
-            readings: vec![
-                UsageReading {
-                    plan_name: Some("主套餐".to_string()),
-                    remaining: Some(3932.0),
-                    used: Some(68.0),
-                    total: Some(4000.0),
-                    unit: Some("次".to_string()),
-                },
-                UsageReading {
-                    plan_name: Some("附加".to_string()),
-                    remaining: Some(2.0),
-                    used: None,
-                    total: Some(3.0),
-                    unit: Some("次".to_string()),
-                },
-            ],
-            at: "2026-09-01T08:00:00Z".to_string(),
+    fn usage_reading_labels_keep_each_quota_on_one_clear_line() {
+        let reading = UsageReading {
+            plan_name: Some("MAX · 5 小时额度".to_string()),
+            remaining: Some(92.0),
+            used: Some(8.0),
+            total: Some(100.0),
+            unit: Some("%".to_string()),
         };
         assert_eq!(
-            usage_suffix(&summary),
-            Some("主套餐 余3932/4000 次 +1".to_string())
+            usage_reading_label(&reading),
+            Some("MAX · 5 小时额度 · 余 92% · 已用 8% · 总 100%".to_string())
+        );
+    }
+
+    #[test]
+    fn cached_usage_section_includes_every_supplier_with_a_current_result() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        let first = profile("provider-a", "供应商 A");
+        let second = profile("provider-b", "供应商 B");
+        let not_queried = profile("provider-c", "供应商 C");
+        crate::usage_cache::store(&state, &first, summary("2026-09-02T02:34:00Z"))
+            .expect("store first result");
+        crate::usage_cache::store(&state, &second, summary("2026-09-02T02:35:00Z"))
+            .expect("store second result");
+        let records = vec![
+            ProviderRecord {
+                profile: first,
+                file_hash: "first".to_string(),
+            },
+            ProviderRecord {
+                profile: second,
+                file_hash: "second".to_string(),
+            },
+            ProviderRecord {
+                profile: not_queried,
+                file_hash: "third".to_string(),
+            },
+        ];
+
+        let cached_usage = cached_usage_profiles(&state, &records);
+        let displayed = cached_usage
+            .iter()
+            .map(|(profile, _)| profile.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(displayed, ["供应商 A", "供应商 B"]);
+        assert_eq!(
+            menu_title(&[], AppKind::Claude, None, &cached_usage),
+            "Claude · 供应商 A · 额度 余 92% · 供应商 B · 额度 余 92%"
         );
     }
 }

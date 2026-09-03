@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { BackupRecord, ConfigWriteRecord } from "../api/client";
 import type { useCloudBackup } from "../app/useCloudBackup";
 import { BackupHistory } from "../components/BackupHistory";
+import { Button } from "../components/Button";
 import { CloudBackupPanel } from "../components/CloudBackupPanel";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
@@ -70,18 +71,17 @@ export function BackupsPage({
           <div className="asb-backup-toolbar">
             <div className="asb-panel-actions">
               {lastSwitch && (
-                <button
-                  type="button"
-                  className="asb-btn-danger"
+                <Button
+                  variant="danger"
                   disabled={busy}
                   onClick={() => onUndo(lastSwitch)}
                 >
                   撤回上一次切换
-                </button>
+                </Button>
               )}
-              <button type="button" className="asb-btn-secondary" onClick={onOpenDir}>
+              <Button variant="secondary" onClick={onOpenDir}>
                 打开备份文件夹
-              </button>
+              </Button>
             </div>
           </div>
           {lastSwitch && (

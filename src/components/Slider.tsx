@@ -1,6 +1,9 @@
 import { type CSSProperties } from "react";
 
 const THUMB_SIZE_PX = 28;
+const MIN_TICK_COUNT = 2;
+const MAX_FULL_TICK_COUNT = 13;
+const CONDENSED_TICK_COUNT = 7;
 const FLOAT_COMPARISON_EPSILON = 1e-6;
 const ENERGY_PARTICLE_COUNT = 9;
 
@@ -22,12 +25,12 @@ interface Props {
 }
 
 /**
- * Discrete-detent slider ported from the spiralcoder reference: pill track,
- * energy-gradient fill clipped to the value, glimmer particles, ticks and a
- * white thumb over a native range input. All visual values come from
- * styles/tokens.css.
+ * Discrete-detent slider with a pill track, energy-gradient fill clipped to
+ * the value, glimmer particles, ticks and a white thumb over a native range
+ * input. All visual values come from styles/tokens.css.
  */
 export function Slider({ value, min, max, step, ariaLabel, ariaValueText, disabled = false, onValueChange }: Props) {
+  assertSliderContract({ value, min, max, step });
   const percent = ((value - min) / (max - min)) * 100;
   const thumbOffset = (0.5 - percent / 100) * THUMB_SIZE_PX;
   const thumbLeft = `calc(${percent}% + ${thumbOffset}px)`;
@@ -36,7 +39,7 @@ export function Slider({ value, min, max, step, ariaLabel, ariaValueText, disabl
     "--asb-slider-fill-width": fillWidth,
     "--asb-slider-thumb-left": thumbLeft,
   };
-  const stepCount = Math.floor((max - min) / step) + 1;
+  const stepCount = resolveTickCount({ min, max, step });
 
   return (
     <div className="asb-slider" data-disabled={disabled ? "true" : undefined} style={style}>
@@ -77,4 +80,19 @@ export function Slider({ value, min, max, step, ariaLabel, ariaValueText, disabl
       />
     </div>
   );
+}
+
+/** Long ranges collapse to a fixed detent sample instead of dense tick rows. */
+function resolveTickCount({ min, max, step }: Pick<Props, "min" | "max" | "step">): number {
+  const stepCount = Math.floor((max - min) / step) + 1;
+  if (stepCount > MAX_FULL_TICK_COUNT) return CONDENSED_TICK_COUNT;
+  return Math.max(MIN_TICK_COUNT, stepCount);
+}
+
+function assertSliderContract({ value, min, max, step }: Pick<Props, "value" | "min" | "max" | "step">): void {
+  const values = [value, min, max, step];
+  if (!values.every(Number.isFinite)) throw new Error("Slider requires finite numeric values");
+  if (max <= min) throw new Error("Slider max must be greater than min");
+  if (step <= 0) throw new Error("Slider step must be greater than zero");
+  if (value < min || value > max) throw new Error("Slider value must be within the configured range");
 }

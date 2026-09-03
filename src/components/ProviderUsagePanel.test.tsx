@@ -1,13 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
+import type { UsageSummary } from "../api/client";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
 
 const invokeMock = vi.mocked(invoke);
+
+const usageQuery = {
+  kind: "declarative" as const,
+  url: "{{baseUrl}}/user/balance",
+  remainingPath: "data/balance",
+  usedPath: null,
+  totalPath: null,
+  unit: "CNY",
+  refreshIntervalMinutes: 0,
+};
 
 const profile = {
   id: "relay-a",
@@ -19,11 +30,7 @@ const profile = {
   apiKey: "test-key",
   modelOptions: null,
   websiteUrl: null,
-};
-
-const query = {
-  kind: "script" as const,
-  source: "({ request() {}, extract() {} })",
+  usageQuery,
 };
 
 describe("ProviderUsagePanel", () => {
@@ -40,14 +47,23 @@ describe("ProviderUsagePanel", () => {
       ],
       at: "2026-08-31T08:00:00Z",
     });
-    render(<ProviderUsagePanel id="provider-usage-relay-a" profile={profile} query={query} />);
+    render(
+      <ProviderUsagePanel
+        id="provider-usage-relay-a"
+        profile={profile}
+      />,
+    );
 
-    expect(await screen.findByText("1,024.5")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "用量" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "主套餐" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "附加套餐" })).toBeInTheDocument();
-    expect(screen.getByText("已用 24")).toBeInTheDocument();
-    expect(screen.getByText("总量 1,048.5 CNY")).toBeInTheDocument();
+    expect(await screen.findByText("1,024.5 CNY")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "中继 A 用量读数" })).toBeInTheDocument();
+
+    const mainRow = screen.getByRole("row", { name: /主套餐/ });
+    expect(within(mainRow).getByText("1,024.5 CNY")).toBeInTheDocument();
+    expect(within(mainRow).getByText("24 CNY")).toBeInTheDocument();
+    expect(within(mainRow).getByText("1,048.5 CNY")).toBeInTheDocument();
+    const extraRow = screen.getByRole("row", { name: /附加套餐/ });
+    expect(within(extraRow).getByText("8 USD")).toBeInTheDocument();
+    expect(within(extraRow).getByText("—")).toBeInTheDocument();
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", { profileId: "relay-a" });
 
@@ -57,7 +73,12 @@ describe("ProviderUsagePanel", () => {
 
   it("keeps the configured query error visible in the expanded card", async () => {
     invokeMock.mockRejectedValueOnce(new Error("额度接口返回 403"));
-    render(<ProviderUsagePanel id="provider-usage-relay-a" profile={profile} query={query} />);
+    render(
+      <ProviderUsagePanel
+        id="provider-usage-relay-a"
+        profile={profile}
+      />,
+    );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("额度接口返回 403");
   });
@@ -73,7 +94,6 @@ describe("ProviderUsagePanel", () => {
       <ProviderUsagePanel
         id="provider-usage-relay-a"
         profile={profile}
-        query={query}
         onConfigure={onConfigure}
       />,
     );
@@ -87,9 +107,94 @@ describe("ProviderUsagePanel", () => {
       readings: [{ planName: "未知额度", remaining: 12, used: null, total: null, unit: "次" }],
       at: "2026-08-31T08:00:00Z",
     });
-    render(<ProviderUsagePanel id="provider-usage-relay-a" profile={profile} query={query} />);
+    render(
+      <ProviderUsagePanel
+        id="provider-usage-relay-a"
+        profile={profile}
+      />,
+    );
 
-    expect(await screen.findByText("未知额度")).toBeInTheDocument();
+    const unknownRow = await screen.findByRole("row", { name: /未知额度/ });
+    expect(within(unknownRow).getByText("12 次")).toBeInTheDocument();
+    expect(within(unknownRow).getAllByText("—")).toHaveLength(3);
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("re-queries on the configured auto-refresh interval", async () => {
+    vi.useFakeTimers();
+    invokeMock.mockResolvedValue({
+      readings: [{ planName: "主套餐", remaining: 1, used: 1, total: 2, unit: "CNY" }],
+      at: "2026-08-31T08:00:00Z",
+    });
+    try {
+      render(
+        <ProviderUsagePanel
+          id="provider-usage-relay-a"
+          profile={{ ...profile, usageQuery: { ...usageQuery, refreshIntervalMinutes: 2 } }}
+        />,
+      );
+      await act(async () => {});
+      expect(invokeMock).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2 * 60_000);
+      });
+      expect(invokeMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays manual when the auto-refresh interval is disabled", async () => {
+    vi.useFakeTimers();
+    invokeMock.mockResolvedValue({ readings: [], at: "2026-08-31T08:00:00Z" });
+    try {
+      render(
+        <ProviderUsagePanel
+          id="provider-usage-relay-a"
+          profile={profile}
+        />,
+      );
+      await act(async () => {});
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30 * 60_000);
+      });
+      expect(invokeMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-queries when the profile changes while the first read is in flight", async () => {
+    let resolveFirst: (value: UsageSummary) => void = () => {};
+    invokeMock.mockImplementationOnce(
+      () => new Promise<UsageSummary>((resolve) => { resolveFirst = resolve; }),
+    );
+    invokeMock.mockResolvedValue({ readings: [], at: "2026-08-31T08:00:00Z" });
+
+    const { rerender } = render(
+      <ProviderUsagePanel
+        id="provider-usage-relay-a"
+        profile={profile}
+      />,
+    );
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ProviderUsagePanel
+        id="provider-usage-relay-a"
+        profile={{ ...profile, id: "relay-b", name: "中继 B" }}
+      />,
+    );
+
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+    expect(invokeMock).toHaveBeenLastCalledWith("query_profile_usage", { profileId: "relay-b" });
+    await waitFor(() =>
+      expect(screen.queryByText("正在读取已配置的用量…")).not.toBeInTheDocument(),
+    );
+
+    resolveFirst({ readings: [], at: "2026-08-31T08:00:00Z" });
+    await act(async () => {});
   });
 });

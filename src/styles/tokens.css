@@ -56,6 +56,22 @@
   --asb-gradient-button-glow-hover: inset 0 0 16px 0 #ffffff,
     inset 0 0 14px 0 #80b4ff;
 
+  /* Premium action gradient — carbon-black body with a restrained violet
+     energy zone on the right (user-directed spiralcoder replica, 2026-09-03).
+     Fixed across themes like the primary-button gradient above; the white
+     inset highlight is the only glow, replacing any drop shadow. */
+  --asb-gradient-premium-button: linear-gradient(
+    108deg,
+    #1f1f23 0%,
+    #1f1f23 66%,
+    #24212d 74%,
+    #312370 84%,
+    #3d2a8c 100%
+  );
+  --asb-gradient-premium-button-glow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --asb-gradient-premium-button-glow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --asb-premium-button-hover-brightness: 1.06;
+
   /* Typography. The user-selected interface font leads both text stacks; the
      fallback here is the bundled default (see main.tsx @font-face imports).
      useAppSettings overrides --asb-font-user at runtime. */
@@ -133,7 +149,6 @@
   --asb-route-particle-idle-base-rgb: 70 124 222;
   --asb-route-particle-idle-flare-rgb: 133 106 207;
   --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --asb-route-pill-text: #1e66f5;
   --asb-route-inner-bg: #edf1f8;
 
   /* Layout */
@@ -175,7 +190,6 @@
     --asb-route-particle-idle-base-rgb: 133 176 255;
     --asb-route-particle-idle-flare-rgb: 173 150 235;
     --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
-    --asb-route-pill-text: #8be9fd;
      --asb-route-inner-bg: #0d2133;
   }
 }
@@ -216,7 +230,6 @@
     --asb-route-particle-idle-base-rgb: 133 176 255;
     --asb-route-particle-idle-flare-rgb: 173 150 235;
     --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
-    --asb-route-pill-text: #8be9fd;
     --asb-route-inner-bg: #0d2133;
 }
 

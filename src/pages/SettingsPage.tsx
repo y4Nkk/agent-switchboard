@@ -1,5 +1,6 @@
 import type { AppSettings, UpdateCheck } from "../api/client";
 import { AppSettingsForm } from "../components/AppSettingsForm";
+import { Button } from "../components/Button";
 import { UpdateSection } from "../components/UpdateSection";
 
 interface SettingsPageProps {
@@ -8,6 +9,8 @@ interface SettingsPageProps {
   loadError: string | null;
   /** Re-runs the settings load after a failure. */
   onRetryLoad: () => void;
+  /** Replaces an invalid settings file with defaults. */
+  onRepair: () => void;
   busy: boolean;
   /** Saves one field of the currently loaded settings. */
   onPatch: (patch: Partial<AppSettings>) => void;
@@ -26,6 +29,7 @@ export function SettingsPage({
   settings,
   loadError,
   onRetryLoad,
+  onRepair,
   busy,
   onPatch,
   onRestart,
@@ -62,14 +66,12 @@ export function SettingsPage({
                 读取失败期间，外观与关闭行为使用默认值
               </span>
             </div>
-            <button
-              type="button"
-              className="asb-btn-secondary"
-              disabled={busy}
-              onClick={onRetryLoad}
-            >
+            <Button variant="secondary" disabled={busy} onClick={onRetryLoad}>
               重试
-            </button>
+            </Button>
+            <Button variant="secondary" disabled={busy} onClick={onRepair}>
+              一键修复
+            </Button>
           </div>
         ) : (
           <p className="asb-empty">加载中</p>

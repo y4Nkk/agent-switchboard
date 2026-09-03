@@ -6,8 +6,8 @@
 
 use crate::adapter::{AdapterError, OverlayEntry};
 use crate::contracts::{
-    ChangeKind, CodexModelSettings, CommonSettings, ConfigValue, KeyChange, ModelOptions,
-    RouteMode, RouteState, SwitchPlan, SwitchPreview,
+    ChangeKind, CodexModelSettings, CommonSettingValue, CommonSettings, ConfigValue, KeyChange,
+    ModelOptions, RouteMode, RouteState, SwitchPlan, SwitchPreview,
 };
 use crate::ownership::{
     is_owned, provider_absent_action, setting_specs, ProviderAbsentAction, SettingOwner,
@@ -195,12 +195,13 @@ fn provider_value(profile: &crate::contracts::ProviderProfile, key: &str) -> Opt
 
 /// One common setting's overlay entry: an explicit non-default value is
 /// written, while the directory default is expressed by omitting the line.
-/// How a default is represented is an adapter-internal decision and never
-/// part of the storage or UI contract.
-fn common_entry(spec: &crate::ownership::SettingSpec, value: &ConfigValue) -> OverlayEntry {
-    match spec.default.as_ref() {
-        Some(default) if default == value => OverlayEntry::RemoveIfPresent,
-        _ => OverlayEntry::Set(value.clone()),
+/// Common-setting intent is explicit: automatic keys leave the host value
+/// alone only after removing a previously managed line; explicit values are
+/// always written, even when they resemble a documented client default.
+fn common_entry(value: &CommonSettingValue) -> OverlayEntry {
+    match value {
+        CommonSettingValue::Automatic => OverlayEntry::RemoveIfPresent,
+        CommonSettingValue::Explicit { value } => OverlayEntry::Set(value.clone()),
     }
 }
 
@@ -212,7 +213,7 @@ fn common_overlay(common: &CommonSettings) -> Vec<(String, OverlayEntry)> {
             let value = common
                 .value(spec.key)
                 .expect("common-settings validation guarantees every catalog key");
-            (spec.key.to_string(), common_entry(&spec, value))
+            (spec.key.to_string(), common_entry(value))
         })
         .collect()
 }
@@ -233,7 +234,7 @@ fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
                         .common
                         .value(spec.key)
                         .expect("plan validation guarantees complete common settings");
-                    common_entry(&spec, value)
+                    common_entry(value)
                 }
                 SettingOwner::Host => unreachable!("host keys never appear in the directory"),
             };
@@ -397,7 +398,7 @@ pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, Adapter
 pub(crate) fn render_common_settings(common: &CommonSettings) -> Result<String, AdapterError> {
     let rendered = render_entries("", common_overlay(common))?;
     Ok(if rendered.trim().is_empty() {
-        "# 所有通用设置均为默认值\n".to_string()
+        "# 所有通用设置均为自动\n".to_string()
     } else {
         rendered
     })
@@ -464,13 +465,15 @@ mod tests {
                 website_url: None,
                 usage_query: None,
             },
-            common: common_with("disable_response_storage", ConfigValue::Bool(true)),
+            common: common_with("model_reasoning_effort", ConfigValue::Str("xhigh".into())),
         }
     }
 
     fn common_with(key: &str, value: ConfigValue) -> crate::contracts::CommonSettings {
         let mut common = default_common_settings(AppKind::Codex);
-        common.settings.insert(key.to_string(), value);
+        common
+            .settings
+            .insert(key.to_string(), CommonSettingValue::Explicit { value });
         common
     }
 
@@ -515,19 +518,19 @@ mod tests {
     }
 
     #[test]
-    fn non_default_general_settings_write_their_value() {
+    fn explicit_general_settings_write_their_value() {
         let current = "";
         let preview = preview(current, &plan_b(), "/b").unwrap();
         let change = preview
             .changes
             .iter()
-            .find(|c| c.key == "disable_response_storage")
-            .expect("non-default common value must be written");
+            .find(|c| c.key == "model_reasoning_effort")
+            .expect("explicit common value must be written");
         assert_eq!(change.kind, ChangeKind::Set);
     }
 
     #[test]
-    fn default_valued_general_settings_omit_the_line_instead_of_writing_it() {
+    fn automatic_general_settings_remove_hand_set_lines() {
         let mut plan = plan_b();
         plan.common = default_common_settings(AppKind::Codex);
         let current = "model_verbosity = \"low\"\n";
@@ -536,12 +539,12 @@ mod tests {
             .changes
             .iter()
             .find(|c| c.key == "model_verbosity")
-            .expect("a hand-set non-default line is normalized back to the default");
+            .expect("automatic behavior removes the app-owned line");
         assert_eq!(change.kind, ChangeKind::Remove);
         let rendered = render(current, &plan).unwrap();
         assert!(!rendered.contains("model_verbosity"));
 
-        // With the line already absent the default produces no diff entry.
+        // With the line already absent automatic behavior produces no diff entry.
         let clean = super::preview("", &plan, "/b").unwrap();
         assert!(!clean.changes.iter().any(|c| c.key == "model_verbosity"));
     }

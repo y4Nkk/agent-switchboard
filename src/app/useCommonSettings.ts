@@ -50,7 +50,15 @@ function sameValues(
   const rightKeys = Object.keys(right);
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every((key) => left[key] === right[key])
+    leftKeys.every((key) => {
+      const before = left[key];
+      const after = right[key];
+      return (
+        before.mode === after.mode &&
+        (before.mode === "automatic" ||
+          (after.mode === "explicit" && before.value === after.value))
+      );
+    })
   );
 }
 
@@ -65,8 +73,8 @@ function phaseForDraft(
 
 /**
  * General-settings state lives entirely in the application store. It owns
- * one independent draft of plain parameter values per client. Its preview
- * is a separately rendered common-settings fragment, never a client-file
+ * one independent automatic-or-explicit draft per client. Its preview is a
+ * separately rendered common-settings fragment, never a client-file
  * candidate.
  */
 export function useCommonSettings({
@@ -151,8 +159,8 @@ export function useCommonSettings({
     [busy],
   );
 
-  /** Restores one group (or every group when group is null) to the
-   * directory-defined defaults. The draft keeps the edits unsaved. */
+  /** Restores one group (or every group when group is null) to the client's
+   * own automatic behavior. The draft keeps the edits unsaved. */
   const resetGroupToDefaults = useCallback(
     (app: AppKind, group: string | null) => {
       if (busy) return;
@@ -162,11 +170,7 @@ export function useCommonSettings({
         const draft = { ...state.draft };
         for (const spec of state.editor.specs) {
           if (group !== null && spec.group !== group) continue;
-          if (spec.default.boolValue !== undefined) {
-            draft[spec.key] = spec.default.boolValue;
-          } else if (spec.default.strValue !== undefined) {
-            draft[spec.key] = spec.default.strValue;
-          }
+          draft[spec.key] = { mode: "automatic" };
         }
         return {
           ...current,

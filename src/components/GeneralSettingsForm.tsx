@@ -2,8 +2,9 @@ import type {
   CommonSettingSpec,
   CommonValue,
 } from "../api/client";
+import { Button } from "./Button";
+import { RadioOption } from "./RadioOption";
 import { Slider } from "./Slider";
-import { Switch } from "./Switch";
 
 interface Props {
   specs: CommonSettingSpec[];
@@ -16,39 +17,21 @@ interface Props {
   onResetGroup: (group: string | null) => void;
 }
 
-function choiceIndex(spec: CommonSettingSpec, value: CommonValue): number {
-  const index =
-    typeof value === "string"
-      ? spec.options.findIndex((option) => option.value === value)
-      : -1;
-  return Math.max(index, 0);
+const automatic: CommonValue = { mode: "automatic" };
+
+function explicit(value: boolean | string): CommonValue {
+  return { mode: "explicit", value };
 }
 
-function RadioOption({
-  name,
-  checked,
-  disabled,
-  label,
-  onChange,
-}: {
-  name: string;
-  checked: boolean;
-  disabled: boolean;
-  label: string;
-  onChange: () => void;
-}) {
-  return (
-    <label className={`asb-seg-opt${checked ? " is-active" : ""}`}>
-      <input
-        type="radio"
-        name={name}
-        checked={checked}
-        disabled={disabled}
-        onChange={onChange}
-      />
-      {label}
-    </label>
-  );
+function choiceIndex(spec: CommonSettingSpec, value: CommonValue): number {
+  if (value.mode === "automatic") return 0;
+  const index = spec.options.findIndex((option) => option.value === value.value);
+  return index < 0 ? 0 : index + 1;
+}
+
+function choiceLabel(spec: CommonSettingSpec, value: CommonValue): string {
+  if (value.mode === "automatic") return "自动";
+  return spec.options.find((option) => option.value === value.value)?.label ?? "自动";
 }
 
 function ChoiceControl({
@@ -65,31 +48,43 @@ function ChoiceControl({
   const name = `${spec.key}-setting`;
   if (spec.control === "slider") {
     return (
-      <Slider
-        value={choiceIndex(spec, value)}
-        min={0}
-        max={spec.options.length - 1}
-        step={1}
-        ariaLabel={spec.label}
-        ariaValueText={`${spec.label} ${
-          spec.options[choiceIndex(spec, value)]?.label ?? ""
-        }`}
-        disabled={busy}
-        onValueChange={(index) => onChange(spec.options[index]?.value)}
-      />
+      <div className="asb-slider-control">
+        <span className="asb-choice-current" aria-live="polite">
+          当前推理：{choiceLabel(spec, value)}
+        </span>
+        <Slider
+          value={choiceIndex(spec, value)}
+          min={0}
+          max={spec.options.length}
+          step={1}
+          ariaLabel={spec.label}
+          ariaValueText={`${spec.label} ${choiceLabel(spec, value)}`}
+          disabled={busy}
+          onValueChange={(index) =>
+            onChange(index === 0 ? automatic : explicit(spec.options[index - 1].value))
+          }
+        />
+      </div>
     );
   }
 
   return (
     <div className="asb-segments" role="radiogroup" aria-label={spec.label}>
+      <RadioOption
+        name={name}
+        checked={value.mode === "automatic"}
+        disabled={busy}
+        label="自动"
+        onChange={() => onChange(automatic)}
+      />
       {spec.options.map((option) => (
         <RadioOption
           key={option.value}
           name={name}
-          checked={value === option.value}
+          checked={value.mode === "explicit" && value.value === option.value}
           disabled={busy}
           label={option.label}
-          onChange={() => onChange(option.value)}
+          onChange={() => onChange(explicit(option.value))}
         />
       ))}
     </div>
@@ -97,11 +92,10 @@ function ChoiceControl({
 }
 
 /**
- * Plain general-parameter controls: every parameter always carries a
- * concrete value. There is no raw TOML/JSON editor, no client-file preview,
- * and no patch semantics here — every edit changes only desired application
- * state, and each group can be restored to its directory defaults. The page
- * owns the one all-settings restore action alongside saving.
+ * General parameters record either automatic client behavior or one explicit
+ * application-owned value. There is no raw TOML/JSON editor: every edit
+ * changes only desired application state, and every reset returns a setting
+ * to automatic behavior.
  */
 export function GeneralSettingsForm({
   specs,
@@ -120,29 +114,45 @@ export function GeneralSettingsForm({
           <section className="asb-toggle-group" key={group}>
             <div className="asb-toggle-group-head">
               <h3 className="asb-toggle-group-title">{group}</h3>
-              <button
-                type="button"
-                className="asb-btn-secondary"
+              <Button
+                variant="secondary"
                 disabled={busy}
                 onClick={() => onResetGroup(group)}
               >
                 恢复默认值
-              </button>
+              </Button>
             </div>
             {groupSpecs.map((spec) => {
-              const value = values[spec.key];
+              const value = values[spec.key] ?? automatic;
               return (
                 <div className="asb-toggle-row asb-choice-row" key={spec.key}>
                   <div className="asb-choice-head">
                     <span className="asb-checkbox-label">{spec.label}</span>
                   </div>
                   {spec.control === "toggle" ? (
-                    <Switch
-                      label={spec.label}
-                      checked={value === true}
-                      disabled={busy}
-                      onChange={(checked) => onChange(spec.key, checked)}
-                    />
+                    <div className="asb-segments" role="radiogroup" aria-label={spec.label}>
+                      <RadioOption
+                        name={`${spec.key}-setting`}
+                        checked={value.mode === "automatic"}
+                        disabled={busy}
+                        label="自动"
+                        onChange={() => onChange(spec.key, automatic)}
+                      />
+                      <RadioOption
+                        name={`${spec.key}-setting`}
+                        checked={value.mode === "explicit" && value.value === true}
+                        disabled={busy}
+                        label="开启"
+                        onChange={() => onChange(spec.key, explicit(true))}
+                      />
+                      <RadioOption
+                        name={`${spec.key}-setting`}
+                        checked={value.mode === "explicit" && value.value === false}
+                        disabled={busy}
+                        label="关闭"
+                        onChange={() => onChange(spec.key, explicit(false))}
+                      />
+                    </div>
                   ) : (
                     <ChoiceControl
                       spec={spec}

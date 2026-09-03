@@ -516,6 +516,75 @@ mod tests {
     }
 
     #[test]
+    fn legacy_usage_query_files_are_upgraded_once_to_explicit_manual_only() {
+        let (directory, store) = store();
+        let mut draft = codex_draft("旧查询档案");
+        draft.usage_query = Some(UsageQuery::Declarative {
+            url: "{{baseUrl}}/usage".to_string(),
+            remaining_path: Some("/remaining".to_string()),
+            used_path: None,
+            total_path: None,
+            unit: None,
+            refresh_interval_minutes: 30,
+        });
+        store.create_provider(draft).expect("create provider");
+        let path = provider_files(&store, AppKind::Codex).remove(0);
+
+        // Rewind the stored file to the previous contract: the interval line
+        // simply did not exist.
+        let current = fs::read_to_string(&path).unwrap();
+        let legacy = current
+            .replace("  \"refreshIntervalMinutes\": 30,\n", "")
+            .replace(",\n    \"refreshIntervalMinutes\": 30", "");
+        assert_ne!(legacy, current, "fixture must remove the interval field");
+        fs::write(&path, &legacy).unwrap();
+
+        // Loading upgrades exactly that shape, persists the explicit 0, and
+        // keeps reporting the query's own configured position in the file.
+        let records = store.list_providers().unwrap();
+        assert_eq!(
+            records[0]
+                .profile
+                .usage_query
+                .as_ref()
+                .unwrap()
+                .refresh_interval_minutes(),
+            0
+        );
+        let upgraded = fs::read_to_string(&path).unwrap();
+        assert!(upgraded.contains("\"refreshIntervalMinutes\": 0"));
+
+        // A second load is a plain strict read; the file no longer changes.
+        let before = upgraded.clone();
+        store.list_providers().unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+        drop(directory);
+    }
+
+    #[test]
+    fn unknown_usage_query_shapes_stay_rejected_without_a_write() {
+        let (directory, store) = store();
+        let mut draft = codex_draft("坏查询档案");
+        draft.usage_query = Some(UsageQuery::Script {
+            source: "({ request() {}, extract() {} })".to_string(),
+            refresh_interval_minutes: 0,
+        });
+        store.create_provider(draft).expect("create provider");
+        let path = provider_files(&store, AppKind::Codex).remove(0);
+
+        let current = fs::read_to_string(&path).unwrap();
+        // An unknown key is not the previous shape; the upgrade must refuse
+        // to touch the file and the load must fail loudly.
+        let unknown = current.replace("\"refreshIntervalMinutes\": 0", "\"legacyTimer\": true");
+        assert_ne!(unknown, current);
+        fs::write(&path, &unknown).unwrap();
+
+        assert!(store.list_providers().is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), unknown);
+        drop(directory);
+    }
+
+    #[test]
     fn create_writes_one_uuid_named_file_per_provider() {
         let (_dir, store) = store();
         let first = store.create_provider(codex_draft("网关 A")).expect("first");
@@ -712,6 +781,7 @@ mod tests {
                 extract() { return { remaining: 1, unit: "USD" }; }
             })"#
             .to_string(),
+            refresh_interval_minutes: 0,
         });
         assert!(!store.provider_exists(&with_query));
         assert!(store.provider_will_receive_usage_query(&with_query));
@@ -747,6 +817,7 @@ mod tests {
         let mut draft = codex_draft("坏脚本");
         draft.usage_query = Some(UsageQuery::Script {
             source: "({ request() {} })".to_string(),
+            refresh_interval_minutes: 0,
         });
         assert!(store.create_provider(draft).is_err());
         assert_eq!(provider_files(&store, AppKind::Codex).len(), 0);

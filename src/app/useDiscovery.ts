@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  discoverCached,
   discoverLocal,
   importDiscoveredProfile,
   type AppKind,
@@ -36,6 +37,22 @@ export function useDiscovery({
   setPage,
 }: DiscoveryDeps) {
   const [discovery, setDiscovery] = useState<DiscoveryReport | null>(null);
+
+  /** Shows the previous scan while the page loads; an absent or unreadable
+   * cache simply means no scan has run yet, not an error. */
+  useEffect(() => {
+    let active = true;
+    discoverCached()
+      .then((cached) => {
+        if (active && cached) setDiscovery(cached);
+      })
+      .catch(() => {
+        /* 缓存不可读等同于"还没有上次扫描"，不作为错误上报 */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /** Refreshes discovery after a successful write and returns the warnings
    * to report: the incoming ones, plus a note when the refresh itself

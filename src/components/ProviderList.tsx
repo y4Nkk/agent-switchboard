@@ -17,12 +17,13 @@ import {
 } from "@dnd-kit/sortable";
 import type { ProviderProfile } from "../api/client";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ConnectivityIcon,
   EditIcon,
   EyeOffIcon,
   GripIcon,
+  MoreIcon,
   PlayIcon,
   PreviewIcon,
   TrashIcon,
@@ -30,6 +31,8 @@ import {
 } from "./icons";
 import { ProbeFeedback, useEndpointProbe } from "./ProbePanel";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
+import { Button } from "./Button";
+import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { Tooltip } from "./Tooltip";
 
@@ -40,9 +43,14 @@ interface Props {
   selectedId: string | null;
   /** Profile whose preview is currently unfolded under the list. */
   openPreviewId?: string | null;
+  /** Persisted profile ids whose usage panel is collapsed; every other
+   * configured panel stays expanded. */
+  collapsedUsageIds?: string[];
   onSelect: (id: string) => void;
   /** Persists a new display order for the visible client's profiles. */
   onReorder?: (orderedIds: string[]) => void;
+  /** Persists the flipped usage-panel state for the profile. */
+  onToggleUsage?: (profile: ProviderProfile) => void;
   /** Opens the preview panel for the profile; the write itself still needs
    * the explicit confirm step (user decision 2026-08-28). */
   onActivate?: (profile: ProviderProfile) => void;
@@ -70,6 +78,9 @@ interface RowProps {
   selected: boolean;
   previewOpen: boolean;
   usageOpen: boolean;
+  /** Official Codex rows: whether the subscription-quota ledger is unfolded,
+   * persisted through the same collapsed-usage owner as `usageOpen`. */
+  quotaOpen: boolean;
   sortable: boolean;
   onSelect: (id: string) => void;
   onToggleUsage: (profile: ProviderProfile) => void;
@@ -90,6 +101,7 @@ function ProviderRow({
   selected,
   previewOpen,
   usageOpen,
+  quotaOpen,
   sortable,
   onSelect,
   onToggleUsage,
@@ -109,13 +121,23 @@ function ProviderRow({
   const websiteUrl = profile.websiteUrl;
   const probe = useEndpointProbe(baseUrl ?? null);
   const [probeOpen, setProbeOpen] = useState(false);
+  const [reloginOpen, setReloginOpen] = useState(false);
+  /** Bumped on each completed re-login so the quota panel re-queries. */
+  const [quotaNonce, setQuotaNonce] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLSpanElement>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
   const official = profile.routeMode === "official";
+  const officialQuota = official && profile.app === "codex";
   const hasUsageQuery = profile.usageQuery !== null && profile.usageQuery !== undefined;
   const usageLabel = hasUsageQuery
     ? usageOpen
       ? `收起 ${profile.name} 用量`
       : `查看 ${profile.name} 用量`
     : `配置 ${profile.name} 用量`;
+  const quotaLabel = quotaOpen
+    ? `收起 ${profile.name} 订阅额度`
+    : `查看 ${profile.name} 订阅额度`;
   const hasProbeFeedback = probe.result !== null || probe.error !== null;
   const probeFeedbackId = `provider-probe-${profile.id}`;
   const probeVisible = probeOpen && hasProbeFeedback;
@@ -124,7 +146,26 @@ function ProviderRow({
     : probeVisible
       ? `收起 ${profile.name} 连通性结果`
       : `测试 ${profile.name} 连通性`;
-  const hasActions = Boolean(baseUrl || hasUsageQuery || (!official && onConfigureUsage) || onPreview || (!official && onEdit) || onDelete);
+  const hasClusterActions = Boolean(
+    baseUrl ||
+      hasUsageQuery ||
+      officialQuota ||
+      (!official && onConfigureUsage) ||
+      onPreview ||
+      onEdit ||
+      onDelete,
+  );
+
+  // Destructive entries live behind the three-dot trigger; the menu follows
+  // the app's popup idioms (FontPicker): outside pointerdown and Escape close.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [moreOpen]);
   return (
     <li
       ref={setNodeRef}
@@ -157,70 +198,89 @@ function ProviderRow({
         </span>
         <span className="asb-row-main">
           <span className="asb-row-name">{profile.name}</span>
-          {websiteUrl ? (
-            <a
-              className="asb-row-meta is-url"
-              href={websiteUrl}
-              title={websiteUrl}
-              onClick={(event) => {
-                // wry blocks webview new-window requests; the opener plugin
-                // routes the URL to the system browser instead.
-                event.preventDefault();
-                void openUrl(websiteUrl);
-              }}
-            >
-              {hostLabel(websiteUrl)}
-            </a>
-          ) : official ? <span className="asb-row-meta">官方登录</span> : null}
-          {profile.model && <span className="asb-row-meta">{profile.model}</span>}
+          {(profile.model || websiteUrl || official) && (
+            <span className="asb-row-meta">
+              {profile.model}
+              {profile.model && (websiteUrl || official) && " · "}
+              {websiteUrl ? (
+                <a
+                  className="asb-row-host"
+                  href={websiteUrl}
+                  title={websiteUrl}
+                  onClick={(event) => {
+                    // wry blocks webview new-window requests; the opener plugin
+                    // routes the URL to the system browser instead.
+                    event.preventDefault();
+                    void openUrl(websiteUrl);
+                  }}
+                >
+                  {hostLabel(websiteUrl)}
+                </a>
+              ) : official ? (
+                <span>官方登录</span>
+              ) : null}
+            </span>
+          )}
         </span>
       </button>
       {onActivate && !active && (
         <Tooltip label={`启用 ${profile.name}`}>
-          <button
-            type="button"
-            className="asb-btn-primary asb-row-activate"
+          <Button
+            variant="primary"
+            className="asb-row-activate"
             aria-label={`启用 ${profile.name}`}
             onClick={() => onActivate(profile)}
           >
             <PlayIcon size={15} />
             启用
-          </button>
+          </Button>
         </Tooltip>
       )}
       {active && <span className="asb-pill-status">使用中</span>}
-      {hasActions && (
+      {official && (
+        <Tooltip label={reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`}>
+          <Button
+            variant="secondary"
+            className={`asb-row-activate${reloginOpen ? " is-active" : ""}`}
+            aria-label={reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`}
+            aria-expanded={reloginOpen}
+            onClick={() => setReloginOpen((open) => !open)}
+          >
+            {reloginOpen ? "收起登录" : "重新登录"}
+          </Button>
+        </Tooltip>
+      )}
+      {hasClusterActions && (
         <span className="asb-iconcluster" role="group" aria-label={`${profile.name} 操作`}>
-          {onEdit && !official && (
+          {onEdit && (
             <Tooltip label={`编辑 ${profile.name}`}>
-              <button
-                type="button"
-                className="asb-btn-icon"
+              <Button
+                variant="icon"
                 aria-label={`编辑 ${profile.name}`}
                 onClick={() => onEdit(profile)}
               >
-                <EditIcon />
-              </button>
+                <EditIcon size={20} />
+              </Button>
             </Tooltip>
           )}
           {onPreview && (
             <Tooltip label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}>
-              <button
-                type="button"
-                className={`asb-btn-icon${previewOpen ? " is-active" : ""}`}
+              <Button
+                variant="icon"
+                className={previewOpen ? "is-active" : undefined}
                 aria-label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}
                 aria-expanded={previewOpen}
                 onClick={() => onPreview(profile)}
               >
-                {previewOpen ? <EyeOffIcon /> : <PreviewIcon />}
-              </button>
+                {previewOpen ? <EyeOffIcon size={20} /> : <PreviewIcon size={20} />}
+              </Button>
             </Tooltip>
           )}
           {baseUrl && (
             <Tooltip label={probeLabel}>
-              <button
-                type="button"
-                className={`asb-btn-icon${probeVisible ? " is-active" : ""}`}
+              <Button
+                variant="icon"
+                className={probeVisible ? "is-active" : undefined}
                 aria-label={probeLabel}
                 aria-busy={probe.busy}
                 aria-controls={probeFeedbackId}
@@ -236,15 +296,29 @@ function ProviderRow({
                   void probe.run();
                 }}
               >
-                <ConnectivityIcon />
-              </button>
+                <ConnectivityIcon size={20} />
+              </Button>
+            </Tooltip>
+          )}
+          {officialQuota && (
+            <Tooltip label={quotaLabel}>
+              <Button
+                variant="icon"
+                className={quotaOpen ? "is-active" : undefined}
+                aria-label={quotaLabel}
+                aria-controls={`codex-official-quota-${profile.id}`}
+                aria-expanded={quotaOpen}
+                onClick={() => onToggleUsage(profile)}
+              >
+                <UsageIcon size={20} />
+              </Button>
             </Tooltip>
           )}
           {!official && (hasUsageQuery || onConfigureUsage) && (
             <Tooltip label={usageLabel}>
-              <button
-                type="button"
-                className={`asb-btn-icon${usageOpen ? " is-active" : ""}`}
+              <Button
+                variant="icon"
+                className={usageOpen ? "is-active" : undefined}
                 aria-label={usageLabel}
                 aria-controls={hasUsageQuery ? `provider-usage-${profile.id}` : undefined}
                 aria-expanded={hasUsageQuery ? usageOpen : undefined}
@@ -253,21 +327,55 @@ function ProviderRow({
                   else onConfigureUsage?.(profile);
                 }}
               >
-                <UsageIcon />
-              </button>
+                <UsageIcon size={20} />
+              </Button>
             </Tooltip>
           )}
           {onDelete && (
-            <Tooltip label={`删除 ${profile.name}`}>
-              <button
-                type="button"
-                className="asb-btn-icon"
-                aria-label={`删除 ${profile.name}`}
-                onClick={() => onDelete(profile)}
-              >
-                <TrashIcon />
-              </button>
-            </Tooltip>
+            <span
+              className="asb-row-more"
+              ref={moreRef}
+              onKeyDown={(event) => {
+                // Escape is handled on the wrapper so it closes the menu even
+                // while focus stays on the trigger, like FontPicker.
+                if (event.key === "Escape" && moreOpen) {
+                  event.preventDefault();
+                  setMoreOpen(false);
+                  moreTriggerRef.current?.focus();
+                }
+              }}
+            >
+              <Tooltip label={`更多 ${profile.name} 操作`}>
+                <Button
+                  variant="icon"
+                  ref={moreTriggerRef}
+                  className={moreOpen ? "is-active" : undefined}
+                  aria-label={`更多 ${profile.name} 操作`}
+                  aria-haspopup="menu"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((open) => !open)}
+                >
+                  <MoreIcon size={20} />
+                </Button>
+              </Tooltip>
+              {moreOpen && (
+                <span className="asb-row-menu" role="menu" aria-label={`${profile.name} 更多操作`}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="asb-row-menu-item"
+                    aria-label={`删除 ${profile.name}`}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onDelete(profile);
+                    }}
+                  >
+                    <TrashIcon size={15} />
+                    删除
+                  </button>
+                </span>
+              )}
+            </span>
           )}
         </span>
       )}
@@ -284,12 +392,20 @@ function ProviderRow({
         <ProviderUsagePanel
           id={`provider-usage-${profile.id}`}
           profile={profile}
-          query={profile.usageQuery}
           onConfigure={onConfigureUsage}
         />
       )}
-      {official && profile.app === "codex" && (
+      {reloginOpen && official && (
+        <OfficialLoginPanel
+          app={profile.app}
+          onFinished={(completed) => {
+            if (completed) setQuotaNonce((nonce) => nonce + 1);
+          }}
+        />
+      )}
+      {officialQuota && quotaOpen && (
         <CodexOfficialQuotaPanel
+          key={`codex-official-quota-${profile.id}-${quotaNonce}`}
           id={`codex-official-quota-${profile.id}`}
           profileId={profile.id}
           profileName={profile.name}
@@ -305,8 +421,10 @@ export function ProviderList({
   activeProfileId,
   selectedId,
   openPreviewId,
+  collapsedUsageIds = [],
   onSelect,
   onReorder,
+  onToggleUsage,
   onActivate,
   onPreview,
   onEdit,
@@ -314,7 +432,6 @@ export function ProviderList({
   onDelete,
   renderPreview,
 }: Props) {
-  const [collapsedUsageIds, setCollapsedUsageIds] = useState<string[]>([]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -327,14 +444,6 @@ export function ProviderList({
     const newIndex = ids.indexOf(String(over.id));
     if (oldIndex === -1 || newIndex === -1) return;
     onReorder?.(arrayMove(ids, oldIndex, newIndex));
-  };
-  const toggleUsage = (profile: ProviderProfile) => {
-    if (!profile.usageQuery) return;
-    setCollapsedUsageIds((current) =>
-      current.includes(profile.id)
-        ? current.filter((id) => id !== profile.id)
-        : [...current, profile.id],
-    );
   };
   if (profiles.length === 0) {
     return <p className="asb-empty">尚无供应商</p>;
@@ -351,9 +460,14 @@ export function ProviderList({
               selected={selectedId === profile.id}
               previewOpen={profile.id === openPreviewId}
               usageOpen={Boolean(profile.usageQuery) && !collapsedUsageIds.includes(profile.id)}
+              quotaOpen={
+                profile.routeMode === "official" &&
+                profile.app === "codex" &&
+                !collapsedUsageIds.includes(profile.id)
+              }
               sortable={Boolean(onReorder)}
               onSelect={onSelect}
-              onToggleUsage={toggleUsage}
+              onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
               onActivate={onActivate}
               onPreview={onPreview}
               onEdit={onEdit}

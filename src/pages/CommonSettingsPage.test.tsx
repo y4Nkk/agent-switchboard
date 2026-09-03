@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -32,7 +32,7 @@ const cleanSettings: CommonSettingsEditorState = {
   phase: "clean",
   editor: {
     app: "codex",
-    settings: { settings: { hide_agent_reasoning: false } },
+    settings: { settings: { hide_agent_reasoning: { mode: "automatic" } } },
     settingsHash: "settings-hash",
     groups: ["模型行为"],
     specs: [
@@ -41,7 +41,6 @@ const cleanSettings: CommonSettingsEditorState = {
         label: "隐藏推理摘要",
         group: "模型行为",
         control: "toggle",
-        default: { boolValue: false },
         options: [],
       },
     ],
@@ -66,7 +65,7 @@ const cleanSettings: CommonSettingsEditorState = {
       },
     ],
   },
-  draft: { hide_agent_reasoning: false },
+  draft: { hide_agent_reasoning: { mode: "automatic" } },
 };
 
 const appliedStatus: ConfigFileStatus = {
@@ -97,15 +96,15 @@ function PromptHarness({
   onPreview?: (app: AppKind) => void;
   onResetGroup?: (app: AppKind, group: string | null) => void;
 }) {
-  const [promptApp, setPromptApp] = useState<AppKind>("codex");
+  const [app, setApp] = useState<AppKind>("codex");
   const [drafts, setDrafts] = useState<Record<AppKind, string>>({
     codex: documents.codex.content,
     claude: documents.claude.content,
   });
   return (
     <CommonSettingsPage
-      app="codex"
-      onSelectApp={() => {}}
+      app={app}
+      onSelectApp={setApp}
       editorState={editorState}
       configStatus={configStatus}
       busy={false}
@@ -115,15 +114,13 @@ function PromptHarness({
       onSave={onSave}
       onRetryLoad={onRetryLoad}
       onPreview={onPreview}
-      promptApp={promptApp}
-      promptDocument={documents[promptApp]}
-      promptDraft={drafts[promptApp]}
-      promptDirty={drafts[promptApp] !== documents[promptApp].content}
-      onSelectPromptApp={setPromptApp}
-      onPromptDraftChange={(content) => setDrafts((current) => ({ ...current, [promptApp]: content }))}
-      onSavePrompt={() => onSave(promptApp)}
+      promptDocument={documents[app]}
+      promptDraft={drafts[app]}
+      promptDirty={drafts[app] !== documents[app].content}
+      onPromptDraftChange={(content) => setDrafts((current) => ({ ...current, [app]: content }))}
+      onSavePrompt={() => onSave(app)}
       onDiscardPrompt={() =>
-        setDrafts((current) => ({ ...current, [promptApp]: documents[promptApp].content }))
+        setDrafts((current) => ({ ...current, [app]: documents[app].content }))
       }
       onReloadPrompt={() => {}}
     />
@@ -131,7 +128,7 @@ function PromptHarness({
 }
 
 describe("CommonSettingsPage", () => {
-  it("keeps base parameters and the official settings directory behind independent main tabs", async () => {
+  it("keeps base parameters, the official settings directory, and global prompts behind independent main tabs", async () => {
     const user = userEvent.setup();
     render(<PromptHarness configStatus={appliedStatus} />);
 
@@ -145,11 +142,14 @@ describe("CommonSettingsPage", () => {
     await user.click(screen.getByRole("tab", { name: "官方设置目录" }));
     expect(screen.getByRole("region", { name: "官方设置目录" })).toHaveTextContent("MCP 服务器");
     expect(screen.getByText("保留不写入")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "AGENTS.md 内容" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "全局指令" }));
     expect(screen.getByRole("textbox", { name: "AGENTS.md 内容" })).toHaveValue(
       "# Codex global instructions\n",
     );
 
-    await user.click(within(screen.getByRole("region", { name: "全局指令" })).getByRole("tab", { name: "Claude" }));
+    await user.click(screen.getByRole("tab", { name: "Claude" }));
     expect(screen.getByRole("textbox", { name: "CLAUDE.md 内容" })).toHaveValue(
       "# Claude global instructions\n",
     );
@@ -205,28 +205,48 @@ describe("CommonSettingsPage", () => {
     expect(onSave).toHaveBeenCalledWith("codex");
   });
 
-  it("shows the backend-rendered common-settings fragment at the bottom on demand", async () => {
+  it("shows the backend-rendered common-settings fragment on demand and folds it with the same button", async () => {
     const user = userEvent.setup();
     const onPreview = vi.fn();
-    render(
-      <PromptHarness
-        onPreview={onPreview}
-        editorState={{
-          ...cleanSettings,
-          preview: {
-            app: "codex",
-            target: "~/.codex/config.toml 通用配置片段",
-            content: "hide_agent_reasoning = true\n",
-          },
-        }}
-      />,
-    );
+    function DemandHarness() {
+      const [preview, setPreview] = useState<CommonSettingsEditorState["preview"]>();
+      return (
+        <PromptHarness
+          editorState={preview ? { ...cleanSettings, preview } : cleanSettings}
+          onPreview={(target) => {
+            onPreview(target);
+            setPreview({
+              app: "codex",
+              target: "~/.codex/config.toml 通用配置片段",
+              content: "hide_agent_reasoning = true\n",
+            });
+          }}
+        />
+      );
+    }
+    render(<DemandHarness />);
 
     await user.click(screen.getByRole("button", { name: "查看通用配置预览" }));
     expect(onPreview).toHaveBeenCalledWith("codex");
     expect(
       screen.getByLabelText("~/.codex/config.toml 通用配置片段 配置预览"),
     ).toHaveTextContent("hide_agent_reasoning = true");
+    const collapse = screen.getByRole("button", { name: "收起通用配置预览" });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(collapse);
+    expect(
+      screen.queryByLabelText("~/.codex/config.toml 通用配置片段 配置预览"),
+    ).toBeNull();
+    const expand = screen.getByRole("button", { name: "展开通用配置预览" });
+    expect(expand).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(expand);
+    expect(
+      screen.getByLabelText("~/.codex/config.toml 通用配置片段 配置预览"),
+    ).toHaveTextContent("hide_agent_reasoning = true");
+    // Expanding shows the cached fragment; only the first click renders.
+    expect(onPreview).toHaveBeenCalledTimes(1);
   });
 
   it("keeps document actions separate from parameter controls", async () => {
@@ -234,7 +254,7 @@ describe("CommonSettingsPage", () => {
     const onSave = vi.fn();
     render(<PromptHarness onSave={onSave} />);
 
-    await user.click(screen.getByRole("tab", { name: "官方设置目录" }));
+    await user.click(screen.getByRole("tab", { name: "全局指令" }));
     await user.type(screen.getByRole("textbox", { name: "AGENTS.md 内容" }), "- Keep scope narrow.\n");
     await user.click(screen.getByRole("button", { name: "保存 AGENTS.md" }));
     expect(onSave).toHaveBeenCalledWith("codex");
@@ -245,12 +265,10 @@ describe("CommonSettingsPage", () => {
     const onReload = vi.fn();
     render(
       <GlobalPromptManager
-        app="codex"
         document={undefined}
         draft=""
         dirty={false}
         busy={false}
-        onSelectApp={() => {}}
         onChange={() => {}}
         onSave={() => {}}
         onDiscard={() => {}}

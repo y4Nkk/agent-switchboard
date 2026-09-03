@@ -81,6 +81,9 @@ export interface DeclarativeUsageQuery {
   totalPath?: string | null;
   /** Display unit for the extracted numbers, e.g. "USD". */
   unit?: string | null;
+  /** Minutes between automatic re-queries of the expanded panel; 0 keeps
+   * the panel manual-only. */
+  refreshIntervalMinutes: number;
 }
 
 /** A self-authored JavaScript query. The source evaluates to `{ request,
@@ -88,6 +91,9 @@ export interface DeclarativeUsageQuery {
 export interface ScriptUsageQuery {
   kind: "script";
   source: string;
+  /** Minutes between automatic re-queries of the expanded panel; 0 keeps
+   * the panel manual-only. */
+  refreshIntervalMinutes: number;
 }
 
 /** The only persisted usage-query contract. `null` on a profile means the
@@ -122,12 +128,23 @@ export interface CodexOfficialQuotaWindow {
   resetsAt: string | null;
 }
 
+/** How a locally detected reset relates to the previously declared schedule. */
+export type CodexOfficialQuotaResetKind = "scheduled" | "early";
+
+/** One reset observed by comparing consecutive successful official reads. */
+export interface CodexOfficialQuotaReset {
+  observedAt: string;
+  kind: CodexOfficialQuotaResetKind;
+  resetsAt: string | null;
+}
+
 /** OAuth credentials and account identifiers never appear in this type. */
 export interface CodexOfficialQuota {
   status: CodexOfficialQuotaStatus;
   windows: CodexOfficialQuotaWindow[];
   at: string | null;
   stale: boolean;
+  lastReset: CodexOfficialQuotaReset | null;
 }
 
 export interface ProviderProfile {
@@ -179,9 +196,14 @@ export interface GlobalPromptDocument {
   exists: boolean;
 }
 
-/** One plain configuration value of a general parameter. There is no null
- * or remove state: every supported parameter always carries a value. */
-export type CommonValue = boolean | string | number;
+/** One concrete client configuration value. */
+export type ConfigValue = boolean | string | number;
+
+/** One application-owned setting intent. Automatic means that no line/key is
+ * written to the client configuration; explicit values are always projected. */
+export type CommonValue =
+  | { mode: "automatic" }
+  | { mode: "explicit"; value: ConfigValue };
 
 /** The complete general-parameter values for one client, stored in the
  * application's `configuration/common/{client}.json`. */
@@ -194,14 +216,6 @@ export interface CommonChoiceOption {
   label: string;
 }
 
-/** The directory-defined default of one parameter; the target of the
- * group's "恢复默认值" action. It is a plain value, never a remove
- * instruction. */
-export interface CommonDefaultValue {
-  boolValue?: boolean;
-  strValue?: string;
-}
-
 /** One ownership-catalog general parameter the settings page may edit. */
 export type CommonSettingSpec =
   | {
@@ -209,7 +223,6 @@ export type CommonSettingSpec =
       label: string;
       group: string;
       control: "toggle";
-      default: CommonDefaultValue;
       options: [];
     }
   | {
@@ -217,7 +230,6 @@ export type CommonSettingSpec =
       label: string;
       group: string;
       control: "slider" | "segment";
-      default: CommonDefaultValue;
       options: CommonChoiceOption[];
     };
 
@@ -287,6 +299,7 @@ export interface ConfigWriteRecord {
 export type RuntimeLogAction =
   | "appStarted"
   | "appSettingsSaved"
+  | "appSettingsRepaired"
   | "profileStoreReset"
   | "profileCreated"
   | "profileUpdated"
@@ -302,7 +315,8 @@ export type RuntimeLogAction =
   | "cloudBackupUploaded"
   | "cloudBackupRestored"
   | "sessionResumed"
-  | "ccSwitchProfilesImported";
+  | "ccSwitchProfilesImported"
+  | "officialLoginCompleted";
 
 /** Persisted recording threshold. `silent` stops future event writes. */
 export type RuntimeLogLevel = "debug" | "info" | "warn" | "error" | "silent";
@@ -633,6 +647,9 @@ export interface AppSettings {
   interfaceFont: string;
   /** Threshold used for future application runtime-event recording. */
   runtimeLogLevel: RuntimeLogLevel;
+  /** Provider ids whose usage panel is collapsed; any other provider's
+   * panel is expanded. */
+  collapsedUsageIds: string[];
 }
 
 /** Public connection coordinates for a user-owned Supabase project. The
@@ -655,6 +672,11 @@ export function getAppSettings(): Promise<AppSettings> {
 
 export function setAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("set_app_settings", { settings });
+}
+
+/** Replaces an invalid settings file with defaults; a readable file refuses. */
+export function repairAppSettings(): Promise<AppSettings> {
+  return invoke<AppSettings>("repair_app_settings");
 }
 
 export function getCloudBackupSettings(): Promise<CloudBackupSettings | null> {
@@ -756,9 +778,16 @@ export function probeEndpoint(url: string): Promise<ProbeResult> {
   return invoke<ProbeResult>("probe_endpoint", { url });
 }
 
-/** Model ids from the provider's OpenAI-compatible /v1/models endpoint. */
-export function fetchProviderModels(baseUrl: string, apiKey: string): Promise<string[]> {
-  return invoke<string[]>("fetch_provider_models", { url: baseUrl, apiKey });
+/** One model from the provider's OpenAI-compatible /v1/models endpoint; the
+ * optional vendor groups the editor's model picker. */
+export interface ProviderModel {
+  id: string;
+  ownedBy: string | null;
+}
+
+/** Models from the provider's OpenAI-compatible /v1/models endpoint. */
+export function fetchProviderModels(baseUrl: string, apiKey: string): Promise<ProviderModel[]> {
+  return invoke<ProviderModel[]>("fetch_provider_models", { url: baseUrl, apiKey });
 }
 
 /** Runs one on-demand usage-balance query with the supplied profile or editor
@@ -781,6 +810,53 @@ export function queryProfileUsage(profileId: string): Promise<UsageSummary> {
  * renderer credential, endpoint, or raw OAuth account data. */
 export function queryCodexOfficialQuota(profileId: string): Promise<CodexOfficialQuota> {
   return invoke<CodexOfficialQuota>("query_codex_official_quota", { profileId });
+}
+
+/** Reads the persisted last successful official read without contacting the
+ * network. Absent until the first refresh of the machine's Codex login. */
+export function getCachedCodexOfficialReset(): Promise<CodexOfficialQuota | null> {
+  return invoke<CodexOfficialQuota | null>("get_cached_codex_official_reset");
+}
+
+/** One explicit read of the machine's Codex official login. Account-scoped
+ * and profile-independent; failed reads return as statuses, not errors. */
+export function refreshCodexOfficialReset(): Promise<CodexOfficialQuota> {
+  return invoke<CodexOfficialQuota>("refresh_codex_official_reset");
+}
+
+/** Phases of one in-flight official login. */
+export type OfficialLoginPhase = "pending" | "completed" | "failed";
+
+/** Start payload: the device code to enter (Codex) or the authorize URL to
+ * open (Claude). Never carries a credential. */
+export interface OfficialLoginStart {
+  userCode: string | null;
+  verificationUrl: string;
+}
+
+/** Poll result: only status, codes, URLs, and fixed messages — no tokens. */
+export interface OfficialLoginStatus {
+  phase: OfficialLoginPhase;
+  userCode: string | null;
+  verificationUrl: string;
+  message: string | null;
+}
+
+/** Starts the official login flow for one client; the previous session for
+ * that client must be finished or cancelled first. */
+export function startOfficialLogin(target: AppKind): Promise<OfficialLoginStart> {
+  return invoke<OfficialLoginStart>("official_login_start", { target });
+}
+
+/** Advances one login by a single step and writes the client's native
+ * credential cache once the vendor approves. */
+export function pollOfficialLogin(target: AppKind): Promise<OfficialLoginStatus> {
+  return invoke<OfficialLoginStatus>("official_login_poll", { target });
+}
+
+/** Cancels one in-flight official login; a no-op without a running session. */
+export function cancelOfficialLogin(target: AppKind): Promise<void> {
+  return invoke<void>("official_login_cancel", { target });
 }
 
 /** Result of one startup or user-triggered app-update check; informational only. */
@@ -854,6 +930,12 @@ export function recoverStaleLock(app: AppKind): Promise<RecoveryEntry> {
 
 export function discoverLocal(): Promise<DiscoveryReport> {
   return invoke<DiscoveryReport>("discover_local");
+}
+
+/** The previous successful scan, cached by the backend; null before the first
+ * scan ever completed. */
+export function discoverCached(): Promise<DiscoveryReport | null> {
+  return invoke<DiscoveryReport | null>("discover_cached");
 }
 
 export function listSessions(): Promise<SessionScan> {

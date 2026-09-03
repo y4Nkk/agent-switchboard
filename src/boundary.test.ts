@@ -62,4 +62,43 @@ describe("UI boundary", () => {
     expect(loadedViteConfig?.config.server?.host).toBe(configuredUrl.hostname);
     expect(loadedViteConfig?.config.server?.port).toBe(Number(configuredUrl.port));
   });
+
+  it("keeps the NSIS installer branding in the Tauri bundle contract", () => {
+    const tauriConfig = JSON.parse(
+      readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"),
+    ) as {
+      bundle: {
+        icon: string[];
+        windows: {
+          nsis: {
+            headerImage: string;
+            sidebarImage: string;
+            installerIcon: string;
+            uninstallerIcon: string;
+            languages: string[];
+          };
+        };
+      };
+    };
+    const nsis = tauriConfig.bundle.windows.nsis;
+
+    expect(tauriConfig.bundle.icon).toEqual(["icons/icon.ico"]);
+    expect(nsis).toEqual({
+      headerImage: "windows/installer-header.bmp",
+      sidebarImage: "windows/installer-sidebar.bmp",
+      installerIcon: "icons/icon.ico",
+      uninstallerIcon: "icons/icon.ico",
+      languages: ["SimpChinese", "English"],
+    });
+
+    for (const [asset, width, height] of [
+      [nsis.headerImage, 150, 57],
+      [nsis.sidebarImage, 164, 314],
+    ] as const) {
+      const bitmap = readFileSync(join(repoRoot, "src-tauri", asset));
+      expect(bitmap.subarray(0, 2).toString("ascii")).toBe("BM");
+      expect(bitmap.readUInt32LE(18)).toBe(width);
+      expect(bitmap.readUInt32LE(22)).toBe(height);
+    }
+  });
 });

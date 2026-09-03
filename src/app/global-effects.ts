@@ -2,10 +2,11 @@ import { useEffect } from "react";
 import { toggleDevtools } from "../api/client";
 import { isBrowserDevelopment } from "../lib/runtime";
 
-/** Dev-machine debug affordance: F12 toggles the WebView inspector. */
+/** Dev-build debug affordance: F12 toggles the WebView inspector. Absent
+ * from production bundles, where the WebView inspector is disabled. */
 export function useDevtoolsShortcut(): void {
   useEffect(() => {
-    if (isBrowserDevelopment) return;
+    if (!import.meta.env.DEV || isBrowserDevelopment) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "F12") {
         event.preventDefault();

@@ -4,10 +4,13 @@
 //! this struct only hands out its store and resolves the real client paths,
 //! which are never created here.
 
+use crate::codex_official_quota::CodexQuotaBaseline;
 use crate::codex_reset::CodexResetStatus;
 use crate::config_store::ConfigStore;
 use crate::runtime_log::RuntimeLogLevel;
+use crate::usage_cache::UsageCache;
 use asb_core::contracts::AppKind;
+use asb_core::discovery::DiscoveryReport;
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -52,6 +55,10 @@ pub struct AppSettings {
     pub hardware_acceleration: bool,
     pub interface_font: String,
     pub runtime_log_level: RuntimeLogLevel,
+    /// Provider ids whose usage panel stays collapsed. A file missing this
+    /// field reads as an empty set, so every panel stays expanded by default.
+    #[serde(default)]
+    pub collapsed_usage_ids: Vec<String>,
 }
 
 impl AppSettings {
@@ -84,6 +91,7 @@ impl Default for AppSettings {
             hardware_acceleration: true,
             interface_font: DEFAULT_INTERFACE_FONT.to_string(),
             runtime_log_level: RuntimeLogLevel::Info,
+            collapsed_usage_ids: Vec::new(),
         }
     }
 }
@@ -216,6 +224,22 @@ impl LocalState {
         ))
     }
 
+    /// Resolves the Claude login cache without reading, creating, or modifying
+    /// it. Claude honors an explicit CLAUDE_CONFIG_DIR for this user-owned
+    /// state, mirroring how the Codex resolver honors CODEX_HOME.
+    pub fn claude_credentials_path() -> Result<PathBuf, String> {
+        let home = std::env::var_os("USERPROFILE")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+        let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Ok(claude_credentials_path_in_home(
+            Path::new(&home),
+            config_dir.as_deref(),
+        ))
+    }
+
     pub fn backup_dir(&self) -> PathBuf {
         self.root.join("backups")
     }
@@ -255,6 +279,19 @@ impl LocalState {
             return Err("无法原子保存应用设置".to_string());
         }
         Ok(())
+    }
+
+    /// One-click repair for an unreadable settings file: replaces it with
+    /// validated defaults through the same atomic write as a normal save. A
+    /// readable settings file is refused, so repair can never silently
+    /// discard healthy preferences.
+    pub fn repair_app_settings(&self) -> Result<AppSettings, String> {
+        if self.get_app_settings().is_ok() {
+            return Err("应用设置当前可读，无需修复".to_string());
+        }
+        let defaults = AppSettings::default();
+        self.set_app_settings(&defaults)?;
+        Ok(defaults)
     }
 
     /// The cloud destination is optional. Reading an absent file never
@@ -324,12 +361,136 @@ impl LocalState {
         Ok(())
     }
 
+    /// The persisted comparison baseline for after-the-fact Codex quota-reset
+    /// detection. An absent file is a normal first-run state; invalid data is
+    /// left untouched rather than silently mistaken for a current baseline.
+    pub fn load_codex_quota_baseline(&self) -> Result<Option<CodexQuotaBaseline>, String> {
+        let text = match fs::read_to_string(self.codex_quota_baseline_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("Codex 官方额度基线不可读".to_string()),
+        };
+        let baseline: CodexQuotaBaseline =
+            serde_json::from_str(&text).map_err(|_| "Codex 官方额度基线格式无效".to_string())?;
+        baseline
+            .validate()
+            .map_err(|_| "Codex 官方额度基线格式无效".to_string())?;
+        Ok(Some(baseline))
+    }
+
+    /// Replaces the prior baseline atomically after a successful official
+    /// read. It never stores credentials or raw upstream payloads.
+    pub fn save_codex_quota_baseline(&self, baseline: &CodexQuotaBaseline) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(baseline)
+            .map_err(|_| "Codex 官方额度基线序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self
+            .root
+            .join(format!("codex-quota-baseline.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content)
+            .map_err(|_| "无法写入 Codex 官方额度基线临时文件".to_string())?;
+        if fs::rename(&temporary, self.codex_quota_baseline_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存 Codex 官方额度基线".to_string());
+        }
+        Ok(())
+    }
+
+    /// The last successful provider-usage snapshots for the native tray. The
+    /// file contains normalized readings plus query digests only: no API key,
+    /// endpoint, raw response, or usage-script source is persisted here.
+    pub(crate) fn load_usage_cache(&self) -> Result<Option<UsageCache>, String> {
+        let text = match fs::read_to_string(self.usage_cache_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("托盘用量缓存不可读".to_string()),
+        };
+        serde_json::from_str(&text)
+            .map(Some)
+            .map_err(|_| "托盘用量缓存格式无效".to_string())
+    }
+
+    pub(crate) fn save_usage_cache(&self, cache: &UsageCache) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(cache)
+            .map_err(|_| "托盘用量缓存序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self
+            .root
+            .join(format!("usage-cache.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content).map_err(|_| "无法写入托盘用量缓存临时文件".to_string())?;
+        if fs::rename(&temporary, self.usage_cache_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存托盘用量缓存".to_string());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn clear_usage_cache(&self) -> Result<(), String> {
+        match fs::remove_file(self.usage_cache_path()) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err("无法清除托盘用量缓存".to_string()),
+        }
+    }
+
+    /// The last successful local discovery scan, for display on the 发现 page
+    /// before the next scan runs. The stored copy never carries credentials:
+    /// import re-derives the draft from the live files. An absent file is a
+    /// normal first-run state; invalid data is left untouched rather than
+    /// silently mistaken for a current result.
+    pub fn load_discovery_cache(&self) -> Result<Option<DiscoveryReport>, String> {
+        let text = match fs::read_to_string(self.discovery_cache_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("发现扫描缓存不可读".to_string()),
+        };
+        serde_json::from_str(&text)
+            .map(Some)
+            .map_err(|_| "发现扫描缓存格式无效".to_string())
+    }
+
+    pub fn save_discovery_cache(&self, report: &DiscoveryReport) -> Result<(), String> {
+        let cached = report.cached_display();
+        let content = serde_json::to_string_pretty(&cached)
+            .map_err(|_| "发现扫描缓存序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self
+            .root
+            .join(format!("discovery-cache.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content).map_err(|_| "无法写入发现扫描缓存临时文件".to_string())?;
+        if fs::rename(&temporary, self.discovery_cache_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存发现扫描缓存".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn clear_discovery_cache(&self) -> Result<(), String> {
+        match fs::remove_file(self.discovery_cache_path()) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err("无法清除发现扫描缓存".to_string()),
+        }
+    }
+
     fn settings_path(&self) -> PathBuf {
         self.root.join("settings.json")
     }
 
     fn codex_reset_cache_path(&self) -> PathBuf {
         self.root.join("codex-reset-cache.json")
+    }
+
+    fn codex_quota_baseline_path(&self) -> PathBuf {
+        self.root.join("codex-quota-baseline.json")
+    }
+
+    fn usage_cache_path(&self) -> PathBuf {
+        self.root.join("usage-cache.json")
+    }
+
+    fn discovery_cache_path(&self) -> PathBuf {
+        self.root.join("discovery-cache.json")
     }
 
     fn cloud_backup_settings_path(&self) -> PathBuf {
@@ -367,10 +528,21 @@ fn codex_auth_path_in_home(home: &Path, codex_home: Option<&Path>) -> PathBuf {
     }
 }
 
+fn claude_credentials_path_in_home(home: &Path, config_dir: Option<&Path>) -> PathBuf {
+    match config_dir {
+        Some(directory) => directory.join(".credentials.json"),
+        None => home.join(".claude").join(".credentials.json"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::codex_official_quota::BaselineRead;
     use crate::codex_reset::{CodexResetFeedStatus, ResetSignal};
+    use asb_core::contracts::{
+        CodexOfficialQuotaReset, CodexOfficialQuotaResetKind, CodexOfficialQuotaWindow,
+    };
 
     fn cached_reset_status() -> CodexResetStatus {
         CodexResetStatus {
@@ -388,6 +560,25 @@ mod tests {
             next_scheduled_reset: None,
             latest_relevant_tibo_post: None,
             source_warning: None,
+        }
+    }
+
+    fn stored_baseline() -> CodexQuotaBaseline {
+        CodexQuotaBaseline {
+            account_marker: Some("account-marker".to_string()),
+            last_read: Some(BaselineRead {
+                at: "2026-09-01T08:00:00Z".to_string(),
+                windows: vec![CodexOfficialQuotaWindow {
+                    label: "7 天".to_string(),
+                    used_percent: 42.5,
+                    resets_at: Some("2026-09-04T00:00:00Z".to_string()),
+                }],
+            }),
+            last_reset: Some(CodexOfficialQuotaReset {
+                observed_at: "2026-08-31T02:34:27Z".to_string(),
+                kind: CodexOfficialQuotaResetKind::Scheduled,
+                resets_at: Some("2026-09-04T00:00:00Z".to_string()),
+            }),
         }
     }
 
@@ -438,6 +629,24 @@ mod tests {
         );
         assert!(!home.exists());
         assert!(!codex_home.exists());
+    }
+
+    #[test]
+    fn claude_credentials_target_follows_the_config_dir_without_creating_it() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let home = directory.path().join("home");
+        let config_dir = directory.path().join("alternate-claude-config");
+
+        assert_eq!(
+            claude_credentials_path_in_home(&home, None),
+            home.join(".claude").join(".credentials.json")
+        );
+        assert_eq!(
+            claude_credentials_path_in_home(&home, Some(&config_dir)),
+            config_dir.join(".credentials.json")
+        );
+        assert!(!home.exists());
+        assert!(!config_dir.exists());
     }
 
     #[test]
@@ -536,6 +745,138 @@ mod tests {
     }
 
     #[test]
+    fn codex_quota_baseline_is_absent_without_creating_a_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+
+        assert_eq!(
+            state.load_codex_quota_baseline().expect("empty baseline"),
+            None
+        );
+        assert!(!state.codex_quota_baseline_path().exists());
+    }
+
+    #[test]
+    fn codex_quota_baseline_replaces_and_persists_the_latest_read() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let root = directory.path().join("state");
+        let state = LocalState::from_root(root.clone());
+        let first = stored_baseline();
+        let latest = CodexQuotaBaseline {
+            account_marker: Some("replacement-marker".to_string()),
+            last_read: None,
+            last_reset: None,
+        };
+
+        state
+            .save_codex_quota_baseline(&first)
+            .expect("save first baseline");
+        state
+            .save_codex_quota_baseline(&latest)
+            .expect("replace baseline with latest read");
+
+        let reopened = LocalState::from_root(root);
+        assert_eq!(
+            reopened.load_codex_quota_baseline().expect("read baseline"),
+            Some(latest)
+        );
+    }
+
+    #[test]
+    fn malformed_codex_quota_baseline_is_rejected_without_rewriting_it() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        let invalid = r#"{"accountMarker":"marker","lastRead":{"at":"not-a-time","windows":[]},"lastReset":null}"#;
+        fs::write(state.codex_quota_baseline_path(), invalid).expect("write invalid baseline");
+
+        assert_eq!(
+            state.load_codex_quota_baseline().unwrap_err(),
+            "Codex 官方额度基线格式无效"
+        );
+        assert_eq!(
+            fs::read_to_string(state.codex_quota_baseline_path()).expect("read invalid baseline"),
+            invalid
+        );
+    }
+
+    #[test]
+    fn discovery_cache_is_absent_without_creating_a_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+
+        assert_eq!(state.load_discovery_cache().expect("empty cache"), None);
+        assert!(!state.discovery_cache_path().exists());
+    }
+
+    #[test]
+    fn discovery_cache_persists_display_facts_and_never_credentials() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let root = directory.path().join("state");
+        let state = LocalState::from_root(root.clone());
+        let report = asb_core::discovery::discover(
+            &asb_core::discovery::DiscoveryPaths {
+                codex: "missing-codex.toml".into(),
+                claude: "claude.json".into(),
+            },
+            |path| {
+                if path == "claude.json" {
+                    Ok(Some(
+                        r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"TEST_CACHE_REDACTED_KEY","ANTHROPIC_MODEL":"claude-opus-4-1"}}"#
+                            .to_string(),
+                    ))
+                } else {
+                    Ok(None)
+                }
+            },
+        );
+        assert!(!report.codex.exists);
+        assert_eq!(report.import_proposals.len(), 1);
+        assert_eq!(
+            report.import_proposals[0].draft.api_key,
+            "TEST_CACHE_REDACTED_KEY"
+        );
+
+        state
+            .save_discovery_cache(&report)
+            .expect("save discovery cache");
+        let stored = fs::read_to_string(state.discovery_cache_path()).expect("stored text");
+        assert!(!stored.contains("TEST_CACHE_REDACTED_KEY"));
+
+        let cached = LocalState::from_root(root)
+            .load_discovery_cache()
+            .expect("read cache");
+        assert_eq!(cached, Some(report.cached_display()));
+    }
+
+    #[test]
+    fn clear_discovery_cache_removes_the_stored_snapshot() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let root = directory.path().join("state");
+        let state = LocalState::from_root(root.clone());
+        let report = asb_core::discovery::discover(
+            &asb_core::discovery::DiscoveryPaths {
+                codex: "c".into(),
+                claude: "s".into(),
+            },
+            |_| Ok(Some(String::new())),
+        );
+
+        state
+            .save_discovery_cache(&report)
+            .expect("save discovery cache");
+        state.clear_discovery_cache().expect("clear cache");
+        state.clear_discovery_cache().expect("clear is idempotent");
+
+        assert_eq!(
+            LocalState::from_root(root)
+                .load_discovery_cache()
+                .expect("read cleared cache"),
+            None
+        );
+    }
+
+    #[test]
     fn app_settings_default_without_creating_a_file() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = LocalState::from_root(directory.path().join("state"));
@@ -561,6 +902,7 @@ mod tests {
             hardware_acceleration: false,
             interface_font: "MiSans".to_string(),
             runtime_log_level: RuntimeLogLevel::Warn,
+            collapsed_usage_ids: vec!["codex-relay-a".to_string()],
         };
 
         state.set_app_settings(&expected).expect("save settings");
@@ -572,9 +914,27 @@ mod tests {
         let written = fs::read_to_string(reopened.settings_path()).expect("read settings text");
         assert_eq!(
             written,
-            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"launchAtLogin\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"MiSans\",\n  \"runtimeLogLevel\": \"warn\"\n}"
+            "{\n  \"closeBehavior\": \"exit\",\n  \"theme\": \"dark\",\n  \"motion\": \"reduce\",\n  \"alwaysOnTop\": true,\n  \"launchAtLogin\": true,\n  \"hardwareAcceleration\": false,\n  \"interfaceFont\": \"MiSans\",\n  \"runtimeLogLevel\": \"warn\",\n  \"collapsedUsageIds\": [\n    \"codex-relay-a\"\n  ]\n}"
         );
         assert!(!reopened.backup_dir().exists());
+    }
+
+    #[test]
+    fn a_settings_file_without_the_usage_collapse_set_reads_as_expanded() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        fs::write(
+            state.settings_path(),
+            "{\"closeBehavior\":\"hideToTray\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"launchAtLogin\":false,\"hardwareAcceleration\":true,\"interfaceFont\":\"Noto Sans SC\",\"runtimeLogLevel\":\"info\"}",
+        )
+        .expect("write settings without the collapse set");
+
+        let settings = state.get_app_settings().expect("read settings");
+        assert_eq!(settings.collapsed_usage_ids, Vec::<String>::new());
+        // Every required preference survives the read untouched.
+        assert_eq!(settings.theme, ThemePreference::Dark);
+        assert!(settings.always_on_top);
     }
 
     #[test]
@@ -599,6 +959,46 @@ mod tests {
             fs::write(state.settings_path(), invalid).expect("write invalid settings");
             assert_eq!(state.get_app_settings().unwrap_err(), "应用设置格式无效");
         }
+    }
+
+    #[test]
+    fn app_settings_repair_replaces_an_invalid_file_with_defaults() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        fs::create_dir_all(&state.root).expect("create state directory");
+        // A previous-contract shape without launchAtLogin is the repair case.
+        fs::write(
+            state.settings_path(),
+            "{\"closeBehavior\":\"exit\",\"theme\":\"dark\",\"motion\":\"reduce\",\"alwaysOnTop\":true,\"hardwareAcceleration\":false,\"interfaceFont\":\"MiSans\",\"runtimeLogLevel\":\"warn\"}",
+        )
+        .expect("write stale settings");
+
+        assert_eq!(
+            state.repair_app_settings().expect("repair"),
+            AppSettings::default()
+        );
+        assert_eq!(
+            state.get_app_settings().expect("read repaired settings"),
+            AppSettings::default()
+        );
+    }
+
+    #[test]
+    fn app_settings_repair_refuses_a_readable_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        let saved = AppSettings {
+            close_behavior: CloseBehavior::Exit,
+            interface_font: "MiSans".to_string(),
+            ..AppSettings::default()
+        };
+        state.set_app_settings(&saved).expect("save settings");
+
+        assert_eq!(
+            state.repair_app_settings().unwrap_err(),
+            "应用设置当前可读，无需修复"
+        );
+        assert_eq!(state.get_app_settings().expect("read settings"), saved);
     }
 
     #[test]

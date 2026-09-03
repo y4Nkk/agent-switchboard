@@ -2,10 +2,13 @@ import type {
   AppKind,
   CcSwitchImportOutcome,
   CcSwitchScan,
+  CcSwitchScanItem,
   DiscoveredState,
   DiscoveryReport,
 } from "../api/client";
+import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
+import { Table, type TableColumn } from "../components/Table";
 import { clientName } from "../lib/client-name";
 
 interface DiscoveryPageProps {
@@ -127,14 +130,13 @@ function DiscoveryCard({ file, proposal, busy, onImport }: DiscoveryCardProps) {
       {proposal && (
         <div className="asb-discovery-import">
           <p className="asb-discovery-basis">{proposal.basis}</p>
-          <button
-            type="button"
-            className="asb-btn-secondary"
+          <Button
+            variant="secondary"
             disabled={busy}
             onClick={() => onImport(proposal.app)}
           >
             导入供应商
-          </button>
+          </Button>
         </div>
       )}
     </article>
@@ -148,9 +150,9 @@ export function DiscoveryPage({ discovery, busy, onScan, onImport }: DiscoveryPa
     <section className="asb-panel" aria-label="本机配置发现">
       <div className="asb-panel-heading">
         <h2 className="asb-panel-title">本机配置</h2>
-        <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onScan}>
-          扫描配置
-        </button>
+        <Button variant="secondary" disabled={busy} onClick={onScan}>
+          {discovery ? "刷新配置" : "扫描配置"}
+        </Button>
       </div>
       {discovery && (
         <div className="asb-status-grid">
@@ -167,6 +169,33 @@ export function DiscoveryPage({ discovery, busy, onScan, onImport }: DiscoveryPa
       )}
     </section>
   );
+}
+
+/** One scan row: an importable provider or a skipped entry. */
+interface CcImportRow {
+  key: string;
+  /** Present only when the row carries an import selection checkbox. */
+  item: CcSwitchScanItem | null;
+  name: string;
+  detail: string | null;
+  status: string | null;
+  warnings: string[];
+}
+
+function providerDetail(item: CcSwitchScanItem): string {
+  return [
+    clientName(item.app),
+    item.routeMode === "official" ? "官方登录" : null,
+    item.model,
+    item.baseUrl,
+    item.usageScriptUpdatesExisting
+      ? "将补充用量查询脚本"
+      : item.usageScriptImportable
+        ? "将导入用量查询脚本"
+        : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 interface CcImportSectionProps {
@@ -191,64 +220,90 @@ export function CcImportSection({
   onImport,
 }: CcImportSectionProps) {
   const selectedCount = scan?.providers.filter((item) => selected[item.key]).length ?? 0;
+
+  const rows: CcImportRow[] = scan
+    ? [
+        ...scan.providers.map((item) => ({
+          key: item.key,
+          item,
+          name: item.name,
+          detail: providerDetail(item),
+          status: item.existing ? "已存在相同档案，导入将跳过" : null,
+          warnings: item.warnings,
+        })),
+        ...scan.skipped.map((skip) => ({
+          key: skip.key,
+          item: null,
+          name: skip.name,
+          detail: null,
+          status: `无法导入：${skip.reason}`,
+          warnings: [],
+        })),
+      ]
+    : [];
+
+  const columns: Array<TableColumn<CcImportRow>> = [
+    {
+      key: "provider",
+      header: "供应商",
+      render: (row) => {
+        const item = row.item;
+        if (item === null) return row.name;
+        return (
+          <Checkbox
+            label={row.name}
+            checked={Boolean(selected[item.key]) && !item.existing}
+            disabled={busy || item.existing}
+            onChange={(checked) => onSelect(item.key, checked)}
+          />
+        );
+      },
+    },
+    { key: "detail", header: "详情", render: (row) => row.detail },
+    {
+      key: "status",
+      header: "状态",
+      render: (row) => (
+        <>
+          {row.status}
+          {row.warnings.map((warning) => (
+            <div key={warning} className="asb-warn-text">
+              {warning}
+            </div>
+          ))}
+        </>
+      ),
+    },
+  ];
+
   return (
     <section className="asb-panel" aria-label="从 CC Switch 导入">
       <div className="asb-panel-heading">
         <h2 className="asb-panel-title">从 CC Switch 导入</h2>
-        <button type="button" className="asb-btn-secondary" disabled={busy} onClick={onScan}>
+        <Button variant="secondary" disabled={busy} onClick={onScan}>
           扫描 CC Switch（只读）
-        </button>
+        </Button>
       </div>
-      <p className="asb-scope-note">
-        导入供应商档案的 API 密钥、服务地址、模型映射、网站、备注与可转换的已启用用量查询脚本；内建模板和未支持字段会逐项提示，通用配置请在通用设置页自行配置。
-      </p>
       {scan && (
         <div className="asb-ccscan">
-          {scan.providers.length === 0 && scan.skipped.length === 0 && (
+          {rows.length === 0 ? (
             <p className="asb-empty">CC Switch 中没有供应商。</p>
+          ) : (
+            <Table
+              columns={columns}
+              rows={rows}
+              rowKey={(row) => row.key}
+              ariaLabel="CC Switch 扫描结果"
+            />
           )}
-          {scan.providers.map((item) => (
-            <div className="asb-ccscan-row" key={item.key}>
-              <Checkbox
-                label={item.name}
-                checked={Boolean(selected[item.key]) && !item.existing}
-                disabled={busy || item.existing}
-                onChange={(checked) => onSelect(item.key, checked)}
-              />
-              <span className="asb-ccscan-meta">
-                {clientName(item.app)}
-                {item.routeMode === "official" ? " · 官方登录" : ""}
-                {item.model ? ` · ${item.model}` : ""}
-                {item.baseUrl ? ` · ${item.baseUrl}` : ""}
-                {item.usageScriptUpdatesExisting
-                  ? " · 将补充用量查询脚本"
-                  : item.usageScriptImportable
-                    ? " · 将导入用量查询脚本"
-                    : ""}
-                {item.existing ? " · 已存在相同档案，导入将跳过" : ""}
-              </span>
-              {item.warnings.map((warning) => (
-                <span key={warning} className="asb-ccscan-meta asb-warn-text">
-                  {warning}
-                </span>
-              ))}
-            </div>
-          ))}
-          {scan.skipped.map((skip) => (
-            <div className="asb-ccscan-row" key={skip.key}>
-              <span className="asb-ccscan-name">{skip.name}</span>
-              <span className="asb-ccscan-meta asb-warn-text">无法导入：{skip.reason}</span>
-            </div>
-          ))}
           <div className="asb-form-actions">
-            <button
-              type="button"
-              className="asb-btn-primary"
+            <Button
+              variant="primary"
               disabled={busy || selectedCount === 0}
               onClick={onImport}
             >
               导入所选 {selectedCount} 项
-            </button>
+            </Button>
           </div>
         </div>
       )}

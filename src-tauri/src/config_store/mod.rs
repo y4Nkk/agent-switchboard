@@ -100,7 +100,9 @@ impl ConfigStore {
             }
             migration::run(self).map_err(ProfileStoreError::Migration)?;
         }
-        migration::migrate_provider_route_mode(self).map_err(ProfileStoreError::Migration)
+        migration::migrate_usage_query_interval(self).map_err(ProfileStoreError::Migration)?;
+        migration::migrate_provider_route_mode(self).map_err(ProfileStoreError::Migration)?;
+        migration::migrate_common_settings_semantics(self).map_err(ProfileStoreError::Migration)
     }
 
     /// Removes every persisted provider, common setting, and history record.
@@ -182,7 +184,7 @@ mod tests {
 
     #[test]
     fn content_revision_is_stable_and_order_sensitive() {
-        let bytes = b"disable_response_storage: true";
+        let bytes = b"model_reasoning_effort: high";
         assert_eq!(content_revision(bytes), content_revision(bytes));
         assert_ne!(content_revision(bytes), content_revision(b"other"));
     }

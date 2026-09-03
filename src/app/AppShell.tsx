@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { CommandError } from "../api/client";
 import { PinTopButton } from "../components/PinTopButton";
 import { UpdateButton } from "../components/UpdateButton";
+import { Button } from "../components/Button";
 import { WindowControls } from "../components/WindowControls";
 import appIcon from "../assets/app-icon.png";
 import { isBrowserDevelopment } from "../lib/runtime";
@@ -16,6 +17,11 @@ interface AppShellProps {
    * toaster. */
   error: CommandError | null;
   busy: boolean;
+  /** Why application settings could not load; the banner keeps the repair
+   * reachable from every page while settings-backed actions silently wait. */
+  settingsError: string | null;
+  /** Replaces an unreadable settings file with validated defaults. */
+  onRepairSettings: () => void;
   /** Offered only for an unsupported profile store. */
   onResetStore: () => void;
   /** Always-on-top toggle state; null until settings load. */
@@ -33,6 +39,8 @@ export function AppShell({
   onPageChange,
   error,
   busy,
+  settingsError,
+  onRepairSettings,
   onResetStore,
   pin,
   update,
@@ -83,15 +91,26 @@ export function AppShell({
               <div className="asb-banner asb-banner-error" role="alert" aria-label="操作错误">
                 <span>{error.message}</span>
                 {error.code === "profile-store-unsupported" && (
-                  <button
-                    type="button"
-                    className="asb-btn-danger"
+                  <Button
+                    variant="danger"
                     disabled={busy}
                     onClick={onResetStore}
                   >
                     清空旧档案并重新开始
-                  </button>
+                  </Button>
                 )}
+              </div>
+            )}
+            {settingsError && (
+              <div className="asb-banner asb-banner-error" role="alert" aria-label="应用设置不可用">
+                <span>应用设置不可用：{settingsError}</span>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={onRepairSettings}
+                >
+                  一键修复
+                </Button>
               </div>
             )}
           </div>

@@ -10,7 +10,6 @@ const specs: CommonSettingSpec[] = [
     label: "隐藏推理摘要",
     group: "模型行为",
     control: "toggle",
-    default: { boolValue: false },
     options: [],
   },
   {
@@ -18,7 +17,6 @@ const specs: CommonSettingSpec[] = [
     label: "推理强度",
     group: "模型行为",
     control: "slider",
-    default: { strValue: "minimal" },
     options: [
       { value: "minimal", label: "极低" },
       { value: "high", label: "高" },
@@ -30,7 +28,6 @@ const specs: CommonSettingSpec[] = [
     label: "沙箱模式",
     group: "安全与审批",
     control: "segment",
-    default: { strValue: "read-only" },
     options: [
       { value: "read-only", label: "只读" },
       { value: "workspace-write", label: "工作区可写" },
@@ -39,7 +36,7 @@ const specs: CommonSettingSpec[] = [
 ];
 
 describe("GeneralSettingsForm", () => {
-  it("renders only catalog parameters as concrete controls, without patch states", async () => {
+  it("renders automatic and explicit values as the only parameter intents", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -47,9 +44,9 @@ describe("GeneralSettingsForm", () => {
         specs={specs}
         groups={["模型行为", "安全与审批"]}
         values={{
-          hide_agent_reasoning: false,
-          model_reasoning_effort: "high",
-          sandbox_mode: "read-only",
+          hide_agent_reasoning: { mode: "automatic" },
+          model_reasoning_effort: { mode: "explicit", value: "high" },
+          sandbox_mode: { mode: "explicit", value: "read-only" },
         }}
         busy={false}
         onChange={onChange}
@@ -57,15 +54,15 @@ describe("GeneralSettingsForm", () => {
       />,
     );
 
-    expect(screen.getByRole("switch", { name: "隐藏推理摘要" })).not.toBeChecked();
-    expect(screen.getByRole("slider", { name: "推理强度" })).toHaveValue("1");
+    expect(screen.getAllByRole("radio", { name: "自动" })[0]).toBeChecked();
+    expect(screen.getByRole("slider", { name: "推理强度" })).toHaveValue("2");
+    expect(screen.getByText("当前推理：高")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "只读" })).toBeChecked();
-    expect(screen.queryByRole("radio", { name: "不接管" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("radio", { name: "写入值" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("radio", { name: "移除该项" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("switch", { name: "隐藏推理摘要" }));
-    expect(onChange).toHaveBeenCalledWith("hide_agent_reasoning", true);
+    await user.click(screen.getAllByRole("radio", { name: "开启" })[0]);
+    expect(onChange).toHaveBeenCalledWith("hide_agent_reasoning", {
+      mode: "explicit",
+      value: true,
+    });
   });
 
   it("changes a catalog choice immediately and restores a group default through its caller", () => {
@@ -76,9 +73,9 @@ describe("GeneralSettingsForm", () => {
         specs={specs}
         groups={["模型行为", "安全与审批"]}
         values={{
-          hide_agent_reasoning: true,
-          model_reasoning_effort: "minimal",
-          sandbox_mode: "read-only",
+          hide_agent_reasoning: { mode: "explicit", value: true },
+          model_reasoning_effort: { mode: "explicit", value: "minimal" },
+          sandbox_mode: { mode: "explicit", value: "read-only" },
         }}
         busy={false}
         onChange={onChange}
@@ -87,9 +84,12 @@ describe("GeneralSettingsForm", () => {
     );
 
     fireEvent.change(screen.getByRole("slider", { name: "推理强度" }), {
-      target: { value: "2" },
+      target: { value: "3" },
     });
-    expect(onChange).toHaveBeenCalledWith("model_reasoning_effort", "xhigh");
+    expect(onChange).toHaveBeenCalledWith("model_reasoning_effort", {
+      mode: "explicit",
+      value: "xhigh",
+    });
 
     const restoreGroup = screen.getAllByRole("button", { name: "恢复默认值" })[0];
     expect(restoreGroup).toHaveClass("asb-btn-secondary");

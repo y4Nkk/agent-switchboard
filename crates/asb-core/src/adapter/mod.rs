@@ -172,7 +172,7 @@ pub(crate) fn diff_owned_maps(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::ConfigValue;
+    use crate::contracts::{CommonSettingValue, ConfigValue};
     use crate::ownership::default_common_settings;
 
     #[test]
@@ -192,11 +192,14 @@ mod tests {
     }
 
     #[test]
-    fn common_fragment_contains_only_non_default_common_values() {
+    fn common_fragment_contains_only_explicit_common_values() {
         let mut settings = default_common_settings(AppKind::Codex);
-        settings
-            .settings
-            .insert("hide_agent_reasoning".to_string(), ConfigValue::Bool(true));
+        settings.settings.insert(
+            "hide_agent_reasoning".to_string(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Bool(true),
+            },
+        );
 
         let rendered = render_common_settings(AppKind::Codex, &settings).expect("fragment");
 
@@ -205,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn common_fragment_keeps_claude_defaults_empty() {
+    fn common_fragment_keeps_claude_automatic_values_empty() {
         let settings = default_common_settings(AppKind::Claude);
 
         assert_eq!(

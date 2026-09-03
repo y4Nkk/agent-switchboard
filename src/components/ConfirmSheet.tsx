@@ -1,5 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { Button } from "./Button";
+
 interface Props {
   title: string;
   details: ReactNode[];
@@ -67,17 +69,16 @@ export function ConfirmSheet({
           ))}
         </ul>
         <div className="asb-sheet-actions">
-          <button ref={cancelRef} type="button" className="asb-btn-secondary" onClick={onCancel}>
+          <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
             取消
-          </button>
-          <button
-            type="button"
-            className={destructive ? "asb-btn-danger" : "asb-btn-primary"}
+          </Button>
+          <Button
+            variant={destructive ? "danger" : "primary"}
             disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

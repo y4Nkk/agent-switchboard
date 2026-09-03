@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { backupDiff, type BackupRecord, type KeyChange } from "../api/client";
 import { DiffView } from "./DiffView";
+import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { Table, type TableColumn } from "./Table";
 import { Time } from "./Time";
 
 interface Props {
@@ -61,15 +63,14 @@ function DiffRow({ record }: { record: BackupRecord }) {
 
   return (
     <div className="asb-backup-diff">
-      <button
-        type="button"
-        className="asb-btn-secondary"
+      <Button
+        variant="secondary"
         disabled={busy}
         aria-expanded={open}
         onClick={run}
       >
         查看差异
-      </button>
+      </Button>
       {open && error && <p className="asb-warn-text">{error}</p>}
       {open && changes !== null && (changes.length > 0 ? (
         <DiffView changes={changes} label="当前文件与备份的差异" />
@@ -84,48 +85,51 @@ function DiffRow({ record }: { record: BackupRecord }) {
 export function BackupHistory({ records, busy, onRestore }: Props) {
   const [pending, setPending] = useState<BackupRecord | null>(null);
 
+  const columns: Array<TableColumn<BackupRecord>> = [
+    {
+      key: "createdAt",
+      header: "时间",
+      cellClassName: "asb-code",
+      render: (record) => <Time iso={record.createdAt} />,
+    },
+    { key: "app", header: "客户端", render: (record) => clientLabel(record.app) },
+    { key: "reason", header: "原因", render: (record) => reasonLabel(record.reason) },
+    {
+      key: "contentHash",
+      header: "内容哈希",
+      cellClassName: "asb-code",
+      render: (record) => record.contentHash.slice(0, 12),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      render: (record) => (
+        <div className="asb-backup-actions">
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() => setPending(record)}
+          >
+            恢复
+          </Button>
+          <DiffRow record={record} />
+        </div>
+      ),
+    },
+  ];
+
   if (records.length === 0) {
     return <p className="asb-empty">暂无备份</p>;
   }
 
   return (
     <div className="asb-backups">
-      <table className="asb-table">
-        <thead>
-          <tr>
-            <th scope="col">时间</th>
-            <th scope="col">客户端</th>
-            <th scope="col">原因</th>
-            <th scope="col">内容哈希</th>
-            <th scope="col">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((record) => (
-            <tr key={record.id}>
-              <td className="asb-code">
-                <Time iso={record.createdAt} />
-              </td>
-              <td>{clientLabel(record.app)}</td>
-              <td>{reasonLabel(record.reason)}</td>
-              <td className="asb-code">{record.contentHash.slice(0, 12)}</td>
-              <td>
-                <div className="asb-backup-actions">
-                  <button
-                    type="button"
-                    className="asb-btn-secondary"
-                    disabled={busy}
-                    onClick={() => setPending(record)}
-                  >
-                    恢复
-                  </button>
-                  <DiffRow record={record} />
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Table
+        columns={columns}
+        rows={records}
+        rowKey={(record) => record.id}
+        ariaLabel="备份历史"
+      />
       {pending && (
         <ConfirmSheet
           title="恢复备份"

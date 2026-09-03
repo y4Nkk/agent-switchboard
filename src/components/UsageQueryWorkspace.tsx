@@ -3,13 +3,14 @@ import {
   testUsageQuery,
   type DeclarativeUsageQuery,
   type UsageQuery,
-  type UsageReading,
   type UsageSummary,
 } from "../api/client";
 import { Input } from "./Input";
 import { Time } from "./Time";
 import { Textarea } from "./Textarea";
+import { Button } from "./Button";
 import { UsageIcon } from "./icons";
+import { UsageReadingsTable } from "./UsageReadingsTable";
 import { normalizeUsageQuery } from "../lib/usage-query";
 
 interface Props {
@@ -36,7 +37,7 @@ const SCRIPT_TEMPLATE = `({
   }),
 })`;
 
-function emptyDeclarative(): DeclarativeUsageQuery {
+function emptyDeclarative(interval: number): DeclarativeUsageQuery {
   return {
     kind: "declarative",
     url: "",
@@ -44,6 +45,7 @@ function emptyDeclarative(): DeclarativeUsageQuery {
     usedPath: null,
     totalPath: null,
     unit: null,
+    refreshIntervalMinutes: interval,
   };
 }
 
@@ -55,29 +57,6 @@ function canRun(query: UsageQuery | null): boolean {
 function optional(raw: string): string | null {
   const value = raw.trim();
   return value || null;
-}
-
-function Metric({ label, value, unit }: { label: string; value: number | null; unit: string | null }) {
-  return (
-    <div className="asb-usage-metric">
-      <span>{label}</span>
-      <strong>{value ?? "—"}</strong>
-      {unit && <small>{unit}</small>}
-    </div>
-  );
-}
-
-function Reading({ reading }: { reading: UsageReading }) {
-  return (
-    <section className="asb-usage-reading">
-      {reading.planName && <h3 className="asb-usage-reading-title">{reading.planName}</h3>}
-      <div className="asb-usage-metrics">
-        <Metric label="余额" value={reading.remaining} unit={reading.unit} />
-        <Metric label="已用" value={reading.used} unit={reading.unit} />
-        <Metric label="总量" value={reading.total} unit={reading.unit} />
-      </div>
-    </section>
-  );
 }
 
 /**
@@ -145,12 +124,19 @@ export function UsageQueryWorkspace({
   }, [onClose, querying, saving]);
 
   const kind = draft?.kind ?? "declarative";
-  const declarative = draft?.kind === "declarative" ? draft : emptyDeclarative();
+  const declarative = draft?.kind === "declarative" ? draft : emptyDeclarative(0);
+  const intervalMinutes = draft ? draft.refreshIntervalMinutes : 0;
+  const [intervalText, setIntervalText] = useState(() => String(intervalMinutes));
 
   const selectKind = (next: "declarative" | "script") => {
     if (next === kind) return;
     clearResult();
-    setDraft(next === "declarative" ? emptyDeclarative() : { kind: "script", source: "" });
+    // The refresh interval is mode-independent and survives a mode switch.
+    setDraft(
+      next === "declarative"
+        ? emptyDeclarative(intervalMinutes)
+        : { kind: "script", source: "", refreshIntervalMinutes: intervalMinutes },
+    );
   };
 
   const patchDeclarative = (fields: Partial<DeclarativeUsageQuery>) => {
@@ -160,7 +146,26 @@ export function UsageQueryWorkspace({
 
   const patchScript = (source: string) => {
     clearResult();
-    setDraft({ kind: "script", source });
+    setDraft({ kind: "script", source, refreshIntervalMinutes: intervalMinutes });
+  };
+
+  /** Commits the free-form interval into the draft; anything outside whole
+   * minutes within 0–1440 reverts to the draft's persisted value. */
+  const commitInterval = () => {
+    const text = intervalText.trim();
+    if (/^\d+$/.test(text) && Number(text) <= 1440) {
+      const minutes = Number(text);
+      setIntervalText(String(minutes));
+      if (minutes !== intervalMinutes) {
+        setDraft((current) =>
+          current && current.kind === "script"
+            ? { ...current, refreshIntervalMinutes: minutes }
+            : { ...declarative, kind: "declarative", refreshIntervalMinutes: minutes },
+        );
+      }
+    } else {
+      setIntervalText(String(intervalMinutes));
+    }
   };
 
   const save = async () => {
@@ -178,15 +183,14 @@ export function UsageQueryWorkspace({
   return (
     <section className="asb-usage-workspace" id="asb-usage-workspace" aria-label="用量查询">
       <header className="asb-usage-workspace-head">
-        <button
-          type="button"
-          className="asb-btn-back"
+        <Button
+          variant="back"
           aria-label="返回供应商配置"
           disabled={controlsDisabled}
           onClick={onClose}
         >
           ←
-        </button>
+        </Button>
         <div>
           <h2 className="asb-panel-title">用量查询</h2>
           <p className="asb-usage-provider">{providerName.trim() || "未命名供应商"}</p>
@@ -304,24 +308,41 @@ export function UsageQueryWorkspace({
         </div>
       )}
 
+      <label className="asb-field asb-usage-interval">
+        <span>自动刷新间隔（分钟，0 为关闭）</span>
+        <Input
+          type="number"
+          min={0}
+          max={1440}
+          step={1}
+          aria-label="自动刷新间隔（分钟，0 为关闭）"
+          value={intervalText}
+          disabled={controlsDisabled}
+          onChange={(event) => setIntervalText(event.target.value)}
+          onBlur={commitInterval}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commitInterval();
+          }}
+        />
+      </label>
+
       <div className="asb-usage-actions">
-        <button
-          type="button"
-          className="asb-btn-secondary asb-usage-run"
+        <Button
+          variant="secondary"
+          className="asb-usage-run"
           disabled={controlsDisabled || !canRun(draft)}
           onClick={() => void run()}
         >
           <UsageIcon />
           {querying ? "查询中…" : "查询用量"}
-        </button>
-        <button
-          type="button"
-          className="asb-btn-primary"
+        </Button>
+        <Button
+          variant="primary"
           disabled={controlsDisabled}
           onClick={() => void save()}
         >
           {saving ? "保存中…" : "保存查询"}
-        </button>
+        </Button>
       </div>
 
       {summary && (
@@ -330,9 +351,7 @@ export function UsageQueryWorkspace({
             <span>本次结果</span>
             <Time iso={summary.at} />
           </div>
-          {summary.readings.map((reading, index) => (
-            <Reading key={`${reading.planName ?? "默认"}-${index}`} reading={reading} />
-          ))}
+          <UsageReadingsTable readings={summary.readings} ariaLabel="本次用量读数" />
         </section>
       )}
       {error && <p className="asb-warn-text" role="alert">{error}</p>}

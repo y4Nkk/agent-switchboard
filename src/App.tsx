@@ -42,6 +42,9 @@ export default function App() {
   const { preview } = switchPreview;
   const { editorMode, setEditorMode } = providers;
   const requestSwitch = () => operations.setConfirmingSwitch(true);
+  // Model currently live in the filtered client's real configuration.
+  const activeModel =
+    snapshot.statuses?.find((status) => status.app === appFilter)?.route?.model ?? null;
   useDevtoolsShortcut();
   useKeyboardFocusMarker();
 
@@ -53,6 +56,8 @@ export default function App() {
         error={error}
         busy={busy}
         onResetStore={() => providers.setResetStorePending(true)}
+        settingsError={appSettingsState.loadError}
+        onRepairSettings={() => void appSettingsState.repairSettings()}
         pin={appSettingsState.pin}
         update={
           updateCheck.updateCheck?.updateAvailable === true
@@ -69,12 +74,8 @@ export default function App() {
               <OverviewPage
                 statuses={snapshot.statuses}
                 locks={snapshot.locks}
-                selectedProfile={selectedProfile}
-                canSwitch={preview !== null}
                 busy={busy}
                 relayHidden={editorMode !== null}
-                onPreview={() => void switchPreview.runPreview()}
-                onRequestSwitch={requestSwitch}
                 onRefresh={() => void snapshot.refresh()}
                 onRecoverLock={operations.setRecoverLockPending}
               />
@@ -84,11 +85,13 @@ export default function App() {
                 profiles={snapshot.profiles}
                 appFilter={appFilter}
                 activeProfileId={activeProfileId(appFilter)}
+                activeModel={activeModel}
                 selectedId={snapshot.selectedId}
                 selectedProfile={selectedProfile}
                 editorMode={editorMode}
                 preview={preview}
                 busy={busy}
+                collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
                 onSelectApp={providers.selectApp}
                 onNew={() => setEditorMode("new")}
                 onCloseEditor={() => setEditorMode(null)}
@@ -96,11 +99,13 @@ export default function App() {
                 onSaveUsageQuery={providers.saveProfileUsageQuery}
                 onSelect={switchPreview.selectProfile}
                 onReorder={providers.dragReorderProfiles}
+                onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
                 onActivate={switchPreview.previewProfile}
                 onTogglePreview={switchPreview.togglePreviewProfile}
                 onEdit={providers.openEditor}
                 onDelete={providers.setDeletePending}
                 onRequestSwitch={requestSwitch}
+                onCancelPreview={switchPreview.retractPreview}
               />
             )}
             {page === "通用设置" && (
@@ -120,21 +125,25 @@ export default function App() {
                 onSave={(app) => void commonSettings.saveSettings(app)}
                 onRetryLoad={commonSettings.retryLoad}
                 onPreview={commonSettings.previewSettings}
-                promptApp={promptDocuments.promptApp}
-                promptDocument={promptDocuments.documents[promptDocuments.promptApp]}
+                promptDocument={promptDocuments.documents[commonSettings.settingsApp]}
                 promptDraft={
-                  promptDocuments.drafts[promptDocuments.promptApp] ??
-                  promptDocuments.documents[promptDocuments.promptApp]?.content ??
+                  promptDocuments.drafts[commonSettings.settingsApp] ??
+                  promptDocuments.documents[commonSettings.settingsApp]?.content ??
                   ""
                 }
-                promptDirty={promptDocuments.isPromptDirty(promptDocuments.promptApp)}
-                onSelectPromptApp={promptDocuments.setPromptApp}
+                promptDirty={promptDocuments.isPromptDirty(commonSettings.settingsApp)}
                 onPromptDraftChange={(content) =>
-                  promptDocuments.setPromptDraft(promptDocuments.promptApp, content)
+                  promptDocuments.setPromptDraft(commonSettings.settingsApp, content)
                 }
-                onSavePrompt={() => void promptDocuments.savePromptDocument(promptDocuments.promptApp)}
-                onDiscardPrompt={() => promptDocuments.discardPromptDraft(promptDocuments.promptApp)}
-                onReloadPrompt={() => promptDocuments.reloadPromptDocument(promptDocuments.promptApp)}
+                onSavePrompt={() =>
+                  void promptDocuments.savePromptDocument(commonSettings.settingsApp)
+                }
+                onDiscardPrompt={() =>
+                  promptDocuments.discardPromptDraft(commonSettings.settingsApp)
+                }
+                onReloadPrompt={() =>
+                  promptDocuments.reloadPromptDocument(commonSettings.settingsApp)
+                }
               />
             )}
             {page === "设置" && (
@@ -142,6 +151,7 @@ export default function App() {
                 settings={appSettingsState.appSettings}
                 loadError={appSettingsState.loadError}
                 onRetryLoad={appSettingsState.retryLoad}
+                onRepair={() => void appSettingsState.repairSettings()}
                 busy={busy}
                 onPatch={appSettingsState.saveSettingsPatch}
                 onRestart={() => void appSettingsState.restart()}

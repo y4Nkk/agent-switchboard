@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cancelOfficialLogin,
   checkCodexResetStatus,
   deleteProfile,
   getCommonSettingsEditor,
   getCloudBackupSettings,
   getCloudBackupSetupSql,
   getAppSettings,
+  getCachedCodexOfficialReset,
   getCachedCodexResetStatus,
   getConfigStatus,
   getGlobalPromptDocument,
@@ -14,8 +16,10 @@ import {
   listRuntimeLogs,
   listSystemFonts,
   openRuntimeLogDir,
+  pollOfficialLogin,
   resetProfileStore,
   reorderProfiles,
+  repairAppSettings,
   resumeSession,
   restartApplication,
   setAppSettings,
@@ -23,8 +27,10 @@ import {
   saveGlobalPromptDocument,
   saveCommonSettings,
   previewCommonSettings,
+  startOfficialLogin,
   queryCodexOfficialQuota,
   queryProfileUsage,
+  refreshCodexOfficialReset,
   uploadCloudBackup,
   restoreCloudBackup,
 } from "./client";
@@ -56,22 +62,24 @@ describe("api client boundary", () => {
     await getCommonSettingsEditor("codex");
     await saveCommonSettings(
       "codex",
-      { settings: { disable_response_storage: true } },
+      { settings: { model_reasoning_effort: { mode: "explicit", value: "high" } } },
       "settings-hash",
     );
-    await previewCommonSettings("codex", { settings: { disable_response_storage: true } });
+    await previewCommonSettings("codex", {
+      settings: { model_reasoning_effort: { mode: "explicit", value: "high" } },
+    });
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, "get_common_settings_editor", {
       target: "codex",
     });
     expect(invokeMock).toHaveBeenNthCalledWith(2, "save_common_settings", {
       target: "codex",
-      settings: { settings: { disable_response_storage: true } },
+      settings: { settings: { model_reasoning_effort: { mode: "explicit", value: "high" } } },
       expectedSettingsHash: "settings-hash",
     });
     expect(invokeMock).toHaveBeenNthCalledWith(3, "preview_common_settings", {
       target: "codex",
-      settings: { settings: { disable_response_storage: true } },
+      settings: { settings: { model_reasoning_effort: { mode: "explicit", value: "high" } } },
     });
   });
 
@@ -134,6 +142,24 @@ describe("api client boundary", () => {
     await expect(getConfigStatus()).rejects.toThrow("backend unavailable");
   });
 
+  it("starts, polls, and cancels official logins through their dedicated commands", async () => {
+    invokeMock.mockResolvedValue({});
+
+    await startOfficialLogin("codex");
+    await pollOfficialLogin("claude");
+    await cancelOfficialLogin("codex");
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "official_login_start", {
+      target: "codex",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "official_login_poll", {
+      target: "claude",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "official_login_cancel", {
+      target: "codex",
+    });
+  });
+
   it("reads public Codex reset signals through their dedicated command", async () => {
     invokeMock.mockResolvedValue({});
 
@@ -160,6 +186,22 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenCalledWith("query_codex_official_quota", {
       profileId: "codex-official",
     });
+  });
+
+  it("reads the cached Codex official reset without contacting the network", async () => {
+    invokeMock.mockResolvedValue(null);
+
+    await getCachedCodexOfficialReset();
+
+    expect(invokeMock).toHaveBeenCalledWith("get_cached_codex_official_reset");
+  });
+
+  it("refreshes the machine Codex official reset without a profile argument", async () => {
+    invokeMock.mockResolvedValue({ status: "available", windows: [], at: null, stale: false });
+
+    await refreshCodexOfficialReset();
+
+    expect(invokeMock).toHaveBeenCalledWith("refresh_codex_official_reset");
   });
 
   it("reads the cached Codex reset snapshot without using the network command", async () => {
@@ -190,6 +232,8 @@ describe("api client boundary", () => {
       hardwareAcceleration: true,
       interfaceFont: "Noto Sans SC",
       runtimeLogLevel: "info" as const,
+      collapsedUsageIds: [] as string[],
+
     };
     const next = { ...stored, closeBehavior: "exit" as const, theme: "dark" as const };
     invokeMock.mockResolvedValue(stored);
@@ -201,6 +245,26 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(2, "set_app_settings", {
       settings: next,
     });
+  });
+
+  it("repairs invalid application settings without submitting a payload", async () => {
+    const defaults = {
+      closeBehavior: "hideToTray" as const,
+      theme: "system" as const,
+      motion: "system" as const,
+      alwaysOnTop: false,
+      launchAtLogin: false,
+      hardwareAcceleration: true,
+      interfaceFont: "Noto Sans SC",
+      runtimeLogLevel: "info" as const,
+      collapsedUsageIds: [] as string[],
+
+    };
+    invokeMock.mockResolvedValue(defaults);
+
+    await expect(repairAppSettings()).resolves.toEqual(defaults);
+
+    expect(invokeMock).toHaveBeenCalledWith("repair_app_settings");
   });
 
   it("restarts the native application through its dedicated command", async () => {

@@ -233,7 +233,7 @@ pub fn enable_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asb_core::contracts::{ConfigValue, ProviderDraft};
+    use asb_core::contracts::{CommonSettingValue, ConfigValue, ProviderDraft};
 
     fn draft(app: AppKind, name: &str) -> ProviderDraft {
         ProviderDraft {
@@ -267,7 +267,9 @@ mod tests {
             let mut settings = snapshot.common[&AppKind::Codex].clone();
             settings.settings.insert(
                 "model_reasoning_effort".into(),
-                ConfigValue::Str("high".into()),
+                CommonSettingValue::Explicit {
+                    value: ConfigValue::Str("high".into()),
+                },
             );
             settings
         });

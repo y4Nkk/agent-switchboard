@@ -8,6 +8,7 @@ mod config_store;
 mod dev_api;
 mod fonts;
 mod local_state;
+mod official_login;
 mod probe;
 mod runtime_log;
 mod session_manager;
@@ -157,6 +158,11 @@ pub fn run() {
             commands::test_usage_query,
             commands::query_profile_usage,
             commands::query_codex_official_quota,
+            commands::get_cached_codex_official_reset,
+            commands::refresh_codex_official_reset,
+            commands::official_login::official_login_start,
+            commands::official_login::official_login_poll,
+            commands::official_login::official_login_cancel,
             commands::fetch_provider_models,
             commands::check_update,
             commands::get_cached_codex_reset_status,
@@ -164,6 +170,7 @@ pub fn run() {
             commands::status::lock_status,
             commands::status::recover_stale_lock,
             commands::discover_local,
+            commands::discover_cached,
             commands::list_sessions,
             commands::get_session_messages,
             commands::resume_session,
@@ -176,7 +183,9 @@ pub fn run() {
             commands::window::restart_application,
             commands::get_app_settings,
             commands::set_app_settings,
+            commands::repair_app_settings,
             commands::list_system_fonts,
+            #[cfg(debug_assertions)]
             commands::window::toggle_devtools,
         ])
         .build(context)

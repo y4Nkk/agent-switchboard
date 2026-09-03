@@ -16,6 +16,7 @@ const settings = {
   hardwareAcceleration: true,
   interfaceFont: "Noto Sans SC",
   runtimeLogLevel: "info" as const,
+  collapsedUsageIds: [],
 };
 
 function callbacks() {
@@ -67,10 +68,30 @@ describe("AppSettingsForm", () => {
     expect(handlers.onAlwaysOnTopChange).toHaveBeenCalledWith(true);
     await user.click(screen.getByRole("switch", { name: "开机自动启动" }));
     expect(handlers.onLaunchAtLoginChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("button", { name: "重启应用" })).toBeNull();
     await user.click(screen.getByRole("switch", { name: "启用硬件加速" }));
     expect(handlers.onHardwareAccelerationChange).toHaveBeenCalledWith(false);
+    expect(screen.getByRole("button", { name: "重启应用" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重启应用" }));
     expect(handlers.onRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the restart action after enabling hardware acceleration", async () => {
+    const user = userEvent.setup();
+    const handlers = callbacks();
+    render(
+      <AppSettingsForm
+        settings={{ ...settings, hardwareAcceleration: false }}
+        busy={false}
+        {...handlers}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "重启应用" })).toBeNull();
+    await user.click(screen.getByRole("switch", { name: "启用硬件加速" }));
+
+    expect(handlers.onHardwareAccelerationChange).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "重启应用" })).toBeInTheDocument();
   });
 
   it("renders the interface-font row and emits the chosen font", async () => {
@@ -97,7 +118,7 @@ describe("AppSettingsForm", () => {
     expect(screen.getByRole("radio", { name: "最小化到托盘" })).toBeDisabled();
     expect(screen.getByRole("radio", { name: "退出应用" })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "启用硬件加速" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重启应用" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "重启应用" })).toBeNull();
     expect(screen.getByRole("button", { name: "选择界面字体" })).toBeDisabled();
   });
 });

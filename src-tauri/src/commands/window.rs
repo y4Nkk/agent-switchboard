@@ -102,7 +102,10 @@ pub fn restart_application(app: tauri::AppHandle) {
     app.restart();
 }
 
-/// Dev-machine debug affordance: toggles the WebView inspector (F12).
+/// Dev-build debug affordance: toggles the WebView inspector (F12). The
+/// inspector methods only exist without the `devtools` cargo feature in
+/// debug builds, and release builds disable devtools entirely.
+#[cfg(debug_assertions)]
 #[tauri::command]
 pub fn toggle_devtools(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {

@@ -314,6 +314,36 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
                 app.clone(),
                 argument(&request.args, "profileId")?,
             )),
+            "get_cached_codex_official_reset" => {
+                command!(commands::get_cached_codex_official_reset(app.clone()))
+            }
+            "refresh_codex_official_reset" => {
+                command!(commands::refresh_codex_official_reset(app.clone()))
+            }
+            "official_login_start" => {
+                command!(commands::official_login::official_login_start(argument::<
+                    AppKind,
+                >(
+                    &request.args,
+                    "target"
+                )?,))
+            }
+            "official_login_poll" => {
+                command!(commands::official_login::official_login_poll(argument::<
+                    AppKind,
+                >(
+                    &request.args,
+                    "target"
+                )?,))
+            }
+            "official_login_cancel" => {
+                command!(commands::official_login::official_login_cancel(argument::<
+                    AppKind,
+                >(
+                    &request.args,
+                    "target"
+                )?,))
+            }
             "check_update" => command!(commands::check_update(app.clone())),
             "get_cached_codex_reset_status" => {
                 command!(commands::get_cached_codex_reset_status(app.clone()))
@@ -327,7 +357,8 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
             )),
-            "discover_local" => command!(commands::discover_local()),
+            "discover_local" => command!(commands::discover_local(app.clone())),
+            "discover_cached" => command!(commands::discover_cached(app.clone())),
             "list_sessions" => command!(commands::list_sessions()),
             "get_session_messages" => command!(commands::get_session_messages(
                 argument::<AppKind>(&request.args, "app")?,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { ProviderEditor } from "./ProviderEditor";
@@ -7,12 +7,44 @@ import { ProviderEditor } from "./ProviderEditor";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 describe("ProviderEditor", () => {
+  it("decorates the client field with the selected client's brand mark", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    const mark = screen.getByLabelText("客户端")
+      .closest(".asb-client-control")
+      ?.querySelector("img.asb-edit-logo");
+    expect(mark).not.toBeNull();
+    // Vite inlines assets as data URIs in tests, so only distinctness is stable.
+    const codexSrc = mark?.getAttribute("src") ?? "";
+    expect(codexSrc.length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("combobox", { name: "客户端" }));
+    await user.click(await screen.findByRole("option", { name: "Claude" }));
+
+    expect(screen.getByLabelText("客户端").closest(".asb-client-control")
+      ?.querySelector("img.asb-edit-logo")
+      ?.getAttribute("src")).not.toBe(codexSrc);
+  });
+
   it("keeps only connectivity and model fetching beside the main-model field", () => {
     render(
       <ProviderEditor
         profile={null}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -28,6 +60,35 @@ describe("ProviderEditor", () => {
       "asb-model-actions",
     );
     expect(screen.queryByRole("button", { name: "查询用量" })).not.toBeInTheDocument();
+  });
+
+  it("shows the currently enabled model for context while editing", () => {
+    const { rerender } = render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        activeModel="glm-4.6"
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("当前启用模型：glm-4.6")).toBeInTheDocument();
+
+    rerender(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/当前启用模型/)).toBeNull();
   });
 
   it("preserves an existing usage query while saving other provider fields", () => {
@@ -48,10 +109,13 @@ describe("ProviderEditor", () => {
             kind: "declarative",
             url: "{{baseUrl}}/balance",
             remainingPath: "data/balance",
+            refreshIntervalMinutes: 0,
           },
         }}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -68,6 +132,7 @@ describe("ProviderEditor", () => {
           usedPath: null,
           totalPath: null,
           unit: null,
+          refreshIntervalMinutes: 0,
         },
       }),
     );
@@ -81,6 +146,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -123,6 +190,8 @@ describe("ProviderEditor", () => {
         }}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -157,6 +226,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -194,6 +265,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="claude"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -266,6 +339,8 @@ describe("ProviderEditor", () => {
         }}
         initialApp="claude"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -286,6 +361,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="claude"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -318,6 +395,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="claude"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -353,22 +432,211 @@ describe("ProviderEditor", () => {
     });
   });
 
-  it("offers no route-mode choice and always emits custom drafts", () => {
+  it("offers the access-mode choice only when creating and defaults to custom", () => {
+    const onSave = vi.fn();
+    const { rerender } = render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "接入方式" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "自定义 API 中继" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "官方登录" })).not.toBeChecked();
+    expect(screen.getByLabelText("服务地址")).toBeInTheDocument();
+    expect(screen.getByLabelText("API 密钥")).toBeInTheDocument();
+
+    rerender(
+      <ProviderEditor
+        profile={{
+          id: "existing",
+          app: "codex",
+          routeMode: "custom",
+          name: "中继",
+          model: null,
+          baseUrl: "https://gateway.example/v1",
+          apiKey: "sk-test",
+          modelOptions: null,
+          websiteUrl: null,
+        }}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("radiogroup", { name: "接入方式" })).toBeNull();
+  });
+
+  it("disables the official choice once the client already owns an official profile", () => {
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={["codex"]}
+        activeModel={null}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("radio", { name: "自定义 API 中继" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "官方登录" })).toBeDisabled();
+  });
+
+  it("hides custom fields in official mode and gates saving until the login completes", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "official_login_start") {
+        return Promise.resolve({
+          userCode: "CODE-1234",
+          verificationUrl: "https://auth.openai.com/codex/device",
+        });
+      }
+      if (command === "official_login_poll") {
+        return Promise.resolve({
+          phase: "completed",
+          userCode: null,
+          verificationUrl: "",
+          message: null,
+        });
+      }
+      return Promise.resolve([]);
+    });
+    vi.useFakeTimers();
+    const onSave = vi.fn();
+
+    try {
+      render(
+        <ProviderEditor
+          profile={null}
+          initialApp="codex"
+          busy={false}
+          officialTakenApps={[]}
+          activeModel={null}
+          onSave={onSave}
+          onCancel={() => {}}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("radio", { name: "官方登录" }));
+
+      expect(screen.getByLabelText("名称")).toHaveValue("Codex 官方登录");
+      expect(screen.queryByLabelText("服务地址")).toBeNull();
+      expect(screen.queryByLabelText("主模型")).toBeNull();
+      expect(screen.queryByLabelText("API 密钥")).toBeNull();
+
+      const save = screen.getByRole("button", { name: "保存供应商" });
+      expect(save).toBeDisabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "开始官方登录" }));
+      await act(async () => {});
+      expect(screen.getByText(/验证码/)).toBeInTheDocument();
+      expect(save).toBeDisabled();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(screen.getByText("登录完成，登录凭据已写入客户端本地文件。")).toBeInTheDocument();
+      expect(save).toBeEnabled();
+
+      fireEvent.click(save);
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          app: "codex",
+          routeMode: "official",
+          name: "Codex 官方登录",
+          model: null,
+          baseUrl: null,
+          apiKey: "",
+          modelOptions: null,
+          usageQuery: null,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+      invokeMock.mockReset();
+    }
+  });
+
+  it("saves an edited official profile without demanding a fresh login", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={{
+          id: "codex-official",
+          app: "codex",
+          routeMode: "official",
+          name: "Codex 官方登录",
+          model: null,
+          baseUrl: null,
+          apiKey: "",
+          modelOptions: null,
+          websiteUrl: null,
+        }}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.queryByLabelText("服务地址")).toBeNull();
+    expect(screen.getByRole("button", { name: "开始官方登录" })).toBeInTheDocument();
+
+    const save = screen.getByRole("button", { name: "保存供应商" });
+    expect(save).toBeEnabled();
+
+    await user.clear(screen.getByLabelText("名称"));
+    await user.type(screen.getByLabelText("名称"), "Codex 官方");
+    await user.click(save);
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ routeMode: "official", name: "Codex 官方" }),
+    );
+  });
+
+  it("clears the custom-route fields the moment official mode is chosen", async () => {
+    const user = userEvent.setup();
     const onSave = vi.fn();
     render(
       <ProviderEditor
         profile={null}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
     );
 
-    expect(screen.queryByRole("radiogroup", { name: "路由模式" })).toBeNull();
-    expect(screen.queryByLabelText("官方登录")).toBeNull();
-    expect(screen.getByLabelText("服务地址")).toBeInTheDocument();
-    expect(screen.getByLabelText("API 密钥")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("名称"), "我的中继");
+    await user.type(screen.getByLabelText("服务地址"), "https://gateway.example/v1");
+    await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
+    await user.click(screen.getByRole("radio", { name: "官方登录" }));
+
+    expect(screen.getByLabelText("名称")).toHaveValue("我的中继");
+    expect(screen.queryByLabelText("服务地址")).toBeNull();
+
+    await user.click(screen.getByRole("radio", { name: "自定义 API 中继" }));
+
+    expect(screen.getByLabelText("名称")).toHaveValue("我的中继");
+    expect(screen.getByLabelText("服务地址")).toHaveValue("");
+    expect(screen.getByLabelText("API 密钥")).toHaveValue("");
   });
 
   it("keeps an existing custom profile in the custom draft contract", async () => {
@@ -389,6 +657,8 @@ describe("ProviderEditor", () => {
         }}
         initialApp="claude"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -404,7 +674,10 @@ describe("ProviderEditor", () => {
 
   it("fetches the model list from the service address and fills the primary model", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValue(["gpt-5.2", "gpt-5.3-codex"]);
+    invokeMock.mockResolvedValue([
+      { id: "gpt-5.2", ownedBy: "openai" },
+      { id: "gpt-5.3-codex", ownedBy: null },
+    ]);
     const user = userEvent.setup();
     const onSave = vi.fn();
     render(
@@ -412,6 +685,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -422,14 +697,14 @@ describe("ProviderEditor", () => {
     await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
     await user.click(screen.getByRole("button", { name: "获取模型" }));
 
-    expect(await screen.findByRole("combobox", { name: "选择模型" })).toBeInTheDocument();
+    const picker = await screen.findByRole("button", { name: "选择模型" });
     // The invoke keys must match the Rust command signature (`url`, `apiKey`).
     expect(invokeMock).toHaveBeenCalledWith("fetch_provider_models", {
       url: "https://gateway.example/v1",
       apiKey: "sk-test-key",
     });
 
-    await user.click(screen.getByRole("combobox", { name: "选择模型" }));
+    await user.click(picker);
     await user.click(await screen.findByRole("option", { name: "gpt-5.3-codex" }));
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
     expect(onSave).toHaveBeenCalledWith(
@@ -440,13 +715,15 @@ describe("ProviderEditor", () => {
 
   it("passes the entered API key to the model-list request", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValue(["gpt-5.2"]);
+    invokeMock.mockResolvedValue([{ id: "gpt-5.2", ownedBy: "openai" }]);
     const user = userEvent.setup();
     render(
       <ProviderEditor
         profile={null}
         initialApp="codex"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -457,10 +734,53 @@ describe("ProviderEditor", () => {
     await user.type(screen.getByLabelText("API 密钥"), "sk-entered-key");
     await user.click(screen.getByRole("button", { name: "获取模型" }));
 
-    expect(await screen.findByRole("combobox", { name: "选择模型" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "选择模型" })).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith(
       "fetch_provider_models",
       expect.objectContaining({ url: "https://gateway.example", apiKey: "sk-entered-key" }),
+    );
+    invokeMock.mockReset();
+  });
+
+  it("fills the Claude mapping tiers from the same fetched list", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue([
+      { id: "claude-haiku-4-5", ownedBy: "anthropic" },
+      { id: "deepseek-v4", ownedBy: "deepseek" },
+    ]);
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="claude"
+        busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("名称"), "中继 B");
+    await user.type(screen.getByLabelText("服务地址"), "https://relay.example");
+    await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
+    await user.click(screen.getByRole("button", { name: "获取模型" }));
+
+    await user.click(await screen.findByRole("button", { name: "选择 Haiku 档模型" }));
+    await user.click(await screen.findByRole("option", { name: "claude-haiku-4-5" }));
+    await user.click(screen.getByRole("button", { name: "选择 Sonnet 档模型" }));
+    await user.click(await screen.findByRole("option", { name: "deepseek-v4" }));
+
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelOptions: expect.objectContaining({
+          kind: "claude",
+          haikuModel: "claude-haiku-4-5",
+          sonnetModel: "deepseek-v4",
+        }),
+      }),
     );
     invokeMock.mockReset();
   });
@@ -473,6 +793,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="claude"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -497,6 +819,8 @@ describe("ProviderEditor", () => {
         profile={null}
         initialApp="claude"
         busy={false}
+        officialTakenApps={[]}
+        activeModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,

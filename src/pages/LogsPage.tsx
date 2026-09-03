@@ -8,7 +8,9 @@ import {
   type RuntimeLogLevel,
   type RuntimeLogSeverity,
 } from "../api/client";
+import { Button } from "../components/Button";
 import { Select } from "../components/Select";
+import { Table, type TableColumn } from "../components/Table";
 import { Time } from "../components/Time";
 
 type LevelFilter = "all" | RuntimeLogSeverity;
@@ -32,6 +34,7 @@ const LOG_LEVEL_OPTIONS: ReadonlyArray<{ value: RuntimeLogLevel; label: string }
 const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   appStarted: "应用已启动",
   appSettingsSaved: "已保存应用设置",
+  appSettingsRepaired: "已修复应用设置",
   profileStoreReset: "已重置供应商数据",
   profileCreated: "已创建供应商档案",
   profileUpdated: "已更新供应商档案",
@@ -48,6 +51,7 @@ const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   cloudBackupRestored: "已恢复云端备份",
   sessionResumed: "已恢复会话",
   ccSwitchProfilesImported: "已导入 CC Switch 档案",
+  officialLoginCompleted: "已完成官方登录",
 };
 
 function levelLabel(level: RuntimeLogSeverity): string {
@@ -62,6 +66,34 @@ function levelLabel(level: RuntimeLogSeverity): string {
       return "错误";
   }
 }
+
+const LOG_COLUMNS: Array<TableColumn<RuntimeLogEntry>> = [
+  {
+    key: "at",
+    header: "时间",
+    cellClassName: "asb-code",
+    render: (entry) => <Time iso={entry.at} />,
+  },
+  {
+    key: "level",
+    header: "级别",
+    render: (entry) => (
+      <span className={`asb-runtime-log-level is-${entry.level}`}>{levelLabel(entry.level)}</span>
+    ),
+  },
+  {
+    key: "action",
+    header: "事件",
+    cellClassName: "asb-runtime-log-action",
+    render: (entry) => ACTION_LABEL[entry.action],
+  },
+  {
+    key: "errorCode",
+    header: "错误代码",
+    cellClassName: "asb-code",
+    render: (entry) => entry.errorCode ?? "—",
+  },
+];
 
 interface LogsPageProps {
   logLevel: RuntimeLogLevel | null;
@@ -140,22 +172,20 @@ export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="asb-btn-secondary"
+          <Button
+            variant="secondary"
             disabled={loading}
             onClick={() => void refresh()}
           >
             {loading ? "刷新中" : "刷新"}
-          </button>
-          <button
-            type="button"
-            className="asb-btn-secondary"
+          </Button>
+          <Button
+            variant="secondary"
             disabled={openingFolder}
             onClick={() => void openLogDirectory()}
           >
             {openingFolder ? "打开中" : "打开日志文件夹"}
-          </button>
+          </Button>
         </div>
       </div>
       {error && (
@@ -178,32 +208,13 @@ export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
         </p>
       ) : (
         <div className="asb-runtime-log-table-wrap">
-          <table className="asb-table asb-runtime-log-table">
-            <thead>
-              <tr>
-                <th scope="col">时间</th>
-                <th scope="col">级别</th>
-                <th scope="col">事件</th>
-                <th scope="col">错误代码</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleEntries.map((entry, index) => (
-                <tr key={`${entry.at}-${entry.action}-${entry.errorCode ?? ""}-${index}`}>
-                  <td>
-                    <Time iso={entry.at} />
-                  </td>
-                  <td>
-                    <span className={`asb-runtime-log-level is-${entry.level}`}>
-                      {levelLabel(entry.level)}
-                    </span>
-                  </td>
-                  <td className="asb-runtime-log-action">{ACTION_LABEL[entry.action]}</td>
-                  <td className="asb-code">{entry.errorCode ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table
+            columns={LOG_COLUMNS}
+            rows={visibleEntries}
+            rowKey={(entry, index) => `${entry.at}-${entry.action}-${entry.errorCode ?? ""}-${index}`}
+            ariaLabel="应用运行日志"
+            className="asb-runtime-log-table"
+          />
         </div>
       )}
     </section>

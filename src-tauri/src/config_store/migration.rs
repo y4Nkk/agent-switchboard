@@ -7,11 +7,10 @@
 //! the legacy file untouched. After a successful run the runtime never reads
 //! `profiles.json` again.
 
-use super::snapshot::ConfigurationSnapshot;
-use super::{history, ConfigStore};
+use super::{history, snapshot::ConfigurationSnapshot, ConfigStore};
 use asb_core::contracts::{
-    AppKind, CommonSettings, ConfigValue, ConfigWriteRecord, ModelOptions, ProviderFile,
-    ProviderProfile, RouteMode, UsageQuery, WriteOperation,
+    AppKind, CommonSettingValue, CommonSettings, ConfigValue, ConfigWriteRecord, ModelOptions,
+    ProviderFile, ProviderProfile, RouteMode, UsageQuery, WriteOperation,
 };
 use asb_core::ownership::default_common_settings;
 use serde::Deserialize;
@@ -185,6 +184,257 @@ struct LegacyBaseEntry {
     value: Option<ConfigValue>,
 }
 
+/// The immediately previous common-settings file stored one plain value for
+/// every catalog key. This exact key set is accepted only at the one-time
+/// migration boundary; normal readers never deserialize it.
+const LEGACY_CODEX_COMMON_KEYS: &[&str] = &[
+    "hide_agent_reasoning",
+    "show_raw_agent_reasoning",
+    "disable_response_storage",
+    "tui.animations",
+    "tui.show_tooltips",
+    "tui.notifications",
+    "tui.raw_output_mode",
+    "tui.vim_mode_default",
+    "disable_paste_burst",
+    "tools.view_image",
+    "features.memories",
+    "features.prevent_idle_sleep",
+    "check_for_update_on_startup",
+    "model_reasoning_effort",
+    "model_reasoning_summary",
+    "model_verbosity",
+    "personality",
+    "web_search",
+    "sandbox_mode",
+    "approval_policy",
+    "history.persistence",
+];
+
+const LEGACY_CLAUDE_COMMON_KEYS: &[&str] = &[
+    "alwaysThinkingEnabled",
+    "autoCompactEnabled",
+    "showThinkingSummaries",
+    "spinnerTipsEnabled",
+    "autoScrollEnabled",
+    "emojiCompletionEnabled",
+    "promptSuggestionEnabled",
+    "showTurnDuration",
+    "syntaxHighlightingDisabled",
+    "terminalProgressBarEnabled",
+    "fileCheckpointingEnabled",
+    "respectGitignore",
+    "includeGitInstructions",
+    "attribution.coAuthoredBy",
+    "autoMemoryEnabled",
+    "outputStyle",
+    "preferredNotifChannel",
+];
+
+/// The first tagged common-settings contract shipped before this official
+/// directory expansion. It already used automatic/explicit values, but did
+/// not yet contain the newly catalogued Codex preferences. This exact shape
+/// is accepted only by the one-time layout migration below.
+const PREVIOUS_TAGGED_CODEX_COMMON_KEYS: &[&str] = &[
+    "hide_agent_reasoning",
+    "show_raw_agent_reasoning",
+    "tui.animations",
+    "tui.show_tooltips",
+    "tui.notifications",
+    "tui.raw_output_mode",
+    "tui.vim_mode_default",
+    "disable_paste_burst",
+    "tools.view_image",
+    "features.memories",
+    "features.prevent_idle_sleep",
+    "check_for_update_on_startup",
+    "model_reasoning_effort",
+    "plan_mode_reasoning_effort",
+    "model_reasoning_summary",
+    "model_verbosity",
+    "personality",
+    "web_search",
+    "sandbox_mode",
+    "approval_policy",
+    "history.persistence",
+];
+
+const PREVIOUS_TAGGED_CLAUDE_COMMON_KEYS: &[&str] = &[
+    "alwaysThinkingEnabled",
+    "autoCompactEnabled",
+    "showThinkingSummaries",
+    "spinnerTipsEnabled",
+    "autoScrollEnabled",
+    "emojiCompletionEnabled",
+    "promptSuggestionEnabled",
+    "showTurnDuration",
+    "syntaxHighlightingDisabled",
+    "terminalProgressBarEnabled",
+    "fileCheckpointingEnabled",
+    "respectGitignore",
+    "includeGitInstructions",
+    "autoMemoryEnabled",
+    "outputStyle",
+    "preferredNotifChannel",
+];
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LegacyPlainCommonSettings {
+    settings: BTreeMap<String, ConfigValue>,
+}
+
+fn legacy_common_keys(app: AppKind) -> &'static [&'static str] {
+    match app {
+        AppKind::Codex => LEGACY_CODEX_COMMON_KEYS,
+        AppKind::Claude => LEGACY_CLAUDE_COMMON_KEYS,
+    }
+}
+
+fn is_removed_legacy_common_key(app: AppKind, key: &str) -> bool {
+    (app == AppKind::Codex && key == "disable_response_storage")
+        || (app == AppKind::Claude && key == "attribution.coAuthoredBy")
+}
+
+fn has_exact_key_set(settings: &BTreeMap<String, CommonSettingValue>, expected: &[&str]) -> bool {
+    let actual: BTreeSet<&str> = settings.keys().map(String::as_str).collect();
+    actual == expected.iter().copied().collect()
+}
+
+fn has_current_key_set(app: AppKind, settings: &BTreeMap<String, CommonSettingValue>) -> bool {
+    settings
+        .keys()
+        .eq(default_common_settings(app).settings.keys())
+}
+
+fn is_legacy_claude_output_style(value: &CommonSettingValue) -> bool {
+    matches!(
+        value,
+        CommonSettingValue::Explicit {
+            value: ConfigValue::Str(value),
+        } if matches!(value.as_str(), "default" | "explanatory" | "learning")
+    )
+}
+
+fn migrate_tagged_claude_output_style(value: CommonSettingValue) -> CommonSettingValue {
+    match value {
+        CommonSettingValue::Explicit {
+            value: ConfigValue::Str(value),
+        } => match value.as_str() {
+            "default" => CommonSettingValue::Automatic,
+            "explanatory" => CommonSettingValue::Explicit {
+                value: ConfigValue::Str("Explanatory".to_string()),
+            },
+            "learning" => CommonSettingValue::Explicit {
+                value: ConfigValue::Str("Learning".to_string()),
+            },
+            _ => CommonSettingValue::Explicit {
+                value: ConfigValue::Str(value),
+            },
+        },
+        value => value,
+    }
+}
+
+fn migrate_previous_tagged_common(
+    app: AppKind,
+    previous: CommonSettings,
+) -> Result<Option<CommonSettings>, String> {
+    let needs_migration = match app {
+        AppKind::Codex => has_exact_key_set(&previous.settings, PREVIOUS_TAGGED_CODEX_COMMON_KEYS),
+        AppKind::Claude => {
+            has_exact_key_set(&previous.settings, PREVIOUS_TAGGED_CLAUDE_COMMON_KEYS)
+                || (has_current_key_set(app, &previous.settings)
+                    && previous
+                        .settings
+                        .get("outputStyle")
+                        .is_some_and(is_legacy_claude_output_style))
+        }
+    };
+    if !needs_migration {
+        return Ok(None);
+    }
+
+    let mut settings = default_common_settings(app).settings;
+    for (key, value) in previous.settings {
+        let value = match (app, key.as_str()) {
+            (AppKind::Claude, "outputStyle") => migrate_tagged_claude_output_style(value),
+            _ => value,
+        };
+        settings.insert(key, value);
+    }
+    let settings = CommonSettings { settings };
+    settings
+        .validate_for(app)
+        .map_err(|error| error.to_string())?;
+    Ok(Some(settings))
+}
+
+fn migrate_legacy_common_value(
+    app: AppKind,
+    key: &str,
+    value: ConfigValue,
+) -> Result<CommonSettingValue, String> {
+    if is_removed_legacy_common_key(app, key) {
+        return Ok(CommonSettingValue::Automatic);
+    }
+    let value = match (app, key, value) {
+        (AppKind::Claude, "outputStyle", ConfigValue::Str(value)) => match value.as_str() {
+            "default" => return Ok(CommonSettingValue::Automatic),
+            "explanatory" => ConfigValue::Str("Explanatory".to_string()),
+            "learning" => ConfigValue::Str("Learning".to_string()),
+            _ => ConfigValue::Str(value),
+        },
+        (_, _, value) => value,
+    };
+    let spec = asb_core::ownership::setting_spec(app, key)
+        .filter(|spec| spec.owner == asb_core::ownership::SettingOwner::Common)
+        .ok_or_else(|| format!("旧版通用参数不受当前目录支持：{key}"))?;
+    if spec.legacy_default.as_ref() == Some(&value) {
+        Ok(CommonSettingValue::Automatic)
+    } else {
+        Ok(CommonSettingValue::Explicit { value })
+    }
+}
+
+fn migrate_legacy_plain_common(app: AppKind, text: &str) -> Result<CommonSettings, String> {
+    let legacy: LegacyPlainCommonSettings =
+        serde_json::from_str(text).map_err(|_| "通用设置不是受支持的上一版契约".to_string())?;
+    let expected: BTreeSet<&str> = legacy_common_keys(app).iter().copied().collect();
+    let actual: BTreeSet<&str> = legacy.settings.keys().map(String::as_str).collect();
+    if actual != expected {
+        return Err("旧版通用设置键集不完整或包含未知项".to_string());
+    }
+    let mut settings = default_common_settings(app).settings;
+    for (key, value) in legacy.settings {
+        if is_removed_legacy_common_key(app, &key) {
+            continue;
+        }
+        settings.insert(key.clone(), migrate_legacy_common_value(app, &key, value)?);
+    }
+    let settings = CommonSettings { settings };
+    settings
+        .validate_for(app)
+        .map_err(|error| error.to_string())?;
+    Ok(settings)
+}
+
+fn read_current_or_legacy_common(
+    app: AppKind,
+    text: &str,
+) -> Result<(CommonSettings, bool), String> {
+    if let Ok(settings) = serde_json::from_str::<CommonSettings>(text) {
+        if let Some(migrated) = migrate_previous_tagged_common(app, settings.clone())? {
+            return Ok((migrated, true));
+        }
+        settings
+            .validate_for(app)
+            .map_err(|error| error.to_string())?;
+        return Ok((settings, false));
+    }
+    migrate_legacy_plain_common(app, text).map(|settings| (settings, true))
+}
+
 /// Converts one legacy common base into complete plain-value settings.
 /// A kept value must be a catalog-legal value; a `null` (the legacy
 /// "remove this line" state) and every unlisted parameter fall back to the
@@ -199,7 +449,13 @@ fn convert_common(app: AppKind, base: &LegacyCommonBase) -> Result<CommonSetting
         }
         match value {
             Some(converted) => {
-                settings.insert(key.clone(), converted.clone());
+                if is_removed_legacy_common_key(app, key) {
+                    continue;
+                }
+                settings.insert(
+                    key.clone(),
+                    migrate_legacy_common_value(app, key, converted.clone())?,
+                );
             }
             None => {
                 // The legacy explicit-remove state becomes the client default.
@@ -305,14 +561,7 @@ fn read_route_migration_common(
     match super::read_optional(&store.common_path(app)).map_err(|_| "通用设置不可读".to_string())?
     {
         None => Ok(default_common_settings(app)),
-        Some(text) => {
-            let settings: CommonSettings =
-                serde_json::from_str(&text).map_err(|_| "通用设置不是当前契约".to_string())?;
-            settings
-                .validate_for(app)
-                .map_err(|error| error.to_string())?;
-            Ok(settings)
-        }
+        Some(text) => read_current_or_legacy_common(app, &text).map(|(settings, _)| settings),
     }
 }
 
@@ -333,6 +582,74 @@ fn read_route_migration_history(
             Ok(file.records)
         }
     }
+}
+
+/// Produces the current-contract text for the one previous usage-query
+/// shape: a query saved before `refreshIntervalMinutes` existed gains the
+/// explicit manual-only value. Any other shape returns `None` so it stays
+/// with the migration or strict reader that owns its fate.
+fn insert_missing_refresh_interval(text: &str) -> Option<String> {
+    let mut value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let query = value.get_mut("usageQuery")?.as_object_mut()?;
+    if query.contains_key("refreshIntervalMinutes") {
+        return None;
+    }
+    let previous_keys = match query.get("kind").and_then(|kind| kind.as_str()) {
+        Some("declarative") => &[
+            "kind",
+            "url",
+            "remainingPath",
+            "usedPath",
+            "totalPath",
+            "unit",
+        ][..],
+        Some("script") => &["kind", "source"][..],
+        _ => return None,
+    };
+    if !query
+        .keys()
+        .all(|key| previous_keys.contains(&key.as_str()))
+    {
+        return None;
+    }
+    query.insert("refreshIntervalMinutes".to_string(), serde_json::json!(0));
+    serde_json::to_string_pretty(&value).ok()
+}
+
+/// Atomically upgrades provider files saved before the usage query carried
+/// an auto-refresh interval. Files already on the current contract stay
+/// untouched; files of any other shape stay exactly as read so the route
+/// migration or the strict reader rejects them loudly. This is a one-time
+/// storage migration, not a runtime fallback: once rewritten, strict
+/// readers reject the old shape.
+pub fn migrate_usage_query_interval(store: &ConfigStore) -> Result<(), String> {
+    for app in [AppKind::Codex, AppKind::Claude] {
+        let entries = match std::fs::read_dir(store.providers_dir(app)) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err("无法读取供应商目录".to_string()),
+        };
+        for entry in entries {
+            let path = entry.map_err(|_| "无法读取供应商文件".to_string())?.path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
+                continue;
+            }
+            let text =
+                std::fs::read_to_string(&path).map_err(|_| "无法读取供应商文件".to_string())?;
+            if serde_json::from_str::<ProviderFile>(&text).is_ok() {
+                continue;
+            }
+            let Some(upgraded) = insert_missing_refresh_interval(&text) else {
+                continue;
+            };
+            if serde_json::from_str::<ProviderFile>(&upgraded).is_err() {
+                continue;
+            }
+            super::write_json_atomic(&path, &upgraded)
+                .map_err(|_| "无法原子保存配置存储".to_string())?;
+        }
+    }
+    Ok(())
 }
 
 /// Atomically upgrades the already-split provider files that predate the
@@ -368,6 +685,54 @@ pub fn migrate_provider_route_mode(store: &ConfigStore) -> Result<(), String> {
         store,
         &ConfigurationSnapshot {
             providers,
+            common,
+            history: history_map,
+        },
+    )
+}
+
+/// Upgrades supported previous complete common-settings contracts into the
+/// current tagged automatic/explicit contract. It stages the entire
+/// configuration directory and swaps it only after strict readback, so there
+/// is no runtime dual-read path and no partial client upgrade.
+pub fn migrate_common_settings_semantics(store: &ConfigStore) -> Result<(), String> {
+    if !store.configuration_dir().exists() {
+        return Ok(());
+    }
+
+    let mut common = BTreeMap::new();
+    let mut needs_migration = false;
+    for app in [AppKind::Codex, AppKind::Claude] {
+        let settings = match super::read_optional(&store.common_path(app))
+            .map_err(|_| "通用设置不可读".to_string())?
+        {
+            None => default_common_settings(app),
+            Some(text) => {
+                let (settings, migrated) = read_current_or_legacy_common(app, &text)?;
+                needs_migration |= migrated;
+                settings
+            }
+        };
+        common.insert(app, settings);
+    }
+    if !needs_migration {
+        return Ok(());
+    }
+
+    let mut providers_map = BTreeMap::new();
+    let mut history_map = BTreeMap::new();
+    for app in [AppKind::Codex, AppKind::Claude] {
+        let (files, current, legacy) = read_route_migration_provider_files(store, app)?;
+        if legacy || (!current && !files.is_empty()) {
+            return Err("通用设置迁移前供应商路由契约未收敛".to_string());
+        }
+        providers_map.insert(app, files);
+        history_map.insert(app, read_route_migration_history(store, app)?);
+    }
+    super::snapshot::enable_snapshot(
+        store,
+        &ConfigurationSnapshot {
+            providers: providers_map,
             common,
             history: history_map,
         },
@@ -493,13 +858,12 @@ mod tests {
             vec!["0b91a2f4-6c85-4a12-9f0d-2f4a1b3c5d6e.json".to_string()]
         );
 
-        // Common settings are complete plain values: kept values stay,
-        // removals and gaps become defaults.
+        // Removed legacy keys disappear. The surviving gap becomes automatic.
         let codex_common = store.get_common_settings(AppKind::Codex).unwrap();
-        assert_eq!(
-            codex_common.settings.value("disable_response_storage"),
-            Some(&ConfigValue::Bool(true))
-        );
+        assert!(codex_common
+            .settings
+            .value("disable_response_storage")
+            .is_none());
         assert_eq!(
             codex_common.settings.value("model_reasoning_effort"),
             default_common_settings(AppKind::Codex).value("model_reasoning_effort")
@@ -560,6 +924,116 @@ mod tests {
         assert_eq!(
             store.list_providers().unwrap()[0].profile.route_mode,
             RouteMode::Custom
+        );
+    }
+
+    #[test]
+    fn plain_common_file_is_migrated_once_to_automatic_or_explicit_intent() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let store = ConfigStore::new(directory.path().join("state"));
+        fs::create_dir_all(store.common_path(AppKind::Claude).parent().unwrap()).unwrap();
+        let legacy = serde_json::json!({
+            "settings": LEGACY_CLAUDE_COMMON_KEYS
+                .iter()
+                .map(|key| {
+                    let value = match *key {
+                        "outputStyle" => serde_json::Value::String("learning".to_string()),
+                        "preferredNotifChannel" => serde_json::Value::String("auto".to_string()),
+                        "showTurnDuration" => serde_json::Value::Bool(true),
+                        "attribution.coAuthoredBy" => serde_json::Value::Bool(true),
+                        _ => serde_json::Value::Bool(true),
+                    };
+                    ((*key).to_string(), value)
+                })
+                .collect::<serde_json::Map<_, _>>(),
+        });
+        fs::write(
+            store.common_path(AppKind::Claude),
+            serde_json::to_string(&legacy).unwrap(),
+        )
+        .unwrap();
+
+        store.ensure_layout().expect("plain common migration");
+
+        let migrated = store.get_common_settings(AppKind::Claude).unwrap().settings;
+        assert_eq!(
+            migrated.value("outputStyle"),
+            Some(&CommonSettingValue::Explicit {
+                value: ConfigValue::Str("Learning".to_string()),
+            })
+        );
+        assert_eq!(
+            migrated.value("showTurnDuration"),
+            Some(&CommonSettingValue::Explicit {
+                value: ConfigValue::Bool(true),
+            })
+        );
+        assert!(migrated.value("attribution.coAuthoredBy").is_none());
+        let persisted = fs::read_to_string(store.common_path(AppKind::Claude)).unwrap();
+        assert!(persisted.contains("\"mode\": \"explicit\""));
+        assert!(!persisted.contains("attribution.coAuthoredBy"));
+    }
+
+    #[test]
+    fn previous_tagged_codex_settings_gain_new_catalog_keys_automatically() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let store = ConfigStore::new(directory.path().join("state"));
+        fs::create_dir_all(store.common_path(AppKind::Codex).parent().unwrap()).unwrap();
+        let mut settings = BTreeMap::new();
+        for key in PREVIOUS_TAGGED_CODEX_COMMON_KEYS {
+            settings.insert((*key).to_string(), CommonSettingValue::Automatic);
+        }
+        settings.insert(
+            "model_reasoning_effort".to_string(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Str("high".to_string()),
+            },
+        );
+        fs::write(
+            store.common_path(AppKind::Codex),
+            serde_json::to_string(&CommonSettings { settings }).unwrap(),
+        )
+        .unwrap();
+
+        store.ensure_layout().expect("tagged common migration");
+
+        let migrated = store.get_common_settings(AppKind::Codex).unwrap().settings;
+        assert_eq!(
+            migrated.value("model_reasoning_effort"),
+            Some(&CommonSettingValue::Explicit {
+                value: ConfigValue::Str("high".to_string()),
+            })
+        );
+        assert_eq!(
+            migrated.value("allow_login_shell"),
+            Some(&CommonSettingValue::Automatic)
+        );
+        assert_eq!(
+            migrated.value("features.multi_agent"),
+            Some(&CommonSettingValue::Automatic)
+        );
+        assert_eq!(
+            migrated.settings.len(),
+            default_common_settings(AppKind::Codex).settings.len()
+        );
+    }
+
+    #[test]
+    fn current_tagged_claude_settings_do_not_trigger_another_migration() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let store = ConfigStore::new(directory.path().join("state"));
+        fs::create_dir_all(store.common_path(AppKind::Claude).parent().unwrap()).unwrap();
+        let current = default_common_settings(AppKind::Claude);
+        let source = serde_json::to_string(&current).unwrap();
+        fs::write(store.common_path(AppKind::Claude), &source).unwrap();
+
+        store
+            .ensure_layout()
+            .expect("current tagged settings are stable");
+
+        assert_eq!(
+            fs::read_to_string(store.common_path(AppKind::Claude)).unwrap(),
+            source
         );
     }
 

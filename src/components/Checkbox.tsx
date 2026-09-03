@@ -4,6 +4,8 @@ interface Props {
   onChange: (checked: boolean) => void;
   /** Visible label text; also serves as the accessible name of the control. */
   label: string;
+  /** Full accessible name for compact visible labels (e.g. an inline "1M"). */
+  ariaLabel?: string;
   disabled?: boolean;
   /** 部分选中：控件显示横条，读屏语义为 mixed；点击仍走 onChange。 */
   indeterminate?: boolean;
@@ -14,7 +16,7 @@ interface Props {
  * input keeps keyboard and screen-reader behavior while the box is drawn
  * beside it. All visual values come from styles/tokens.css.
  */
-export function Checkbox({ checked, disabled = false, indeterminate = false, label, onChange }: Props) {
+export function Checkbox({ checked, disabled = false, indeterminate = false, label, ariaLabel, onChange }: Props) {
   const active = checked || indeterminate;
   return (
     <label className="asb-checkbox" data-disabled={disabled ? "true" : undefined}>
@@ -24,6 +26,7 @@ export function Checkbox({ checked, disabled = false, indeterminate = false, lab
         checked={checked}
         disabled={disabled}
         aria-checked={indeterminate ? "mixed" : checked}
+        aria-label={ariaLabel}
         onChange={(event) => onChange(event.target.checked)}
       />
       <span className="asb-checkbox-box" data-checked={active ? "true" : "false"} aria-hidden="true">
