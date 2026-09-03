@@ -106,6 +106,7 @@ fn setup(app: AppKind, content: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
 /// Wraps FsIo with deterministic failure injection at a chosen stage.
 struct FailingIo {
     fail_stage: Cell<Option<&'static str>>,
+    fixed_now: Option<&'static str>,
     renamed: Cell<bool>,
     /// When set, the first read of the live file after a rename returns
     /// corrupted content, simulating a post-verify failure with the file
@@ -126,6 +127,7 @@ impl FailingIo {
     fn new() -> Self {
         Self {
             fail_stage: Cell::new(None),
+            fixed_now: None,
             renamed: Cell::new(false),
             corrupt_once: Cell::new(false),
             corrupt_after_rename: false,
@@ -228,7 +230,9 @@ impl SwitchIo for FailingIo {
     }
 
     fn now_rfc3339(&self) -> String {
-        FsIo.now_rfc3339()
+        self.fixed_now
+            .map(str::to_string)
+            .unwrap_or_else(|| FsIo.now_rfc3339())
     }
 }
 
@@ -917,7 +921,8 @@ fn first_switch_creates_a_file_and_undo_restores_its_absence() {
     let dir = tempfile::tempdir().expect("tempdir");
     let target = dir.path().join("live").join("config.toml");
     let backup_dir = dir.path().join("backups");
-    let io = FsIo;
+    let mut io = FailingIo::new();
+    io.fixed_now = Some("2026-09-03T15:40:08.000Z");
     let plan = codex_plan(
         "Relay B",
         "https://relay-b.internal/v1",
@@ -953,7 +958,18 @@ fn first_switch_creates_a_file_and_undo_restores_its_absence() {
         .iter()
         .any(|record| record.id == restored.pre_restore_backup.id));
 
-    restore(&io, &restored.pre_restore_backup, &target).expect("undo restore");
+    let undone =
+        restore(&io, &restored.pre_restore_backup, &target).expect("undo restore");
+    assert_ne!(
+        restored.pre_restore_backup.id,
+        undone.pre_restore_backup.id,
+        "fixed timestamps must still produce distinct backup records"
+    );
+    assert_ne!(
+        restored.pre_restore_backup.backup_path,
+        undone.pre_restore_backup.backup_path,
+        "fixed timestamps must still produce distinct backup paths"
+    );
     assert_eq!(fs::read_to_string(&target).unwrap(), switched_content);
 }
 

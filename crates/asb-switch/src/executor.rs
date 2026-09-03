@@ -17,6 +17,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use crate::restore::RestoreOutcome;
 
@@ -274,12 +275,17 @@ fn plan_rejected(e: AdapterError) -> SwitchError {
     }
 }
 
+static BACKUP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 pub(crate) fn timestamp_name<Io: SwitchIo>(io: &Io) -> String {
-    io.now_rfc3339()
+    let timestamp: String = io
+        .now_rfc3339()
         .chars()
         .filter(|c| c.is_ascii_digit())
         .take(17)
-        .collect()
+        .collect();
+    let sequence = BACKUP_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("{timestamp}-{}-{sequence}", std::process::id())
 }
 
 /// Executes one provider projection transactionally. A successful client
