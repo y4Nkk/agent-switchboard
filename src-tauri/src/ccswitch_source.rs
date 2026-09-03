@@ -18,11 +18,9 @@ struct RawScan {
     skipped: Vec<ccswitch::CcSwitchSkip>,
 }
 
-/// Locates the CC Switch database under the user profile.
+/// Locates the CC Switch database under the user home directory.
 fn db_path() -> Result<PathBuf, String> {
-    let home = std::env::var_os("USERPROFILE")
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+    let home = crate::local_state::user_home_dir()?;
     Ok(Path::new(&home).join(".cc-switch").join("cc-switch.db"))
 }
 

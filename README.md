@@ -5,14 +5,14 @@
 <h1 align="center">Agent Switchboard</h1>
 
 <p align="center">
-  面向 <strong>Codex</strong> 与 <strong>Claude Code</strong> 的本地 Windows 供应商配置控制台。<br>
+  面向 <strong>Codex</strong> 与 <strong>Claude Code</strong> 的本地供应商配置控制台（Windows / macOS / Linux）。<br>
   通用设置可视化编辑，供应商档案独立管理；写入前可预览，写入后可恢复。
 </p>
 
 <p align="center">
-  <a href="https://github.com/y4Nkk/agent-switchboard/actions/workflows/windows-package.yml"><img src="https://github.com/y4Nkk/agent-switchboard/actions/workflows/windows-package.yml/badge.svg?branch=master" alt="Windows 打包工作流"></a>
+  <a href="https://github.com/y4Nkk/agent-switchboard/actions/workflows/package.yml"><img src="https://github.com/y4Nkk/agent-switchboard/actions/workflows/package.yml/badge.svg?branch=master" alt="打包工作流"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c8bf5.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0f7ee8.svg" alt="Windows 10 或 11">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0f7ee8.svg" alt="Windows、macOS 与 Linux">
 </p>
 
 Agent Switchboard 把多供应商使用下最容易出错的环节——手改客户端配置文件——收束为一条可检查的本地流程。它管理两份数据：与供应商无关的**通用设置**，以及每个供应商一份的**自定义档案**；启用供应商时由应用将两者合成为最终配置，经确认后写入 Codex / Claude Code 的用户级配置文件。
@@ -64,36 +64,46 @@ Agent Switchboard 把多供应商使用下最容易出错的环节——手改�
 
 ## 下载
 
-Windows 10 / 11 安装包（NSIS）从 [Releases](https://github.com/y4Nkk/agent-switchboard/releases) 获取，当前是否存在已发布版本以该页面为准。
+安装包从 [Releases](https://github.com/y4Nkk/agent-switchboard/releases) 获取，当前是否存在已发布版本以该页面为准：
+
+| 平台 | 产物 |
+| --- | --- |
+| Windows 10 / 11 (x64) | NSIS 安装程序 `*-setup.exe` |
+| macOS Apple Silicon | `*-aarch64.dmg` |
+| macOS Intel | `*-x64.dmg` |
+| Linux (x64) | `*.deb` 与 `*.AppImage` |
 
 ## 本地构建与开发
 
-本项目为 Windows 桌面应用，使用 `Tauri 2`、Rust 与 React/TypeScript。`rust-toolchain.toml` 固定 GNU Windows 工具链；本机需要可用的 MinGW `gcc`、`windres` 与 `dlltool`。
+本项目为 `Tauri 2` 桌面应用，Rust + React/TypeScript。Windows 开发使用 `rust-toolchain.toml` 固定的 GNU 工具链，本机需要可用的 MinGW `gcc`、`windres` 与 `dlltool`；macOS / Linux 开发者请导出 `RUSTUP_TOOLCHAIN=stable` 覆盖该 pin，Linux 另需 WebKitGTK 构建依赖（`libwebkit2gtk-4.1-dev`、`libayatana-appindicator3-dev`、`librsvg2-dev` 等）。
 
-```powershell
+```bash
 npm ci
 cargo test --workspace
 npm test -- --run
-npm run tauri build
+npm run tauri:build:windows   # 或 tauri:build:macos / tauri:build:linux
 ```
 
-完成后，NSIS 安装程序位于：
+安装包输出位置：
 
 ```text
-target\release\bundle\nsis\*-setup.exe
+target/release/bundle/nsis/*-setup.exe      # Windows
+target/release/bundle/dmg/*.dmg             # macOS
+target/release/bundle/deb/*.deb             # Linux
+target/release/bundle/appimage/*.AppImage   # Linux
 ```
 
 开发入口：
 
-```powershell
+```bash
 # 真实本机后端 + 浏览器开发页
 npm run dev
 
-# 可见的原生 Tauri 窗口，用于托盘与 WebView2 验证
+# 可见的原生 Tauri 窗口，用于托盘与系统 WebView 验证
 npm run dev:desktop
 ```
 
-每次推送都会运行 Windows 打包工作流：安装 Node 22 和 GNU Rust/MinGW，执行 Rust 与前端测试，生成 NSIS 安装包，并把安装包保留为 GitHub Actions 制品 30 天。推送 `v*` 标签时，工作流还会把该安装包发布为正式 GitHub Release。CNB 同时通过根目录 `.cnb.yml` 在 Linux Runner 上自动执行 Rust 与前端验证；CNB 默认云端 Runner 不提供 Windows WebView2/NSIS 打包环境，因此不将其 Linux 产物冒充为安装包。
+每次推送都会运行三端打包工作流：四个 job（Windows NSIS、macOS 双架构 dmg、Linux deb + AppImage）各自执行 Rust 与前端测试、构建安装包并保留为 GitHub Actions 制品 30 天；所有产物在发布前逐个执行凭据扫描。推送 `v*` 标签时，工作流还会把全部安装包发布为正式 GitHub Release。CNB 同时通过根目录 `.cnb.yml` 在 Linux Runner 上自动执行 Rust 与前端验证。
 
 ## 项目边界与致谢
 

@@ -15,6 +15,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+/// Resolves the user home directory across supported platforms: `USERPROFILE`
+/// on Windows, `HOME` elsewhere. The first non-empty value wins.
+pub(crate) fn user_home_dir() -> Result<PathBuf, String> {
+    for key in ["USERPROFILE", "HOME"] {
+        if let Some(home) = std::env::var_os(key).filter(|value| !value.is_empty()) {
+            return Ok(PathBuf::from(home));
+        }
+    }
+    Err("无法确定用户主目录".to_string())
+}
+
 /// App-runtime preference: controls what a user-visible close request does.
 /// It never belongs to Codex or Claude Code configuration files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -188,16 +199,12 @@ impl LocalState {
     }
 
     pub fn user_config_path(app: AppKind) -> Result<PathBuf, String> {
-        let home = std::env::var_os("USERPROFILE")
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+        let home = user_home_dir()?;
         Ok(target_in_home(Path::new(&home), app))
     }
 
     pub fn global_prompt_path(app: AppKind) -> Result<PathBuf, String> {
-        let home = std::env::var_os("USERPROFILE")
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+        let home = user_home_dir()?;
         let codex_home = std::env::var_os("CODEX_HOME")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);
@@ -212,9 +219,7 @@ impl LocalState {
     /// modifying it. Codex honors an explicit CODEX_HOME for this user-owned
     /// state just as it does for its global instruction document.
     pub fn codex_auth_path() -> Result<PathBuf, String> {
-        let home = std::env::var_os("USERPROFILE")
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+        let home = user_home_dir()?;
         let codex_home = std::env::var_os("CODEX_HOME")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);
@@ -228,9 +233,7 @@ impl LocalState {
     /// it. Claude honors an explicit CLAUDE_CONFIG_DIR for this user-owned
     /// state, mirroring how the Codex resolver honors CODEX_HOME.
     pub fn claude_credentials_path() -> Result<PathBuf, String> {
-        let home = std::env::var_os("USERPROFILE")
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+        let home = user_home_dir()?;
         let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);

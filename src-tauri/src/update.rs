@@ -3,8 +3,7 @@
 //! One check answers exactly one question: does the latest published release
 //! carry a newer version than this running build? Nothing is downloaded,
 //! verified, or installed here — the UI opens the release page and the user
-//! decides. The check rides the shared WinHTTP path, so no third-party TLS
-//! stack joins the build.
+//! decides. The check rides the shared reqwest transport in [`crate::probe`].
 
 use crate::probe;
 use serde::Serialize;

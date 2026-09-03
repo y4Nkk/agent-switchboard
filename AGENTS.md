@@ -4,7 +4,7 @@
 
 ## 1. 产品边界
 
-`Agent Switchboard` 是一个仅服务于 `Codex` 和 `Claude Code` 的本地 Windows 控制台。
+`Agent Switchboard` 是一个仅服务于 `Codex` 和 `Claude Code` 的本地配置控制台（`Windows` / `macOS` / `Linux`）。
 它的职责是让提供商配置可观察、可安全切换。
 
 - 除非用户明确要求，否则不得增加其他编程客户端支持。

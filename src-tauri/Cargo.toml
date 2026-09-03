@@ -23,7 +23,18 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Resolves the app-data directory before Tauri creates its first WebView.
 # This is the same platform resolver Tauri uses for `app_data_dir`.
 dirs = "6"
+fontdb = "0.23"
 log = "0.4"
+# Outbound HTTP for probe / models / update / quota / OAuth / cloud backup.
+# rustls verifies against the OS root store (native-roots) the way the native
+# stack did, and system-proxy keeps automatic proxy discovery. No compression
+# or HTTP/2 features: bodies are small JSON and the native stack spoke
+# HTTP/1.1.
+reqwest = { version = "0.12", default-features = false, features = [
+    "blocking",
+    "rustls-tls-native-roots",
+    "system-proxy",
+] }
 # Read-only access to the CC Switch SQLite database. `bundled` compiles
 # libsqlite3-sys with the system cc (scoop gcc on this windows-gnu host).
 rusqlite = { version = "0.32", features = ["bundled"], default-features = false }
@@ -46,12 +57,6 @@ tauri-plugin-opener = "2"
 tauri-plugin-log = "2"
 tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
-windows-sys = { version = "0.61", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_Networking_WinHttp",
-    "Win32_UI_WindowsAndMessaging",
-] }
 tauri-plugin-autostart = "2"
 
 [dev-dependencies]

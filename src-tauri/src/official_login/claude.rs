@@ -14,7 +14,7 @@ use tiny_http::{Header, Response, Server};
 use crate::official_login::credentials::{
     code_challenge, random_state, random_verifier, ClaudeTokens,
 };
-use crate::official_login::{percent_decode, percent_encode, USER_AGENT, SESSION_EXPIRY};
+use crate::official_login::{percent_decode, percent_encode, SESSION_EXPIRY, USER_AGENT};
 use crate::probe::http_request;
 
 pub(crate) const CLAUDE_CLIENT_ID: &str = "9d1c250a-e61b-44d9-9ed4-8d0c5bd5fae0";
@@ -211,8 +211,7 @@ fn serve_callback(server: Arc<Server>, callback: Arc<Mutex<Option<Callback>>>) {
                     let _ = request.respond(completed_response());
                     return;
                 }
-                let _ =
-                    request.respond(Response::from_string("not found").with_status_code(404));
+                let _ = request.respond(Response::from_string("not found").with_status_code(404));
             }
             // The window closed, or stop() unblocked the wait for an
             // immediate teardown on cancel.

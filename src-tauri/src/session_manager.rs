@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -71,14 +72,14 @@ struct SessionSource {
 }
 
 pub fn scan_sessions() -> SessionScan {
-    let home = match std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
-        Some(home) => PathBuf::from(home),
-        None => {
+    let home = match crate::local_state::user_home_dir() {
+        Ok(home) => home,
+        Err(message) => {
             return SessionScan {
                 sessions: Vec::new(),
                 issues: vec![SessionIssue {
                     app: AppKind::Codex,
-                    message: "无法确定 Windows 用户目录".to_string(),
+                    message,
                 }],
             }
         }
@@ -98,9 +99,9 @@ pub fn load_messages(app: AppKind, session_id: &str) -> Result<Vec<SessionMessag
     read_messages(&source.path)
 }
 
-/// Opens the selected local session in a new Windows Command Prompt window.
-/// The renderer supplies only the supported client plus a validated session id;
-/// the source path and working directory stay resolved inside this module.
+/// Opens the selected local session in a new terminal window. The renderer
+/// supplies only the supported client plus a validated session id; the source
+/// path and working directory stay resolved inside this module.
 pub fn resume_session(app: AppKind, session_id: &str) -> Result<SessionResume, String> {
     let source = resolve_session(app, session_id)?;
     let project_dir = source
@@ -108,17 +109,7 @@ pub fn resume_session(app: AppKind, session_id: &str) -> Result<SessionResume, S
         .project_dir
         .as_deref()
         .filter(|path| Path::new(path).is_dir());
-    let mut terminal = Command::new("cmd.exe");
-    terminal
-        .args(["/d", "/k"])
-        .args(resume_arguments(app, session_id))
-        .creation_flags(CREATE_NEW_CONSOLE);
-    if let Some(project_dir) = project_dir {
-        terminal.current_dir(project_dir);
-    }
-    terminal
-        .spawn()
-        .map_err(|error| format!("无法启动命令提示符：{error}"))?;
+    launch_terminal(&resume_arguments(app, session_id), project_dir)?;
 
     Ok(SessionResume {
         command: resume_command(app, session_id),
@@ -126,7 +117,95 @@ pub fn resume_session(app: AppKind, session_id: &str) -> Result<SessionResume, S
     })
 }
 
+/// Spawns the resume command in a fresh terminal window, one implementation
+/// per platform: Windows keeps the Command Prompt semantics; Linux probes the
+/// session's `$TERMINAL` and then the common emulators; macOS opens
+/// Terminal.app via osascript.
+#[cfg(windows)]
+fn launch_terminal(arguments: &[&str], project_dir: Option<&str>) -> Result<(), String> {
+    let mut terminal = Command::new("cmd.exe");
+    terminal
+        .args(["/d", "/k"])
+        .args(arguments)
+        .creation_flags(CREATE_NEW_CONSOLE);
+    if let Some(project_dir) = project_dir {
+        terminal.current_dir(project_dir);
+    }
+    terminal
+        .spawn()
+        .map_err(|error| format!("无法启动命令提示符：{error}"))?;
+    Ok(())
+}
+
+#[cfg(windows)]
 const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
+/// Spawns the resume command in a fresh terminal window. Linux probes the
+/// session's `$TERMINAL` and then the common emulators, launching `sh -lc`
+/// so cargo-installed client CLIs resolve.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn launch_terminal(arguments: &[&str], project_dir: Option<&str>) -> Result<(), String> {
+    let command = arguments.join(" ");
+    // Single-quoted for sh; the id is validated, but quoting stays correct
+    // for any future argument shape.
+    let script = format!("'{}'", command.replace('\'', r"'\''"));
+
+    let spawn = |program: &str, flags: &[&str]| -> Result<(), String> {
+        let mut terminal = Command::new(program);
+        terminal.args(flags).args(["sh", "-lc", &script]);
+        if let Some(project_dir) = project_dir {
+            terminal.current_dir(project_dir);
+        }
+        terminal
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("无法启动终端：{error}"))
+    };
+
+    if let Some(configured) = std::env::var_os("TERMINAL")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    {
+        if spawn(&configured.to_string_lossy(), &["-e"]).is_ok() {
+            return Ok(());
+        }
+    }
+    let candidates: &[(&str, &[&str])] = &[
+        ("gnome-terminal", &["--"]),
+        ("konsole", &["-e"]),
+        ("xfce4-terminal", &["-x"]),
+        ("x-terminal-emulator", &["-e"]),
+        ("alacritty", &["-e"]),
+        ("kitty", &[]),
+    ];
+    for (program, flags) in candidates {
+        if spawn(program, flags).is_ok() {
+            return Ok(());
+        }
+    }
+    Err("无法启动终端：没有可用的终端程序".to_string())
+}
+
+/// Spawns the resume command in a fresh Terminal.app window via osascript;
+/// the terminal's own login shell resolves the client CLI from the profile.
+#[cfg(target_os = "macos")]
+fn launch_terminal(arguments: &[&str], project_dir: Option<&str>) -> Result<(), String> {
+    let command = arguments.join(" ");
+    let script = match project_dir {
+        Some(project_dir) => format!("cd {project_dir} && {command}"),
+        None => command,
+    };
+    let escaped = script.replace('\\', "\\\\").replace('"', "\\\"");
+    Command::new("osascript")
+        .args([
+            "-e",
+            &format!("tell application \"Terminal\" to do script \"{escaped}\""),
+        ])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("无法启动终端：{error}"))?;
+    Ok(())
+}
 
 fn resolve_session(app: AppKind, session_id: &str) -> Result<SessionSource, String> {
     if !valid_session_id(session_id) {
@@ -145,10 +224,7 @@ fn resolve_session(app: AppKind, session_id: &str) -> Result<SessionSource, Stri
 }
 
 fn scan_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    let home = std::env::var_os("USERPROFILE")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .ok_or_else(|| "无法确定 Windows 用户目录".to_string())?;
+    let home = crate::local_state::user_home_dir()?;
     Ok(scan_session_source_roots(&[
         (AppKind::Codex, home.join(".codex").join("sessions")),
         (

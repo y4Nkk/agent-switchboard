@@ -1,14 +1,16 @@
-//! Manual endpoint probing over the Windows-native WinHTTP stack.
+//! Manual endpoint probing and the shared outbound HTTP transport.
 //!
 //! One probe answers exactly one question: does this URL answer HTTP(S)
 //! requests, with which status, and how fast. It never selects or switches
-//! anything. Using WinHTTP keeps the probe free of third-party TLS
-//! dependencies; the system verifier and proxy settings apply. The shared
-//! [`http_get`] helper carries that same stack to other outbound reads
-//! (model fetch, update check).
+//! anything. The transport is [`reqwest`] with rustls verifying against the
+//! OS root store, so the system trust and proxy settings apply the way the
+//! native stack did. The shared [`http_get`] helper carries that same stack
+//! to other outbound reads (model fetch, update check, quota, OAuth).
 
 use serde::Serialize;
-use std::time::Instant;
+use std::error::Error as _;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 /// Outcome grade of one manual probe, ported from the CC Switch reachability
 /// pattern: any HTTP answer proves reachability, latency above the threshold
@@ -47,49 +49,139 @@ pub struct ProbeResult {
     pub at: String,
 }
 
-/// A failed WinHTTP call, keeping the error code so retry decisions can
-/// distinguish timeout-class jitter from immediate failures.
+/// The failure class a transport error belongs to. Retry decisions and the
+/// user-facing message both key off this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FailureKind {
+    Dns,
+    Timeout,
+    Connect,
+    Tls,
+    Other,
+}
+
+/// A failed transport call. The message is only the failure class — the raw
+/// reqwest error text may embed the URL and is never surfaced.
 #[derive(Debug, PartialEq)]
-struct ProbeError {
-    code: u32,
+struct ProbeFailure {
+    kind: FailureKind,
     message: String,
 }
 
-impl ProbeError {
+impl ProbeFailure {
     fn is_timeout(&self) -> bool {
-        self.code == windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_TIMEOUT
+        self.kind == FailureKind::Timeout
     }
 }
 
-/// Maps a WinHTTP last-error code to the failure class the user can act on.
-fn failure_message(code: u32) -> &'static str {
-    use windows_sys::Win32::Networking::WinHttp::{
-        ERROR_WINHTTP_CANNOT_CONNECT, ERROR_WINHTTP_NAME_NOT_RESOLVED,
-        ERROR_WINHTTP_SECURE_CHANNEL_ERROR, ERROR_WINHTTP_TIMEOUT,
+/// Maps a failure class to the message the user can act on.
+fn failure_message(kind: FailureKind) -> &'static str {
+    match kind {
+        FailureKind::Dns => "域名解析失败（DNS）",
+        FailureKind::Timeout => "连接超时",
+        FailureKind::Connect => "连接被拒绝",
+        FailureKind::Tls => "TLS 握手失败",
+        FailureKind::Other => "网络请求失败",
+    }
+}
+
+/// The process-wide transport. The connect budget mirrors the native stack;
+/// the per-attempt and per-request total budgets are applied where the calls
+/// are made (see [`probe`] and [`http_request`]).
+fn client() -> &'static reqwest::blocking::Client {
+    static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .user_agent("Agent Switchboard")
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .expect("static network client configuration is valid")
+    })
+}
+
+/// Total budget of one probe attempt: the 5 s connect phase plus a receive
+/// phase, matching the native stack's 10 s receive timeout.
+const PROBE_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Total budget of one payload-carrying request, matching the native stack's
+/// 15 s send and receive timeouts.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Walks a transport error's source chain and assigns the failure class the
+/// user can act on. reqwest exposes no typed DNS/TLS predicates, so the chain
+/// text is matched against the stable error vocabulary of hyper/rustls/OS
+/// errors; anything unrecognised lands in the generic class.
+fn classify(error: &reqwest::Error) -> ProbeFailure {
+    let mut texts = Vec::new();
+    let mut current: Option<&dyn std::error::Error> = error.source();
+    while let Some(source) = current {
+        texts.push(source.to_string());
+        current = source.source();
+    }
+    let kind = classify_kind(&texts);
+    ProbeFailure {
+        kind,
+        message: failure_message(kind).to_string(),
+    }
+}
+
+fn classify_kind(source_texts: &[String]) -> FailureKind {
+    let lower: Vec<String> = source_texts
+        .iter()
+        .map(|text| text.to_ascii_lowercase())
+        .collect();
+    let matches = |needles: &[&str]| {
+        lower
+            .iter()
+            .any(|text| needles.iter().any(|needle| text.contains(needle)))
     };
-    match code {
-        ERROR_WINHTTP_NAME_NOT_RESOLVED => "域名解析失败（DNS）",
-        ERROR_WINHTTP_TIMEOUT => "连接超时",
-        ERROR_WINHTTP_CANNOT_CONNECT => "连接被拒绝",
-        ERROR_WINHTTP_SECURE_CHANNEL_ERROR => "TLS 握手失败",
-        _ => "网络请求失败",
+    if error_is_timeout(source_texts) {
+        return FailureKind::Timeout;
+    }
+    if matches(&[
+        "dns error",
+        "failed to lookup",
+        "name or service not known",
+        "nodename nor servname",
+        "temporary failure in name resolution",
+        "no such host",
+    ]) {
+        FailureKind::Dns
+    } else if matches(&[
+        "certificate",
+        "invalid peer",
+        "unknown issuer",
+        "tls",
+        "ssl",
+    ]) {
+        FailureKind::Tls
+    } else if matches(&[
+        "refused",
+        "unreachable",
+        "reset by peer",
+        "tcp connect",
+        "connect error",
+        "client error (connect)",
+    ]) {
+        FailureKind::Connect
+    } else {
+        FailureKind::Other
     }
 }
 
-unsafe fn winhttp_failure() -> ProbeError {
-    let code = windows_sys::Win32::Foundation::GetLastError();
-    ProbeError {
-        code,
-        message: failure_message(code).to_string(),
-    }
+fn error_is_timeout(source_texts: &[String]) -> bool {
+    source_texts.iter().any(|text| {
+        let text = text.to_ascii_lowercase();
+        text.contains("timed out") || text.contains("operation was canceled due to timeouts")
+    })
 }
 
-/// Probe retry policy, separated from the WinHTTP layer for testing:
+/// Probe retry policy, separated from the transport layer for testing:
 /// timeout-class failures get exactly one retry (network jitter), immediate
 /// failures such as refused connections or DNS errors fail fast.
 fn probe_with_retries(
-    mut attempt: impl FnMut() -> Result<u16, ProbeError>,
-) -> Result<u16, ProbeError> {
+    mut attempt: impl FnMut() -> Result<u16, ProbeFailure>,
+) -> Result<u16, ProbeFailure> {
     match attempt() {
         Err(failure) if failure.is_timeout() => attempt(),
         first => first,
@@ -103,7 +195,7 @@ struct ParsedUrl {
     secure: bool,
 }
 
-/// Splits a validated `http(s)://` URL into WinHTTP's connect/open pieces.
+/// Splits a validated `http(s)://` URL into scheme, authority and path.
 fn parse_url(url: &str) -> Option<ParsedUrl> {
     let (secure, rest) = if let Some(rest) = url.strip_prefix("https://") {
         (true, rest)
@@ -150,146 +242,72 @@ fn parse_url(url: &str) -> Option<ParsedUrl> {
     })
 }
 
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
-/// WinHTTP accepts an explicit request-header length in UTF-16 code units.
-/// The buffer passed to it is NUL-terminated for the FFI, but that terminator
-/// is not part of the header value and must not be counted.
-fn wide_len_without_terminator(text: &[u16]) -> u32 {
-    u32::try_from(
-        text.len()
-            .checked_sub(1)
-            .expect("WinHTTP UTF-16 buffers always end in NUL"),
-    )
-    .expect("WinHTTP request headers exceed the supported size")
-}
-
-unsafe fn last_error() -> String {
-    let code = windows_sys::Win32::Foundation::GetLastError();
-    format!("{}（WinHTTP 错误 {code}）", failure_message(code))
-}
-
-/// Sends one GET and returns the HTTP status code; the response body is never
-/// read, so returning here means the endpoint answered.
-unsafe fn request_status(
-    connect: *mut core::ffi::c_void,
-    verb: &str,
-    path: &str,
-    secure: bool,
-) -> Result<u16, ProbeError> {
-    use windows_sys::Win32::Networking::WinHttp::{
-        WinHttpCloseHandle, WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReceiveResponse,
-        WinHttpSendRequest, WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER,
-        WINHTTP_QUERY_STATUS_CODE,
-    };
-
-    let verb_w = wide(verb);
-    let path_w = wide(path);
-    let flags = if secure { WINHTTP_FLAG_SECURE } else { 0 };
-    let request = WinHttpOpenRequest(
-        connect,
-        verb_w.as_ptr(),
-        path_w.as_ptr(),
-        std::ptr::null(),
-        std::ptr::null(),
-        std::ptr::null(),
-        flags,
-    );
-    if request.is_null() {
-        return Err(winhttp_failure());
-    }
-    let outcome = (|| {
-        if WinHttpSendRequest(request, std::ptr::null(), 0, std::ptr::null(), 0, 0, 0) == 0 {
-            return Err(winhttp_failure());
-        }
-        if WinHttpReceiveResponse(request, std::ptr::null_mut()) == 0 {
-            return Err(winhttp_failure());
-        }
-        let mut status: u32 = 0;
-        let mut length = std::mem::size_of::<u32>() as u32;
-        let queried = WinHttpQueryHeaders(
-            request,
-            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-            std::ptr::null(),
-            &mut status as *mut u32 as *mut core::ffi::c_void,
-            &mut length,
-            std::ptr::null_mut(),
-        );
-        if queried == 0 {
-            return Err(winhttp_failure());
-        }
-        Ok(status as u16)
-    })();
-    WinHttpCloseHandle(request);
-    outcome
+fn request_url(parsed: &ParsedUrl) -> String {
+    let scheme = if parsed.secure { "https" } else { "http" };
+    format!("{scheme}://{}:{}{}", parsed.host, parsed.port, parsed.path)
 }
 
 /// Probes one URL for reachability. Any HTTP answer counts — the status code
 /// (200/4xx/5xx alike) only proves the endpoint is alive; the probe sends no
 /// model request and carries no credential, so it never validates
-/// authentication or model configuration.
+/// authentication or model configuration. The response body is never read.
 pub fn probe(url: &str) -> Result<ProbeResult, String> {
     let parsed = parse_url(url).ok_or_else(|| "端点必须是 http(s) URL".to_string())?;
     let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let url = request_url(&parsed);
 
-    use windows_sys::Win32::Networking::WinHttp::{
-        WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpSetTimeouts,
-        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-    };
-
-    let agent_w = wide("Agent Switchboard probe");
-    unsafe {
-        let session = WinHttpOpen(
-            agent_w.as_ptr(),
-            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-            std::ptr::null(),
-            std::ptr::null(),
-            0,
-        );
-        if session.is_null() {
-            return Err("系统网络组件初始化失败".to_string());
-        }
-        let result = (|| {
-            if WinHttpSetTimeouts(session, 5_000, 5_000, 10_000, 10_000) == 0 {
-                return Err("系统网络组件配置失败".to_string());
-            }
-            let host_w = wide(&parsed.host);
-            let connect = WinHttpConnect(session, host_w.as_ptr(), parsed.port, 0);
-            if connect.is_null() {
-                return Err("无法建立网络连接".to_string());
-            }
-            let started = Instant::now();
-            let outcome =
-                probe_with_retries(|| request_status(connect, "GET", &parsed.path, parsed.secure));
-            let latency_ms = Some(started.elapsed().as_millis() as u64);
-            WinHttpCloseHandle(connect);
-            Ok(match outcome {
-                Ok(status) => ProbeResult {
-                    grade: grade_for(latency_ms.unwrap_or(0)),
-                    status: Some(status),
-                    latency_ms,
-                    error: None,
-                    at,
-                },
-                Err(failure) => ProbeResult {
-                    grade: ProbeGrade::Unreachable,
-                    status: None,
-                    latency_ms,
-                    error: Some(failure.message),
-                    at,
-                },
-            })
-        })();
-        WinHttpCloseHandle(session);
-        result
-    }
+    let started = Instant::now();
+    let outcome = probe_with_retries(|| {
+        client()
+            .get(&url)
+            .timeout(PROBE_ATTEMPT_TIMEOUT)
+            .send()
+            .map(|response| response.status().as_u16())
+            .map_err(|error| classify(&error))
+    });
+    let latency_ms = Some(started.elapsed().as_millis() as u64);
+    Ok(match outcome {
+        Ok(status) => ProbeResult {
+            grade: grade_for(latency_ms.unwrap_or(0)),
+            status: Some(status),
+            latency_ms,
+            error: None,
+            at,
+        },
+        Err(failure) => ProbeResult {
+            grade: ProbeGrade::Unreachable,
+            status: None,
+            latency_ms,
+            error: Some(failure.message),
+            at,
+        },
+    })
 }
 
-/// One WinHTTP request returning the response status and body text. The
-/// agent string doubles as the required `User-Agent`; callers pass extra
-/// request headers as CRLF-joined lines.
+/// Parses the CRLF-joined request-header convention into a header map. An
+/// empty string maps to no headers; anything malformed is rejected loudly
+/// instead of silently dropped.
+fn header_map(raw: &str) -> Result<reqwest::header::HeaderMap, String> {
+    let mut map = reqwest::header::HeaderMap::new();
+    for line in raw.split("\r\n") {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let (name, value) = line
+            .split_once(':')
+            .ok_or_else(|| "请求头无效".to_string())?;
+        let name = reqwest::header::HeaderName::from_bytes(name.trim().as_bytes())
+            .map_err(|_| "请求头无效".to_string())?;
+        let value = reqwest::header::HeaderValue::from_bytes(value.trim().as_bytes())
+            .map_err(|_| "请求头无效".to_string())?;
+        map.insert(name, value);
+    }
+    Ok(map)
+}
+
+/// One request returning the response status and body text. The shared
+/// client doubles as the required `User-Agent`; callers pass extra request
+/// headers as CRLF-joined lines. The whole request is budgeted at 15 s.
 pub fn http_request(
     method: &str,
     url: &str,
@@ -297,101 +315,21 @@ pub fn http_request(
     body: &[u8],
 ) -> Result<(u16, String), String> {
     let parsed = parse_url(url).ok_or_else(|| "请求地址必须是 http(s) URL".to_string())?;
+    let method =
+        reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| "请求方式无效".to_string())?;
+    let headers = header_map(headers)?;
 
-    use windows_sys::Win32::Networking::WinHttp::{
-        WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders,
-        WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetTimeouts,
-        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER,
-        WINHTTP_QUERY_STATUS_CODE,
-    };
-
-    let agent_w = wide("Agent Switchboard");
-    unsafe {
-        let session = WinHttpOpen(
-            agent_w.as_ptr(),
-            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-            std::ptr::null(),
-            std::ptr::null(),
-            0,
-        );
-        if session.is_null() {
-            return Err(last_error());
-        }
-        let result = (|| {
-            if WinHttpSetTimeouts(session, 5_000, 5_000, 15_000, 15_000) == 0 {
-                return Err(last_error());
-            }
-            let host_w = wide(&parsed.host);
-            let connect = WinHttpConnect(session, host_w.as_ptr(), parsed.port, 0);
-            if connect.is_null() {
-                return Err(last_error());
-            }
-            let outcome = (|| {
-                let flags = if parsed.secure {
-                    WINHTTP_FLAG_SECURE
-                } else {
-                    0
-                };
-                let request = WinHttpOpenRequest(
-                    connect,
-                    wide(method).as_ptr(),
-                    wide(&parsed.path).as_ptr(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    flags,
-                );
-                if request.is_null() {
-                    return Err(last_error());
-                }
-                let headers_w = wide(headers);
-                let headers_len = wide_len_without_terminator(&headers_w);
-                let (body_ptr, body_len) = if body.is_empty() {
-                    (std::ptr::null(), 0)
-                } else {
-                    (body.as_ptr().cast(), body.len() as u32)
-                };
-                let outcome = (|| {
-                    if WinHttpSendRequest(
-                        request,
-                        headers_w.as_ptr(),
-                        headers_len,
-                        body_ptr,
-                        body_len,
-                        body_len,
-                        0,
-                    ) == 0
-                    {
-                        return Err(last_error());
-                    }
-                    if WinHttpReceiveResponse(request, std::ptr::null_mut()) == 0 {
-                        return Err(last_error());
-                    }
-                    let mut status: u32 = 0;
-                    let mut length = std::mem::size_of::<u32>() as u32;
-                    if WinHttpQueryHeaders(
-                        request,
-                        WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                        std::ptr::null(),
-                        &mut status as *mut u32 as *mut core::ffi::c_void,
-                        &mut length,
-                        std::ptr::null_mut(),
-                    ) == 0
-                    {
-                        return Err(last_error());
-                    }
-                    let body = read_body(request)?;
-                    Ok((status as u16, String::from_utf8_lossy(&body).into_owned()))
-                })();
-                WinHttpCloseHandle(request);
-                outcome
-            })();
-            WinHttpCloseHandle(connect);
-            outcome
-        })();
-        WinHttpCloseHandle(session);
-        result
+    let mut request = client()
+        .request(method, request_url(&parsed))
+        .timeout(REQUEST_TIMEOUT)
+        .headers(headers);
+    if !body.is_empty() {
+        request = request.body(body.to_vec());
     }
+    let response = request.send().map_err(|error| classify(&error).message)?;
+    let status = response.status().as_u16();
+    let bytes = response.bytes().map_err(|error| classify(&error).message)?;
+    Ok((status, String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 /// Convenience wrapper for the existing outbound read-only callers.
@@ -418,28 +356,6 @@ fn models_path_for(base_url: &str) -> String {
     path
 }
 
-/// Reads the full response body of an open request handle.
-unsafe fn read_body(request: *mut core::ffi::c_void) -> Result<Vec<u8>, String> {
-    use windows_sys::Win32::Networking::WinHttp::{WinHttpQueryDataAvailable, WinHttpReadData};
-    let mut body = Vec::new();
-    loop {
-        let mut available: u32 = 0;
-        if WinHttpQueryDataAvailable(request, &mut available) == 0 {
-            return Err(last_error());
-        }
-        if available == 0 {
-            return Ok(body);
-        }
-        let mut chunk = vec![0u8; available as usize];
-        let mut read: u32 = 0;
-        if WinHttpReadData(request, chunk.as_mut_ptr().cast(), available, &mut read) == 0 {
-            return Err(last_error());
-        }
-        chunk.truncate(read as usize);
-        body.extend_from_slice(&chunk);
-    }
-}
-
 /// One model from the provider's `/v1/models` list: the requestable id plus
 /// the optional `owned_by` vendor used to group the picker menu.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -456,8 +372,12 @@ pub struct ProviderModel {
 pub fn fetch_models(base_url: &str, api_key: &str) -> Result<Vec<ProviderModel>, String> {
     let parsed = parse_url(base_url).ok_or_else(|| "服务地址必须是 http(s) URL".to_string())?;
     let path = models_path_for(base_url);
-    let scheme = if parsed.secure { "https" } else { "http" };
-    let url = format!("{scheme}://{}:{}{path}", parsed.host, parsed.port);
+    let url = format!(
+        "{}://{}:{}{path}",
+        if parsed.secure { "https" } else { "http" },
+        parsed.host,
+        parsed.port
+    );
     let (status, body) = http_get(&url, &auth_headers(api_key))?;
 
     if !(200..300).contains(&status) {
@@ -557,23 +477,17 @@ mod tests {
         assert_eq!(grade_for(45_000), ProbeGrade::Slow);
     }
 
-    fn timeout_failure() -> ProbeError {
-        ProbeError {
-            code: windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_TIMEOUT,
-            message: failure_message(
-                windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_TIMEOUT,
-            )
-            .to_string(),
+    fn timeout_failure() -> ProbeFailure {
+        ProbeFailure {
+            kind: FailureKind::Timeout,
+            message: failure_message(FailureKind::Timeout).to_string(),
         }
     }
 
-    fn refused_failure() -> ProbeError {
-        ProbeError {
-            code: windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_CANNOT_CONNECT,
-            message: failure_message(
-                windows_sys::Win32::Networking::WinHttp::ERROR_WINHTTP_CANNOT_CONNECT,
-            )
-            .to_string(),
+    fn refused_failure() -> ProbeFailure {
+        ProbeFailure {
+            kind: FailureKind::Connect,
+            message: failure_message(FailureKind::Connect).to_string(),
         }
     }
 
@@ -615,45 +529,107 @@ mod tests {
     }
 
     #[test]
-    fn failure_codes_map_to_actionable_classes() {
-        use windows_sys::Win32::Networking::WinHttp::{
-            ERROR_WINHTTP_CANNOT_CONNECT, ERROR_WINHTTP_NAME_NOT_RESOLVED,
-            ERROR_WINHTTP_SECURE_CHANNEL_ERROR, ERROR_WINHTTP_TIMEOUT,
-        };
-        assert_eq!(failure_message(ERROR_WINHTTP_TIMEOUT), "连接超时");
-        assert_eq!(
-            failure_message(ERROR_WINHTTP_NAME_NOT_RESOLVED),
-            "域名解析失败（DNS）"
-        );
-        assert_eq!(failure_message(ERROR_WINHTTP_CANNOT_CONNECT), "连接被拒绝");
-        assert_eq!(
-            failure_message(ERROR_WINHTTP_SECURE_CHANNEL_ERROR),
-            "TLS 握手失败"
-        );
-        assert_eq!(failure_message(0), "网络请求失败");
+    fn failure_kinds_map_to_actionable_classes() {
+        assert_eq!(failure_message(FailureKind::Timeout), "连接超时");
+        assert_eq!(failure_message(FailureKind::Dns), "域名解析失败（DNS）");
+        assert_eq!(failure_message(FailureKind::Connect), "连接被拒绝");
+        assert_eq!(failure_message(FailureKind::Tls), "TLS 握手失败");
+        assert_eq!(failure_message(FailureKind::Other), "网络请求失败");
+    }
+
+    fn chain(texts: &[&str]) -> Vec<String> {
+        texts.iter().map(|text| text.to_string()).collect()
     }
 
     #[test]
-    fn explicit_header_length_excludes_the_ffi_terminator() {
-        let headers = wide("Accept: application/json\r\n");
-        assert_eq!(headers.last(), Some(&0));
-        assert_eq!(wide_len_without_terminator(&headers), 26);
+    fn classify_kind_maps_realistic_transport_errors() {
+        assert_eq!(
+            classify_kind(&chain(&[
+                "client error (Connect)",
+                "dns error: failed to lookup address information: Name or service not known",
+            ])),
+            FailureKind::Dns
+        );
+        assert_eq!(
+            classify_kind(&chain(&[
+                "client error (Connect)",
+                "invalid peer certificate: UnknownIssuer",
+            ])),
+            FailureKind::Tls
+        );
+        assert_eq!(
+            classify_kind(&chain(&[
+                "client error (Connect)",
+                "tcp connect error: Connection refused (os error 111)",
+            ])),
+            FailureKind::Connect
+        );
+        assert_eq!(
+            classify_kind(&chain(&["operation timed out"])),
+            FailureKind::Timeout
+        );
+        assert_eq!(
+            classify_kind(&chain(&["something unfamiliar"])),
+            FailureKind::Other
+        );
     }
 
     #[test]
-    fn winhttp_sends_nonempty_headers_and_body_to_a_loopback_server() {
+    fn unreachable_endpoint_grades_unreachable() {
+        // Port 1 on loopback is closed in every supported test environment.
+        let result = probe("http://127.0.0.1:1/health").expect("probe result");
+        assert_eq!(result.grade, ProbeGrade::Unreachable);
+        assert_eq!(result.status, None);
+        assert_eq!(result.error.as_deref(), Some("连接被拒绝"));
+    }
+
+    #[test]
+    fn http_request_passes_non_2xx_status_and_body_through() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback server");
         let address = listener.local_addr().expect("loopback address");
         let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept WinHTTP request");
+            let (mut stream, _) = listener.accept().expect("accept request");
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(3)))
                 .expect("set read timeout");
             let mut request = Vec::new();
             let mut chunk = [0u8; 512];
             loop {
-                let read = stream.read(&mut chunk).expect("read WinHTTP request");
-                assert_ne!(read, 0, "WinHTTP closed before completing the request");
+                let read = stream.read(&mut chunk).expect("read request");
+                assert_ne!(read, 0, "client closed before completing the request");
+                request.extend_from_slice(&chunk[..read]);
+                if request.windows(4).any(|part| part == b"\r\n\r\n") {
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 16\r\n\r\n{\"error\":\"boom\"}",
+                        )
+                        .expect("write response");
+                    return;
+                }
+            }
+        });
+
+        let (status, body) = http_request("GET", &format!("http://{address}/usage"), "", &[])
+            .expect("request reaches a 500 responder");
+        assert_eq!(status, 500);
+        assert_eq!(body, "{\"error\":\"boom\"}");
+        server.join().expect("join loopback server");
+    }
+
+    #[test]
+    fn http_request_sends_nonempty_headers_and_body_to_a_loopback_server() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback server");
+        let address = listener.local_addr().expect("loopback address");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+                .expect("set read timeout");
+            let mut request = Vec::new();
+            let mut chunk = [0u8; 512];
+            loop {
+                let read = stream.read(&mut chunk).expect("read request");
+                assert_ne!(read, 0, "client closed before completing the request");
                 request.extend_from_slice(&chunk[..read]);
 
                 let Some(headers_end) = request.windows(4).position(|part| part == b"\r\n\r\n")
@@ -663,7 +639,10 @@ mod tests {
                 let headers = String::from_utf8_lossy(&request[..headers_end]);
                 let content_length = headers
                     .lines()
-                    .find_map(|line| line.strip_prefix("Content-Length:"))
+                    .find_map(|line| {
+                        line.strip_prefix("Content-Length:")
+                            .or_else(|| line.strip_prefix("content-length:"))
+                    })
                     .map(str::trim)
                     .map(|value| value.parse::<usize>().expect("numeric content length"))
                     .unwrap_or(0);
@@ -682,20 +661,23 @@ mod tests {
             "X-ASB-Test: header-value\r\nContent-Type: text/plain\r\n",
             b"ping",
         )
-        .expect("WinHTTP request succeeds with explicit headers");
+        .expect("request succeeds with explicit headers");
 
         assert_eq!(status, 201);
         assert_eq!(body, "ok");
+        // hyper normalizes header names to lowercase on the wire; header
+        // names are case-insensitive per RFC 9110, so compare likewise.
         let request = String::from_utf8(server.join().expect("join loopback server"))
-            .expect("UTF-8 loopback request");
-        assert!(request.starts_with("POST /quota HTTP/1.1\r\n"));
-        assert!(request.contains("X-ASB-Test: header-value\r\n"));
-        assert!(request.contains("Content-Type: text/plain\r\n"));
+            .expect("UTF-8 loopback request")
+            .to_ascii_lowercase();
+        assert!(request.starts_with("post /quota http/1.1\r\n"));
+        assert!(request.contains("x-asb-test: header-value\r\n"));
+        assert!(request.contains("content-type: text/plain\r\n"));
         assert!(request.ends_with("\r\n\r\nping"));
     }
 
     #[test]
-    fn model_fetch_uses_the_shared_winhttp_transport() {
+    fn model_fetch_uses_the_shared_transport() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback server");
         let address = listener.local_addr().expect("loopback address");
         let server = thread::spawn(move || {
@@ -707,7 +689,7 @@ mod tests {
             let mut chunk = [0u8; 512];
             loop {
                 let read = stream.read(&mut chunk).expect("read model request");
-                assert_ne!(read, 0, "WinHTTP closed before completing the request");
+                assert_ne!(read, 0, "client closed before completing the request");
                 request.extend_from_slice(&chunk[..read]);
                 if request.windows(4).any(|part| part == b"\r\n\r\n") {
                     stream
@@ -721,7 +703,7 @@ mod tests {
         });
 
         let models = fetch_models(&format!("http://{address}/api"), "test-credential")
-            .expect("fetch models through shared WinHTTP transport");
+            .expect("fetch models through shared transport");
 
         assert_eq!(
             models,
@@ -737,9 +719,10 @@ mod tests {
             ]
         );
         let request = String::from_utf8(server.join().expect("join loopback server"))
-            .expect("UTF-8 loopback request");
-        assert!(request.starts_with("GET /api/v1/models HTTP/1.1\r\n"));
-        assert!(request.contains("Authorization: Bearer test-credential\r\n"));
+            .expect("UTF-8 loopback request")
+            .to_ascii_lowercase();
+        assert!(request.starts_with("get /api/v1/models http/1.1\r\n"));
+        assert!(request.contains("authorization: bearer test-credential\r\n"));
     }
 
     #[test]

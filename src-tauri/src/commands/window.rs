@@ -2,25 +2,19 @@
 //! dev-only inspector toggle.
 //!
 //! The custom webview buttons only emit intents; the native side performs
-//! them through Win32 system commands — the same channel the system caption
-//! buttons use — so minimize/restore animations, snap-aware maximize, and
-//! the close path behave exactly like a decorated window. Visuals stay in
-//! the webview.
+//! them through Tauri's portable window APIs, so the same buttons work on
+//! every supported platform. Visuals stay in the webview.
 
 use super::error::CommandError;
 use crate::local_state::AppSettings;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_autostart::ManagerExt;
-use windows_sys::Win32::Foundation::WPARAM;
-use windows_sys::Win32::UI::WindowsAndMessaging::{
-    IsZoomed, SendMessageW, SC_CLOSE, SC_MAXIMIZE, SC_MINIMIZE, SC_RESTORE, WM_SYSCOMMAND,
-};
 
 /// Applies live desktop preferences before persistence. The caller restores
 /// the prior complete setting when this returns an error, so the native window
-/// state and Windows login registration never report a value that was not
-/// saved. Hardware acceleration is applied before WebView creation on the
-/// next app start.
+/// state and login registration never report a value that was not saved.
+/// Hardware acceleration is applied before WebView creation on the next app
+/// start.
 pub(crate) fn apply_desktop_settings(
     app: &AppHandle,
     settings: &AppSettings,
@@ -50,52 +44,41 @@ pub(crate) fn apply_desktop_settings(
     }
 }
 
-fn main_hwnd(app: &AppHandle) -> Option<windows_sys::Win32::Foundation::HWND> {
-    app.get_webview_window("main")
-        .and_then(|window| window.hwnd().ok())
-        .map(|hwnd| hwnd.0)
-}
-
 #[tauri::command]
 pub fn window_minimize(app: tauri::AppHandle) {
-    if let Some(hwnd) = main_hwnd(&app) {
-        unsafe {
-            SendMessageW(hwnd, WM_SYSCOMMAND, SC_MINIMIZE as WPARAM, 0);
-        }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.minimize();
     }
 }
 
 #[tauri::command]
 pub fn window_toggle_maximize(app: tauri::AppHandle) {
-    if let Some(hwnd) = main_hwnd(&app) {
-        let command = if unsafe { IsZoomed(hwnd) } != 0 {
-            SC_RESTORE
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_maximized().unwrap_or(false) {
+            let _ = window.unmaximize();
         } else {
-            SC_MAXIMIZE
-        };
-        unsafe {
-            SendMessageW(hwnd, WM_SYSCOMMAND, command as WPARAM, 0);
+            let _ = window.maximize();
         }
     }
 }
 
 #[tauri::command]
 pub fn window_is_maximized(app: tauri::AppHandle) -> bool {
-    main_hwnd(&app)
-        .map(|hwnd| unsafe { IsZoomed(hwnd) } != 0)
+    app.get_webview_window("main")
+        .and_then(|window| window.is_maximized().ok())
         .unwrap_or(false)
 }
 
 #[tauri::command]
 pub fn window_close(app: tauri::AppHandle) {
-    if let Some(hwnd) = main_hwnd(&app) {
-        unsafe {
-            SendMessageW(hwnd, WM_SYSCOMMAND, SC_CLOSE as WPARAM, 0);
-        }
+    if let Some(window) = app.get_webview_window("main") {
+        // Routes through CloseRequested, so the close-to-tray absorption in
+        // the window-event handler keeps working.
+        let _ = window.close();
     }
 }
 
-/// Restarts the complete desktop process so WebView2 creation-time options,
+/// Restarts the complete desktop process so webview creation-time options,
 /// including hardware acceleration, are recreated from the persisted setting.
 #[tauri::command]
 pub fn restart_application(app: tauri::AppHandle) {

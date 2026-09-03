@@ -4,7 +4,8 @@
 //! headers and JSON-Pointer extraction. Script queries evaluate a small
 //! JavaScript expression in a fresh, resource-bounded QuickJS context. The
 //! script can calculate a request and extract JSON, but receives no host I/O;
-//! WinHTTP remains the only process that performs a network request.
+//! the shared probe transport remains the only process that performs a
+//! network request.
 
 use asb_core::contracts::{UsageQuery, UsageReading, UsageSummary};
 use rquickjs::{Context, Runtime};
@@ -42,7 +43,7 @@ fn pointer_number(value: &serde_json::Value, path: &str) -> Option<f64> {
     }
 }
 
-/// Checks the fixed URL form before it reaches WinHTTP. This deliberately
+/// Checks the fixed URL form before it reaches the network. This deliberately
 /// does not return the submitted URL, which could contain `{{apiKey}}`.
 fn is_http_url(url: &str) -> bool {
     (url.starts_with("https://") || url.starts_with("http://"))

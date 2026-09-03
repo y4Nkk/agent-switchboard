@@ -108,12 +108,12 @@ describe("SessionManager", () => {
       sessionId: "codex-1",
     });
 
-    await user.click(within(detail).getByRole("button", { name: "在命令提示符中恢复" }));
+    await user.click(within(detail).getByRole("button", { name: "在终端中恢复" }));
     expect(invokeMock).toHaveBeenCalledWith("resume_session", {
       app: "codex",
       sessionId: "codex-1",
     });
-    expect(within(detail).getByText("已在新命令提示符窗口中恢复会话")).toBeInTheDocument();
+    expect(within(detail).getByText("已在新终端窗口中恢复会话")).toBeInTheDocument();
 
     await user.click(within(detail).getByRole("button", { name: "复制恢复命令" }));
     expect(within(detail).getByText("已复制恢复命令")).toBeInTheDocument();

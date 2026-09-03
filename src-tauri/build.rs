@@ -1,6 +1,8 @@
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+
+#[cfg(target_os = "windows")]
 use std::process::Command;
 
 /// Embeds a Common Controls v6 dependency as a manifest resource into every
@@ -11,6 +13,7 @@ use std::process::Command;
 /// STATUS_ENTRYPOINT_NOT_FOUND on `TaskDialogIndirect`. We keep that feature
 /// off, let tauri-build skip its own app manifest, and embed exactly one
 /// manifest ourselves via `windres`.
+#[cfg(target_os = "windows")]
 fn embed_common_controls_manifest() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is set"));
     let manifest = out_dir.join("asb-manifest.xml");
@@ -55,12 +58,16 @@ fn embed_common_controls_manifest() {
 }
 
 fn main() {
-    // Skip tauri-build's own app manifest; ours above covers every target
-    // and a second copy makes the GNU linker merge .rsrc sections fail.
-    tauri_build::try_build(
+    #[cfg(target_os = "windows")]
+    let attrs = {
+        // Skip tauri-build's own app manifest; ours above covers every target
+        // and a second copy makes the GNU linker merge .rsrc sections fail.
         tauri_build::Attributes::new()
-            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest()),
-    )
-    .expect("failed to run tauri-build");
+            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest())
+    };
+    #[cfg(not(target_os = "windows"))]
+    let attrs = tauri_build::Attributes::new();
+    tauri_build::try_build(attrs).expect("failed to run tauri-build");
+    #[cfg(target_os = "windows")]
     embed_common_controls_manifest();
 }

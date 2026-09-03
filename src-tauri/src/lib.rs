@@ -19,6 +19,9 @@ mod usage_query;
 
 pub use commands::local_config_paths;
 
+/// Hardware acceleration is a WebView2 (Windows) creation-time concept; other
+/// platforms keep their webview engine defaults.
+#[cfg(windows)]
 const WRY_DEFAULT_WEBVIEW2_BROWSER_ARGS: &str =
     "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 
@@ -27,6 +30,7 @@ fn web_development_enabled(value: Option<&std::ffi::OsStr>) -> bool {
     value == Some(std::ffi::OsStr::new("1"))
 }
 
+#[cfg(windows)]
 fn apply_hardware_acceleration(
     windows: &mut [tauri::utils::config::WindowConfig],
     hardware_acceleration: bool,
@@ -53,6 +57,7 @@ fn apply_hardware_acceleration(
     }
 }
 
+#[cfg(windows)]
 fn configure_hardware_acceleration<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
     let identifier = context.config().identifier.clone();
     let hardware_acceleration = local_state::LocalState::from_startup_identifier(&identifier)
@@ -64,6 +69,9 @@ fn configure_hardware_acceleration<R: tauri::Runtime>(context: &mut tauri::Conte
 
     apply_hardware_acceleration(&mut context.config_mut().app.windows, hardware_acceleration);
 }
+
+#[cfg(not(windows))]
+fn configure_hardware_acceleration<R: tauri::Runtime>(_: &mut tauri::Context<R>) {}
 
 /// Runs the Agent Switchboard desktop shell.
 pub fn run() {
@@ -214,6 +222,7 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn disabling_hardware_acceleration_keeps_wry_defaults_and_adds_the_gpu_flag() {
         let mut windows = vec![tauri::utils::config::WindowConfig::default()];
@@ -225,6 +234,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn enabled_hardware_acceleration_leaves_existing_browser_arguments_unchanged() {
         let mut windows = vec![tauri::utils::config::WindowConfig::default()];

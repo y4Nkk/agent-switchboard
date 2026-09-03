@@ -1,4 +1,4 @@
-//! Native Windows system-tray integration.
+//! System-tray integration.
 //!
 //! The menu exposes the same two-client provider selection as the main
 //! surface. A tray click first creates the established switch preview, then

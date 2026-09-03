@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppSettingsForm } from "./AppSettingsForm";
@@ -33,6 +33,28 @@ function callbacks() {
 }
 
 describe("AppSettingsForm", () => {
+  beforeEach(() => {
+    // jsdom's default UA reports linux; the suite below asserts the Windows
+    // surface including the hardware-acceleration toggle.
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hides the hardware-acceleration section outside Windows", () => {
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64)",
+    });
+    render(<AppSettingsForm settings={settings} busy={false} {...callbacks()} />);
+
+    expect(screen.queryByRole("switch", { name: "启用硬件加速" })).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "点击关闭按钮时" })).toBeInTheDocument();
+  });
+
   it("renders the persisted close behavior as a selected segment", () => {
     render(<AppSettingsForm settings={settings} busy={false} {...callbacks()} />);
 

@@ -95,6 +95,9 @@ export function AppSettingsForm({
   onRestart,
 }: Props) {
   const [hardwareAccelerationRestartRequired, setHardwareAccelerationRestartRequired] = useState(false);
+  // Hardware acceleration is a WebView2 (Windows) creation-time option; the
+  // other platforms have no such toggle to expose.
+  const isWindows = /Windows/.test(navigator.userAgent);
 
   const handleHardwareAccelerationChange = (value: boolean) => {
     onHardwareAccelerationChange(value);
@@ -162,7 +165,8 @@ export function AppSettingsForm({
           />
         </div>
       </section>
-      <section className="asb-app-settings-group" aria-labelledby="performance-settings">
+      {isWindows && (
+        <section className="asb-app-settings-group" aria-labelledby="performance-settings">
         <h3 id="performance-settings" className="asb-toggle-group-title">
           性能
         </h3>
@@ -187,7 +191,8 @@ export function AppSettingsForm({
             </Button>
           </div>
         )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }

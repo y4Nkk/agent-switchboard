@@ -341,8 +341,8 @@ export function SessionManager({ active }: { active: boolean }) {
       const result = await resumeSession(selected.app, selected.sessionId);
       setResumeStatus(
         result.usedProjectDir
-          ? "已在新命令提示符窗口中恢复会话"
-          : "已在新命令提示符窗口中启动恢复；原工作目录不可用",
+          ? "已在新终端窗口中恢复会话"
+          : "已在新终端窗口中启动恢复；原工作目录不可用",
       );
     } catch (caught) {
       setResumeStatus((caught as { message?: string }).message ?? "无法启动会话恢复");
@@ -464,7 +464,7 @@ export function SessionManager({ active }: { active: boolean }) {
                 </div>
                 <div className="asb-session-actions">
                   <Button variant="primary" disabled={resuming} onClick={() => void resume()}>
-                    {resuming ? "正在启动" : "在命令提示符中恢复"}
+                    {resuming ? "正在启动" : "在终端中恢复"}
                   </Button>
                   <Button
                     variant="secondary"

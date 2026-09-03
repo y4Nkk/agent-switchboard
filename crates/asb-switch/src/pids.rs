@@ -28,20 +28,24 @@ pub fn pid_liveness(_pid: u32) -> PidLiveness {
     PidLiveness::Unknown
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[cfg(windows)]
+#[test]
+fn own_pid_is_alive() {
+    let pid = std::process::id();
+    assert_eq!(pid_liveness(pid), PidLiveness::Alive);
+}
 
-    #[test]
-    fn own_pid_is_alive() {
-        let pid = std::process::id();
-        assert_eq!(pid_liveness(pid), PidLiveness::Alive);
-    }
+#[cfg(windows)]
+#[test]
+fn impossible_pid_is_dead() {
+    // PID -1 is not a valid Windows process identifier; unlike a
+    // recently exited child it cannot be reused between assertions.
+    assert_eq!(pid_liveness(u32::MAX), PidLiveness::Dead);
+}
 
-    #[test]
-    fn impossible_pid_is_dead() {
-        // PID -1 is not a valid Windows process identifier; unlike a
-        // recently exited child it cannot be reused between assertions.
-        assert_eq!(pid_liveness(u32::MAX), PidLiveness::Dead);
-    }
+#[cfg(not(windows))]
+#[test]
+fn non_windows_liveness_stays_unknown() {
+    assert_eq!(pid_liveness(std::process::id()), PidLiveness::Unknown);
+    assert_eq!(pid_liveness(u32::MAX), PidLiveness::Unknown);
 }

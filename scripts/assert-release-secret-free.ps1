@@ -2,18 +2,17 @@
 param(
   [Parameter(Mandatory)]
   [ValidateNotNullOrEmpty()]
-  [string]$InstallerPath
+  [string]$ArtifactPath
 )
 
-$resolvedInstaller = (Resolve-Path -LiteralPath $InstallerPath -ErrorAction Stop).Path
-if ([IO.Path]::GetExtension($resolvedInstaller) -ne '.exe') {
-  throw "Only an NSIS .exe installer can be scanned: $resolvedInstaller"
-}
+# Extracts one release artifact (.exe NSIS installer, .dmg, .AppImage or
+# .deb) into a temp directory and scans every contained file for
+# credential-shaped data. 7z is required for .exe; the other formats use
+# tools preinstalled on their building runner (hdiutil on macOS,
+# ar/tar/unzstd on Linux, --appimage-extract is built into AppImages).
 
-$sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
-if ($null -eq $sevenZip) {
-  throw '7z.exe is required to inspect the NSIS installer contents.'
-}
+$resolvedArtifact = (Resolve-Path -LiteralPath $ArtifactPath -ErrorAction Stop).Path
+$extension = [IO.Path]::GetExtension($resolvedArtifact)
 
 $rules = [ordered]@{
   'OpenAI-style token' = '(?<![A-Za-z0-9_-])sk-(?:proj-)?[A-Za-z0-9_-]{20,}'
@@ -23,7 +22,10 @@ $rules = [ordered]@{
   'Google API key' = '\bAIza[A-Za-z0-9_-]{30,}\b'
   'Slack token' = '\bxox(?:b|p|a|r|s)-[A-Za-z0-9-]{10,}\b'
   'Stripe secret key' = '\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b'
-  'Private key block' = '-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----'
+  # A full PEM block (header, newline, base64 body, footer) — not a bare
+  # header literal: dependency libraries embed the header/footer strings as
+  # adjacent assertion constants (schannel), which are not keys.
+  'Private key block' = '-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}-----END (?:[A-Z ]+ )?PRIVATE KEY-----'
   'JWT-like token' = '\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b'
 }
 
@@ -31,9 +33,75 @@ $scanRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-switchboard-release-sca
 New-Item -ItemType Directory -Path $scanRoot -ErrorAction Stop | Out-Null
 
 try {
-  & $sevenZip.Source x -y "-o$scanRoot" $resolvedInstaller | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    throw "7z.exe could not extract the installer (exit code $LASTEXITCODE)."
+  switch ($extension) {
+    '.exe' {
+      $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
+      if ($null -eq $sevenZip) {
+        $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue
+      }
+      if ($null -eq $sevenZip) {
+        throw '7z is required to inspect the NSIS installer contents.'
+      }
+      & $sevenZip.Source x -y "-o$scanRoot" $resolvedArtifact | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        throw "7z could not extract the installer (exit code $LASTEXITCODE)."
+      }
+    }
+    '.dmg' {
+      $mountPoint = Join-Path $scanRoot 'mount'
+      New-Item -ItemType Directory -Path $mountPoint | Out-Null
+      hdiutil attach -readonly -nobrowse -mountpoint $mountPoint $resolvedArtifact | Out-Null
+      try {
+        Copy-Item -Path (Join-Path $mountPoint '*') -Destination $scanRoot -Recurse -Force
+      }
+      finally {
+        hdiutil detach $mountPoint -Force | Out-Null
+      }
+    }
+    '.appimage' {
+      # --appimage-extract is built in and needs no FUSE; it unpacks into
+      # squashfs-root below the working directory.
+      $copy = Join-Path $scanRoot ([IO.Path]::GetFileName($resolvedArtifact))
+      Copy-Item -LiteralPath $resolvedArtifact -Destination $copy
+      & chmod +x $copy
+      Push-Location $scanRoot
+      try {
+        & $copy --appimage-extract | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+          throw "AppImage extraction failed (exit code $LASTEXITCODE)."
+        }
+      }
+      finally {
+        Pop-Location
+      }
+    }
+    '.deb' {
+      Push-Location $scanRoot
+      try {
+        & ar x $resolvedArtifact
+        if ($LASTEXITCODE -ne 0) {
+          throw "ar could not extract the deb package (exit code $LASTEXITCODE)."
+        }
+        $dataTar = Get-ChildItem -Path $scanRoot -Filter 'data.tar.*' |
+          Select-Object -First 1
+        if ($null -eq $dataTar) {
+          throw 'deb package contains no data.tar payload.'
+        }
+        & tar -xf $dataTar.FullName -C $scanRoot
+        if ($LASTEXITCODE -ne 0) {
+          & tar --use-compress-program=unzstd -xf $dataTar.FullName -C $scanRoot
+        }
+        if ($LASTEXITCODE -ne 0) {
+          throw "tar could not extract the deb payload (exit code $LASTEXITCODE)."
+        }
+      }
+      finally {
+        Pop-Location
+      }
+    }
+    default {
+      throw "Unsupported artifact type '$extension'; expected .exe, .dmg, .AppImage or .deb: $resolvedArtifact"
+    }
   }
 
   $findings = [System.Collections.Generic.List[object]]::new()
@@ -58,7 +126,7 @@ try {
     throw "Release artifact contains high-confidence credential-shaped data. Values are intentionally redacted.`n$($summary -join "`n")"
   }
 
-  "Release artifact credential scan passed: $([IO.Path]::GetFileName($resolvedInstaller))"
+  "Release artifact credential scan passed: $([IO.Path]::GetFileName($resolvedArtifact))"
 }
 finally {
   if (Test-Path -LiteralPath $scanRoot) {

@@ -528,6 +528,10 @@ describe("App integration with the typed client boundary", () => {
   });
 
   it("loads, applies, and saves complete application settings", async () => {
+    // The hardware-acceleration section renders only on Windows.
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    });
     primeBackend();
     const user = userEvent.setup();
     render(<App />);
@@ -591,6 +595,7 @@ describe("App integration with the typed client boundary", () => {
 
     await user.click(screen.getByRole("button", { name: "重启应用" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("restart_application"));
+    vi.unstubAllGlobals();
   });
 
   it("顶栏置顶钮经同一保存路径提交完整设置对象", async () => {

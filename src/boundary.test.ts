@@ -63,27 +63,46 @@ describe("UI boundary", () => {
     expect(loadedViteConfig?.config.server?.port).toBe(Number(configuredUrl.port));
   });
 
-  it("keeps the NSIS installer branding in the Tauri bundle contract", () => {
-    const tauriConfig = JSON.parse(
-      readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"),
-    ) as {
-      bundle: {
-        icon: string[];
-        windows: {
-          nsis: {
-            headerImage: string;
-            sidebarImage: string;
-            installerIcon: string;
-            uninstallerIcon: string;
-            languages: string[];
-          };
+  it("keeps the platform bundle contracts in their own Tauri config files", () => {
+    const readBundle = (file: string) =>
+      (
+        JSON.parse(
+          readFileSync(join(repoRoot, "src-tauri", file), "utf8"),
+        ) as { bundle: Record<string, unknown> }
+      ).bundle;
+
+    const base = readBundle("tauri.conf.json");
+    expect(base.icon).toEqual([
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+    ]);
+    // The platform-neutral base never bundles anything and carries no
+    // Windows-only resources; per-OS overlay files own those contracts.
+    expect(base.targets).toBeUndefined();
+    expect(base.resources).toBeUndefined();
+    expect(base.windows).toBeUndefined();
+
+    const windows = readBundle("tauri.windows.conf.json") as {
+      targets: string[];
+      resources: Record<string, string>;
+      windows: {
+        nsis: {
+          headerImage: string;
+          sidebarImage: string;
+          installerIcon: string;
+          uninstallerIcon: string;
+          languages: string[];
         };
       };
     };
-    const nsis = tauriConfig.bundle.windows.nsis;
-
-    expect(tauriConfig.bundle.icon).toEqual(["icons/icon.ico"]);
-    expect(nsis).toEqual({
+    expect(windows.targets).toEqual(["nsis"]);
+    expect(windows.resources).toEqual({
+      "bin/WebView2Loader.dll": "WebView2Loader.dll",
+    });
+    expect(windows.windows.nsis).toEqual({
       headerImage: "windows/installer-header.bmp",
       sidebarImage: "windows/installer-sidebar.bmp",
       installerIcon: "icons/icon.ico",
@@ -91,9 +110,15 @@ describe("UI boundary", () => {
       languages: ["SimpChinese", "English"],
     });
 
+    expect(readBundle("tauri.macos.conf.json").targets).toEqual(["dmg"]);
+    expect(readBundle("tauri.linux.conf.json").targets).toEqual([
+      "deb",
+      "appimage",
+    ]);
+
     for (const [asset, width, height] of [
-      [nsis.headerImage, 150, 57],
-      [nsis.sidebarImage, 164, 314],
+      [windows.windows.nsis.headerImage, 150, 57],
+      [windows.windows.nsis.sidebarImage, 164, 314],
     ] as const) {
       const bitmap = readFileSync(join(repoRoot, "src-tauri", asset));
       expect(bitmap.subarray(0, 2).toString("ascii")).toBe("BM");
