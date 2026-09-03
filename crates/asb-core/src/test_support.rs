@@ -5,13 +5,17 @@
 //! fields so tests prove unknown keys survive a switch untouched.
 
 /// Codex `config.toml` test sample: host-owned top-level keys, comments, and
-/// the built-in OpenAI provider with an explicit custom base URL.
+/// a provider-scoped custom route.
 pub const CODEX_TOML: &str = r#"# host-owned Codex configuration (test sample)
 history_persistence = "save-all"
 threads = 8
 model = "gpt-5.1"
-model_provider = "openai"
-openai_base_url = "https://relay-a.internal/v1"
+model_provider = "OpenAi"
+
+[model_providers.OpenAi]
+name = "Relay A"
+base_url = "https://relay-a.internal/v1"
+wire_api = "responses"
 experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
 
 [projects."F:\\work\\sample"]

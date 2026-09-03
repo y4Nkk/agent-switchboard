@@ -265,11 +265,12 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
     assert_ne!(switched, fp.content);
     assert!(fp.content.contains("••••••••"));
     assert!(!fp.content.contains("CODEX_RELAY_B_KEY"));
+    assert!(switched.contains("model_provider = \"OpenAi\""));
+    assert!(switched.contains("[model_providers.OpenAi]"));
     assert!(switched.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
-    assert!(switched.contains("model_provider = \"openai\""));
-    assert!(switched.contains("openai_base_url = \"https://relay-b.internal/v1\""));
+    assert!(switched.contains("base_url = \"https://relay-b.internal/v1\""));
     assert!(switched.contains("model_reasoning_effort = \"xhigh\""));
-    assert!(!switched.contains("[model_providers"));
+    assert!(!switched.contains("openai_base_url"));
     assert!(switched.contains("https://relay-b.internal/v1"));
     for host in ["threads = 8", "history_persistence", "trusted = true"] {
         assert!(switched.contains(host), "host field lost: {host}");
@@ -278,6 +279,85 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
     let restored = restore(&io, &outcome.backup, &target).unwrap();
     assert_eq!(restored.restored_hash, sha256_hex(&original));
     assert_eq!(fs::read_to_string(&target).unwrap(), original);
+}
+
+#[test]
+fn codex_custom_and_official_switches_preserve_auth_and_host_owned_provider_entries() {
+    let initial = r#"threads = 8
+model = "gpt-5.1"
+model_provider = "openai"
+openai_base_url = "https://legacy.internal/v1"
+experimental_bearer_token = "LEGACY_TOKEN"
+
+[model_providers.OpenAi]
+host_extension = "preserve"
+
+[model_providers.gateway]
+name = "Gateway"
+base_url = "https://gateway.internal/v1"
+wire_api = "responses"
+"#;
+    let (_dir, target, backup_dir) = setup(AppKind::Codex, initial);
+    let auth_path = target.parent().expect("target parent").join("auth.json");
+    let auth = "{\"auth_mode\":\"chatgpt\",\"tokens\":{\"access_token\":\"OFFICIAL_TOKEN\"}}";
+    write(&auth_path, auth);
+    let io = FsIo;
+
+    let custom = codex_plan(
+        "Relay B",
+        "https://relay-b.internal/v1",
+        "gpt-5.2",
+        "CODEX_RELAY_B_KEY",
+    );
+    let custom_preview =
+        read_preview(&io, &target, &custom, &backup_dir.to_string_lossy()).expect("custom preview");
+    assert!(custom_preview.content.contains("••••••••"));
+    assert!(!custom_preview.content.contains("CODEX_RELAY_B_KEY"));
+    execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &custom,
+            backup_dir: &backup_dir,
+            expected_hash: &custom_preview.content_hash,
+            expected_rendered_hash: &custom_preview.rendered_hash,
+        },
+    )
+    .expect("custom switch");
+
+    let custom_text = fs::read_to_string(&target).expect("custom config");
+    assert!(custom_text.contains("model_provider = \"OpenAi\""));
+    assert!(custom_text.contains("experimental_bearer_token = \"CODEX_RELAY_B_KEY\""));
+    assert!(!custom_text.contains("openai_base_url"));
+    assert!(custom_text.contains("host_extension = \"preserve\""));
+    assert!(custom_text.contains("[model_providers.gateway]"));
+    assert_eq!(fs::read_to_string(&auth_path).unwrap(), auth);
+
+    let mut official = custom;
+    official.profile.route_mode = asb_core::RouteMode::Official;
+    official.profile.model = None;
+    official.profile.base_url = None;
+    official.profile.api_key.clear();
+    let official_preview = read_preview(&io, &target, &official, &backup_dir.to_string_lossy())
+        .expect("official preview");
+    execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &official,
+            backup_dir: &backup_dir,
+            expected_hash: &official_preview.content_hash,
+            expected_rendered_hash: &official_preview.rendered_hash,
+        },
+    )
+    .expect("official switch");
+
+    let official_text = fs::read_to_string(&target).expect("official config");
+    assert!(!official_text.contains("model_provider ="));
+    assert!(!official_text.contains("experimental_bearer_token"));
+    assert!(official_text.contains("host_extension = \"preserve\""));
+    assert!(official_text.contains("[model_providers.gateway]"));
+    assert_eq!(fs::read_to_string(&auth_path).unwrap(), auth);
 }
 
 #[test]

@@ -20,17 +20,22 @@ pub fn system_font_families() -> Vec<String> {
         .get_or_init(|| {
             let mut db = fontdb::Database::new();
             db.load_system_fonts();
-            let mut families = BTreeSet::new();
-            for face in db.faces() {
-                for (family, _language) in &face.families {
-                    if !family.starts_with('@') {
-                        families.insert(family.clone());
-                    }
-                }
-            }
-            families.into_iter().collect()
+            visible_families(db.faces().flat_map(|face| {
+                face.families
+                    .iter()
+                    .map(|(family, _language)| family.clone())
+            }))
         })
         .clone()
+}
+
+fn visible_families(families: impl IntoIterator<Item = String>) -> Vec<String> {
+    families
+        .into_iter()
+        .filter(|family| !family.starts_with('@'))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 #[cfg(test)]
@@ -38,11 +43,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn installed_families_are_unique_sorted_and_include_the_shell_font() {
-        let families = system_font_families();
+    fn visible_families_sort_deduplicate_and_skip_vertical_names() {
+        let families = visible_families([
+            "Noto Sans SC".to_string(),
+            "@Microsoft YaHei UI".to_string(),
+            "Arial".to_string(),
+            "Noto Sans SC".to_string(),
+        ]);
 
-        assert!(families.contains(&"Segoe UI".to_string()));
-        assert!(families.windows(2).all(|pair| pair[0] < pair[1]));
-        assert!(!families.iter().any(|name| name.starts_with('@')));
+        assert_eq!(families, ["Arial", "Noto Sans SC"]);
     }
 }

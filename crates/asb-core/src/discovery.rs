@@ -147,11 +147,16 @@ fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
         .get("model_provider")
         .and_then(Item::as_value)
         .and_then(|value| value.as_str());
-    if provider_id.is_some_and(|id| id != crate::adapter::codex::OFFICIAL_PROVIDER) {
+    let Some(provider_id) =
+        provider_id.filter(|id| *id != crate::adapter::codex::OFFICIAL_PROVIDER)
+    else {
         return false;
-    }
-    doc.as_table()
-        .get("experimental_bearer_token")
+    };
+    doc.get("model_providers")
+        .and_then(Item::as_table_like)
+        .and_then(|table| table.get(provider_id))
+        .and_then(Item::as_table_like)
+        .and_then(|table| table.get("experimental_bearer_token"))
         .and_then(Item::as_value)
         .and_then(|value| value.as_str())
         .is_some_and(|value| !value.trim().is_empty())
@@ -215,11 +220,12 @@ fn inspect_codex(text: &str) -> (bool, Vec<String>) {
         .and_then(Item::as_value)
         .and_then(|value| value.as_str())
         .unwrap_or(crate::adapter::codex::OFFICIAL_PROVIDER);
-    let managed = provider_id == crate::adapter::codex::OFFICIAL_PROVIDER
+    let managed = provider_id == crate::ownership::CODEX_MANAGED_PROVIDER_ID
         && doc
-            .as_table()
-            .get("openai_base_url")
-            .and_then(Item::as_value)
+            .get("model_providers")
+            .and_then(Item::as_table_like)
+            .and_then(|table| table.get(provider_id))
+            .and_then(Item::as_table_like)
             .is_some();
 
     (managed, vec![])
@@ -283,9 +289,17 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
     match file.app {
         AppKind::Codex => {
             let doc = text.parse::<toml_edit::DocumentMut>().ok()?;
-            let key = doc
+            let provider_id = doc
                 .as_table()
-                .get("experimental_bearer_token")
+                .get("model_provider")
+                .and_then(Item::as_value)
+                .and_then(|value| value.as_str())?;
+            let key = doc
+                .get("model_providers")
+                .and_then(Item::as_table_like)
+                .and_then(|table| table.get(provider_id))
+                .and_then(Item::as_table_like)
+                .and_then(|table| table.get("experimental_bearer_token"))
                 .and_then(Item::as_value)
                 .and_then(|value| value.as_str())?;
             let model_options = route
@@ -439,7 +453,7 @@ mod tests {
         };
         assert!(managed);
         assert_eq!(route.route_mode, RouteMode::Custom);
-        assert!(route.provider_name.is_none());
+        assert_eq!(route.provider_name.as_deref(), Some("Relay A"));
         assert_eq!(route.wire_api.as_deref(), Some("responses"));
         let codex_proposal = report
             .import_proposals

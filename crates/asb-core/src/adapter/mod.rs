@@ -57,6 +57,8 @@ pub enum OverlayEntry {
     Leave,
     /// Remove the key if it currently exists.
     RemoveIfPresent,
+    /// Remove a managed table only after its declared entries have been removed.
+    RemoveTableIfEmpty,
 }
 
 /// Computes the preview for `plan` against `current` file text, using the

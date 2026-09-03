@@ -408,6 +408,7 @@ fn preview_entries_from_root(
                     });
                 }
             }
+            OverlayEntry::RemoveTableIfEmpty => {}
         }
     }
 
@@ -440,6 +441,7 @@ pub(crate) fn render_entries(
             OverlayEntry::RemoveIfPresent => {
                 remove(&mut root, &key)?;
             }
+            OverlayEntry::RemoveTableIfEmpty => {}
         }
     }
     serde_json::to_string_pretty(&root).map_err(|_| AdapterError {

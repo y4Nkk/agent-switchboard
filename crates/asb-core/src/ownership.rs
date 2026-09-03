@@ -105,6 +105,16 @@ struct ProviderSettingSpec {
     value_type: SettingValueType,
 }
 
+/// The non-reserved custom provider table used for third-party Codex routes.
+/// Every third-party Codex route points here so the API key lives in the
+/// provider-scoped slot required by current Codex releases.
+pub const CODEX_MANAGED_PROVIDER_ID: &str = "OpenAi";
+pub const CODEX_MANAGED_PROVIDER_NAME_KEY: &str = "model_providers.OpenAi.name";
+pub const CODEX_MANAGED_PROVIDER_BASE_URL_KEY: &str = "model_providers.OpenAi.base_url";
+pub const CODEX_MANAGED_PROVIDER_WIRE_API_KEY: &str = "model_providers.OpenAi.wire_api";
+pub const CODEX_MANAGED_PROVIDER_TOKEN_KEY: &str =
+    "model_providers.OpenAi.experimental_bearer_token";
+
 const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     ProviderSettingSpec {
         app: AppKind::Codex,
@@ -118,6 +128,33 @@ const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     },
     ProviderSettingSpec {
         app: AppKind::Codex,
+        key: CODEX_MANAGED_PROVIDER_NAME_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_MANAGED_PROVIDER_BASE_URL_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_MANAGED_PROVIDER_WIRE_API_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_MANAGED_PROVIDER_TOKEN_KEY,
+        value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model_context_window",
+        value_type: SettingValueType::PositiveInteger,
+    },
+    // The prior top-level Codex route is removed by the next projection. It
+    // is not a supported runtime route and cannot receive a profile value.
+    ProviderSettingSpec {
+        app: AppKind::Codex,
         key: "openai_base_url",
         value_type: SettingValueType::String,
     },
@@ -125,11 +162,6 @@ const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
         app: AppKind::Codex,
         key: "experimental_bearer_token",
         value_type: SettingValueType::Secret,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: "model_context_window",
-        value_type: SettingValueType::PositiveInteger,
     },
     ProviderSettingSpec {
         app: AppKind::Claude,
@@ -1391,10 +1423,10 @@ mod tests {
     }
 
     #[test]
-    fn codex_top_level_routing_keys_are_owned() {
+    fn codex_routing_keys_include_the_managed_provider_table() {
         assert!(is_owned(AppKind::Codex, "model"));
         assert!(is_owned(AppKind::Codex, "model_provider"));
-        assert!(is_owned(AppKind::Codex, "openai_base_url"));
+        assert!(is_owned(AppKind::Codex, "model_providers.OpenAi.base_url"));
         assert!(is_owned(AppKind::Codex, "model_reasoning_effort"));
         assert!(is_owned(AppKind::Codex, "model_context_window"));
     }
@@ -1459,7 +1491,7 @@ mod tests {
         );
         assert!(is_provider_owned(
             AppKind::Codex,
-            "experimental_bearer_token"
+            "model_providers.OpenAi.experimental_bearer_token"
         ));
         assert_eq!(owner_for(AppKind::Codex, "threads"), SettingOwner::Host);
     }

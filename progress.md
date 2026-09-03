@@ -90,7 +90,7 @@
 
 **退出条件：** 不再有任何模块需要猜测一次切换可以变更哪些字段。
 
-**结果：** 于 2026-08-26 完成。契约位于 `crates/asb-core/src/contracts.rs`（`AppKind`、`ProviderProfile` / `ProviderDraft`、`CommonConfigPatch` / `PatchEntry` / `PatchValue`、`SwitchPlan`、`SwitchPreview` / `KeyChange` / `ChangeKind`、`BackupRecord`、`RouteState`、`ImportProposal`）；所有权表位于 `ownership.rs`（Codex 受管顶层键含 `model_provider` / `openai_base_url`，所有 `model_providers.*` 表都归宿主所有；以及 Claude 所有的键）；锁契约位于 `lock.rs`，其中纯函数 `classify_lock` 区分空闲 / 占用 / 陈旧 / 不确定。`validate.rs` 会拒绝空名称、非 `http(s)` URL、形似密钥或非法的 Codex 环境变量名、Claude 环境变量名、宿主所有的补丁键和应用不匹配，并给出修复提示。`test_support.rs` 仅在测试构建中提供样本，包含宿主所有字段且不含凭据。规划 / 适配器在结构上不产生变更：`asb-core` 完全没有文件系统依赖；只有 `asb-switch` 接收写入能力（注入 `SwitchIo` trait）。
+**结果：** 于 2026-08-26 完成，2026-09-03 更新 Codex 路由所有权。契约位于 `crates/asb-core/src/contracts.rs`（`AppKind`、`ProviderProfile` / `ProviderDraft`、`CommonConfigPatch` / `PatchEntry` / `PatchValue`、`SwitchPlan`、`SwitchPreview` / `KeyChange` / `ChangeKind`、`BackupRecord`、`RouteState`、`ImportProposal`）；所有权表位于 `ownership.rs`（Codex 受管顶层键为 `model_provider`，以及受管 `[model_providers.OpenAi]` 表；其他 `model_providers.*` 表归宿主所有；以及 Claude 所有的键）；锁契约位于 `lock.rs`，其中纯函数 `classify_lock` 区分空闲 / 占用 / 陈旧 / 不确定。`validate.rs` 会拒绝空名称、非 `http(s)` URL、形似密钥或非法的 Codex 环境变量名、Claude 环境变量名、宿主所有的补丁键和应用不匹配，并给出修复提示。`test_support.rs` 仅在测试构建中提供样本，包含宿主所有字段且不含凭据。规划 / 适配器在结构上不产生变更：`asb-core` 完全没有文件系统依赖；只有 `asb-switch` 接收写入能力（注入 `SwitchIo` trait）。
 
 ## 03 — 读取并预览两个客户端配置
 
@@ -185,7 +185,7 @@
 
 **目标：** 移除运行时虚拟配置路径和预置供应商，使应用只管理本机 `Codex` 与 `Claude Code` 配置，并保留由用户确认的可逆切换与 Windows 打包。
 
-**范围调整（2026-08-26，2026-09-01 更新）：** 不再提供两套目标选择。供应商配置档保存在应用数据目录的独立供应商文件中，首次启动为空；它们保存稳定标识、客户端、名称、模型、端点、API 密钥及档案级模型选项。密钥只保存在 `state/configuration/providers/{codex,claude}/{id}.json`，切换分别写入 Codex `experimental_bearer_token` 与 Claude `env.ANTHROPIC_AUTH_TOKEN`，所有展示、预览、日志、错误和诊断均脱敏。通用设置与写入历史各有独立文件。所有状态、预览、切换、恢复和备份历史均指向用户级配置路径。自动化测试仍使用隔离的临时文件，不构成运行时模式。
+**范围调整（2026-08-26，2026-09-03 更新）：** 不再提供两套目标选择。供应商配置档保存在应用数据目录的独立供应商文件中，首次启动为空；它们保存稳定标识、客户端、名称、模型、端点、API 密钥及档案级模型选项。密钥只保存在 `state/configuration/providers/{codex,claude}/{id}.json`，切换分别写入 Codex `[model_providers.OpenAi]` 内的 `experimental_bearer_token` 与 Claude `env.ANTHROPIC_AUTH_TOKEN`，所有展示、预览、日志、错误和诊断均脱敏。通用设置与写入历史各有独立文件。所有状态、预览、切换、恢复和备份历史均指向用户级配置路径。自动化测试仍使用隔离的临时文件，不构成运行时模式。
 
 **范围**
 
@@ -209,7 +209,7 @@
 
 **退出条件：** 用户能够安全地将应用用于日常 `Codex` / `Claude Code` 提供商管理。
 
-**当前状态（2026-08-26）：** 运行时已迁移为真实配置单一路径：`config_status`、预览、切换、恢复、锁和备份命令都解析用户级目标；旧的虚拟命令、路径、预置供应商和界面选择器已删除。供应商的新增、编辑、删除、只读导入和空初始存储已实现；Codex 自定义路由固定使用内置 `openai` 与 `openai_base_url`，不写项目私有 provider 表。
+**当前状态（2026-08-26，2026-09-03 更新）：** 运行时已迁移为真实配置单一路径：`config_status`、预览、切换、恢复、锁和备份命令都解析用户级目标；旧的虚拟命令、路径、预置供应商和界面选择器已删除。供应商的新增、编辑、删除、只读导入和空初始存储已实现；Codex 自定义路由固定使用 `[model_providers.OpenAi]`，不占用保留的内建 `openai` provider。
 
 **Codex 官方订阅额度（完成，2026-09-01）：** 新增一条独立于 `UsageQuery` 的只读能力，仅服务于 Codex 官方登录档案。`asb-core` 拥有已脱敏的额度结果契约；桌面服务临时读取已有 Codex OAuth 登录态、查询服务端限额窗口，并只归一化窗口名称、已用百分比、重置时间和可恢复状态。它不接管、复制、持久化或写入登录缓存，不将 OAuth 令牌或账号标识返回渲染器，也不复用第三方档案的地址、API 密钥或脚本。供应商行使用 Frosted Relay 自有的紧凑账本与细进度轨呈现，不迁移 CC Switch 视觉、文案或组件；首次显示读取一次，随后只允许手动刷新，失败时保留进程内最近一次成功结果并标明过期。未登录、失效登录、服务拒绝或网络/响应故障都有可恢复状态。验证：`cargo fmt --check` 与 `cargo test --workspace`（桌面库 120 通过、1 个既有真实 CC Switch 数据库测试忽略；核心 111、执行器 7、集成 29 均通过）、`npm test`（228 通过）、`npm run typecheck`、`npm run build` 均通过；未读取真实 OAuth 文件或执行实际额度查询，故尚未做真实账户的桌面运行时验收。
 
@@ -248,7 +248,7 @@
 
 **供应商卡操作区排序（完成，2026-09-01）：** 按用户指定将右侧图标动作簇固定为「编辑 → 预览/收起预览 → 测试连通性 → 用量查询/配置用量 → 删除」；只调整 DOM 次序，五项既有条件、图标、提示和行为均不变。验证：`npx vitest run src/components/ProviderList.test.tsx`（16 项）通过。
 
-**路由、模型映射与通用设置（2026-09-01 契约重塑）：** 供应商档案以显式 `routeMode` 表示 `custom` 或 `official`。自定义档案必须声明服务地址与密钥；官方入口不存储地址、密钥、模型覆盖或用量脚本，凭据继续由 Codex / Claude 原生登录管理。Codex 自定义档案固定写回 `model_provider = "openai"`，并通过官方 `openai_base_url` 使用自定义服务；不创建或覆盖任何 `model_providers.*` 表。Claude 自定义档案使用主模型、Haiku、Sonnet、Opus 与 `availableModels`；`ANTHROPIC_SMALL_FAST_MODEL` 是供应商受管清理字段，当前档案未声明时一定移除，导入时升格为 Haiku 档。启用官方入口会清理本应用受管的自定义路由字段，保留宿主未知字段与客户端登录缓存。每客户端的通用设置存于 `state/configuration/common/{codex,claude}.json`，字段都是完整具体值。启用或重新应用当前供应商时，执行器合成「固定通用设置 + 完整供应商声明」，清理上一供应商拥有但当前未声明的字段，并保留未知宿主字段。旧聚合文件及上一版拆分档案均只做一次确定性、原子迁移；运行时没有兼容读取。
+**路由、模型映射与通用设置（2026-09-01 契约重塑，2026-09-03 更新）：** 供应商档案以显式 `routeMode` 表示 `custom` 或 `official`。自定义档案必须声明服务地址与密钥；官方入口不存储地址、密钥、模型覆盖或用量脚本，凭据继续由 Codex / Claude 原生登录管理。Codex 自定义档案固定写回 `model_provider = "OpenAi"`，并通过受管 `[model_providers.OpenAi]` 表的 `base_url`、`wire_api = "responses"` 与 `experimental_bearer_token` 使用自定义服务；不占用保留的内建 `openai` provider，且不覆盖其他 `model_providers.*` 表。Claude 自定义档案使用主模型、Haiku、Sonnet、Opus 与 `availableModels`；`ANTHROPIC_SMALL_FAST_MODEL` 是供应商受管清理字段，当前档案未声明时一定移除，导入时升格为 Haiku 档。启用官方入口会清理本应用受管的自定义路由字段，保留宿主未知字段与客户端登录缓存。每客户端的通用设置存于 `state/configuration/common/{codex,claude}.json`，字段都是完整具体值。启用或重新应用当前供应商时，执行器合成「固定通用设置 + 完整供应商声明」，清理上一供应商拥有但当前未声明的字段，并保留未知宿主字段。旧聚合文件及上一版拆分档案均只做一次确定性、原子迁移；运行时没有兼容读取。
 
 **官方设置目录覆盖（2026-09-01 完成第一阶段）：** `asb_core::ownership::official_setting_directory` 成为 Codex / Claude Code 官方设置族的唯一覆盖图，并直接派生已有可写标量的目录行；每一族都标注为「基础参数」「独立模块」或「保留不写入」。因此页面不再把 MCP、Hooks、权限/沙箱、环境映射、模型选择器、项目/本地/受管配置、官方身份与运行态笼统藏为“未知键”：用户可见其精确路径族及当前真实边界。全局 `AGENTS.md` / `CLAUDE.md` 被明确归入官方目录中的独立模块，仍走专属文件事务；基础参数仍只写应用状态，供应商重新应用仍是唯一真实客户端配置写入路径。目录不引入任意 TOML/JSON 编辑器，也不改变项目、受管或登录资源的所有权。验收：core 目录测试、Tauri 编辑器投影测试、通用设置页目录/文档隔离测试与 TypeScript 类型检查。
 
@@ -354,7 +354,7 @@
 
 **窗口控制改走 Win32 系统命令（2026-08-28 完成）：** 按用户指令把标题栏三钮（最小化 / 最大化-还原 / 关闭）的执行路径从 tauri 窗口抽象（`window.minimize()/maximize()/close()`）改为 Windows 原生实现，前端样式零改动。背景：三钮本就是自绘（无装饰窗口 + webview 内 SVG 按钮），此前仅点击动作经 tauri 转发 `ShowWindow`。实现：`commands.rs` 四个窗口命令统一经 `windows-sys` 走 `SendMessageW(WM_SYSCOMMAND, SC_*)`——与系统标题栏按钮同一通道（`SC_MINIMIZE` / 最大化态经 `IsZoomed` 判定后发 `SC_MAXIMIZE` 或 `SC_RESTORE` / `SC_CLOSE`，`SC_CLOSE` 经 `WM_CLOSE` 仍进 tauri 的 close-requested 流程）；`window_is_maximized` 同步改用原生 `IsZoomed`；HWND 取自 `window.hwnd()`（`windows` crate 句柄与 `windows-sys` 同为 `*mut c_void`，直接透传）。`Cargo.toml` 的 `windows-sys` 增加 `Win32_UI_WindowsAndMessaging` 特性。前端 `WindowControls` / api client / 命令签名均未动。架构定案（用户三选一拍板「维持现状」）：自绘按钮 + 系统命令通道即最终形态——真原生标题栏（顶部加系统栏、纯色不能磨砂）与 WebView2 Window Controls Overlay（理想形态但 SDK prerelease、wry 不支持 wry#1650、fork 即技术债）均被否；悬停最大化不弹 Snap Layouts 为 WebView2 平台限制，已知且接受。验证：独立 `CARGO_TARGET_DIR` 下 `cargo check` 通过（本轮窗口命令区域零警告零错误）；全量 `cargo test --workspace` 因用户并发进行中的 `fetch_models` 凭据重构（`probe.rs` / `commands.rs` 测试段编译错误）暂无法收集，非本轮引入，待该改动落地后随跑；未打包。
 
-**供应商 API 密钥档案化（2026-08-28，2026-09-01 存储更新）：** `ProviderProfile` / `ProviderDraft` 的 `apiKey: String` 由每个客户端的独立供应商文件保存，编辑器中 Codex / Claude 均有必填密码输入「API 密钥」；空白或超过 4096 字符拒绝。切换映射：Codex 写受管顶层 `experimental_bearer_token`，Claude 写受管 `env.ANTHROPIC_AUTH_TOKEN`；通用设置不可写。模型获取命令只接收当前编辑器 `apiKey`。CC Switch 和本机发现仅在后端导入边界读取凭据；密钥不进入 RouteState、告警或诊断。`FilePreview.content` 是展示专用脱敏副本，执行器内部原文只用于哈希、校验与原子写入；TOML/JSON 按敏感键路径遮罩。差异、错误、日志与诊断继续只见遮罩。
+**供应商 API 密钥档案化（2026-08-28，2026-09-03 存储更新）：** `ProviderProfile` / `ProviderDraft` 的 `apiKey: String` 由每个客户端的独立供应商文件保存，编辑器中 Codex / Claude 均有必填密码输入「API 密钥」；空白或超过 4096 字符拒绝。切换映射：Codex 写受管 `[model_providers.OpenAi]` 内的 `experimental_bearer_token`，Claude 写受管 `env.ANTHROPIC_AUTH_TOKEN`；通用设置不可写。模型获取命令只接收当前编辑器 `apiKey`。CC Switch 和本机发现仅在后端导入边界读取凭据；密钥不进入 RouteState、告警或诊断。`FilePreview.content` 是展示专用脱敏副本，执行器内部原文只用于哈希、校验与原子写入；TOML/JSON 按敏感键路径遮罩。差异、错误、日志与诊断继续只见遮罩。
 
 **变更预览接入优质打印全文（2026-08-28 完成）：** 按用户指令把优质打印模块接入供应商变更预览，替换真实配置下不可读的「保持不变的设置」扁平键列表（Codex 宿主键可达 90+ 个）。契约迁移（单一所有者 = `asb-switch::executor::FilePreview`）：`FilePreview` 新增 `content` 字段——`read_preview_for` 把候选渲染一次，`rendered_hash` 与界面展示共用同一文本；`preview_switch` 与 `preview_common` 由此都携带全文。同一改动删除旧路径：`commands.rs` 的 `CommonPreview` 包装结构与其重复的读取＋`common_render` 渲染段整体移除，`preview_common` 直接返回 `FilePreview`（`preview.target` 回填与 `preview_switch` 对齐）；前端 `CommonPreview` 接口删除。界面：`PreviewInspector` 的「保持不变的设置」键值行与顶部路径 h2 移除（路径由 `CodePreview` 文件条显示，避免重复），在差异视图与警告之后渲染 `CodePreview` 候选全文——被保留的宿主键原位可见，`320px` 限高滚动不撑爆行内展开区。安全不变性以隔离测试锁定：执行后落盘文件与 `fp.content` 逐字节相等。验证：`cargo test -p asb-switch`（3 + 16 项含新断言）、`npm run typecheck`（仅剩用户并发 `mock-dev-entry.tsx` 的既有脚本作用域错误，非本轮引入）、`npm test` 78/78（`PreviewInspector` 新增候选全文原位断言；`fetch_provider_models` 新签名断言由用户会话同步更新）；`cargo test --workspace` 暂被用户进行中的凭据改动（`claude_credential` 可见性）阻塞，与本轮无关；未打包。
 
@@ -484,3 +484,5 @@
 
 
 **设置读取失败的全局修复横幅（2026-09-03 完成，用户指令「在合适位置加入一键修复按钮」）：** 起因：严格设置契约拒绝含废弃字段的文件后，修复入口只在设置页失败行可见，而受影响的功能（供应商页用量收起等设置类操作）在其他页静默等待，用户无从发现阻塞原因。实现：`AppShell` 持久错误横幅新增第二种情形——`settingsError`（来自 `useAppSettings.loadError`）非空时于每一页工作区顶部显示「应用设置不可用：{原因}」+ 次级「一键修复」按钮，直连同一 `repair_app_settings`；与 `profile-store-unsupported` 横幅同构（role=alert + 行内恢复动作），与设置页失败行构成同一动作的两个视图（置顶双视图同款先例），修复/重试成功后随加载状态消失。无兼容路径：修复仍为整体替换默认值，本横幅只解决可发现性。测试：App 集成新增「任意页面显示横幅并一键修复后横幅消失」，既有设置页修复用例改为显式点击失败行内的按钮（页面行与横幅现为两个同名按钮）。验证：`npm run typecheck` 零错误、`npx vitest run src/App.test.tsx` 29 项全过。未打包。
+
+**Codex 自定义路由改为 provider-scoped token（2026-09-03 完成，用户指令）：** 调研 OpenAI Codex 与 CC Switch 当前源码后，废除旧的内建 `openai` 重定向（顶层 `openai_base_url` / `experimental_bearer_token`）。OpenAI 上游明确拒绝覆写保留的小写 `model_providers.openai`，因此自定义档案统一使用合法的大小写变体 `model_provider = "OpenAi"` 与 `[model_providers.OpenAi]`；该表承载档案名称、`base_url`、`wire_api = "responses"` 和 provider-scoped `experimental_bearer_token`，不会回退到 `auth.json`。状态读取不再识别旧顶层路由，只在下一次投影时清理它。官方档案清理全部受管字段，并仅在表没有宿主字段时删除空 `[model_providers.OpenAi]` 表；未声明字段和其他 `model_providers.*` 表均原样保留。普通切换继续绝不读、写或删除 `auth.json`；发现导入同步从活动自定义表读取令牌。`LocalState::user_config_path` 也改为遵循 `CODEX_HOME`，确保 `config.toml` 与官方登录缓存处于同一用户设置目录。测试覆盖旧顶层路由清理、旧路由不再影响状态、第三方及表内宿主字段保留、令牌脱敏、活动表导入和 `CODEX_HOME` 解析；隔离黑盒测试模拟旧配置 -> 自定义 -> 官方的完整事务，断言 `auth.json` 字节不变。验证：隔离 `CARGO_TARGET_DIR` 下 `cargo test --workspace`（桌面库 174 通过、1 忽略；核心 117、执行器 7、切换集成 26 均通过）。未打包。

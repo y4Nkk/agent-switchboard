@@ -200,7 +200,10 @@ impl LocalState {
 
     pub fn user_config_path(app: AppKind) -> Result<PathBuf, String> {
         let home = user_home_dir()?;
-        Ok(target_in_home(Path::new(&home), app))
+        let codex_home = std::env::var_os("CODEX_HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Ok(target_in_home(Path::new(&home), codex_home.as_deref(), app))
     }
 
     pub fn global_prompt_path(app: AppKind) -> Result<PathBuf, String> {
@@ -507,9 +510,12 @@ impl LocalState {
     }
 }
 
-fn target_in_home(home: &Path, app: AppKind) -> PathBuf {
+fn target_in_home(home: &Path, codex_home: Option<&Path>, app: AppKind) -> PathBuf {
     match app {
-        AppKind::Codex => home.join(".codex").join("config.toml"),
+        AppKind::Codex => match codex_home {
+            Some(directory) => directory.join("config.toml"),
+            None => home.join(".codex").join("config.toml"),
+        },
         AppKind::Claude => home.join(".claude").join("settings.json"),
     }
 }
@@ -592,7 +598,7 @@ mod tests {
 
         assert!(!state.configuration().legacy_store_path().exists());
         assert!(!state.configuration().configuration_dir().exists());
-        let target = target_in_home(&directory.path().join("home"), AppKind::Codex);
+        let target = target_in_home(&directory.path().join("home"), None, AppKind::Codex);
         assert!(!target.exists());
     }
 
@@ -632,6 +638,18 @@ mod tests {
         );
         assert!(!home.exists());
         assert!(!codex_home.exists());
+    }
+
+    #[test]
+    fn codex_config_target_follows_codex_home() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let home = directory.path().join("home");
+        let codex_home = directory.path().join("alternate-codex-home");
+
+        assert_eq!(
+            target_in_home(&home, Some(&codex_home), AppKind::Codex),
+            codex_home.join("config.toml")
+        );
     }
 
     #[test]
