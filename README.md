@@ -103,7 +103,7 @@ npm run dev
 npm run dev:desktop
 ```
 
-每次推送都会运行三端打包工作流：四个 job（Windows NSIS、macOS 双架构 dmg、Linux deb + AppImage）各自执行 Rust 与前端测试、构建安装包并保留为 GitHub Actions 制品 30 天；所有产物在发布前逐个执行凭据扫描。推送 `v*` 标签时，工作流还会把全部安装包发布为正式 GitHub Release。CNB 同时通过根目录 `.cnb.yml` 在 Linux Runner 上自动执行 Rust 与前端验证。
+每次推送都会运行三端打包工作流：四个 job（Windows NSIS、macOS 双架构 dmg、Linux deb + AppImage）各自执行 Rust 与前端测试、构建安装包并保留为 GitHub Actions 制品 30 天；所有产物在发布前逐个执行凭据扫描。推送 `v*` 标签时，工作流会将已完成构建并通过扫描的安装包发布为正式 GitHub Release；某个平台失败不会阻止其他可用安装包发布，未显示的平台没有可发布产物。CNB 同时通过根目录 `.cnb.yml` 在 Linux Runner 上自动执行 Rust 与前端验证。
 
 ## 项目边界与致谢
 

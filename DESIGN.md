@@ -324,7 +324,7 @@
 
 打包契约按平台拆分：`src-tauri/tauri.conf.json` 只保留平台中性的图标集，`tauri.windows.conf.json`、`tauri.macos.conf.json`、`tauri.linux.conf.json` 分别拥有 `["nsis"]` + WebView2 资源 + 安装器品牌、`["dmg"]`、`["deb", "appimage"]` 三份 bundle 契约；`npm run tauri:build:<平台>` 是唯一构建入口，`src/boundary.test.ts` 锁定该分平台结构。
 
-Windows 安装器是应用交付前的独立原生界面，不模拟 WebView，也不在其中复用应用工作区的玻璃、导航或配置控件。它只完成安装这一件事：说明正在安装什么、让用户选择位置、展示真实进度，并在完成后让用户决定是否启动应用。macOS 出 Apple Silicon 与 Intel 两个 dmg；Linux 出 deb（声明 `libwebkit2gtk-4.1-0`、`libayatana-appindicator3-1` 运行依赖）与 AppImage。CI（`.github/workflows/package.yml`）矩阵构建四个产物组，逐产物执行凭据扫描，`v*` 标签聚合发布全部安装包为正式 Release。
+Windows 安装器是应用交付前的独立原生界面，不模拟 WebView，也不在其中复用应用工作区的玻璃、导航或配置控件。它只完成安装这一件事：说明正在安装什么、让用户选择位置、展示真实进度，并在完成后让用户决定是否启动应用。macOS 出 Apple Silicon 与 Intel 两个 dmg；Linux 出 deb（声明 `libwebkit2gtk-4.1-0`、`libayatana-appindicator3-1` 运行依赖）与 AppImage。CI（`.github/workflows/package.yml`）矩阵构建四个产物组，逐产物执行凭据扫描，`v*` 标签将已完成且通过扫描的安装包发布为正式 Release；单个平台失败不阻断其余可用安装包，缺失平台没有可发布产物。
 
 - NSIS 的页头、欢迎页和完成页只使用 Agent Switchboard 自有双半宝石标识：左半行动蓝、右半 Claude 紫，中缝表达两条客户端路由在一个本地控制台中汇合。不得展示 Codex、Claude 或任意第三方商标，以免暗示隶属或认可。
 - 欢迎和完成页的侧栏由深流蓝实体底、细蓝紫路由线与宝石标识构成；页头仅保留小尺寸标识与两条路由线。它们是安装过程中的唯一装饰，正文继续由 NSIS 的真实页标题、安装位置、进度与操作选项承担信息层级。

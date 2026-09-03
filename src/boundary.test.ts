@@ -126,4 +126,23 @@ describe("UI boundary", () => {
       expect(bitmap.readUInt32LE(22)).toBe(height);
     }
   });
+
+  it("releases successful platform artifacts after a partial tag build", () => {
+    const workflow = readFileSync(
+      join(repoRoot, ".github", "workflows", "package.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain(
+      "if: ${{ always() && !cancelled() && startsWith(github.ref, 'refs/tags/v') }}",
+    );
+    expect(workflow).toContain("pattern: agent-switchboard-*");
+    expect(workflow).toContain(
+      'gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber',
+    );
+    expect(workflow).toContain(
+      'gh release create "$GITHUB_REF_NAME" "${assets[@]}"',
+    );
+    expect(workflow).toContain("未创建空 Release");
+  });
 });
