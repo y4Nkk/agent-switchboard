@@ -63,7 +63,7 @@
 - 不得将 API 密钥、令牌、凭据或私有 URL 写入源码、测试数据、快照、日志、`README.md` 或截图。
 - 应用数据目录的 `state/configuration/providers/{codex,claude}/{id}.json` 是唯一允许明文持久化供应商 API 密钥的位置；每个档案文件同时保存名称、模型和服务地址。密钥只允许经编辑器输入或本机 Codex / Claude / CC Switch 配置导入。
 - Codex 切换将档案 `apiKey` 写入受管 `experimental_bearer_token`；Claude 切换将其写入受管 `env.ANTHROPIC_AUTH_TOKEN`。两者都必须经执行器事务路径写入；预览、差异、日志、错误、诊断和截图只可出现稳定脱敏标记。
-- 官方 `Codex` 与 `Claude` 登录缓存不属于应用管理范围。
+- 官方 `Codex` 与 `Claude` 登录缓存（`auth.json`、`.credentials.json`）仅能由专用官方登录流程在用户明确发起登录或重新登录时写入；登录令牌不进入供应商档案、渲染层、日志或错误信息。
 - 渲染差异、错误、审计记录或诊断前必须脱敏密钥。
 
 ## 6. 契约、代码与测试
