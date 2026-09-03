@@ -44,7 +44,18 @@ describe("DualRelay", () => {
     expect(screen.getAllByText("未加载").length).toBeGreaterThan(0);
     expect(screen.queryByText("已启用")).not.toBeInTheDocument();
     expect(document.querySelectorAll(".asb-route-card.is-on .asb-card-particle-canvas").length).toBe(1);
-    expect(document.querySelectorAll(".asb-route-card:not(.is-on) .asb-card-particle-canvas").length).toBe(1);
+    expect(document.querySelector(".asb-route-card.is-on .asb-starlight")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    expect(document.querySelector(".asb-route-card.is-on .asb-starlight")).toHaveAttribute(
+      "data-variant",
+      "cool",
+    );
+    expect(document.querySelector(".asb-route-card:not(.is-on) .asb-starlight")).toHaveAttribute(
+      "data-active",
+      "false",
+    );
   });
 
   it("renders no action buttons; switching lives on the provider page", () => {
@@ -61,5 +72,13 @@ describe("DualRelay", () => {
     expect(screen.getAllByText("官方登录").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "查看变更" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "安全切换" })).not.toBeInTheDocument();
+    expect(document.querySelector('.asb-route-card[data-app="codex"] .asb-starlight')).toHaveAttribute(
+      "data-variant",
+      "cool",
+    );
+    expect(document.querySelector('.asb-route-card[data-app="claude"] .asb-starlight')).toHaveAttribute(
+      "data-variant",
+      "violet",
+    );
   });
 });

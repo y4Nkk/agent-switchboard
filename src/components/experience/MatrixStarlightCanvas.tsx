@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 
-export type MatrixStarlightVariant = "route-active" | "route-idle";
+export type MatrixStarlightVariant = "cool" | "violet" | "warm";
 
 type Rgb = readonly [red: number, green: number, blue: number];
 
@@ -11,21 +11,26 @@ type MatrixStarlightTone = {
   flareOpacity: number;
 };
 
-/* Color channels are owned by tokens.css (--asb-route-particle-*-rgb);
+/* Color channels are owned by tokens.css (--asb-starlight-*-rgb);
    this table only tunes effect intensity. */
 const TONE_OPACITY = {
-  "route-active": { baseOpacity: 0.5, flareOpacity: 0.96 },
-  "route-idle": { baseOpacity: 0.3, flareOpacity: 0.62 },
+  cool: { baseOpacity: 0.5, flareOpacity: 0.96 },
+  violet: { baseOpacity: 0.5, flareOpacity: 0.96 },
+  warm: { baseOpacity: 0.3, flareOpacity: 0.62 },
 } as const;
 
 const TONE_TOKENS = {
-  "route-active": {
-    base: "--asb-route-particle-base-rgb",
-    flare: "--asb-route-particle-flare-rgb",
+  cool: {
+    base: "--asb-starlight-cool-base-rgb",
+    flare: "--asb-starlight-cool-flare-rgb",
   },
-  "route-idle": {
-    base: "--asb-route-particle-idle-base-rgb",
-    flare: "--asb-route-particle-idle-flare-rgb",
+  violet: {
+    base: "--asb-starlight-violet-base-rgb",
+    flare: "--asb-starlight-violet-flare-rgb",
+  },
+  warm: {
+    base: "--asb-starlight-warm-base-rgb",
+    flare: "--asb-starlight-warm-flare-rgb",
   },
 } as const;
 

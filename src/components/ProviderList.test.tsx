@@ -156,7 +156,16 @@ describe("ProviderList", () => {
 
     const selectedRow = screen.getByRole("option", { name: /官方 OpenAI/ });
     expect(selectedRow).toHaveAttribute("aria-selected", "true");
-    expect(selectedRow.closest("li")).not.toHaveClass("is-selected");
+    const selectedCard = selectedRow.closest("li");
+    expect(selectedCard).toHaveClass("is-selected");
+    expect(selectedCard?.querySelector(".asb-starlight")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    expect(selectedCard?.querySelector(".asb-starlight")).toHaveAttribute(
+      "data-variant",
+      "warm",
+    );
   });
 
   it("swaps the preview eye for a closed-eye toggle when that row's preview is open", async () => {

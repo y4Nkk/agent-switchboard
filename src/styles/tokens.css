@@ -135,19 +135,46 @@
   --asb-focus-ring: 0 0 0 2px var(--asb-canvas), 0 0 0 4px var(--asb-action);
 
   /* Route card — model-service-card treatment replicated from the
-     spiralcoder reference (user-directed 2026-08-27). Enabled cards carry
-     the blue→light-blue→warm-peach flow with a bottom blue wash; idle cards
-   stay calm and near-solid. This is the ONLY sanctioned gradient surface (DESIGN.md §4). */
-  --asb-route-active-gradient:
+     spiralcoder reference (user-directed 2026-08-27). Enabled cards carry a
+     client-identity flow with a matching bottom wash — Codex blue→light-blue,
+     Claude purple→lavender — sharing the warm-peach tail (user-directed
+     2026-09-03); idle cards stay calm and near-solid. This is the ONLY
+     sanctioned gradient surface (DESIGN.md §4). */
+  --asb-route-active-gradient-codex:
     linear-gradient(180deg, rgba(49, 108, 237, 0) 42%, rgba(49, 108, 237, 0.86) 100%),
     linear-gradient(100deg, #477ff5 0%, #78a0f4 54%, #f8c09c 100%);
+  --asb-route-active-gradient-claude:
+    linear-gradient(180deg, rgba(112, 84, 238, 0) 42%, rgba(112, 84, 238, 0.86) 100%),
+    linear-gradient(100deg, #8b7cff 0%, #ab97ff 54%, #f8c09c 100%);
   --asb-route-idle-bg: #f8f9fc;
   /* Starlight matrix particle tones (RGB triplets), consumed by
-     MatrixStarlightCanvas; the only animated decoration (DESIGN.md §4). */
-  --asb-route-particle-base-rgb: 239 248 255;
-  --asb-route-particle-flare-rgb: 255 255 255;
-  --asb-route-particle-idle-base-rgb: 70 124 222;
-  --asb-route-particle-idle-flare-rgb: 133 106 207;
+     MatrixStarlightCanvas. Palettes are scoped by page and client
+     (user-directed 2026-09-03): "cool" white-blue owns the Codex route card,
+     "violet" lavender owns the Claude route card, "warm" amber owns the
+     provider selected row, so no two starlight surfaces read as the same
+     decoration. Each tone owns its corner glow (spiralcoder
+     recommendation-card replica). */
+  --asb-starlight-cool-base-rgb: 239 248 255;
+  --asb-starlight-cool-flare-rgb: 255 255 255;
+  --asb-starlight-violet-base-rgb: 244 241 255;
+  --asb-starlight-violet-flare-rgb: 198 183 255;
+  --asb-starlight-warm-base-rgb: 224 158 62;
+  --asb-starlight-warm-flare-rgb: 255 214 130;
+  --asb-starlight-cool-glow: radial-gradient(
+    ellipse 34% 64% at 92% 86%,
+    rgba(91, 151, 225, 0.18) 0%,
+    transparent 68%
+  );
+  --asb-starlight-violet-glow: radial-gradient(
+    ellipse 34% 64% at 92% 86%,
+    rgba(139, 124, 255, 0.2) 0%,
+    transparent 68%
+  );
+  --asb-starlight-warm-glow: radial-gradient(
+    ellipse 34% 64% at 92% 86%,
+    rgba(224, 158, 62, 0.16) 0%,
+    transparent 68%
+  );
   --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
   --asb-route-inner-bg: #edf1f8;
 
@@ -187,8 +214,13 @@
     --asb-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
      --asb-route-idle-bg: #071725;
-    --asb-route-particle-idle-base-rgb: 133 176 255;
-    --asb-route-particle-idle-flare-rgb: 173 150 235;
+    --asb-starlight-warm-base-rgb: 255 200 120;
+    --asb-starlight-warm-flare-rgb: 255 231 176;
+    --asb-starlight-warm-glow: radial-gradient(
+      ellipse 34% 64% at 92% 86%,
+      rgba(255, 200, 120, 0.2) 0%,
+      transparent 68%
+    );
     --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
      --asb-route-inner-bg: #0d2133;
   }
@@ -227,8 +259,13 @@
     --asb-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
     --asb-route-idle-bg: #071725;
-    --asb-route-particle-idle-base-rgb: 133 176 255;
-    --asb-route-particle-idle-flare-rgb: 173 150 235;
+    --asb-starlight-warm-base-rgb: 255 200 120;
+    --asb-starlight-warm-flare-rgb: 255 231 176;
+    --asb-starlight-warm-glow: radial-gradient(
+      ellipse 34% 64% at 92% 86%,
+      rgba(255, 200, 120, 0.2) 0%,
+      transparent 68%
+    );
     --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
     --asb-route-inner-bg: #0d2133;
 }

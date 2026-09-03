@@ -309,12 +309,16 @@ body {
 
 .asb-route-card.is-on {
   border-color: var(--asb-action);
-  background: var(--asb-route-active-gradient);
   box-shadow: var(--asb-route-shadow);
+}
+
+.asb-route-card[data-app="codex"].is-on {
+  background: var(--asb-route-active-gradient-codex);
 }
 
 .asb-route-card[data-app="claude"].is-on {
   border-color: var(--asb-claude);
+  background: var(--asb-route-active-gradient-claude);
 }
 
 /* Starlight particle matrix — real aria-hidden canvas layer, never content. */
@@ -326,6 +330,41 @@ body {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+/* Starlight activation layer (spiralcoder recommendation-card port): the
+   matrix and the corner glow fade in together with the active flag. The
+   layer clips itself, so the glow never bleeds past its host. */
+.asb-starlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.asb-starlight .asb-card-particle-canvas,
+.asb-starlight-glow {
+  opacity: 0;
+  transition: opacity var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-starlight[data-active="true"] .asb-card-particle-canvas,
+.asb-starlight[data-active="true"] .asb-starlight-glow {
+  opacity: 1;
+}
+
+.asb-starlight[data-variant="cool"] .asb-starlight-glow {
+  background: var(--asb-starlight-cool-glow);
+}
+
+.asb-starlight[data-variant="violet"] .asb-starlight-glow {
+  background: var(--asb-starlight-violet-glow);
+}
+
+.asb-starlight[data-variant="warm"] .asb-starlight-glow {
+  background: var(--asb-starlight-warm-glow);
 }
 
 .asb-route-card-body {
@@ -869,11 +908,20 @@ button:disabled {
 /* The horizontal row line inside a card; the card can also carry the
    unfolded preview block directly below this line. */
 .asb-row-line {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--asb-space-2);
   width: 100%;
   min-height: 52px;
+}
+
+/* The selected row's starlight bar sits behind the line content: the card
+   itself stacks (positioned) so the negative-z layer paints above the card
+   fill but below the controls, and popovers keep their cascade. */
+.asb-row-line .asb-starlight {
+  z-index: -1;
+  border-radius: var(--asb-radius-control);
 }
 
 .asb-row-item:hover {
@@ -892,6 +940,16 @@ button:disabled {
 .asb-row-item.is-live {
   background: var(--asb-row-selected);
   box-shadow: var(--asb-live-shadow);
+}
+
+/* Selected row (2026-09-03 user directive, spiralcoder recommendation-card
+   language): the quiet tint plus the starlight activation bar in the row
+   line. Selection is a persistent state, so the tint survives the previewing
+   reading-surface hover reset like the live fill above. */
+.asb-row-item.is-selected {
+  position: relative;
+  z-index: 0;
+  background: var(--asb-row-selected);
 }
 
 /* The selectable region: avatar + texts. A reset button, visually flat —

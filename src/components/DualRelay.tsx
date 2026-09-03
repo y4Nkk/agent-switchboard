@@ -1,6 +1,6 @@
 import type { AppKind, RouteState } from "../api/client";
 import { ClientLogo } from "./ClientLogo";
-import { MatrixStarlightCanvas } from "./experience/MatrixStarlightCanvas";
+import { StarlightLayer } from "./experience/StarlightLayer";
 
 interface Props {
   routes: { codex: RouteState | null; claude: RouteState | null };
@@ -42,7 +42,7 @@ function RouteCard({
       data-app={app}
       aria-label={`${client} 当前配置`}
     >
-      <MatrixStarlightCanvas variant={on ? "route-active" : "route-idle"} />
+      <StarlightLayer active={on} variant={app === "codex" ? "cool" : "violet"} />
       <div className="asb-route-card-body">
         <div>
           <div className="asb-route-ident">

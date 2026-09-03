@@ -33,6 +33,7 @@ import { ProbeFeedback, useEndpointProbe } from "./ProbePanel";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
+import { StarlightLayer } from "./experience/StarlightLayer";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { Tooltip } from "./Tooltip";
 
@@ -170,9 +171,10 @@ function ProviderRow({
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`asb-row-item${active ? " is-live" : ""}${isDragging ? " is-dragging" : ""}${previewOpen ? " is-previewing" : ""}`}
+      className={`asb-row-item${active ? " is-live" : ""}${selected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}${previewOpen ? " is-previewing" : ""}`}
     >
       <div className="asb-row-line">
+      <StarlightLayer active={selected} variant="warm" />
       {sortable && (
         <Tooltip label={`拖动调整 ${profile.name} 的顺序`}>
           <button
