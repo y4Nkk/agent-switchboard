@@ -7,7 +7,6 @@ import {
   toggleMaximizeWindow,
 } from "../api/client";
 import { CloseIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from "./icons";
-import { Tooltip } from "./Tooltip";
 
 /** Custom window controls for the undecorated, integrated title bar
  * (PC Manager-style). All Tauri access goes through the api client. The
@@ -35,36 +34,30 @@ export function WindowControls() {
 
   return (
     <div className="asb-wincontrols">
-      <Tooltip label="最小化" side="bottom">
-        <button
-          type="button"
-          className="asb-winbtn"
-          aria-label="最小化"
-          onClick={() => void minimizeWindow().catch(() => {})}
-        >
-          <MinimizeIcon />
-        </button>
-      </Tooltip>
-      <Tooltip label={maximized ? "还原" : "最大化"} side="bottom">
-        <button
-          type="button"
-          className="asb-winbtn"
-          aria-label={maximized ? "还原" : "最大化"}
-          onClick={() => void toggleMaximizeWindow().catch(() => {})}
-        >
-          {maximized ? <RestoreIcon /> : <MaximizeIcon />}
-        </button>
-      </Tooltip>
-      <Tooltip label="关闭" side="bottom">
-        <button
-          type="button"
-          className="asb-winbtn asb-winbtn-close"
-          aria-label="关闭"
-          onClick={() => void closeWindow().catch(() => {})}
-        >
-          <CloseIcon />
-        </button>
-      </Tooltip>
+      <button
+        type="button"
+        className="asb-winbtn"
+        aria-label="最小化"
+        onClick={() => void minimizeWindow().catch(() => {})}
+      >
+        <MinimizeIcon />
+      </button>
+      <button
+        type="button"
+        className="asb-winbtn"
+        aria-label={maximized ? "还原" : "最大化"}
+        onClick={() => void toggleMaximizeWindow().catch(() => {})}
+      >
+        {maximized ? <RestoreIcon /> : <MaximizeIcon />}
+      </button>
+      <button
+        type="button"
+        className="asb-winbtn asb-winbtn-close"
+        aria-label="关闭"
+        onClick={() => void closeWindow().catch(() => {})}
+      >
+        <CloseIcon />
+      </button>
     </div>
   );
 }

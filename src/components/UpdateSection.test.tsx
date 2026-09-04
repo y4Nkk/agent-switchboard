@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Update } from "@tauri-apps/plugin-updater";
 import type { UpdateCheck } from "../api/client";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { UpdateSection } from "./UpdateSection";
+import { toast } from "./use-toast";
+
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
+vi.mock("./use-toast", () => ({ toast: vi.fn() }));
 
 const available: UpdateCheck = {
   currentVersion: "0.1.0",
@@ -30,12 +35,18 @@ function renderSection(overrides: Partial<Parameters<typeof UpdateSection>[0]> =
   return props;
 }
 
+beforeEach(() => {
+  vi.mocked(openUrl).mockReset();
+  vi.mocked(toast).mockReset();
+});
+
 describe("UpdateSection", () => {
   it("does not offer the GitHub updater in a Store installation", () => {
     renderSection({ channel: "microsoftStore" });
 
     expect(screen.getByText("由 Microsoft Store 管理更新")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "检查更新" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更新发布页" })).not.toBeInTheDocument();
   });
 
   it("shows the manual check affordance before any check ran", () => {
@@ -52,6 +63,33 @@ describe("UpdateSection", () => {
 
     await user.click(screen.getByRole("button", { name: "检查更新" }));
     expect(props.onCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the release page that hosts the build packages", async () => {
+    vi.mocked(openUrl).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(screen.getByRole("button", { name: "更新发布页" }));
+    expect(openUrl).toHaveBeenCalledWith(
+      "https://github.com/y4Nkk/agent-switchboard/releases/latest",
+    );
+  });
+
+  it("reports an external-browser failure when opening the release page", async () => {
+    vi.mocked(openUrl).mockRejectedValue(new Error("browser unavailable"));
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(screen.getByRole("button", { name: "更新发布页" }));
+
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith({
+        kind: "error",
+        title: "无法打开更新发布页",
+        description: "请检查默认浏览器后重试。",
+      });
+    });
   });
 
   it("shows the startup lookup state before a result is available", () => {

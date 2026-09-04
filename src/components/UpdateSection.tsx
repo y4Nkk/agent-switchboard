@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { UpdateChannel, UpdateCheck } from "../api/client";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { Button } from "./Button";
 import { Time } from "./Time";
+import { toast } from "./use-toast";
+
+const releasesUrl = "https://github.com/y4Nkk/agent-switchboard/releases/latest";
 
 function formatProgress(progress: UpdateDownloadProgress): string {
   if (progress.totalBytes === null || progress.totalBytes === 0) {
@@ -36,6 +40,16 @@ export function UpdateSection({
   onInstall: () => void;
   onRestart: () => void;
 }) {
+  const openReleasePage = () => {
+    void openUrl(releasesUrl).catch(() => {
+      toast({
+        kind: "error",
+        title: "无法打开更新发布页",
+        description: "请检查默认浏览器后重试。",
+      });
+    });
+  };
+
   if (channel === "microsoftStore") {
     return (
       <section className="asb-app-settings-group" aria-labelledby="software-update">
@@ -97,6 +111,9 @@ export function UpdateSection({
           ) : null}
           <Button variant="secondary" disabled={busy || installing || restartRequired} onClick={onCheck}>
             检查更新
+          </Button>
+          <Button variant="secondary" onClick={openReleasePage}>
+            更新发布页
           </Button>
         </div>
       </div>
