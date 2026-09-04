@@ -4,6 +4,7 @@ import { ConfigurationAssembly } from "./components/ConfigurationAssembly";
 import { FinalCta } from "./components/FinalCta";
 import { Hero } from "./components/Hero";
 import { SiteHeader } from "./components/SiteHeader";
+import { WriteLifecycle } from "./components/WriteLifecycle";
 import { SitePreferencesProvider } from "./site-preferences";
 import { useSitePreferences } from "./use-site-preferences";
 
@@ -98,6 +99,7 @@ function SitePage() {
             </div>
             <div className="reveal">
               <PreviewReplica />
+              <WriteLifecycle />
             </div>
           </div>
         </section>

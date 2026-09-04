@@ -54,6 +54,10 @@ export const configurationAssembly = {
       "openai_base_url = \"https://bedrock-runtime.us-east-1.amazonaws.com/v1\"",
       "hide_agent_reasoning = true",
       "model_reasoning_effort = \"high\""
+    ],
+    "preservedPaths": [
+      "mcp_servers.<id>",
+      "hooks"
     ]
   },
   "claude": {
@@ -111,6 +115,10 @@ export const configurationAssembly = {
       "  \"autoCompactEnabled\": true,",
       "  \"effortLevel\": \"high\"",
       "}"
+    ],
+    "preservedPaths": [
+      "permissions",
+      "hooks"
     ]
   }
 } as const;

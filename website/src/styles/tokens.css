@@ -26,6 +26,10 @@
   --site-radius-panel: 22px;
   --site-radius-control: 14px;
   --site-radius-action: 12px;
+  --site-slider-height: 32px;
+  --site-slider-track-height: 24px;
+  --site-slider-thumb-size: 28px;
+  --site-slider-particle-size: 3px;
 
   --site-touch-target: 40px;
   --site-max-width: 1120px;
@@ -33,6 +37,14 @@
   --site-motion-fast: 180ms;
   --site-motion-node: 220ms;
   --site-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --site-ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --site-gradient-energy: linear-gradient(96deg, #30d158 0%, #0a84ff 50%, #8b7cff 100%);
+  --site-slider-thumb-bg: #ffffff;
+  --site-slider-thumb-shadow: 0 1px 3px rgb(20 22 27 / 0.16);
+  --site-slider-particle: rgb(255 255 255 / 0.7);
+  --site-slider-particle-shadow: 0 0 5px rgb(255 255 255 / 0.3);
+  --site-motion-glimmer: 1.8s;
 
   --site-font-ui:
     "Noto Sans SC", "Segoe UI Variable", "MiSans", "PingFang SC",

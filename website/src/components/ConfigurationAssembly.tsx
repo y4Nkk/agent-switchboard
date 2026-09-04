@@ -15,13 +15,18 @@ import {
 import { useSitePreferences } from "../use-site-preferences";
 
 const clientIds = Object.keys(configurationAssembly) as ConfigurationAssemblyClientId[];
+const ENERGY_PARTICLE_COUNT = 9;
+const SLIDER_THUMB_SIZE_PX = 28;
 type CommonAssemblyField = {
   key: ConfigurationAssemblyCommonField["key"];
   value: ConfigurationAssemblyControlValue;
   control: ConfigurationAssemblyCommonField["control"];
   options: readonly ConfigurationAssemblyControlValue[];
 };
-type AssemblySliderStyle = CSSProperties & { "--assembly-slider-position": string };
+type AssemblySliderStyle = CSSProperties & {
+  "--assembly-slider-fill-width": string;
+  "--assembly-slider-thumb-left": string;
+};
 
 function nextTabIndex(current: number, key: string) {
   if (key === "Home") return 0;
@@ -42,17 +47,32 @@ function CommonSettingControl({
   const position = field.options.length > 1 ? (selectedIndex / (field.options.length - 1)) * 100 : 0;
 
   if (field.control === "slider") {
-    const style = { "--assembly-slider-position": `${position}%` } as AssemblySliderStyle;
+    const thumbLeft = `calc(${position}% + ${(0.5 - position / 100) * SLIDER_THUMB_SIZE_PX}px)`;
+    const style = {
+      "--assembly-slider-fill-width": position >= 100 ? "100%" : thumbLeft,
+      "--assembly-slider-thumb-left": thumbLeft,
+    } as AssemblySliderStyle;
     return (
       <span className="assembly-control assembly-control-slider" aria-hidden="true" style={style}>
-        <span className="assembly-slider-track">
-          <span className="assembly-slider-fill" />
-          <span className="assembly-slider-thumb" />
-          <span className="assembly-slider-ticks">
-            {field.options.map((option) => (
-              <span key={option} data-selected={option === field.value || undefined} />
-            ))}
+        <span className="assembly-slider">
+          <span className="assembly-slider-track">
+            <span className="assembly-slider-fill" />
+            <span className="assembly-slider-particles">
+              {Array.from({ length: ENERGY_PARTICLE_COUNT }, (_, index) => (
+                <span className="assembly-slider-particle" key={index} />
+              ))}
+            </span>
+            <span className="assembly-slider-ticks">
+              {field.options.map((option, index) => (
+                <span
+                  key={option}
+                  data-active={index <= selectedIndex || undefined}
+                  style={{ left: `${(index / (field.options.length - 1)) * 100}%` }}
+                />
+              ))}
+            </span>
           </span>
+          <span className="assembly-slider-thumb" />
         </span>
         <span className="assembly-slider-values">
           {field.options.map((option) => (
@@ -171,6 +191,13 @@ export function ConfigurationAssembly() {
             <span>{copy.fileNote}</span>
           </div>
           <code className="assembly-path">{active.filePath}</code>
+          <div className="assembly-preserved-boundary">
+            <div>
+              <span>{copy.preservedLabel}</span>
+              <code>{active.preservedPaths.join(" · ")}</code>
+            </div>
+            <span>{copy.preservedState}</span>
+          </div>
           <pre>
             <code>
               {active.codeLines.map((line, index) => (

@@ -46,6 +46,14 @@ describe("App", () => {
     expect(screen.getAllByText("••••••••").length).toBe(2);
   });
 
+  it("预览后展示与桌面执行器一致的事务写入阶段", () => {
+    render(<App />);
+    for (const step of siteContent.writeLifecycle.steps) {
+      expect(screen.getByText(step)).toBeTruthy();
+    }
+    expect(screen.getByText(siteContent.writeLifecycle.recovery)).toBeTruthy();
+  });
+
   it("配置积木台默认组合 Codex 的通用与供应商设置到 TOML", () => {
     render(<App />);
     expect(screen.getByText("Codex 通用配置")).toBeTruthy();
@@ -54,6 +62,9 @@ describe("App", () => {
     expect(screen.getAllByText('model_provider = "openai"').length).toBeGreaterThan(0);
     expect(document.querySelector(".assembly-control-segments")).toBeTruthy();
     expect(document.querySelector(".assembly-control-slider")).toBeTruthy();
+    expect(document.querySelectorAll(".assembly-slider-particle")).toHaveLength(9);
+    expect(screen.getByText("未受管字段")).toBeTruthy();
+    expect(screen.getByText("mcp_servers.<id> · hooks")).toBeTruthy();
   });
 
   it("配置积木台切换 Claude Code 后展示 JSON 目标文件", () => {

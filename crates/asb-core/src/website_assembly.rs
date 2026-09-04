@@ -10,7 +10,8 @@ use crate::contracts::{
     SwitchPlan,
 };
 use crate::ownership::{
-    default_common_settings, owner_for, setting_spec, ChoiceControl, SettingControl, SettingOwner,
+    default_common_settings, official_setting_directory, owner_for, setting_spec, ChoiceControl,
+    OfficialSettingDisposition, SettingControl, SettingOwner,
 };
 use crate::redact::REDACTED;
 use serde::Serialize;
@@ -37,6 +38,7 @@ struct WebsiteAssemblyClient {
     file_name: &'static str,
     file_path: &'static str,
     code_lines: Vec<String>,
+    preserved_paths: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -104,6 +106,12 @@ fn client(app: AppKind) -> WebsiteAssemblyClient {
         file_name,
         file_path: app.config_label(),
         code_lines: public_candidate.lines().map(str::to_owned).collect(),
+        preserved_paths: official_setting_directory(app)
+            .into_iter()
+            .filter(|entry| entry.disposition == OfficialSettingDisposition::PreserveOnly)
+            .take(2)
+            .map(|entry| entry.path.to_owned())
+            .collect(),
     }
 }
 
@@ -207,6 +215,9 @@ mod tests {
         assert!(generated.contains(REDACTED));
         assert!(generated.contains("\"control\": \"toggle\""));
         assert!(generated.contains("\"control\": \"slider\""));
+        assert!(generated.contains("\"preservedPaths\""));
+        assert!(generated.contains("mcp_servers.<id>"));
+        assert!(generated.contains("\"permissions\""));
         assert!(!generated.contains(DEMO_API_KEY));
     }
 }

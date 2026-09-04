@@ -61,6 +61,36 @@ describe("site-content 契约", () => {
     );
   });
 
+  it("官网积木台暴露桌面端目录声明的保留边界", () => {
+    expect(configurationAssembly.codex.preservedPaths).toEqual(["mcp_servers.<id>", "hooks"]);
+    expect(configurationAssembly.claude.preservedPaths).toEqual(["permissions", "hooks"]);
+  });
+
+  it("事务复刻只在替换后的校验失败时说明恢复备份", () => {
+    expect(siteContent.writeLifecycle.steps).toEqual([
+      "创建备份",
+      "临时写入",
+      "临时回读",
+      "语法校验",
+      "最终冲突检查",
+      "原子替换",
+      "写后验证",
+    ]);
+    expect(siteContent.writeLifecycle.recovery).toBe("写后验证失败时，恢复刚创建的备份");
+    expect(siteContentByLocale.en.writeLifecycle.steps).toEqual([
+      "Create backup",
+      "Write temporary file",
+      "Verify temporary file",
+      "Validate syntax",
+      "Final conflict check",
+      "Atomic replace",
+      "Verify write",
+    ]);
+    expect(siteContentByLocale.en.writeLifecycle.recovery).toBe(
+      "If post-write verification fails, restore the just-created backup",
+    );
+  });
+
   it("中英文内容保持同一导航与积木客户端集合", () => {
     const english = siteContentByLocale.en;
     expect(english.nav.map((item) => item.href)).toEqual(siteContent.nav.map((item) => item.href));
