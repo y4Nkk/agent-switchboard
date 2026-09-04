@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/asb-core", "crates/asb-switch", "src-tauri"]
 
 [workspace.package]
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 
 [workspace.dependencies]

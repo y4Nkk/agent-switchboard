@@ -110,7 +110,7 @@ describe("UI boundary", () => {
       languages: ["SimpChinese", "English"],
     });
 
-    expect(readBundle("tauri.macos.conf.json").targets).toEqual(["dmg"]);
+    expect(readBundle("tauri.macos.conf.json").targets).toEqual(["dmg", "app"]);
     expect(readBundle("tauri.linux.conf.json").targets).toEqual([
       "deb",
       "appimage",
