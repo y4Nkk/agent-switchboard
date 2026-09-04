@@ -1,0 +1,2 @@
+# The website assembly generator emits a canonical LF-only artifact.
+website/src/generated/configuration-assembly.ts text eol=lf
