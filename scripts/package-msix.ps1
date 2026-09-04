@@ -82,6 +82,7 @@ $resolvedOutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 [IO.Directory]::CreateDirectory($resolvedOutputDirectory) | Out-Null
 $outputPath = Join-Path $resolvedOutputDirectory $assetName
 $stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-switchboard-msix-" + [guid]::NewGuid().ToString('N'))
+$validationRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-switchboard-msix-validation-" + [guid]::NewGuid().ToString('N'))
 
 try {
   New-Item -ItemType Directory -Path (Join-Path $stageRoot 'Assets') -Force | Out-Null
@@ -101,14 +102,32 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "MakeAppx could not create $outputPath."
   }
-  & $makeAppx validate /p $outputPath
+  & $makeAppx unpack /p $outputPath /d $validationRoot /o
   if ($LASTEXITCODE -ne 0) {
-    throw "MakeAppx validation failed for $outputPath."
+    throw "MakeAppx could not unpack $outputPath for validation."
+  }
+
+  $requiredPackageFiles = @(
+    'AppxManifest.xml',
+    'agent-switchboard.exe',
+    'WebView2Loader.dll',
+    'Assets\StoreLogo.png',
+    'Assets\Square150x150Logo.png',
+    'Assets\Square44x44Logo.png'
+  )
+  $missingPackageFiles = @($requiredPackageFiles | Where-Object {
+    -not (Test-Path -LiteralPath (Join-Path $validationRoot $_) -PathType Leaf)
+  })
+  if ($missingPackageFiles.Count -gt 0) {
+    throw "MSIX validation failed; package is missing: $($missingPackageFiles -join ', ')."
   }
   "Created Microsoft Store package: $outputPath"
 }
 finally {
   if (Test-Path -LiteralPath $stageRoot) {
     [IO.Directory]::Delete($stageRoot, $true)
+  }
+  if (Test-Path -LiteralPath $validationRoot) {
+    [IO.Directory]::Delete($validationRoot, $true)
   }
 }

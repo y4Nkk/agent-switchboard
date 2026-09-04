@@ -154,7 +154,7 @@ describe("UI boundary", () => {
     expect(workflow).not.toContain("always() && !cancelled()");
   });
 
-  it("keeps the Microsoft Store identity in the MSIX packaging contract", () => {
+  it("keeps the Microsoft Store identity and supported package validation in the MSIX contract", () => {
     const identity = JSON.parse(
       readFileSync(join(repoRoot, "src-tauri", "windows", "store-identity.json"), "utf8"),
     );
@@ -168,7 +168,10 @@ describe("UI boundary", () => {
       description: "Manage Codex and Claude Code configuration.",
     });
     expect(packageScript).toContain("MakeAppx.exe");
-    expect(packageScript).toContain("makeAppx validate");
+    expect(packageScript).toContain("& $makeAppx pack /d $stageRoot /p $outputPath /o");
+    expect(packageScript).toContain("& $makeAppx unpack /p $outputPath /d $validationRoot /o");
+    expect(packageScript).toContain("$requiredPackageFiles");
+    expect(packageScript).not.toContain("makeAppx validate");
   });
 
   it("builds the canonical Linux installer assets in CNB", () => {
