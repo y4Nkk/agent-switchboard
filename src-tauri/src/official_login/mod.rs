@@ -216,8 +216,11 @@ pub(crate) mod fake_oauth {
                         },
                         None => (200, body.clone()),
                     };
+                    // Each canned response consumes its connection, so make
+                    // that HTTP contract explicit instead of leaving a client
+                    // to race a reuse of the socket we are about to drop.
                     let response = format!(
-                        "HTTP/1.1 {status} FAKE\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{payload}",
+                        "HTTP/1.1 {status} FAKE\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{payload}",
                         payload.len()
                     );
                     let _ = stream.write_all(response.as_bytes());
