@@ -68,11 +68,18 @@ function New-TestAppImage {
     [string]$ArtifactPath,
     [Parameter(Mandatory)]
     [string]$SystemLibrary,
-    [switch]$MutateLibrary
+    [switch]$AppendByte,
+    [switch]$AppendPrivateKey
   )
 
   $quotedLibrary = $SystemLibrary.Replace("'", "'\''")
-  $mutation = if ($MutateLibrary) { "printf x >> squashfs-root/usr/lib/libgnutls.so.30" } else { ':' }
+  $mutation = if ($AppendPrivateKey) {
+    "printf '\n-----BEGIN PRIVATE KEY-----\n$([string]::new('A', 64))\n-----END PRIVATE KEY-----\n' >> squashfs-root/usr/lib/libgnutls.so.30"
+  } elseif ($AppendByte) {
+    'printf x >> squashfs-root/usr/lib/libgnutls.so.30'
+  } else {
+    ':'
+  }
   $fixture = @'
 #!/bin/sh
 if [ "$1" = "--appimage-extract" ]; then
@@ -116,7 +123,10 @@ try {
     New-TestAppImage $artifact $systemLibrary
     Invoke-Scanner $artifact
 
-    New-TestAppImage $artifact $systemLibrary -MutateLibrary
+    New-TestAppImage $artifact $systemLibrary -AppendByte
+    Invoke-Scanner $artifact
+
+    New-TestAppImage $artifact $systemLibrary -AppendPrivateKey
     Assert-ScannerRejects $artifact
   }
   else {

@@ -29,10 +29,12 @@ $rules = [ordered]@{
   'JWT-like token' = '\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b'
 }
 
-function Test-VerifiedSystemSharedLibrary {
+function Test-KnownSystemPrivateKeyBlock {
   param(
     [Parameter(Mandatory)]
-    [IO.FileInfo]$File
+    [IO.FileInfo]$File,
+    [Parameter(Mandatory)]
+    [string]$PrivateKeyBlock
   )
 
   if (-not $IsLinux -or $File.Name -notmatch '\.so(?:\.\d+)*$') {
@@ -45,7 +47,6 @@ function Test-VerifiedSystemSharedLibrary {
   }
 
   $escapedName = [regex]::Escape($File.Name)
-  $artifactHash = (Get-FileHash -LiteralPath $File.FullName -Algorithm SHA256).Hash
   foreach ($line in @(& $ldconfig.Source -p 2>$null)) {
     if ($line -notmatch "^\s*$escapedName\s+\([^)]+\)\s+=>\s+(?<path>.+)$") {
       continue
@@ -54,7 +55,10 @@ function Test-VerifiedSystemSharedLibrary {
     if (-not (Test-Path -LiteralPath $systemPath -PathType Leaf)) {
       continue
     }
-    if ($artifactHash -ceq (Get-FileHash -LiteralPath $systemPath -Algorithm SHA256).Hash) {
+    # linuxdeploy can patch an ELF's metadata after copying it. Only exempt a
+    # precise PEM block when the build host's registered library contains it.
+    $systemContent = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($systemPath))
+    if ($systemContent.IndexOf($PrivateKeyBlock, [StringComparison]::Ordinal) -ge 0) {
       return $true
     }
   }
@@ -143,12 +147,15 @@ try {
       [string]::IsNullOrEmpty($_.LinkType)
     })) {
     $content = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($file.FullName))
-    $verifiedSystemLibrary = $extension -ieq '.appimage' -and (Test-VerifiedSystemSharedLibrary $file)
     foreach ($entry in $rules.GetEnumerator()) {
-      if ($verifiedSystemLibrary -and $entry.Key -eq 'Private key block') {
-        continue
-      }
       foreach ($match in [regex]::Matches($content, $entry.Value)) {
+        if (
+          $extension -ieq '.appimage' -and
+          $entry.Key -eq 'Private key block' -and
+          (Test-KnownSystemPrivateKeyBlock $file $match.Value)
+        ) {
+          continue
+        }
         $findings.Add([pscustomobject]@{
           Rule = $entry.Key
           Path = $file.FullName.Substring($scanSource.Length + 1)
