@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { formatChartValue } from "./chart-data";
+import { formatUsageValue } from "../../lib/usage-format";
 
 type MeterStyle = CSSProperties & {
   "--asb-usage-ratio-meter-width": string;
@@ -19,6 +19,7 @@ export function UsageRatioMeter({ percent, ariaLabel }: Props) {
 
   const clamped = Math.min(100, Math.max(0, percent));
   const style: MeterStyle = { "--asb-usage-ratio-meter-width": `${clamped}%` };
+  const display = formatUsageValue(percent, "%");
   return (
     <span
       className="asb-usage-ratio-meter"
@@ -26,13 +27,13 @@ export function UsageRatioMeter({ percent, ariaLabel }: Props) {
       aria-label={ariaLabel}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={Math.round(clamped)}
-      aria-valuetext={formatChartValue(clamped) + "%"}
+      aria-valuenow={clamped}
+      aria-valuetext={display}
     >
       <span className="asb-usage-ratio-meter-track" aria-hidden="true">
         <span className="asb-usage-ratio-meter-fill" style={style} />
       </span>
-      <span className="asb-usage-ratio-meter-value">{formatChartValue(clamped)}%</span>
+      <span className="asb-usage-ratio-meter-value">{display}</span>
     </span>
   );
 }

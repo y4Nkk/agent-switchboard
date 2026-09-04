@@ -100,7 +100,7 @@ describe("ProviderUsagePanel", () => {
       />,
     );
 
-    expect(await screen.findByText("1,024.5 CNY")).toBeInTheDocument();
+    expect((await screen.findAllByText("1,024.5 CNY")).length).toBeGreaterThan(0);
     expect(screen.getByRole("table", { name: "中继 A 用量读数" })).toBeInTheDocument();
 
     const mainRow = screen.getByRole("row", { name: /主套餐/ });
@@ -113,7 +113,7 @@ describe("ProviderUsagePanel", () => {
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", { profileId: "relay-a" });
     await waitFor(() => expect(document.querySelector(".recharts-line")).not.toBeNull());
-    expect(within(screen.getAllByRole("figure", { name: /余额趋势/ })[0]).getByText("主套餐")).toBeInTheDocument();
+    expect(within(screen.getAllByRole("figure", { name: /余额趋势/ })[0]).getAllByText("主套餐")).toHaveLength(2);
     await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(2));
 
     await user.click(screen.getByRole("button", { name: "刷新" }));

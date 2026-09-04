@@ -84,7 +84,7 @@ describe("CodexOfficialResetPanel", () => {
     render(<CodexOfficialResetPanel />);
 
     expect(await screen.findByRole("row", { name: /7 天/ })).toBeInTheDocument();
-    expect(screen.getAllByText("76 %").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("76.25 %").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(screen.getByText("本地缓存")).toBeInTheDocument();
     const metas = screen.getAllByText(
@@ -126,7 +126,7 @@ describe("CodexOfficialResetPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "无法刷新官方额度：网络不可用；仍在显示上次成功读取的数据。",
     );
-    expect(screen.getAllByText("76 %").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("76.25 %").length).toBeGreaterThan(0);
     expect(callsFor("get_usage_history")).toHaveLength(1);
   });
 

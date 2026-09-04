@@ -138,6 +138,7 @@ describe("UI boundary", () => {
     );
     expect(workflow).toContain("TAURI_SIGNING_PRIVATE_KEY");
     expect(workflow).toContain("src-tauri/tauri.updater.conf.json");
+    expect(workflow).toContain("verify_updater_artifact");
     expect(workflow).toContain("pattern: agent-switchboard-release-*");
     expect(workflow).toContain("node scripts/updater-release.mjs manifest");
     expect(workflow).toContain(

@@ -61,4 +61,5 @@ uuid = { version = "1", features = ["v4"] }
 tauri-plugin-autostart = "2"
 
 [dev-dependencies]
+minisign-verify = "0.2.5"
 tempfile = "3"

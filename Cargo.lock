@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "agent-switchboard"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -56,6 +56,7 @@ dependencies = [
  "dirs 6.0.0",
  "fontdb",
  "log",
+ "minisign-verify",
  "reqwest 0.12.28",
  "rquickjs",
  "rusqlite",
@@ -169,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "asb-core"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "serde",
  "serde_json",
@@ -179,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "asb-switch"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "asb-core",
  "chrono",

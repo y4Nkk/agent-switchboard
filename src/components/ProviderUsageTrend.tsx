@@ -44,7 +44,7 @@ export function ProviderUsageTrend({ providerName, series, loading, error }: Pro
                   series={group.series}
                   ariaLabel={`${providerName}${selection.heading}${group.unit ? `（${group.unit}）` : ""}`}
                   emptyMessage="尚无可比较的历史读数。"
-                  sumAcrossSeries
+                  valueKind="generic"
                 />
               </div>
             ))}
@@ -56,6 +56,7 @@ export function ProviderUsageTrend({ providerName, series, loading, error }: Pro
           series={[]}
           ariaLabel={`${providerName}${heading}`}
           emptyMessage="成功读取后会在这里显示趋势。"
+          valueKind="generic"
         />
       )}
       {error && <p className="asb-warn-text" role="alert">历史记录不可用：{error}</p>}
@@ -74,6 +75,7 @@ function selectProviderMetrics(series: UsageHistorySeries[]): MetricSelection[] 
 }
 
 function groupByUnit(series: UsageHistorySeries[]): TrendGroup[] {
+  // Same units share an axis but do not make independently named plans additive.
   const groups = new Map<string, TrendGroup>();
   for (const entry of series) {
     const unit = entry.unit?.trim() || null;

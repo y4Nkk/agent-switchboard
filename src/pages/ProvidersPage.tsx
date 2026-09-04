@@ -129,6 +129,14 @@ export function ProvidersPage({
             initialApp={appFilter}
             busy={busy}
             officialTakenApps={officialTakenApps}
+            onOpenOfficial={(app) => {
+              const officialProfile = profiles.find(
+                (profile) => profile.app === app && profile.routeMode === "official",
+              );
+              if (!officialProfile) return;
+              onSelectApp(app);
+              onEdit(officialProfile);
+            }}
             userConfigModel={userConfigModel}
             userConfigWarnings={userConfigWarnings}
             onSave={onSave}

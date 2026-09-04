@@ -31,6 +31,7 @@ export function OfficialQuotaTrend({ series, loading, error, ariaLabel }: Props)
           series={quotaSeries}
           ariaLabel={ariaLabel}
           emptyMessage="成功读取官方额度后会在这里显示趋势。"
+          valueKind="percentage"
         />
       )}
       {error && <p className="asb-warn-text" role="alert">历史记录不可用：{error}</p>}

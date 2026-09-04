@@ -1,11 +1,12 @@
 import type { CodexOfficialQuotaWindow } from "../api/client";
+import { formatUsageValue } from "../lib/usage-format";
 import { UsageRatioMeter } from "./charts/UsageRatioMeter";
 import { countdownLabel } from "../lib/time";
 import { Table, type TableColumn } from "./Table";
 import { Time } from "./Time";
 
 function percent(usedPercent: number): string {
-  return `${Math.round(usedPercent)} %`;
+  return formatUsageValue(usedPercent, "%");
 }
 
 const WINDOW_COLUMNS: Array<TableColumn<CodexOfficialQuotaWindow>> = [

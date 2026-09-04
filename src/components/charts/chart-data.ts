@@ -1,4 +1,5 @@
-import { formatCompactTokenCount, formatTokenValue, isTokenUnit } from "../../lib/token-format";
+import { formatCompactUsageValue, formatUsageValue } from "../../lib/usage-format";
+import { formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
 
 export interface UsageTrendPoint {
   at: string;
@@ -31,9 +32,9 @@ export interface PreparedTrendSeries {
 }
 
 export const CHART_TONE_COUNT = 5;
-
-const valueFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
-const compactFormatter = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
+/** The source contract of a trend's values. A unit string alone cannot decide
+ * whether a `tokens` reading is local model usage or a provider-owned value. */
+export type UsageTrendValueKind = "generic" | "local-token" | "percentage";
 
 /** Keep renderer data defensive: malformed points disappear rather than
  * creating an invalid SVG path or a made-up replacement value. */
@@ -59,17 +60,39 @@ export function trendSeriesShareUnit(series: PreparedTrendSeries[]): boolean {
   return new Set(series.map((entry) => entry.unit ?? "")).size <= 1;
 }
 
-export function formatChartValue(value: number, unit?: string | null): string {
-  if (!Number.isFinite(value)) return "—";
-  if (isTokenUnit(unit)) return formatTokenValue(value);
-  const formatted = valueFormatter.format(value);
-  return unit === null || unit === undefined || unit.trim() === "" ? formatted : `${formatted} ${unit}`;
+/** Chart cards compact local token values, while all other series retain the
+ * generic source-value formatter used by their adjacent ledgers. */
+export function formatChartValue(
+  value: number,
+  unit: string | null | undefined,
+  valueKind: UsageTrendValueKind,
+): string {
+  return valueKind === "local-token" ? formatTokenValue(value) : formatUsageValue(value, unit);
 }
 
 /** A compact tick label; token axes use the app-wide K/M/B token contract. */
-export function formatChartAxisValue(value: number, unit?: string | null): string {
-  if (!Number.isFinite(value)) return "—";
-  return isTokenUnit(unit) ? formatCompactTokenCount(value) : compactFormatter.format(value);
+export function formatChartAxisValue(value: number, valueKind: UsageTrendValueKind): string {
+  return valueKind === "local-token" ? formatCompactTokenCount(value) : formatCompactUsageValue(value);
+}
+
+/** Percentages have an explicit 0–100 semantic range. Other quantities retain
+ * a zero baseline when possible, while negative source values remain visible
+ * instead of being clipped below the chart. */
+export function trendYAxisDomain(
+  series: PreparedTrendSeries[],
+  valueKind: UsageTrendValueKind,
+): [number, number] {
+  if (valueKind === "percentage") return [0, 100];
+
+  const values = series.flatMap((entry) => entry.points.map((point) => point.value));
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+
+  if (minimum >= 0) return [0, Math.max(maximum, 1) * 1.1];
+  if (maximum <= 0) return [Math.min(minimum, -1) * 1.1, 0];
+
+  const padding = (maximum - minimum) * 0.1;
+  return [minimum - padding, maximum + padding];
 }
 
 /** A compact local-time axis label. Full timestamps remain available on each

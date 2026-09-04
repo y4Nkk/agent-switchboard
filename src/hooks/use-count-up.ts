@@ -20,7 +20,7 @@ export function useCountUp(target: number, duration = 320) {
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / duration);
-      const value = Math.round(from + (target - from) * easeOutCubic(t));
+      const value = from + (target - from) * easeOutCubic(t);
       fromRef.current = value;
       setDisplay(value);
       if (t < 1) raf = requestAnimationFrame(tick);

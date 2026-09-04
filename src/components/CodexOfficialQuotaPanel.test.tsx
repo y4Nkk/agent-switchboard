@@ -63,8 +63,8 @@ describe("CodexOfficialQuotaPanel", () => {
 
     expect(await screen.findByRole("row", { name: /^5 小时/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /^7 天/ })).toBeInTheDocument();
-    expect(screen.getAllByText("13 %").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("76 %").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("12.5 %").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("76.25 %").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(invokeMock).toHaveBeenCalledWith("query_codex_official_quota", {
       profileId: "codex-official",
@@ -126,7 +126,7 @@ describe("CodexOfficialQuotaPanel", () => {
       />,
     );
 
-    expect(await screen.findByText("38 %")).toBeInTheDocument();
+    expect((await screen.findAllByText("38 %")).length).toBeGreaterThan(0);
     expect(screen.getByRole("alert")).toHaveTextContent("正在显示上次成功读取的额度");
     await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(1));
   });

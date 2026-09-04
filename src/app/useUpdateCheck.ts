@@ -93,7 +93,6 @@ export function useUpdateCheck({ onError }: UpdateCheckDeps) {
     if (!availableUpdate || installing || restartRequired) return;
     setInstalling(true);
     setDownloadProgress(null);
-    let installed = false;
     try {
       await installUpdate(availableUpdate.update, (event) => {
         if (event.event === "Started") {
@@ -105,16 +104,14 @@ export function useUpdateCheck({ onError }: UpdateCheckDeps) {
           }));
         }
       });
-      installed = true;
     } catch (caught) {
-      onError(caught as CommandError);
-    } finally {
-      replaceUpdate(null);
-    }
-    if (!installed) {
       setInstalling(false);
+      setDownloadProgress(null);
+      onError(caught as CommandError);
       return;
     }
+
+    replaceUpdate(null);
     setRestartRequired(true);
     try {
       // Windows exits inside the updater before this promise resolves. macOS

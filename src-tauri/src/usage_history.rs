@@ -307,7 +307,6 @@ fn provider_series_from_points(
         let used = point
             .used
             .or_else(|| derived_used(point.total, point.remaining));
-        let percentage = used.and_then(|used| used_percent(used, point.total));
         push_provider_series_point(
             &mut grouped,
             &point,
@@ -315,12 +314,6 @@ fn provider_series_from_points(
             point.remaining,
         );
         push_provider_series_point(&mut grouped, &point, UsageHistoryMetric::Used, used);
-        push_provider_series_point(
-            &mut grouped,
-            &point,
-            UsageHistoryMetric::UsedPercent,
-            percentage,
-        );
     }
 
     grouped
@@ -340,10 +333,7 @@ fn provider_series_from_points(
                     ],
                 ),
                 label: provider_series_label(plan_label, key.metric),
-                unit: match key.metric {
-                    UsageHistoryMetric::UsedPercent => Some("%".to_string()),
-                    UsageHistoryMetric::Remaining | UsageHistoryMetric::Used => key.unit,
-                },
+                unit: key.unit,
                 metric: key.metric,
                 points,
             }
@@ -376,13 +366,6 @@ fn push_provider_series_point(
 fn derived_used(total: Option<f64>, remaining: Option<f64>) -> Option<f64> {
     let (total, remaining) = total.zip(remaining)?;
     (total >= remaining).then_some(total - remaining)
-}
-
-fn used_percent(used: f64, total: Option<f64>) -> Option<f64> {
-    let total = total?;
-    (total > 0.0)
-        .then_some(used / total * 100.0)
-        .filter(|value| value.is_finite())
 }
 
 fn metric_key(metric: UsageHistoryMetric) -> &'static str {
@@ -572,7 +555,7 @@ mod tests {
         assert!(!persisted.contains("extract()"));
 
         let series = provider_series(&state, &profile).expect("provider series");
-        assert_eq!(series.len(), 3);
+        assert_eq!(series.len(), 2);
         assert!(series.iter().any(|series| {
             series.metric == UsageHistoryMetric::Remaining
                 && series.points[0].value == 70.0
@@ -581,11 +564,9 @@ mod tests {
         assert!(series.iter().any(|series| {
             series.metric == UsageHistoryMetric::Used && series.points[0].value == 30.0
         }));
-        assert!(series.iter().any(|series| {
-            series.metric == UsageHistoryMetric::UsedPercent
-                && series.points[0].value == 30.0
-                && series.unit.as_deref() == Some("%")
-        }));
+        assert!(series
+            .iter()
+            .all(|series| series.metric != UsageHistoryMetric::UsedPercent));
     }
 
     #[test]

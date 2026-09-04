@@ -9,11 +9,19 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 function ProviderEditor({
   userConfigWarnings = [],
+  onOpenOfficial = vi.fn(),
   ...props
-}: Omit<ComponentProps<typeof ProviderEditorComponent>, "userConfigWarnings"> & {
+}: Omit<ComponentProps<typeof ProviderEditorComponent>, "userConfigWarnings" | "onOpenOfficial"> & {
   userConfigWarnings?: string[];
+  onOpenOfficial?: (app: "codex" | "claude") => void;
 }) {
-  return <ProviderEditorComponent {...props} userConfigWarnings={userConfigWarnings} />;
+  return (
+    <ProviderEditorComponent
+      {...props}
+      userConfigWarnings={userConfigWarnings}
+      onOpenOfficial={onOpenOfficial}
+    />
+  );
 }
 
 describe("ProviderEditor", () => {
@@ -489,7 +497,9 @@ describe("ProviderEditor", () => {
     expect(screen.queryByRole("radiogroup", { name: "接入方式" })).toBeNull();
   });
 
-  it("disables the official choice once the client already owns an official profile", () => {
+  it("opens the existing official profile instead of creating a duplicate", async () => {
+    const user = userEvent.setup();
+    const onOpenOfficial = vi.fn();
     render(
       <ProviderEditor
         profile={null}
@@ -497,13 +507,53 @@ describe("ProviderEditor", () => {
         busy={false}
         officialTakenApps={["codex"]}
         userConfigModel={null}
+        onOpenOfficial={onOpenOfficial}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
     );
 
     expect(screen.getByRole("radio", { name: "自定义 API 中继" })).toBeEnabled();
-    expect(screen.getByRole("radio", { name: "官方登录" })).toBeDisabled();
+    const official = screen.getByRole("radio", { name: "官方登录" });
+    expect(official).toBeEnabled();
+    await user.click(official);
+    expect(onOpenOfficial).toHaveBeenCalledWith("codex");
+  });
+
+  it("starts a new empty draft when the selected client changes", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        userConfigModel={null}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("名称"), "Codex 中继");
+    await user.type(screen.getByLabelText("官网地址"), "https://codex.example");
+    await user.type(screen.getByLabelText("备注"), "Codex 记录");
+    await user.type(screen.getByLabelText("服务地址"), "https://relay.example");
+    await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
+
+    await user.click(screen.getByRole("combobox", { name: "客户端" }));
+    await user.click(await screen.findByRole("option", { name: "Claude" }));
+    await user.click(screen.getByRole("radio", { name: "官方登录" }));
+    expect(screen.getByLabelText("名称")).toHaveValue("Claude 官方登录");
+
+    await user.click(screen.getByRole("combobox", { name: "客户端" }));
+    await user.click(await screen.findByRole("option", { name: "Codex" }));
+
+    expect(screen.getByRole("radio", { name: "自定义 API 中继" })).toBeChecked();
+    expect(screen.getByLabelText("名称")).toHaveValue("");
+    expect(screen.getByLabelText("官网地址")).toHaveValue("");
+    expect(screen.getByLabelText("备注")).toHaveValue("");
+    expect(screen.getByLabelText("服务地址")).toHaveValue("");
+    expect(screen.getByLabelText("API 密钥")).toHaveValue("");
   });
 
   it("hides custom fields in official mode and gates saving until the login completes", async () => {

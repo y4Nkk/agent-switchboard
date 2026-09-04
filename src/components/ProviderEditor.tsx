@@ -29,6 +29,8 @@ interface Props {
   busy: boolean;
   /** Clients that already own their single official profile. */
   officialTakenApps: AppKind[];
+  /** Opens the client's existing official profile for a re-login. */
+  onOpenOfficial: (app: AppKind) => void;
   /** Model read from the client's user-level configuration, shown for context
    * while editing; null means the client selects its default model. */
   userConfigModel: string | null;
@@ -115,6 +117,7 @@ export function ProviderEditor({
   initialApp,
   busy,
   officialTakenApps,
+  onOpenOfficial,
   userConfigModel,
   userConfigWarnings,
   onSave,
@@ -198,11 +201,10 @@ export function ProviderEditor({
             ]}
             disabled={Boolean(profile) || busy}
             onChange={(app) => {
-              setDraft((current) => ({
-                ...current,
-                app: app as AppKind,
-                modelOptions: null,
-              }));
+              const nextApp = app as AppKind;
+              if (nextApp === draft.app) return;
+              setDraft(draftFrom(null, nextApp));
+              setApiKeyVisible(false);
               setLoginDone(false);
             }}
           />
@@ -225,9 +227,13 @@ export function ProviderEditor({
             <RadioOption
               name="access-mode"
               checked={official}
-              disabled={busy || officialTakenApps.includes(draft.app)}
+              disabled={busy}
               label="官方登录"
               onChange={() => {
+                if (officialTakenApps.includes(draft.app)) {
+                  onOpenOfficial(draft.app);
+                  return;
+                }
                 // The official contract is credential-free, so the custom
                 // fields are dropped the moment the mode is chosen instead of
                 // being carried hidden and stripped at submit time.

@@ -206,7 +206,7 @@ export function UsagePage({ active }: { active: boolean }) {
                 ariaLabel="模型消耗日趋势"
                 title="每日 Token 趋势"
                 emptyMessage="当前范围内没有带时间的模型消耗记录。"
-                sumAcrossSeries
+                valueKind="local-token"
               />
             </section>
           </div>

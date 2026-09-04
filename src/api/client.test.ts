@@ -313,6 +313,19 @@ describe("api client boundary", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
+  it("turns updater errors into actionable command errors", async () => {
+    const downloadAndInstall = vi.fn().mockRejectedValue({
+      code: "UnexpectedKeyId",
+      message: "The signature was created with a different key",
+    });
+    const nativeUpdate = { downloadAndInstall };
+
+    await expect(installUpdate(nativeUpdate as never, vi.fn())).rejects.toEqual({
+      code: "updater-signature-invalid",
+      message: "更新包签名验证失败，请从 GitHub Release 页面下载安装包后重试。",
+    });
+  });
+
   it("reads the update channel from the installed package", async () => {
     invokeMock.mockResolvedValue("microsoftStore");
 

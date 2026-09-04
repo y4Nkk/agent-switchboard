@@ -9,12 +9,6 @@ const TOKEN_MAGNITUDES = [
   { divisor: 1_000, suffix: "K" },
 ] as const;
 
-/** Whether a chart's declared unit represents a token quantity. */
-export function isTokenUnit(unit: string | null | undefined): boolean {
-  const normalized = unit?.trim().toLocaleLowerCase();
-  return normalized === "token" || normalized === TOKEN_UNIT;
-}
-
 /** Exact, separator-delimited token value for audit-friendly detail tables. */
 export function formatTokenCount(value: number): string {
   return Number.isFinite(value) ? exactTokenFormatter.format(value) : "—";

@@ -142,6 +142,25 @@ jobs:
           }
           & node @arguments
 
+      - name: 验证已签名更新包
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $signatures = @(Get-ChildItem -LiteralPath release-assets -File -Filter '*.sig')
+          if ($signatures.Count -eq 0) {
+            throw "没有待验证的更新包签名。"
+          }
+          foreach ($signature in $signatures) {
+            $artifactPath = $signature.FullName.Substring(0, $signature.FullName.Length - $signature.Extension.Length)
+            if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+              throw "更新包签名缺少对应载荷：$($signature.Name)"
+            }
+            & cargo run --locked --manifest-path src-tauri/Cargo.toml --example verify_updater_artifact -- $artifactPath $signature.FullName
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
       - name: 扫描发布资产中的凭据
         shell: pwsh
         run: |

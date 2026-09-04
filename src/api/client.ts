@@ -1004,25 +1004,66 @@ export function getUpdateChannel(): Promise<UpdateChannel> {
   return invoke<UpdateChannel>("update_channel");
 }
 
+function updateFailure(operation: "check" | "install", caught: unknown): CommandError {
+  const structured =
+    typeof caught === "object" &&
+    caught !== null &&
+    "code" in caught &&
+    typeof caught.code === "string" &&
+    "message" in caught &&
+    typeof caught.message === "string"
+      ? { code: caught.code, message: caught.message }
+      : null;
+
+  const detail =
+    structured?.message ??
+    (typeof caught === "string"
+      ? caught.trim()
+      : caught instanceof Error
+        ? caught.message.trim()
+        : "");
+  if (/unexpected\s*key\s*id|signature/i.test(`${structured?.code ?? ""} ${detail}`)) {
+    return {
+      code: "updater-signature-invalid",
+      message: "更新包签名验证失败，请从 GitHub Release 页面下载安装包后重试。",
+    };
+  }
+  if (structured) return structured;
+
+  const action = operation === "check" ? "检查更新" : "下载或安装更新";
+  return {
+    code: `updater-${operation}-failed`,
+    message: detail ? `${action}失败：${detail}` : `${action}失败，请稍后重试。`,
+  };
+}
+
 /** Checks the signed update manifest. `null` means the installed build is current. */
 export async function checkUpdate(): Promise<UpdateCheck | null> {
-  const update = await checkForUpdate();
-  return update
-    ? {
-        currentVersion: update.currentVersion,
-        latestVersion: update.version,
-        checkedAt: new Date().toISOString(),
-        update,
-      }
-    : null;
+  try {
+    const update = await checkForUpdate();
+    return update
+      ? {
+          currentVersion: update.currentVersion,
+          latestVersion: update.version,
+          checkedAt: new Date().toISOString(),
+          update,
+        }
+      : null;
+  } catch (caught) {
+    throw updateFailure("check", caught);
+  }
 }
 
 /** Downloads, verifies and installs one previously discovered update. */
-export function installUpdate(
+export async function installUpdate(
   update: Update,
   onEvent: (event: DownloadEvent) => void,
 ): Promise<void> {
-  return update.downloadAndInstall(onEvent);
+  try {
+    await update.downloadAndInstall(onEvent);
+  } catch (caught) {
+    throw updateFailure("install", caught);
+  }
 }
 
 /** Releases an update resource once it is superseded or no longer usable. */

@@ -316,7 +316,7 @@ pub enum UsageHistoryRequest {
 }
 
 /// The meaning of one stored usage-history series. `UsedPercent` is reserved
-/// for ratios that have a trustworthy total, including official quotas.
+/// for normalized official quota windows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UsageHistoryMetric {

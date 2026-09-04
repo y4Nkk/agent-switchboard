@@ -108,9 +108,9 @@ describe("useUpdateCheck", () => {
     expect(result.current.restartRequired).toBe(true);
   });
 
-  it("clears a failed download so the next attempt must use a newly checked resource", async () => {
+  it("keeps a failed download available for a direct retry", async () => {
     vi.mocked(checkUpdate).mockResolvedValue(discoveredUpdate);
-    vi.mocked(installUpdate).mockRejectedValue(new Error("signature invalid"));
+    vi.mocked(installUpdate).mockRejectedValueOnce(new Error("signature invalid"));
     const onError = vi.fn();
     const { result } = renderHook(() => useUpdateCheck({ onError }));
 
@@ -119,9 +119,20 @@ describe("useUpdateCheck", () => {
       await result.current.installAvailableUpdate();
     });
 
-    expect(result.current.updateCheck).toBeNull();
-    expect(closeUpdate).toHaveBeenCalledWith(nativeUpdate);
+    expect(result.current.updateCheck).toEqual(discoveredUpdate);
+    expect(result.current.installing).toBe(false);
+    expect(result.current.downloadProgress).toBeNull();
+    expect(closeUpdate).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "signature invalid" }));
+
+    vi.mocked(installUpdate).mockResolvedValueOnce();
+    await act(async () => {
+      await result.current.installAvailableUpdate();
+    });
+
+    expect(installUpdate).toHaveBeenCalledTimes(2);
+    expect(closeUpdate).toHaveBeenCalledWith(nativeUpdate);
+    expect(restartApplication).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a completed installation in restart-required state when relaunch fails", async () => {

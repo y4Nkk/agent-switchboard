@@ -4,7 +4,6 @@ import {
   formatCompactTokenCount,
   formatTokenCount,
   formatTokenValue,
-  isTokenUnit,
 } from "./token-format";
 
 describe("token format", () => {
@@ -22,9 +21,4 @@ describe("token format", () => {
     expect(TOKEN_UNIT).toBe("tokens");
   });
 
-  it("recognizes the two token spellings used by existing chart data", () => {
-    expect(isTokenUnit("token")).toBe(true);
-    expect(isTokenUnit("tokens")).toBe(true);
-    expect(isTokenUnit("CNY")).toBe(false);
-  });
 });

@@ -1,7 +1,8 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
-import { formatChartValue, type ModelUsageDistributionItem } from "./chart-data";
+import { formatUsageValue } from "../../lib/usage-format";
+import type { ModelUsageDistributionItem } from "./chart-data";
 
 const TOP_MODEL_COUNT = 5;
 const SERIES_TONE_COUNT = 5;
@@ -80,7 +81,7 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
                     {label}
                   </span>
                   <span className="shrink-0 text-body-medium text-text-tertiary tabular-nums">
-                    {formatChartValue(percent)}%
+                    {formatUsageValue(percent, "%")}
                   </span>
                 </div>
                 <p className="mt-1 ml-5 text-body-medium text-text-secondary tabular-nums">

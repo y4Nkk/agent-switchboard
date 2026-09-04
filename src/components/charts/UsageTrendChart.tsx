@@ -8,9 +8,11 @@ import {
   formatChartTimestamp,
   formatChartValue,
   prepareTrendSeries,
+  trendYAxisDomain,
   trendSeriesShareUnit,
   type PreparedTrendSeries,
   type UsageTrendSeries,
+  type UsageTrendValueKind,
 } from "./chart-data";
 
 interface Props {
@@ -19,10 +21,9 @@ interface Props {
   emptyMessage: string;
   /** Visible heading for the standalone local-usage analysis surface. */
   title?: string;
-  /** The headline aggregates every series at one timestamp. Only set this
-   * when the shared unit makes the sum meaningful; otherwise the headline
-   * tracks the first series (e.g. one quota window's percentage). */
-  sumAcrossSeries?: boolean;
+  /** Source semantics determine formatting and vertical scale. Units alone do
+   * not identify a local Token total. */
+  valueKind: UsageTrendValueKind;
   /** "default" is the full showcase card for the usage page; "compact" fits
    * trend charts embedded in provider and official-quota panels. */
   size?: "default" | "compact";
@@ -39,7 +40,7 @@ export function UsageTrendChart({
   ariaLabel,
   emptyMessage,
   title,
-  sumAcrossSeries = false,
+  valueKind,
   size = "default",
 }: Props) {
   const prepared = useMemo(() => prepareTrendSeries(series), [series]);
@@ -53,19 +54,25 @@ export function UsageTrendChart({
   }
 
   return (
-    <TrendCard prepared={prepared} sumAcrossSeries={sumAcrossSeries} ariaLabel={ariaLabel} title={title} size={size} />
+    <TrendCard
+      prepared={prepared}
+      valueKind={valueKind}
+      ariaLabel={ariaLabel}
+      title={title}
+      size={size}
+    />
   );
 }
 
 function TrendCard({
   prepared,
-  sumAcrossSeries,
+  valueKind,
   ariaLabel,
   title,
   size,
 }: {
   prepared: PreparedTrendSeries[];
-  sumAcrossSeries: boolean;
+  valueKind: UsageTrendValueKind;
   ariaLabel: string;
   title?: string;
   size: "default" | "compact";
@@ -79,21 +86,16 @@ function TrendCard({
   const unit = prepared[0]?.unit ?? null;
   const pointCount = prepared.reduce((total, entry) => total + entry.points.length, 0);
 
-  // Rest state headlines the newest real reading; hover headlines the hovered
-  // timestamp. No aggregate ever spans time — only series at one timestamp.
+  // Rest state and hover state both resolve to a real recorded point. A sum
+  // is available only for local-token series when every series recorded the
+  // same timestamp.
   const activeRow = activeIndex !== null && activeIndex < rows.length ? rows[activeIndex] : null;
-  const restRow = rows[rows.length - 1];
-  const row = activeRow ?? restRow;
-  const figure = rowFigure(row, prepared, sumAcrossSeries);
-  const display = useCountUp(Math.round(figure));
+  const figure = resolveTrendFigure(rows, prepared, activeRow, valueKind === "local-token");
+  const display = useCountUp(figure.value);
 
-  const label = activeRow
-    ? formatChartAxisTime(row.timestamp)
-    : sumAcrossSeries
-      ? "合计"
-      : prepared[0].label;
+  const label = activeRow ? formatChartAxisTime(figure.timestamp) : figure.label;
   const caption = activeRow
-    ? formatChartTimestamp(row.timestamp)
+    ? `${figure.label} · ${formatChartTimestamp(figure.timestamp)}`
     : unit
       ? `单位：${unit}`
       : `${pointCount} 个真实读数`;
@@ -128,7 +130,7 @@ function TrendCard({
                 compact ? "text-title-2-medium" : "text-title-1-medium",
               )}
             >
-              {formatChartValue(display, unit)}
+              {formatChartValue(display, unit, valueKind)}
             </p>
           </div>
           <p className="text-body-2-medium text-text-tertiary tabular-nums">{caption}</p>
@@ -172,9 +174,9 @@ function TrendCard({
             </defs>
             <YAxis
               width={44}
-              domain={[0, yMax(prepared) * 1.1]}
+              domain={trendYAxisDomain(prepared, valueKind)}
               tickCount={4}
-              tickFormatter={(value: number) => formatChartAxisValue(value, unit)}
+              tickFormatter={(value: number) => formatChartAxisValue(value, valueKind)}
               tickLine={false}
               axisLine={false}
               tick={AXIS_TICK}
@@ -254,24 +256,66 @@ function seriesColor(index: number): string {
   return `var(--color-chart-${(index % SERIES_TONE_COUNT) + 1})`;
 }
 
-function yMax(series: PreparedTrendSeries[]): number {
-  const max = Math.max(...series.flatMap((entry) => entry.points.map((point) => point.value)));
-  return Math.max(max, 1);
-}
-
-function rowFigure(row: TrendRow, series: PreparedTrendSeries[], sumAcrossSeries: boolean): number {
-  if (sumAcrossSeries) {
-    return series.reduce((sum, entry) => {
-      const value = row[entry.id];
-      return typeof value === "number" ? sum + value : sum;
-    }, 0);
-  }
-  return typeof row[series[0].id] === "number" ? (row[series[0].id] as number) : 0;
-}
-
 interface TrendRow {
   timestamp: number;
   [seriesId: string]: number | undefined;
+}
+
+interface TrendFigure {
+  label: string;
+  value: number;
+  timestamp: number;
+}
+
+function resolveTrendFigure(
+  rows: TrendRow[],
+  series: PreparedTrendSeries[],
+  activeRow: TrendRow | null,
+  aggregateSeries: boolean,
+): TrendFigure {
+  if (activeRow) return figureForRow(activeRow, series, aggregateSeries);
+
+  if (aggregateSeries) {
+    const latestCompleteRow = [...rows].reverse().find((row) => rowHasEverySeries(row, series));
+    if (latestCompleteRow) return aggregateFigure(latestCompleteRow, series);
+  }
+
+  return latestObservedFigure(series);
+}
+
+function figureForRow(
+  row: TrendRow,
+  series: PreparedTrendSeries[],
+  aggregateSeries: boolean,
+): TrendFigure {
+  if (aggregateSeries && rowHasEverySeries(row, series)) return aggregateFigure(row, series);
+
+  const observedSeries = series.find((entry) => typeof row[entry.id] === "number");
+  if (!observedSeries) return latestObservedFigure(series);
+
+  return {
+    label: observedSeries.label,
+    value: row[observedSeries.id]!,
+    timestamp: row.timestamp,
+  };
+}
+
+function aggregateFigure(row: TrendRow, series: PreparedTrendSeries[]): TrendFigure {
+  return {
+    label: "合计",
+    value: series.reduce((sum, entry) => sum + row[entry.id]!, 0),
+    timestamp: row.timestamp,
+  };
+}
+
+function latestObservedFigure(series: PreparedTrendSeries[]): TrendFigure {
+  return series
+    .flatMap((entry) => entry.points.map((point) => ({ label: entry.label, value: point.value, timestamp: point.timestamp })))
+    .reduce((latest, point) => (point.timestamp > latest.timestamp ? point : latest));
+}
+
+function rowHasEverySeries(row: TrendRow, series: PreparedTrendSeries[]): boolean {
+  return series.every((entry) => typeof row[entry.id] === "number");
 }
 
 /** Union of every real timestamp; each series contributes only the points it

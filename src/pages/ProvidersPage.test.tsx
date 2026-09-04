@@ -118,4 +118,34 @@ describe("ProvidersPage", () => {
     await user.click(within(previewPanel).getByRole("button", { name: "确认切换" }));
     expect(onRequestSwitch).toHaveBeenCalledTimes(1);
   });
+
+  it("opens an existing official profile when that mode is chosen in a new form", async () => {
+    const user = userEvent.setup();
+    const official: ProviderProfile = {
+      id: "codex-official",
+      app: "codex",
+      routeMode: "official",
+      name: "Codex 官方登录",
+      model: null,
+      baseUrl: null,
+      apiKey: "",
+      modelOptions: null,
+      websiteUrl: null,
+      usageQuery: null,
+    };
+    const onSelectApp = vi.fn();
+    const onEdit = vi.fn();
+
+    renderPage({
+      profiles: [profile, official],
+      editorMode: "new",
+      onSelectApp,
+      onEdit,
+    });
+
+    await user.click(screen.getByRole("radio", { name: "官方登录" }));
+
+    expect(onSelectApp).toHaveBeenCalledWith("codex");
+    expect(onEdit).toHaveBeenCalledWith(official);
+  });
 });

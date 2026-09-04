@@ -1,22 +1,13 @@
 import type { UsageReading } from "../api/client";
+import { formatUsageValue } from "../lib/usage-format";
 import { UsageRatioMeter } from "./charts/UsageRatioMeter";
 import { Table, type TableColumn } from "./Table";
-
-function usageValue(value: number | null): string {
-  if (value === null) return "—";
-  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
-}
 
 function usageProgress(reading: UsageReading): number | null {
   if (reading.total === null || !Number.isFinite(reading.total) || reading.total <= 0) return null;
   const used = reading.used ?? (reading.remaining === null ? null : reading.total - reading.remaining);
   if (used === null || !Number.isFinite(used)) return null;
-  return Math.min(100, Math.max(0, (used / reading.total) * 100));
-}
-
-function measure(value: number | null, unit: string | null): string {
-  if (value === null) return "—";
-  return unit === null ? usageValue(value) : `${usageValue(value)} ${unit}`;
+  return (used / reading.total) * 100;
 }
 
 /** One reading as a table row: plan identity plus its three measures. */
@@ -31,17 +22,17 @@ const USAGE_COLUMNS: Array<TableColumn<UsageRow>> = [
   {
     key: "remaining",
     header: "余额",
-    render: (row) => measure(row.reading.remaining, row.reading.unit),
+    render: (row) => formatUsageValue(row.reading.remaining, row.reading.unit),
   },
   {
     key: "used",
     header: "已用",
-    render: (row) => measure(row.reading.used, row.reading.unit),
+    render: (row) => formatUsageValue(row.reading.used, row.reading.unit),
   },
   {
     key: "total",
     header: "总量",
-    render: (row) => measure(row.reading.total, row.reading.unit),
+    render: (row) => formatUsageValue(row.reading.total, row.reading.unit),
   },
   {
     key: "ratio",
