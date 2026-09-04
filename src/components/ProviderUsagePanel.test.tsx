@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
-import type { UsageSummary } from "../api/client";
+import type { UsageHistorySeries, UsageSummary } from "../api/client";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -33,6 +33,58 @@ const profile = {
   usageQuery,
 };
 
+const successfulSummary: UsageSummary = {
+  readings: [
+    { planName: "主套餐", remaining: 1024.5, used: 24, total: 1048.5, unit: "CNY" },
+    { planName: "附加套餐", remaining: 8, used: null, total: 10, unit: "USD" },
+  ],
+  at: "2026-08-31T08:00:00Z",
+};
+
+const providerHistory: UsageHistorySeries[] = [
+  {
+    id: "relay-a-main-remaining",
+    label: "主套餐",
+    unit: "CNY",
+    metric: "remaining",
+    points: [
+      { at: "2026-08-30T08:00:00Z", value: 1060.5 },
+      { at: "2026-08-31T08:00:00Z", value: 1024.5 },
+    ],
+  },
+];
+
+const mixedMetricHistory: UsageHistorySeries[] = [
+  {
+    id: "relay-a-main-remaining",
+    label: "主套餐余额",
+    unit: "CNY",
+    metric: "remaining",
+    points: [{ at: "2026-08-31T08:00:00Z", value: 1024.5 }],
+  },
+  {
+    id: "relay-a-extra-used",
+    label: "附加套餐已用",
+    unit: "USD",
+    metric: "used",
+    points: [{ at: "2026-08-31T08:00:00Z", value: 2 }],
+  },
+];
+
+function callsFor(command: string) {
+  return invokeMock.mock.calls.filter(([calledCommand]) => calledCommand === command);
+}
+
+function mockProviderCommands(summary: UsageSummary | Error, history = providerHistory) {
+  invokeMock.mockImplementation((command) => {
+    if (command === "get_usage_history") return Promise.resolve(history) as never;
+    if (command === "query_profile_usage") {
+      return summary instanceof Error ? Promise.reject(summary) as never : Promise.resolve(summary) as never;
+    }
+    return Promise.reject(new Error(`unexpected command: ${command}`)) as never;
+  });
+}
+
 describe("ProviderUsagePanel", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -40,13 +92,7 @@ describe("ProviderUsagePanel", () => {
 
   it("runs the configured query on expansion and shows every named reading", async () => {
     const user = userEvent.setup();
-    invokeMock.mockResolvedValue({
-      readings: [
-        { planName: "主套餐", remaining: 1024.5, used: 24, total: 1048.5, unit: "CNY" },
-        { planName: "附加套餐", remaining: 8, used: null, total: 10, unit: "USD" },
-      ],
-      at: "2026-08-31T08:00:00Z",
-    });
+    mockProviderCommands(successfulSummary);
     render(
       <ProviderUsagePanel
         id="provider-usage-relay-a"
@@ -66,13 +112,16 @@ describe("ProviderUsagePanel", () => {
     expect(within(extraRow).getByText("—")).toBeInTheDocument();
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", { profileId: "relay-a" });
+    expect(await screen.findByRole("img", { name: /主套餐，1,024.5 CNY/ })).toBeInTheDocument();
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(2));
 
     await user.click(screen.getByRole("button", { name: "刷新" }));
-    expect(invokeMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(callsFor("query_profile_usage")).toHaveLength(2));
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(3));
   });
 
-  it("keeps the configured query error visible in the expanded card", async () => {
-    invokeMock.mockRejectedValueOnce(new Error("额度接口返回 403"));
+  it("keeps the configured query error visible without refreshing history", async () => {
+    mockProviderCommands(new Error("额度接口返回 403"));
     render(
       <ProviderUsagePanel
         id="provider-usage-relay-a"
@@ -81,12 +130,54 @@ describe("ProviderUsagePanel", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("额度接口返回 403");
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(1));
+  });
+
+  it("clears the displayed trend and reloads history when the saved query changes", async () => {
+    let historyReads = 0;
+    invokeMock.mockImplementation((command) => {
+      if (command === "get_usage_history") {
+        historyReads += 1;
+        return Promise.resolve(historyReads === 1 ? providerHistory : []) as never;
+      }
+      if (command === "query_profile_usage") return Promise.reject(new Error("额度接口返回 403")) as never;
+      return Promise.reject(new Error(`unexpected command: ${command}`)) as never;
+    });
+    const { rerender } = render(
+      <ProviderUsagePanel id="provider-usage-relay-a" profile={profile} />,
+    );
+
+    expect(await screen.findByRole("img", { name: /主套餐，1,024.5 CNY/ })).toBeInTheDocument();
+
+    rerender(
+      <ProviderUsagePanel
+        id="provider-usage-relay-a"
+        profile={{
+          ...profile,
+          usageQuery: { ...usageQuery, url: "{{baseUrl}}/v2/user/balance" },
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(2));
+    expect(screen.queryByRole("img", { name: /主套餐，1,024.5 CNY/ })).not.toBeInTheDocument();
+    expect(screen.getByText("成功读取后会在这里显示趋势。")).toBeInTheDocument();
+  });
+
+  it("shows remaining and used trends together when plans provide different metrics", async () => {
+    mockProviderCommands(new Error("额度接口返回 403"), mixedMetricHistory);
+    render(<ProviderUsagePanel id="provider-usage-relay-a" profile={profile} />);
+
+    expect(await screen.findByRole("img", { name: /主套餐余额，1,024.5 CNY/ })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /附加套餐已用，2 USD/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "余额趋势" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "已用趋势" })).toBeInTheDocument();
   });
 
   it("opens the dedicated query workspace through its edit action", async () => {
     const user = userEvent.setup();
     const onConfigure = vi.fn();
-    invokeMock.mockResolvedValue({
+    mockProviderCommands({
       readings: [{ remaining: null, used: null, total: null, unit: null }],
       at: "2026-08-31T08:00:00Z",
     });
@@ -103,7 +194,7 @@ describe("ProviderUsagePanel", () => {
   });
 
   it("omits a progress rail when the response cannot produce a ratio", async () => {
-    invokeMock.mockResolvedValue({
+    mockProviderCommands({
       readings: [{ planName: "未知额度", remaining: 12, used: null, total: null, unit: "次" }],
       at: "2026-08-31T08:00:00Z",
     });
@@ -122,7 +213,7 @@ describe("ProviderUsagePanel", () => {
 
   it("re-queries on the configured auto-refresh interval", async () => {
     vi.useFakeTimers();
-    invokeMock.mockResolvedValue({
+    mockProviderCommands({
       readings: [{ planName: "主套餐", remaining: 1, used: 1, total: 2, unit: "CNY" }],
       at: "2026-08-31T08:00:00Z",
     });
@@ -133,13 +224,12 @@ describe("ProviderUsagePanel", () => {
           profile={{ ...profile, usageQuery: { ...usageQuery, refreshIntervalMinutes: 2 } }}
         />,
       );
-      await act(async () => {});
-      expect(invokeMock).toHaveBeenCalledTimes(1);
+      expect(callsFor("query_profile_usage")).toHaveLength(1);
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2 * 60_000);
+      act(() => {
+        vi.advanceTimersByTime(2 * 60_000);
       });
-      expect(invokeMock).toHaveBeenCalledTimes(2);
+      expect(callsFor("query_profile_usage")).toHaveLength(2);
     } finally {
       vi.useRealTimers();
     }
@@ -147,7 +237,7 @@ describe("ProviderUsagePanel", () => {
 
   it("stays manual when the auto-refresh interval is disabled", async () => {
     vi.useFakeTimers();
-    invokeMock.mockResolvedValue({ readings: [], at: "2026-08-31T08:00:00Z" });
+    mockProviderCommands({ readings: [], at: "2026-08-31T08:00:00Z" });
     try {
       render(
         <ProviderUsagePanel
@@ -155,12 +245,11 @@ describe("ProviderUsagePanel", () => {
           profile={profile}
         />,
       );
-      await act(async () => {});
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(30 * 60_000);
+      act(() => {
+        vi.advanceTimersByTime(30 * 60_000);
       });
-      expect(invokeMock).toHaveBeenCalledTimes(1);
+      expect(callsFor("query_profile_usage")).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -168,10 +257,16 @@ describe("ProviderUsagePanel", () => {
 
   it("re-queries when the profile changes while the first read is in flight", async () => {
     let resolveFirst: (value: UsageSummary) => void = () => {};
-    invokeMock.mockImplementationOnce(
-      () => new Promise<UsageSummary>((resolve) => { resolveFirst = resolve; }),
-    );
-    invokeMock.mockResolvedValue({ readings: [], at: "2026-08-31T08:00:00Z" });
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "get_usage_history") return Promise.resolve(providerHistory) as never;
+      if (command === "query_profile_usage") {
+        const profileId = (args as { profileId?: string } | undefined)?.profileId;
+        return profileId === "relay-a"
+          ? new Promise<UsageSummary>((resolve) => { resolveFirst = resolve; }) as never
+          : Promise.resolve({ readings: [], at: "2026-08-31T08:00:00Z" }) as never;
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`)) as never;
+    });
 
     const { rerender } = render(
       <ProviderUsagePanel
@@ -179,7 +274,7 @@ describe("ProviderUsagePanel", () => {
         profile={profile}
       />,
     );
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(callsFor("query_profile_usage")).toHaveLength(1);
 
     rerender(
       <ProviderUsagePanel
@@ -188,7 +283,7 @@ describe("ProviderUsagePanel", () => {
       />,
     );
 
-    expect(invokeMock).toHaveBeenCalledTimes(2);
+    expect(callsFor("query_profile_usage")).toHaveLength(2);
     expect(invokeMock).toHaveBeenLastCalledWith("query_profile_usage", { profileId: "relay-b" });
     await waitFor(() =>
       expect(screen.queryByText("正在读取已配置的用量…")).not.toBeInTheDocument(),

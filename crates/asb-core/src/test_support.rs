@@ -5,22 +5,23 @@
 //! fields so tests prove unknown keys survive a switch untouched.
 
 /// Codex `config.toml` test sample: host-owned top-level keys, comments, and
-/// a provider-scoped custom route.
+/// a built-in `openai` route to an OpenAI-compatible endpoint.
 pub const CODEX_TOML: &str = r#"# host-owned Codex configuration (test sample)
 history_persistence = "save-all"
 threads = 8
 model = "gpt-5.1"
-model_provider = "OpenAi"
-
-[model_providers.OpenAi]
-name = "Relay A"
-base_url = "https://relay-a.internal/v1"
-wire_api = "responses"
-experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
+model_provider = "openai"
+openai_base_url = "https://relay-a.internal/v1"
 
 [projects."F:\\work\\sample"]
 trusted = true
 "#;
+
+/// The companion file-backed API-key login cache for [`CODEX_TOML`].
+pub const CODEX_AUTH_JSON: &str = r#"{
+  "auth_mode": "apikey",
+  "OPENAI_API_KEY": "TEST_CODEX_IMPORT_KEY"
+}"#;
 
 /// Claude Code `settings.json` test sample: host-owned permission blocks and
 /// status line plus app-owned routing keys.

@@ -178,6 +178,28 @@
   --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
   --asb-route-inner-bg: #edf1f8;
 
+  /* Usage charts keep the same calm, inspectable material as data tables.
+     Series tones are supplementary: every chart also renders text labels and
+     exact values. */
+  --asb-chart-axis: var(--asb-text-muted);
+  --asb-chart-grid: var(--asb-hairline);
+  --asb-chart-tooltip-bg: var(--asb-content);
+  --asb-chart-point-fill: var(--asb-content);
+  --asb-chart-series-0: var(--asb-action);
+  --asb-chart-series-1: var(--asb-claude);
+  --asb-chart-series-2: var(--asb-safe);
+  --asb-chart-series-3: var(--asb-warning);
+  --asb-chart-series-4: var(--asb-text-muted);
+  --asb-chart-height: 228px;
+  --asb-chart-min-width: 320px;
+  --asb-chart-axis-font-size: 12px;
+  --asb-chart-grid-width: 1px;
+  --asb-chart-line-width: 2px;
+  --asb-chart-point-radius: 4px;
+  --asb-chart-legend-swatch-size: 9px;
+  --asb-chart-ratio-track-width: 56px;
+  --asb-chart-ratio-track-height: 4px;
+
   /* Layout */
   --asb-touch-target: 40px;
 }

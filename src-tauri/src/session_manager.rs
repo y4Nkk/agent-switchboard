@@ -72,8 +72,8 @@ struct SessionSource {
 }
 
 pub fn scan_sessions() -> SessionScan {
-    let home = match crate::local_state::user_home_dir() {
-        Ok(home) => home,
+    let roots = match session_roots() {
+        Ok(roots) => roots,
         Err(message) => {
             return SessionScan {
                 sessions: Vec::new(),
@@ -84,14 +84,7 @@ pub fn scan_sessions() -> SessionScan {
             }
         }
     };
-    scan_session_roots(&[
-        (AppKind::Codex, home.join(".codex").join("sessions")),
-        (
-            AppKind::Codex,
-            home.join(".codex").join("archived_sessions"),
-        ),
-        (AppKind::Claude, home.join(".claude").join("projects")),
-    ])
+    scan_session_roots(&roots)
 }
 
 pub fn load_messages(app: AppKind, session_id: &str) -> Result<Vec<SessionMessage>, String> {
@@ -224,15 +217,21 @@ fn resolve_session(app: AppKind, session_id: &str) -> Result<SessionSource, Stri
 }
 
 fn scan_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+    Ok(scan_session_source_roots(&session_roots()?))
+}
+
+/// The only approved local JSONL roots. Both session browsing and usage
+/// aggregation consume this list so neither feature accepts a renderer path.
+pub(crate) fn session_roots() -> Result<Vec<(AppKind, PathBuf)>, String> {
     let home = crate::local_state::user_home_dir()?;
-    Ok(scan_session_source_roots(&[
+    Ok(vec![
         (AppKind::Codex, home.join(".codex").join("sessions")),
         (
             AppKind::Codex,
             home.join(".codex").join("archived_sessions"),
         ),
         (AppKind::Claude, home.join(".claude").join("projects")),
-    ]))
+    ])
 }
 
 fn scan_session_roots(roots: &[(AppKind, PathBuf)]) -> SessionScan {
@@ -259,7 +258,7 @@ fn scan_session_source_roots(
     let mut seen = HashSet::new();
 
     for (app, root) in roots {
-        match collect_jsonl_files(root) {
+        match collect_session_jsonl_files(root) {
             Ok(paths) => {
                 for path in paths {
                     if let Ok(meta) = parse_session(*app, &path) {
@@ -285,7 +284,26 @@ fn scan_session_source_roots(
     (sources, issues)
 }
 
-fn collect_jsonl_files(root: &Path) -> io::Result<Vec<PathBuf>> {
+/// Finds the stable session identity in the same bounded metadata prefix used
+/// by session discovery. Consumers can preserve the configured-root priority
+/// when a client keeps an archived copy of a live session.
+pub(crate) fn session_id_in_session_file(path: &Path) -> io::Result<Option<String>> {
+    let reader = BufReader::new(File::open(path)?);
+    for line in reader.lines().take(METADATA_LINE_LIMIT) {
+        let line = line?;
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if let Some(session_id) = session_id_from(&value).filter(|id| valid_session_id(id)) {
+            return Ok(Some(session_id));
+        }
+    }
+    Ok(None)
+}
+
+/// Recursively finds client-owned JSONL session records without following
+/// symlinks. Callers receive no input path from the renderer.
+pub(crate) fn collect_session_jsonl_files(root: &Path) -> io::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     let mut pending = vec![root.to_path_buf()];
 

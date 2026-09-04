@@ -23,11 +23,13 @@
 pub(crate) mod cloud_backup;
 pub(crate) mod common_settings;
 pub(crate) mod error;
+pub(crate) mod model_usage;
 pub(crate) mod official_login;
 pub(crate) mod prompt_management;
 pub(crate) mod runtime_log;
 pub(crate) mod status;
 pub(crate) mod switching;
+pub(crate) mod usage_history;
 pub(crate) mod window;
 
 pub(crate) use status::config_status_report;
@@ -151,6 +153,9 @@ pub async fn reset_profile_store(
             if let Err(error) = crate::usage_cache::clear(&state) {
                 log::warn!("无法清除托盘用量缓存: {error}");
             }
+            if let Err(error) = crate::usage_history::clear_providers(&state) {
+                log::warn!("无法清除供应商用量历史: {error}");
+            }
         }
         crate::codex_official_quota::clear();
         crate::tray::refresh(&refresh_app);
@@ -206,6 +211,10 @@ pub async fn update_profile(
             if let Err(error) = crate::usage_cache::invalidate(&state, &cache_profile_id) {
                 log::warn!("无法清除更新供应商的托盘用量缓存: {error}");
             }
+            if let Err(error) = crate::usage_history::invalidate_provider(&state, &cache_profile_id)
+            {
+                log::warn!("无法清除更新供应商的用量历史: {error}");
+            }
         }
         crate::codex_official_quota::invalidate(&cache_profile_id);
         crate::tray::refresh(&refresh_app);
@@ -236,6 +245,10 @@ pub async fn delete_profile(
         if let Ok(state) = LocalState::from_app(&refresh_app) {
             if let Err(error) = crate::usage_cache::invalidate(&state, &cache_profile_id) {
                 log::warn!("无法清除已删除供应商的托盘用量缓存: {error}");
+            }
+            if let Err(error) = crate::usage_history::invalidate_provider(&state, &cache_profile_id)
+            {
+                log::warn!("无法清除已删除供应商的用量历史: {error}");
             }
         }
         crate::codex_official_quota::invalidate(&cache_profile_id);
@@ -377,6 +390,9 @@ pub async fn query_profile_usage(
         if let Err(error) = crate::usage_cache::store(&state, &profile, summary.clone()) {
             log::warn!("用量查询成功，但无法保存托盘用量快照: {error}");
         }
+        if let Err(error) = crate::usage_history::record_provider(&state, &profile, &summary) {
+            log::warn!("用量查询成功，但无法保存趋势历史: {error}");
+        }
         Ok(summary)
     })
     .await?;
@@ -429,10 +445,19 @@ fn record_official_reset_read(
         log::warn!("Codex 官方额度基线不可读，将从本次读取重建: {error}");
         None
     });
+    // The history ledger deliberately has no account marker. It may continue
+    // only when the persisted baseline proves this is the same account.
+    let reset_history = !baseline
+        .as_ref()
+        .and_then(|previous| previous.account_marker.as_deref().zip(marker.as_deref()))
+        .is_some_and(|(previous, current)| previous == current);
     let at = quota.at.clone().unwrap_or_default();
     let (baseline, _) = crate::codex_official_quota::apply_read(baseline, marker, quota, &at);
     if let Err(error) = state.save_codex_quota_baseline(&baseline) {
         log::warn!("官方额度读取成功，但无法保存重置检测基线: {error}");
+    }
+    if let Err(error) = crate::usage_history::record_official(state, quota, reset_history) {
+        log::warn!("官方额度读取成功，但无法保存趋势历史: {error}");
     }
     baseline.last_reset
 }
@@ -484,20 +509,6 @@ pub async fn refresh_codex_official_reset(
     .await
 }
 
-/// Result of one manual update check against the project's GitHub releases.
-/// Informational only: nothing is downloaded or installed by this command.
-pub use crate::update::UpdateCheck;
-
-#[tauri::command]
-pub async fn check_update(app: tauri::AppHandle) -> Result<UpdateCheck, CommandError> {
-    let current_version = app.package_info().version.to_string();
-    blocking(move || {
-        crate::update::check(&current_version)
-            .map_err(|error| CommandError::new("update-check-failed", error))
-    })
-    .await
-}
-
 /// A typed overview snapshot and its display freshness. Both are
 /// informational and global; they never read an account's quota or credentials.
 pub use crate::codex_reset::CodexResetRead;
@@ -538,12 +549,13 @@ pub async fn check_codex_reset_status(
 }
 
 /// Standard user-level configuration locations. This resolver does not read,
-/// create, or write either path.
+/// create, or write any target.
 pub fn local_config_paths() -> Result<DiscoveryPaths, String> {
     Ok(DiscoveryPaths {
         codex: LocalState::user_config_path(AppKind::Codex)?
             .to_string_lossy()
             .to_string(),
+        codex_auth: LocalState::codex_auth_path()?.to_string_lossy().to_string(),
         claude: LocalState::user_config_path(AppKind::Claude)?
             .to_string_lossy()
             .to_string(),
@@ -563,7 +575,7 @@ fn discovery_report() -> Result<DiscoveryReport, CommandError> {
 }
 
 /// Read-only discovery of local Codex and Claude Code configuration. Reads at
-/// most two files; never writes, creates, or locks either target. A successful
+/// most three files; never writes, creates, or locks any target. A successful
 /// scan replaces the local display cache; a cache-write failure is logged and
 /// never hides the fresh result.
 #[tauri::command]
@@ -664,4 +676,46 @@ pub async fn import_ccswitch_profiles(
         .await
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use asb_core::contracts::{
+        CodexOfficialQuota, CodexOfficialQuotaStatus, CodexOfficialQuotaWindow,
+    };
+    use tempfile::tempdir;
+
+    fn quota(at: &str, used_percent: f64) -> CodexOfficialQuota {
+        CodexOfficialQuota {
+            status: CodexOfficialQuotaStatus::Available,
+            windows: vec![CodexOfficialQuotaWindow {
+                label: "7 天".to_string(),
+                used_percent,
+                resets_at: None,
+            }],
+            at: Some(at.to_string()),
+            stale: false,
+            last_reset: None,
+        }
+    }
+
+    #[test]
+    fn missing_quota_baseline_replaces_the_existing_official_trend() {
+        let directory = tempdir().expect("temporary directory");
+        let state = LocalState::from_root(directory.path().join("state"));
+        crate::usage_history::record_official(&state, &quota("2026-09-03T08:00:00Z", 20.0), false)
+            .expect("record old account trend");
+
+        record_official_reset_read(
+            &state,
+            Some("new-account-marker".to_string()),
+            &quota("2026-09-03T09:00:00Z", 40.0),
+        );
+
+        let series = crate::usage_history::official_series(&state).expect("official trend");
+        assert_eq!(series.len(), 1);
+        assert_eq!(series[0].points.len(), 1);
+        assert_eq!(series[0].points[0].value, 40.0);
+    }
 }

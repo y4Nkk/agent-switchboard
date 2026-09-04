@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelOfficialLogin,
   checkCodexResetStatus,
+  checkUpdate,
+  closeUpdate,
   deleteProfile,
   getCommonSettingsEditor,
   getCloudBackupSettings,
@@ -11,10 +13,13 @@ import {
   getCachedCodexResetStatus,
   getConfigStatus,
   getGlobalPromptDocument,
+  getModelUsageReport,
+  getUsageHistory,
   getSessionMessages,
   listSessions,
   listRuntimeLogs,
   listSystemFonts,
+  installUpdate,
   openRuntimeLogDir,
   pollOfficialLogin,
   resetProfileStore,
@@ -38,8 +43,12 @@ import {
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(),
+}));
 
 import { invoke } from "@tauri-apps/api/core";
+import { check } from "@tauri-apps/plugin-updater";
 
 const invokeMock = vi.mocked(invoke);
 
@@ -275,6 +284,33 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenCalledWith("restart_application");
   });
 
+  it("uses the signed updater resource without routing through a backend command", async () => {
+    const downloadAndInstall = vi.fn().mockResolvedValue(undefined);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const nativeUpdate = {
+      currentVersion: "0.1.2",
+      version: "0.2.0",
+      downloadAndInstall,
+      close,
+    };
+    vi.mocked(check).mockResolvedValue(nativeUpdate as never);
+    const onEvent = vi.fn();
+
+    const update = await checkUpdate();
+    expect(update).toEqual(expect.objectContaining({
+      currentVersion: "0.1.2",
+      latestVersion: "0.2.0",
+      update: nativeUpdate,
+    }));
+
+    await installUpdate(nativeUpdate as never, onEvent);
+    await closeUpdate(nativeUpdate as never);
+
+    expect(downloadAndInstall).toHaveBeenCalledWith(onEvent);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
   it("lists installed system fonts for the interface-font picker", async () => {
     invokeMock.mockResolvedValue(["Segoe UI", "微软雅黑"]);
 
@@ -327,6 +363,30 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(3, "resume_session", {
       app: "claude",
       sessionId: "019f4b74-c859-7e72-bb0c-9f83347954fb",
+    });
+  });
+
+  it("requests model usage only by its typed local-calendar range", async () => {
+    invokeMock.mockResolvedValue({ groups: [], issues: [] });
+
+    await getModelUsageReport("last7Days");
+
+    expect(invokeMock).toHaveBeenCalledWith("get_model_usage_report", {
+      range: "last7Days",
+    });
+  });
+
+  it("requests provider and official history through their distinct typed requests", async () => {
+    invokeMock.mockResolvedValue([]);
+
+    await getUsageHistory({ kind: "provider", profileId: "profile-1" });
+    await getUsageHistory({ kind: "official" });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "get_usage_history", {
+      request: { kind: "provider", profileId: "profile-1" },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "get_usage_history", {
+      request: { kind: "official" },
     });
   });
 });

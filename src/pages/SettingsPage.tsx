@@ -1,4 +1,5 @@
 import type { AppSettings, UpdateCheck } from "../api/client";
+import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
 import { UpdateSection } from "../components/UpdateSection";
@@ -20,7 +21,13 @@ interface SettingsPageProps {
   updateCheck: UpdateCheck | null;
   /** A startup or user-triggered release lookup is currently in flight. */
   updateChecking: boolean;
+  updateInstalling: boolean;
+  updateProgress: UpdateDownloadProgress | null;
+  updateCheckedAt: string | null;
+  updateRestartRequired: boolean;
   onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
+  onRestartInstalledUpdate: () => void;
 }
 
 /** Application-runtime settings. Separate from the client common
@@ -35,7 +42,13 @@ export function SettingsPage({
   onRestart,
   updateCheck,
   updateChecking,
+  updateInstalling,
+  updateProgress,
+  updateCheckedAt,
+  updateRestartRequired,
   onCheckUpdate,
+  onInstallUpdate,
+  onRestartInstalledUpdate,
 }: SettingsPageProps) {
   return (
     <section className="asb-panel" aria-label="设置">
@@ -76,7 +89,17 @@ export function SettingsPage({
         ) : (
           <p className="asb-empty">加载中</p>
         )}
-        <UpdateSection result={updateCheck} busy={busy || updateChecking} onCheck={onCheckUpdate} />
+        <UpdateSection
+          result={updateCheck}
+          busy={busy || updateChecking}
+          installing={updateInstalling}
+          progress={updateProgress}
+          checkedAt={updateCheckedAt}
+          restartRequired={updateRestartRequired}
+          onCheck={onCheckUpdate}
+          onInstall={onInstallUpdate}
+          onRestart={onRestartInstalledUpdate}
+        />
       </div>
     </section>
   );

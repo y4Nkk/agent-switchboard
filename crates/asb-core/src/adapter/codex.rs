@@ -11,9 +11,8 @@ use crate::contracts::{
 };
 use crate::ownership::{
     is_owned, provider_absent_action, setting_specs, ProviderAbsentAction, SettingOwner,
-    CODEX_MANAGED_PROVIDER_BASE_URL_KEY, CODEX_MANAGED_PROVIDER_ID,
-    CODEX_MANAGED_PROVIDER_NAME_KEY, CODEX_MANAGED_PROVIDER_TOKEN_KEY,
-    CODEX_MANAGED_PROVIDER_WIRE_API_KEY,
+    CODEX_LEGACY_PROVIDER_BASE_URL_KEY, CODEX_LEGACY_PROVIDER_ID, CODEX_LEGACY_PROVIDER_NAME_KEY,
+    CODEX_LEGACY_PROVIDER_TOKEN_KEY, CODEX_LEGACY_PROVIDER_WIRE_API_KEY,
 };
 use crate::redact::redact;
 use crate::AppKind;
@@ -163,10 +162,9 @@ fn to_toml_value(value: ConfigValue) -> TomlValue {
     }
 }
 
-/// Builds the overlay entries implied by `plan`. Custom profiles use a
-/// provider-scoped table so Codex does not fall back to `auth.json` for their
-/// API key. Official profiles remove the managed route and leave the native
-/// login cache untouched.
+/// Builds the overlay entries implied by `plan`. Every route uses Codex's
+/// built-in `openai` provider, so session history remains in one provider
+/// bucket while the selected third-party endpoint and API-key cache vary.
 fn absent_provider_entry(key: &str) -> OverlayEntry {
     match provider_absent_action(AppKind::Codex, key) {
         Some(ProviderAbsentAction::Remove) => OverlayEntry::RemoveIfPresent,
@@ -175,17 +173,15 @@ fn absent_provider_entry(key: &str) -> OverlayEntry {
 }
 
 fn provider_value(profile: &crate::contracts::ProviderProfile, key: &str) -> Option<ConfigValue> {
-    if profile.route_mode == crate::contracts::RouteMode::Official {
-        return None;
-    }
     match key {
         "model" => profile.model.clone().map(ConfigValue::Str),
-        "model_provider" => Some(ConfigValue::Str(CODEX_MANAGED_PROVIDER_ID.into())),
-        CODEX_MANAGED_PROVIDER_NAME_KEY => Some(ConfigValue::Str(profile.name.clone())),
-        CODEX_MANAGED_PROVIDER_BASE_URL_KEY => profile.base_url.clone().map(ConfigValue::Str),
-        CODEX_MANAGED_PROVIDER_WIRE_API_KEY => Some(ConfigValue::Str("responses".into())),
-        CODEX_MANAGED_PROVIDER_TOKEN_KEY => Some(ConfigValue::Str(profile.api_key.clone())),
-        "openai_base_url" | "experimental_bearer_token" => None,
+        "model_provider" => Some(ConfigValue::Str(OFFICIAL_PROVIDER.into())),
+        "openai_base_url" => profile.base_url.clone().map(ConfigValue::Str),
+        "experimental_bearer_token"
+        | CODEX_LEGACY_PROVIDER_NAME_KEY
+        | CODEX_LEGACY_PROVIDER_BASE_URL_KEY
+        | CODEX_LEGACY_PROVIDER_WIRE_API_KEY
+        | CODEX_LEGACY_PROVIDER_TOKEN_KEY => None,
         "model_context_window" => match &profile.model_options {
             Some(ModelOptions::Codex(settings)) => settings
                 .context_window
@@ -247,12 +243,10 @@ fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
             (spec.key.to_string(), entry)
         })
         .collect();
-    if plan.profile.route_mode == crate::contracts::RouteMode::Official {
-        entries.push((
-            format!("model_providers.{CODEX_MANAGED_PROVIDER_ID}"),
-            OverlayEntry::RemoveTableIfEmpty,
-        ));
-    }
+    entries.push((
+        format!("model_providers.{CODEX_LEGACY_PROVIDER_ID}"),
+        OverlayEntry::RemoveTableIfEmpty,
+    ));
     entries
 }
 
@@ -318,11 +312,16 @@ pub fn route_state(text: &str) -> RouteState {
     let doc = parse(text).expect("caller validates syntax first");
     let get = |path: &str| item_at(&doc, path).and_then(item_repr);
     let provider_id = get("model_provider").unwrap_or_else(|| OFFICIAL_PROVIDER.to_string());
-    let custom = provider_id != OFFICIAL_PROVIDER;
-    let base_path = format!("model_providers.{provider_id}.base_url");
-    let wire_path = format!("model_providers.{provider_id}.wire_api");
-    let base_url = custom.then(|| get(&base_path)).flatten();
-    let wire_api = custom.then(|| get(&wire_path)).flatten();
+    let custom_provider = provider_id != OFFICIAL_PROVIDER;
+    let base_url = if custom_provider {
+        get(&format!("model_providers.{provider_id}.base_url"))
+    } else {
+        get("openai_base_url")
+    };
+    let custom = custom_provider || base_url.is_some();
+    let wire_api = custom_provider
+        .then(|| get(&format!("model_providers.{provider_id}.wire_api")))
+        .flatten();
     RouteState {
         app: AppKind::Codex,
         route_mode: if custom {
@@ -330,7 +329,7 @@ pub fn route_state(text: &str) -> RouteState {
         } else {
             RouteMode::Official
         },
-        provider_name: custom
+        provider_name: custom_provider
             .then(|| get(&format!("model_providers.{provider_id}.name")))
             .flatten(),
         model: get("model"),
@@ -539,7 +538,7 @@ mod tests {
         let changed: Vec<&str> = preview.changes.iter().map(|c| c.key.as_str()).collect();
         assert!(changed.contains(&"model"));
         assert!(!changed.contains(&"model_provider"));
-        assert!(changed.contains(&"model_providers.OpenAi.base_url"));
+        assert!(changed.contains(&"openai_base_url"));
         assert!(changed.contains(&"model_context_window"));
         assert_eq!(preview.backup_dir, "F:/backups");
         assert_eq!(preview.target, "~/.codex/config.toml");
@@ -559,15 +558,14 @@ mod tests {
         let rendered = render(CODEX_TOML, &plan).expect("official render");
         assert!(!rendered.contains("[model_providers.OpenAi]"));
         assert!(!rendered.contains("openai_base_url"));
-        assert!(!rendered.contains("model_provider"));
+        assert!(rendered.contains("model_provider = \"openai\""));
         assert!(rendered.contains("threads = 8"));
     }
 
     #[test]
     fn official_route_keeps_unknown_entries_in_the_managed_provider_table() {
-        let current = CODEX_TOML.replace(
-            "experimental_bearer_token = \"TEST_CODEX_IMPORT_KEY\"",
-            "experimental_bearer_token = \"TEST_CODEX_IMPORT_KEY\"\nhost_extension = \"preserve\"",
+        let current = format!(
+            "{CODEX_TOML}\n[model_providers.OpenAi]\nname = \"Legacy Relay\"\nbase_url = \"https://legacy.internal/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"LEGACY_TOKEN\"\nhost_extension = \"preserve\"\n"
         );
         let mut plan = plan_b();
         plan.profile.route_mode = RouteMode::Official;
@@ -580,7 +578,8 @@ mod tests {
         assert!(rendered.contains("[model_providers.OpenAi]"));
         assert!(rendered.contains("host_extension = \"preserve\""));
         assert!(!rendered.contains("experimental_bearer_token"));
-        assert!(!rendered.contains("base_url"));
+        assert!(!rendered.contains("Legacy Relay"));
+        assert!(!rendered.contains("https://legacy.internal/v1"));
     }
 
     #[test]
@@ -616,18 +615,21 @@ mod tests {
     }
 
     #[test]
-    fn preview_replaces_bearer_token_and_redacts_it() {
-        let current = CODEX_TOML.replace("TEST_CODEX_IMPORT_KEY", "sk-live-old-secret");
+    fn preview_removes_legacy_bearer_token_and_redacts_it() {
+        let current = CODEX_TOML.replace(
+            "\n[projects.",
+            "\nexperimental_bearer_token = \"sk-live-old-secret\"\n\n[projects.",
+        );
 
         let preview = preview(&current, &plan_b(), "/b").unwrap();
         let change = preview
             .changes
             .iter()
-            .find(|c| c.key == "model_providers.OpenAi.experimental_bearer_token")
-            .expect("bearer token must be replaced");
-        assert_eq!(change.kind, ChangeKind::Set);
+            .find(|c| c.key == "experimental_bearer_token")
+            .expect("legacy bearer token must be removed");
+        assert_eq!(change.kind, ChangeKind::Remove);
         assert_eq!(change.before.as_deref(), Some(crate::redact::REDACTED));
-        assert_eq!(change.after.as_deref(), Some(crate::redact::REDACTED));
+        assert!(change.after.is_none());
         assert!(!format!("{preview:?}").contains("sk-live-old-secret"));
     }
 
@@ -647,10 +649,9 @@ mod tests {
         assert!(rendered.contains("history_persistence = \"save-all\""));
         assert!(rendered.contains("trusted = true"));
         assert!(rendered.contains("model = \"gpt-5.2\""));
-        assert!(rendered.contains("model_provider = \"OpenAi\""));
-        assert!(rendered.contains("[model_providers.OpenAi]"));
-        assert!(rendered.contains("base_url = \"https://relay-b.internal/v1\""));
-        assert!(rendered.contains("wire_api = \"responses\""));
+        assert!(rendered.contains("model_provider = \"openai\""));
+        assert!(rendered.contains("openai_base_url = \"https://relay-b.internal/v1\""));
+        assert!(!rendered.contains("[model_providers.OpenAi]"));
         // Output stays valid TOML.
         rendered
             .parse::<DocumentMut>()
@@ -658,20 +659,16 @@ mod tests {
     }
 
     #[test]
-    fn render_writes_profile_bearer_token() {
+    fn render_keeps_profile_api_key_out_of_config_toml() {
         let rendered = render(CODEX_TOML, &plan_b()).unwrap();
         let doc = rendered.parse::<DocumentMut>().unwrap();
-        assert_eq!(
-            item_at(&doc, "model_providers.OpenAi.experimental_bearer_token")
-                .and_then(item_repr)
-                .as_deref(),
-            Some("CODEX_RELAY_B_KEY")
-        );
         assert!(item_at(&doc, "experimental_bearer_token").is_none());
+        assert!(item_at(&doc, "model_providers.OpenAi.experimental_bearer_token").is_none());
+        assert!(!rendered.contains("CODEX_RELAY_B_KEY"));
     }
 
     #[test]
-    fn projection_removes_the_legacy_top_level_route_and_preserves_other_tables() {
+    fn projection_reuses_builtin_openai_route_and_preserves_other_tables() {
         let legacy = r#"
 model_provider = "openai"
 openai_base_url = "https://legacy.internal/v1"
@@ -684,15 +681,10 @@ wire_api = "responses"
 "#;
 
         let rendered = render(legacy, &plan_b()).expect("render custom route");
-        assert!(!rendered.contains("openai_base_url"));
+        assert!(rendered.contains("openai_base_url = \"https://relay-b.internal/v1\""));
         let doc = rendered.parse::<DocumentMut>().expect("valid TOML");
         assert!(item_at(&doc, "experimental_bearer_token").is_none());
-        assert_eq!(
-            item_at(&doc, "model_providers.OpenAi.experimental_bearer_token")
-                .and_then(item_repr)
-                .as_deref(),
-            Some("CODEX_RELAY_B_KEY")
-        );
+        assert!(item_at(&doc, "model_providers.OpenAi.experimental_bearer_token").is_none());
         assert_eq!(
             item_at(&doc, "model_providers.gateway.base_url")
                 .and_then(item_repr)
@@ -741,7 +733,7 @@ wire_api = "responses"
     fn route_state_reads_managed_custom_provider_and_model() {
         let state = route_state(CODEX_TOML);
         assert_eq!(state.route_mode, RouteMode::Custom);
-        assert_eq!(state.provider_name.as_deref(), Some("Relay A"));
+        assert_eq!(state.provider_name, None);
         assert_eq!(state.model.as_deref(), Some("gpt-5.1"));
         assert_eq!(
             state.base_url.as_deref(),
@@ -752,7 +744,9 @@ wire_api = "responses"
 
     #[test]
     fn route_state_defaults_to_official_when_model_provider_is_omitted() {
-        let implicit = CODEX_TOML.replace("model_provider = \"OpenAi\"\n", "");
+        let implicit = CODEX_TOML
+            .replace("model_provider = \"openai\"\n", "")
+            .replace("openai_base_url = \"https://relay-a.internal/v1\"\n", "");
         assert_eq!(route_state(&implicit).route_mode, RouteMode::Official);
     }
 
@@ -777,15 +771,18 @@ wire_api = "responses"
     }
 
     #[test]
-    fn route_state_ignores_legacy_top_level_route_fields() {
+    fn route_state_reads_builtin_openai_endpoint_override() {
         let legacy = r#"
 model_provider = "openai"
 openai_base_url = "https://legacy.internal/v1"
 experimental_bearer_token = "LEGACY_TOKEN"
 "#;
         let state = route_state(legacy);
-        assert_eq!(state.route_mode, RouteMode::Official);
-        assert!(state.base_url.is_none());
+        assert_eq!(state.route_mode, RouteMode::Custom);
+        assert_eq!(
+            state.base_url.as_deref(),
+            Some("https://legacy.internal/v1")
+        );
         assert!(state.wire_api.is_none());
     }
 

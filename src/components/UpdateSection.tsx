@@ -1,29 +1,58 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ReactNode } from "react";
 import type { UpdateCheck } from "../api/client";
+import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { Button } from "./Button";
 import { Time } from "./Time";
 
-/** Software-update state on the settings page. The startup lookup is silent;
- * a user-triggered retry exposes failures through the application error UI. */
+function formatProgress(progress: UpdateDownloadProgress): string {
+  if (progress.totalBytes === null || progress.totalBytes === 0) {
+    return `正在下载更新 ${Math.floor(progress.downloadedBytes / 1024)} KB`;
+  }
+  return `正在下载更新 ${Math.min(100, Math.floor((progress.downloadedBytes / progress.totalBytes) * 100))}%`;
+}
+
+/** Software-update state on the settings page. Startup checks are silent;
+ * download, verification and installation are explicit user actions. */
 export function UpdateSection({
   result,
   busy,
+  installing,
+  progress,
+  checkedAt,
+  restartRequired,
   onCheck,
+  onInstall,
+  onRestart,
 }: {
   result: UpdateCheck | null;
   busy: boolean;
+  installing: boolean;
+  progress: UpdateDownloadProgress | null;
+  checkedAt: string | null;
+  restartRequired: boolean;
   onCheck: () => void;
+  onInstall: () => void;
+  onRestart: () => void;
 }) {
-  const label = result
-    ? result.updateAvailable
-      ? `发现新版本 ${result.latestVersion}`
-      : "已是最新版本"
+  const label = restartRequired
+    ? installing
+      ? "正在重新启动"
+      : "更新已安装，需要重启"
+    : result
+    ? installing
+      ? progress
+        ? formatProgress(progress)
+        : "正在安装更新"
+      : `发现新版本 ${result.latestVersion}`
     : busy
       ? "正在检查新版本"
+      : checkedAt
+        ? "已是最新版本"
       : "检查新版本";
-  const detail: ReactNode = result ? (
-    <>当前版本 {result.currentVersion} · 检查于 <Time iso={result.checkedAt} /></>
+  const detail: ReactNode = checkedAt ? (
+    <>
+      {result ? `当前版本 ${result.currentVersion} · ` : null}检查于 <Time iso={checkedAt} />
+    </>
   ) : null;
   return (
     <section className="asb-app-settings-group" aria-labelledby="software-update">
@@ -36,15 +65,20 @@ export function UpdateSection({
           {detail ? <span className="asb-app-setting-detail">{detail}</span> : null}
         </div>
         <div className="asb-panel-actions">
-          {result?.updateAvailable === true && (
+          {restartRequired ? (
+            <Button variant="primary" disabled={installing} onClick={onRestart}>
+              重新启动
+            </Button>
+          ) : result ? (
             <Button
               variant="primary"
-              onClick={() => void openUrl(result.releaseUrl)}
+              disabled={busy || installing}
+              onClick={onInstall}
             >
-              打开下载页面
+              下载并安装
             </Button>
-          )}
-          <Button variant="secondary" disabled={busy} onClick={onCheck}>
+          ) : null}
+          <Button variant="secondary" disabled={busy || installing || restartRequired} onClick={onCheck}>
             检查更新
           </Button>
         </div>

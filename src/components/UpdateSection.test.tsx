@@ -1,68 +1,93 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import type { Update } from "@tauri-apps/plugin-updater";
 import type { UpdateCheck } from "../api/client";
 import { UpdateSection } from "./UpdateSection";
 
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
-
 const available: UpdateCheck = {
   currentVersion: "0.1.0",
-  latestVersion: "v0.2.0",
-  updateAvailable: true,
-  releaseUrl: "https://github.com/y4Nkk/agent-switchboard/releases/tag/v0.2.0",
+  latestVersion: "0.2.0",
   checkedAt: "2026-08-31T08:00:00Z",
+  update: {} as Update,
 };
 
-const upToDate: UpdateCheck = { ...available, latestVersion: "0.1.0", updateAvailable: false };
+function renderSection(overrides: Partial<Parameters<typeof UpdateSection>[0]> = {}) {
+  const props = {
+    result: null,
+    busy: false,
+    installing: false,
+    progress: null,
+    checkedAt: null,
+    restartRequired: false,
+    onCheck: vi.fn(),
+    onInstall: vi.fn(),
+    onRestart: vi.fn(),
+    ...overrides,
+  };
+  render(<UpdateSection {...props} />);
+  return props;
+}
 
 describe("UpdateSection", () => {
   it("shows the manual check affordance before any check ran", () => {
-    render(<UpdateSection result={null} busy={false} onCheck={() => {}} />);
+    renderSection();
 
     expect(screen.getByText("检查新版本")).toBeInTheDocument();
-    expect(screen.queryByText(/当前版本/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "打开下载页面" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/检查于/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下载并安装" })).not.toBeInTheDocument();
   });
 
   it("emits the check request on demand", async () => {
     const user = userEvent.setup();
-    const onCheck = vi.fn();
-    render(<UpdateSection result={null} busy={false} onCheck={onCheck} />);
+    const props = renderSection();
 
     await user.click(screen.getByRole("button", { name: "检查更新" }));
-    expect(onCheck).toHaveBeenCalledTimes(1);
-  });
-
-  it("disables the check button while the frame is busy", () => {
-    render(<UpdateSection result={available} busy onCheck={() => {}} />);
-
-    expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
+    expect(props.onCheck).toHaveBeenCalledTimes(1);
   });
 
   it("shows the startup lookup state before a result is available", () => {
-    render(<UpdateSection result={null} busy onCheck={() => {}} />);
+    renderSection({ busy: true });
 
     expect(screen.getByText("正在检查新版本")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
   });
 
-  it("reports an up-to-date result without a download entry", () => {
-    render(<UpdateSection result={upToDate} busy={false} onCheck={() => {}} />);
+  it("reports an up-to-date result after a completed empty check", () => {
+    renderSection({ checkedAt: "2026-08-31T08:00:00Z" });
 
     expect(screen.getByText("已是最新版本")).toBeInTheDocument();
-    expect(screen.getByText(/当前版本 0\.1\.0 · 检查于/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "打开下载页面" })).not.toBeInTheDocument();
+    expect(screen.getByText(/检查于/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下载并安装" })).not.toBeInTheDocument();
   });
 
-  it("offers the release page when a newer version is found", async () => {
-    vi.mocked(openUrl).mockClear();
+  it("offers download and installation for a signed update", async () => {
     const user = userEvent.setup();
-    render(<UpdateSection result={available} busy={false} onCheck={() => {}} />);
+    const props = renderSection({ result: available, checkedAt: available.checkedAt });
 
-    expect(screen.getByText("发现新版本 v0.2.0")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "打开下载页面" }));
-    expect(openUrl).toHaveBeenCalledWith(available.releaseUrl);
+    expect(screen.getByText("发现新版本 0.2.0")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "下载并安装" }));
+    expect(props.onInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows byte progress while an update package has no content length", () => {
+    renderSection({
+      result: available,
+      installing: true,
+      progress: { downloadedBytes: 2048, totalBytes: null },
+    });
+
+    expect(screen.getByText("正在下载更新 2 KB")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载并安装" })).toBeDisabled();
+  });
+
+  it("requires an explicit restart after a completed installation", async () => {
+    const user = userEvent.setup();
+    const props = renderSection({ restartRequired: true });
+
+    expect(screen.getByText("更新已安装，需要重启")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "重新启动" }));
+    expect(props.onRestart).toHaveBeenCalledTimes(1);
   });
 });

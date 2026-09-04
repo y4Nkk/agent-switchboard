@@ -5,11 +5,12 @@ param(
   [string]$ArtifactPath
 )
 
-# Extracts one release artifact (.exe NSIS installer, .dmg, .AppImage or
-# .deb) into a temp directory and scans every contained file for
+# Extracts one release artifact (.exe NSIS installer, .dmg, .AppImage,
+# .deb or .app.tar.gz) into a temp directory and scans every contained file for
 # credential-shaped data. 7z is required for .exe; the other formats use
 # tools preinstalled on their building runner (hdiutil on macOS,
-# ar/tar/unzstd on Linux, --appimage-extract is built into AppImages).
+# ar/tar/unzstd on Linux, --appimage-extract is built into AppImages). Raw
+# updater signature files are scanned directly.
 
 $resolvedArtifact = (Resolve-Path -LiteralPath $ArtifactPath -ErrorAction Stop).Path
 $extension = [IO.Path]::GetExtension($resolvedArtifact)
@@ -70,9 +71,17 @@ $scanRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-switchboard-release-sca
 New-Item -ItemType Directory -Path $scanRoot -ErrorAction Stop | Out-Null
 $scanSource = $scanRoot
 $mountedDmg = $null
+$isMacUpdaterArchive = $resolvedArtifact.EndsWith('.app.tar.gz', [StringComparison]::OrdinalIgnoreCase)
 
 try {
-  switch ($extension) {
+  if ($isMacUpdaterArchive) {
+    & tar -xzf $resolvedArtifact -C $scanRoot
+    if ($LASTEXITCODE -ne 0) {
+      throw "tar could not extract the macOS updater archive (exit code $LASTEXITCODE)."
+    }
+  }
+  else {
+    switch ($extension) {
     '.exe' {
       $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
       if ($null -eq $sevenZip) {
@@ -137,8 +146,12 @@ try {
         Pop-Location
       }
     }
+    '.sig' {
+      Copy-Item -LiteralPath $resolvedArtifact -Destination $scanRoot
+    }
     default {
-      throw "Unsupported artifact type '$extension'; expected .exe, .dmg, .AppImage or .deb: $resolvedArtifact"
+      throw "Unsupported artifact type '$extension'; expected .exe, .dmg, .AppImage, .deb, .app.tar.gz or .sig: $resolvedArtifact"
+    }
     }
   }
 

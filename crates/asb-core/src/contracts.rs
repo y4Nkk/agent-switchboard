@@ -186,6 +186,135 @@ pub struct UsageSummary {
     pub at: String,
 }
 
+/// The selectable time span for a read-only aggregation of local client
+/// session records. The range is evaluated in the local machine's calendar;
+/// it does not describe a provider billing window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelUsageRange {
+    Today,
+    Last7Days,
+    Last30Days,
+    All,
+}
+
+/// Token consumption observed in local client session records, grouped by
+/// client and model. `total_tokens` is the sum of fresh input, cache-read
+/// input, cache-creation input, and output. This is intentionally separate
+/// from a provider balance or a subscription quota: local logs cannot
+/// establish remaining allowance.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageGroup {
+    pub app: AppKind,
+    pub model: Option<String>,
+    pub input_tokens: u64,
+    pub cache_read_input_tokens: u64,
+    pub cache_creation_input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    pub session_count: u64,
+}
+
+/// Token consumption assigned to one local calendar day. The date uses the
+/// local machine's `YYYY-MM-DD` calendar, matching `ModelUsageRange`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageDay {
+    pub date: String,
+    pub input_tokens: u64,
+    pub cache_read_input_tokens: u64,
+    pub cache_creation_input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+}
+
+/// A token subtotal that cannot be assigned to a local calendar day because
+/// its source record has no usable timestamp. It is separate from the daily
+/// trend so the report never silently represents it as dated usage.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageTokens {
+    pub input_tokens: u64,
+    pub cache_read_input_tokens: u64,
+    pub cache_creation_input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+}
+
+/// One client-local reason why a model-usage report may be incomplete. The
+/// report still includes any independently readable session records.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageIssue {
+    pub app: AppKind,
+    pub message: String,
+}
+
+/// A credential-free, read-only aggregation over local Codex and Claude Code
+/// session records. It never represents a provider billing or quota value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageReport {
+    pub range: ModelUsageRange,
+    /// RFC 3339 UTC timestamp at which the report was generated.
+    pub generated_at: String,
+    pub groups: Vec<ModelUsageGroup>,
+    /// Daily local-calendar totals for records with usable timestamps.
+    pub days: Vec<ModelUsageDay>,
+    /// Totals included in `groups` but intentionally absent from `days`.
+    /// This can be non-zero only for the `All` range, because date-bounded
+    /// ranges cannot decide whether an undated record belongs inside them.
+    pub unassigned_tokens: ModelUsageTokens,
+    pub issues: Vec<ModelUsageIssue>,
+}
+
+/// One renderer request for persisted, credential-free usage history.
+/// Provider history is always resolved against the profile's current query
+/// digest by the backend; the renderer never supplies a digest or path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum UsageHistoryRequest {
+    Provider { profile_id: String },
+    Official,
+}
+
+/// The meaning of one stored usage-history series. `UsedPercent` is reserved
+/// for ratios that have a trustworthy total, including official quotas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UsageHistoryMetric {
+    Remaining,
+    Used,
+    UsedPercent,
+}
+
+/// One observed numeric point. Timestamps are RFC 3339 UTC values written
+/// only after a real successful provider or official-quota read.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageHistoryPoint {
+    pub at: String,
+    pub value: f64,
+}
+
+/// A renderer-safe history series. It intentionally contains no provider
+/// endpoint, query source, account identifier, credential, or raw payload.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageHistorySeries {
+    pub id: String,
+    pub label: String,
+    pub unit: Option<String>,
+    pub metric: UsageHistoryMetric,
+    pub points: Vec<UsageHistoryPoint>,
+}
+
 /// The renderer-safe status of one Codex official-subscription quota read.
 /// OAuth credentials and account identifiers are intentionally absent from
 /// this contract; the desktop service owns them for the duration of a single
@@ -575,6 +704,10 @@ pub struct BackupRecord {
     /// metadata always represents an existing target.
     #[serde(default = "backup_target_existed")]
     pub target_existed: bool,
+    /// The configuration backup created by the same Codex two-file operation.
+    /// Credential backups carry this link; ordinary backups do not.
+    #[serde(default)]
+    pub linked_backup_id: Option<String>,
     pub reason: String,
 }
 
@@ -680,6 +813,69 @@ pub struct ImportProposal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_usage_report_serializes_as_a_read_only_client_model_summary() {
+        let report = ModelUsageReport {
+            range: ModelUsageRange::Last7Days,
+            generated_at: "2026-09-03T08:00:00Z".to_string(),
+            groups: vec![ModelUsageGroup {
+                app: AppKind::Codex,
+                model: Some("gpt-5.6-codex".to_string()),
+                input_tokens: 120,
+                cache_read_input_tokens: 40,
+                cache_creation_input_tokens: 20,
+                output_tokens: 30,
+                total_tokens: 210,
+                session_count: 2,
+            }],
+            days: vec![ModelUsageDay {
+                date: "2026-09-03".to_string(),
+                input_tokens: 120,
+                cache_read_input_tokens: 40,
+                cache_creation_input_tokens: 20,
+                output_tokens: 30,
+                total_tokens: 210,
+            }],
+            unassigned_tokens: ModelUsageTokens::default(),
+            issues: vec![ModelUsageIssue {
+                app: AppKind::Claude,
+                message: "当前客户端未提供可解析的 token 记录".to_string(),
+            }],
+        };
+
+        let value = serde_json::to_value(&report).expect("report serializes");
+        assert_eq!(value["range"], "last7Days");
+        assert_eq!(value["groups"][0]["cacheReadInputTokens"], 40);
+        assert_eq!(value["days"][0]["date"], "2026-09-03");
+        assert_eq!(value["unassignedTokens"]["totalTokens"], 0);
+        assert_eq!(value["issues"][0]["app"], "claude");
+    }
+
+    #[test]
+    fn usage_history_contract_exposes_only_the_requested_scope_and_series_points() {
+        let request = UsageHistoryRequest::Provider {
+            profile_id: "profile-1".to_string(),
+        };
+        let series = UsageHistorySeries {
+            id: "provider-123".to_string(),
+            label: "默认方案余额".to_string(),
+            unit: Some("次".to_string()),
+            metric: UsageHistoryMetric::Remaining,
+            points: vec![UsageHistoryPoint {
+                at: "2026-09-03T08:00:00.000Z".to_string(),
+                value: 12.5,
+            }],
+        };
+
+        assert_eq!(
+            serde_json::to_value(request).expect("request serializes"),
+            serde_json::json!({"kind":"provider","profileId":"profile-1"})
+        );
+        let value = serde_json::to_value(series).expect("series serializes");
+        assert_eq!(value["metric"], "remaining");
+        assert_eq!(value["points"][0]["value"], 12.5);
+    }
 
     #[test]
     fn profiles_without_usage_query_still_deserialize() {

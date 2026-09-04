@@ -1,7 +1,6 @@
 {
   "name": "agent-switchboard",
   "private": true,
-  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "cross-env ASB_WEB_DEVELOPMENT=1 tauri dev",
@@ -11,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:updater-release": "node --test scripts/updater-release.test.mjs",
     "tauri": "tauri",
     "tauri:build:windows": "tauri build --config src-tauri/tauri.windows.conf.json",
     "tauri:build:macos": "tauri build --config src-tauri/tauri.macos.conf.json",
@@ -25,6 +25,7 @@
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

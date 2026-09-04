@@ -6,6 +6,11 @@
  */
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  check as checkForUpdate,
+  type DownloadEvent,
+  type Update,
+} from "@tauri-apps/plugin-updater";
 import { isBrowserDevelopment } from "../lib/runtime";
 
 type InvokeArgs = Record<string, unknown>;
@@ -113,6 +118,82 @@ export interface UsageReading {
 export interface UsageSummary {
   readings: UsageReading[];
   at: string;
+}
+
+/** Local-calendar range for the read-only client session usage report. */
+export type ModelUsageRange = "today" | "last7Days" | "last30Days" | "all";
+
+/** One local-session token total, grouped by client and model. It is not a
+ * provider billing quota and does not assert a remaining allowance. */
+export interface ModelUsageGroup {
+  app: AppKind;
+  model: string | null;
+  inputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  sessionCount: number;
+}
+
+/** Token totals assigned to one local-calendar day. These values remain
+ * separate from provider billing or quota data. */
+export interface ModelUsageDay {
+  date: string;
+  inputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+/** Token totals that a local session log did not timestamp. They remain in
+ * the exact totals but never become an invented trend point. */
+export interface ModelUsageTokens {
+  inputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+/** A non-fatal client-local reason why a model usage report is incomplete. */
+export interface ModelUsageIssue {
+  app: AppKind;
+  message: string;
+}
+
+/** Credential-free aggregation over the supported local session records. */
+export interface ModelUsageReport {
+  range: ModelUsageRange;
+  generatedAt: string;
+  groups: ModelUsageGroup[];
+  days: ModelUsageDay[];
+  unassignedTokens: ModelUsageTokens;
+  issues: ModelUsageIssue[];
+}
+
+/** The renderer asks for either its current provider's normalized history or
+ * the independent account-level Codex official history. */
+export type UsageHistoryRequest =
+  | { kind: "provider"; profileId: string }
+  | { kind: "official" };
+
+export type UsageHistoryMetric = "remaining" | "used" | "usedPercent";
+
+export interface UsageHistoryPoint {
+  at: string;
+  value: number;
+}
+
+/** A credential-free, unit-aware historical series returned by the desktop
+ * service after successful real reads only. */
+export interface UsageHistorySeries {
+  id: string;
+  label: string;
+  unit: string | null;
+  metric: UsageHistoryMetric;
+  points: UsageHistoryPoint[];
 }
 
 /** Renderer-safe state of the read-only Codex ChatGPT-login quota service. */
@@ -389,6 +470,7 @@ export interface BackupRecord {
   createdAt: string;
   contentHash: string;
   targetExisted: boolean;
+  linkedBackupId: string | null;
   reason: string;
 }
 
@@ -859,18 +941,38 @@ export function cancelOfficialLogin(target: AppKind): Promise<void> {
   return invoke<void>("official_login_cancel", { target });
 }
 
-/** Result of one startup or user-triggered app-update check; informational only. */
+/** One verified application update discovered by Tauri's updater plugin. */
 export interface UpdateCheck {
   currentVersion: string;
-  /** Release tag exactly as published, e.g. "v0.2.0". */
   latestVersion: string;
-  updateAvailable: boolean;
-  releaseUrl: string;
   checkedAt: string;
+  update: Update;
 }
 
-export function checkUpdate(): Promise<UpdateCheck> {
-  return invoke<UpdateCheck>("check_update");
+/** Checks the signed update manifest. `null` means the installed build is current. */
+export async function checkUpdate(): Promise<UpdateCheck | null> {
+  const update = await checkForUpdate();
+  return update
+    ? {
+        currentVersion: update.currentVersion,
+        latestVersion: update.version,
+        checkedAt: new Date().toISOString(),
+        update,
+      }
+    : null;
+}
+
+/** Downloads, verifies and installs one previously discovered update. */
+export function installUpdate(
+  update: Update,
+  onEvent: (event: DownloadEvent) => void,
+): Promise<void> {
+  return update.downloadAndInstall(onEvent);
+}
+
+/** Releases an update resource once it is superseded or no longer usable. */
+export function closeUpdate(update: Update): Promise<void> {
+  return update.close();
 }
 
 /** Public, global reset signals from Codex Runway. These do not describe the
@@ -940,6 +1042,17 @@ export function discoverCached(): Promise<DiscoveryReport | null> {
 
 export function listSessions(): Promise<SessionScan> {
   return invoke<SessionScan>("list_sessions");
+}
+
+/** Aggregates token records from the two approved local session roots. */
+export function getModelUsageReport(range: ModelUsageRange): Promise<ModelUsageReport> {
+  return invoke<ModelUsageReport>("get_model_usage_report", { range });
+}
+
+/** Reads the app-owned, credential-free history ledger. It never triggers a
+ * provider or Codex network request. */
+export function getUsageHistory(request: UsageHistoryRequest): Promise<UsageHistorySeries[]> {
+  return invoke<UsageHistorySeries[]>("get_usage_history", { request });
 }
 
 export function getSessionMessages(app: AppKind, sessionId: string): Promise<SessionMessage[]> {

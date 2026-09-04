@@ -8,13 +8,14 @@ mod config_store;
 mod dev_api;
 mod fonts;
 mod local_state;
+mod model_usage;
 mod official_login;
 mod probe;
 mod runtime_log;
 mod session_manager;
 mod tray;
-mod update;
 mod usage_cache;
+mod usage_history;
 mod usage_query;
 
 pub use commands::local_config_paths;
@@ -83,6 +84,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(runtime_log::plugin())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -172,13 +174,14 @@ pub fn run() {
             commands::official_login::official_login_poll,
             commands::official_login::official_login_cancel,
             commands::fetch_provider_models,
-            commands::check_update,
             commands::get_cached_codex_reset_status,
             commands::check_codex_reset_status,
             commands::status::lock_status,
             commands::status::recover_stale_lock,
             commands::discover_local,
             commands::discover_cached,
+            commands::model_usage::get_model_usage_report,
+            commands::usage_history::get_usage_history,
             commands::list_sessions,
             commands::get_session_messages,
             commands::resume_session,

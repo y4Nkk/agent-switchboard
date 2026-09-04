@@ -1,7 +1,10 @@
+import { useCallback } from "react";
 import { queryProfileUsage, type ProviderProfile } from "../api/client";
+import { ProviderUsageTrend } from "./ProviderUsageTrend";
 import { Time } from "./Time";
 import { UsageReadingsTable } from "./UsageReadingsTable";
 import { useAutoQuery } from "./use-auto-query";
+import { useUsageHistory } from "./use-usage-history";
 
 interface Props {
   id: string;
@@ -15,10 +18,19 @@ export function ProviderUsagePanel({ id, profile, onConfigure }: Props) {
   /** The auto-refresh cadence is owned by the profile's saved query; an
    * unconfigured profile (manual-only) never reaches this panel's timer. */
   const refreshIntervalMinutes = profile.usageQuery?.refreshIntervalMinutes ?? 0;
+  // The backend owns query hashing. This version only causes an already-mounted
+  // panel to reload after the profile's query is saved and its old history cleared.
+  const queryRevision = JSON.stringify(profile.usageQuery);
+  const history = useUsageHistory({ kind: "provider", profileId: profile.id }, queryRevision);
+  const query = useCallback(async (profileId: string) => {
+    const summary = await queryProfileUsage(profileId);
+    void history.refresh();
+    return summary;
+  }, [history.refresh]);
   const { data: summary, querying, error, run } = useAutoQuery(
     profile.id,
     refreshIntervalMinutes,
-    queryProfileUsage,
+    query,
     "用量查询失败",
   );
 
@@ -50,6 +62,12 @@ export function ProviderUsagePanel({ id, profile, onConfigure }: Props) {
         </div>
       </header>
 
+      <ProviderUsageTrend
+        providerName={profile.name}
+        series={history.series}
+        loading={history.loading}
+        error={history.error}
+      />
       {summary ? (
         <UsageReadingsTable
           readings={summary.readings}

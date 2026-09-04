@@ -55,6 +55,7 @@ tauri = { version = "2", default-features = false, features = [
 # `target=_blank` new-window requests, so external links must go through it.
 tauri-plugin-opener = "2"
 tauri-plugin-log = "2"
+tauri-plugin-updater = "2.11"
 tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-autostart = "2"

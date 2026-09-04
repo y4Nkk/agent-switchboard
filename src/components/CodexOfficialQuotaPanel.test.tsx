@@ -2,13 +2,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
-import type { CodexOfficialQuota } from "../api/client";
+import type { CodexOfficialQuota, UsageHistorySeries } from "../api/client";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
 
 const invokeMock = vi.mocked(invoke);
+
+const officialHistory: UsageHistorySeries[] = [
+  {
+    id: "official-5-hours",
+    label: "5 小时",
+    unit: "%",
+    metric: "usedPercent",
+    points: [
+      { at: "2026-09-01T02:00:00Z", value: 8 },
+      { at: "2026-09-01T03:00:00Z", value: 12.5 },
+    ],
+  },
+];
+
+function callsFor(command: string) {
+  return invokeMock.mock.calls.filter(([calledCommand]) => calledCommand === command);
+}
+
+function mockQuotaCommands(quota: CodexOfficialQuota, history = officialHistory) {
+  invokeMock.mockImplementation((command) => {
+    if (command === "get_usage_history") return Promise.resolve(history) as never;
+    if (command === "query_codex_official_quota") return Promise.resolve(quota) as never;
+    return Promise.reject(new Error(`unexpected command: ${command}`)) as never;
+  });
+}
 
 describe("CodexOfficialQuotaPanel", () => {
   beforeEach(() => {
@@ -17,7 +42,7 @@ describe("CodexOfficialQuotaPanel", () => {
 
   it("renders the native server windows without receiving OAuth data", async () => {
     const user = userEvent.setup();
-    invokeMock.mockResolvedValue({
+    mockQuotaCommands({
       status: "available",
       windows: [
         { label: "5 小时", usedPercent: 12.5, resetsAt: "2026-09-01T08:00:00Z" },
@@ -25,6 +50,7 @@ describe("CodexOfficialQuotaPanel", () => {
       ],
       at: "2026-09-01T03:00:00Z",
       stale: false,
+      lastReset: null,
     });
 
     render(
@@ -43,16 +69,19 @@ describe("CodexOfficialQuotaPanel", () => {
     expect(invokeMock).toHaveBeenCalledWith("query_codex_official_quota", {
       profileId: "codex-official",
     });
-    expect(invokeMock.mock.calls[0]?.[1]).toEqual({ profileId: "codex-official" });
+    expect(callsFor("query_codex_official_quota")[0]?.[1]).toEqual({ profileId: "codex-official" });
+    expect(await screen.findByRole("img", { name: /5 小时，12.5 %/ })).toBeInTheDocument();
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(2));
 
     await user.click(screen.getByRole("button", { name: "刷新" }));
-    expect(invokeMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(callsFor("query_codex_official_quota")).toHaveLength(2));
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(3));
   });
 
   it("appends a render-time countdown to a declared reset time", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-02T08:00:00Z"));
-    invokeMock.mockResolvedValue({
+    mockQuotaCommands({
       status: "available",
       windows: [{ label: "7 天", usedPercent: 76.25, resetsAt: "2026-09-06T08:00:00Z" }],
       at: "2026-09-01T03:00:00Z",
@@ -68,7 +97,9 @@ describe("CodexOfficialQuotaPanel", () => {
           profileName="Codex 官方登录"
         />,
       );
-      await act(async () => {});
+      await act(async () => {
+        await Promise.resolve();
+      });
 
       const windowRow = screen.getByRole("row", { name: /7 天/ });
       expect(windowRow).toHaveTextContent("约 4 天 0 小时后");
@@ -78,11 +109,12 @@ describe("CodexOfficialQuotaPanel", () => {
   });
 
   it("keeps a stale successful read visible beside the recoverable refresh state", async () => {
-    invokeMock.mockResolvedValue({
+    mockQuotaCommands({
       status: "unavailable",
       windows: [{ label: "5 小时", usedPercent: 38, resetsAt: null }],
       at: "2026-09-01T03:00:00Z",
       stale: true,
+      lastReset: null,
     });
 
     render(
@@ -95,14 +127,16 @@ describe("CodexOfficialQuotaPanel", () => {
 
     expect(await screen.findByText("38 %")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("正在显示上次成功读取的额度");
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(1));
   });
 
   it("directs a missing native login to the Codex login recovery action", async () => {
-    invokeMock.mockResolvedValue({
+    mockQuotaCommands({
       status: "signInRequired",
       windows: [],
       at: null,
       stale: false,
+      lastReset: null,
     });
 
     render(
@@ -115,18 +149,26 @@ describe("CodexOfficialQuotaPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("完成登录后刷新");
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(1));
   });
 
   it("re-reads when the profile changes while the first read is in flight", async () => {
     let resolveFirst: (value: CodexOfficialQuota) => void = () => {};
-    invokeMock.mockImplementationOnce(
-      () => new Promise<CodexOfficialQuota>((resolve) => { resolveFirst = resolve; }),
-    );
-    invokeMock.mockResolvedValue({
-      status: "available",
-      windows: [],
-      at: "2026-09-01T03:00:00Z",
-      stale: false,
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "get_usage_history") return Promise.resolve(officialHistory) as never;
+      if (command === "query_codex_official_quota") {
+        const profileId = (args as { profileId?: string } | undefined)?.profileId;
+        return profileId === "codex-official"
+          ? new Promise<CodexOfficialQuota>((resolve) => { resolveFirst = resolve; }) as never
+          : Promise.resolve({
+              status: "available",
+              windows: [],
+              at: "2026-09-01T03:00:00Z",
+              stale: false,
+              lastReset: null,
+            }) as never;
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`)) as never;
     });
 
     const { rerender } = render(
@@ -136,7 +178,7 @@ describe("CodexOfficialQuotaPanel", () => {
         profileName="Codex 官方登录"
       />,
     );
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(callsFor("query_codex_official_quota")).toHaveLength(1);
 
     rerender(
       <CodexOfficialQuotaPanel
@@ -146,7 +188,7 @@ describe("CodexOfficialQuotaPanel", () => {
       />,
     );
 
-    expect(invokeMock).toHaveBeenCalledTimes(2);
+    expect(callsFor("query_codex_official_quota")).toHaveLength(2);
     expect(invokeMock).toHaveBeenLastCalledWith("query_codex_official_quota", {
       profileId: "codex-relay",
     });

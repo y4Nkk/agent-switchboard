@@ -283,6 +283,7 @@ where
         created_at: io.now_rfc3339(),
         content_hash: sha256_hex(&current),
         target_existed,
+        linked_backup_id: None,
         reason: "restore-precheck".to_string(),
     };
     write_pre_restore_backup(io, &pre_path, &current, &pre_record)?;

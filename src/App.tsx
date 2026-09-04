@@ -12,6 +12,7 @@ import { LogsPage } from "./pages/LogsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { UsagePage } from "./pages/UsagePage";
 
 /** View composition root: the model lives in `useSwitchboardModel` (domain
  * hooks in `app/`), page rendering in `pages/`, and this file only wires
@@ -60,7 +61,7 @@ export default function App() {
         onRepairSettings={() => void appSettingsState.repairSettings()}
         pin={appSettingsState.pin}
         update={
-          updateCheck.updateCheck?.updateAvailable === true
+          updateCheck.updateCheck
             ? {
                 latestVersion: updateCheck.updateCheck.latestVersion,
                 onOpen: () => setPage("设置"),
@@ -157,9 +158,18 @@ export default function App() {
                 onRestart={() => void appSettingsState.restart()}
                 updateCheck={updateCheck.updateCheck}
                 updateChecking={updateCheck.checking}
+                updateInstalling={updateCheck.installing}
+                updateProgress={updateCheck.downloadProgress}
+                updateCheckedAt={updateCheck.lastCheckedAt}
+                updateRestartRequired={updateCheck.restartRequired}
                 onCheckUpdate={() => void updateCheck.runUpdateCheck()}
+                onInstallUpdate={() => void updateCheck.installAvailableUpdate()}
+                onRestartInstalledUpdate={() => void updateCheck.restartInstalledUpdate()}
               />
             )}
+            <div hidden={page !== "用量"}>
+              <UsagePage active={page === "用量"} />
+            </div>
             <section className="asb-panel" hidden={page !== "会话"} aria-label="会话管理">
               <div className="asb-panel-heading">
                 <h2 className="asb-panel-title">会话管理</h2>

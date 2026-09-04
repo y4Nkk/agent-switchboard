@@ -122,6 +122,7 @@ fn back_up_current<Io: SwitchIo>(
         created_at: io.now_rfc3339(),
         content_hash: current_hash.to_string(),
         target_existed,
+        linked_backup_id: None,
         reason: "prompt-management".to_string(),
     };
     write_backup_metadata(io, &backup, "backup-meta")?;

@@ -16,6 +16,7 @@ const records: BackupRecord[] = [
     createdAt: "2026-08-26T08:30:00.000+00:00",
     contentHash: "abcdef0123456789abcdef0123456789",
     targetExisted: true,
+    linkedBackupId: null,
     reason: "switch",
   },
   {
@@ -26,6 +27,7 @@ const records: BackupRecord[] = [
     createdAt: "2026-08-26T09:00:00.000+00:00",
     contentHash: "0123456789abcdef0123456789abcdef",
     targetExisted: true,
+    linkedBackupId: null,
     reason: "restore-precheck",
   },
 ];

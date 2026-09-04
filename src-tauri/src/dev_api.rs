@@ -6,7 +6,9 @@
 
 use crate::commands::{self, error::CommandError};
 use crate::local_state::{AppSettings, CloudBackupSettings};
-use asb_core::contracts::{AppKind, CommonSettings, ProviderDraft, UsageQuery};
+use asb_core::contracts::{
+    AppKind, CommonSettings, ModelUsageRange, ProviderDraft, UsageHistoryRequest, UsageQuery,
+};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -344,7 +346,6 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
                     "target"
                 )?,))
             }
-            "check_update" => command!(commands::check_update(app.clone())),
             "get_cached_codex_reset_status" => {
                 command!(commands::get_cached_codex_reset_status(app.clone()))
             }
@@ -359,6 +360,18 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
             )),
             "discover_local" => command!(commands::discover_local(app.clone())),
             "discover_cached" => command!(commands::discover_cached(app.clone())),
+            "get_model_usage_report" => {
+                command!(commands::model_usage::get_model_usage_report(argument::<
+                    ModelUsageRange,
+                >(
+                    &request.args,
+                    "range",
+                )?,))
+            }
+            "get_usage_history" => command!(commands::usage_history::get_usage_history(
+                app.clone(),
+                argument::<UsageHistoryRequest>(&request.args, "request")?,
+            )),
             "list_sessions" => command!(commands::list_sessions()),
             "get_session_messages" => command!(commands::get_session_messages(
                 argument::<AppKind>(&request.args, "app")?,

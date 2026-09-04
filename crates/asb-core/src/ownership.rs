@@ -105,14 +105,14 @@ struct ProviderSettingSpec {
     value_type: SettingValueType,
 }
 
-/// The non-reserved custom provider table used for third-party Codex routes.
-/// Every third-party Codex route points here so the API key lives in the
-/// provider-scoped slot required by current Codex releases.
-pub const CODEX_MANAGED_PROVIDER_ID: &str = "OpenAi";
-pub const CODEX_MANAGED_PROVIDER_NAME_KEY: &str = "model_providers.OpenAi.name";
-pub const CODEX_MANAGED_PROVIDER_BASE_URL_KEY: &str = "model_providers.OpenAi.base_url";
-pub const CODEX_MANAGED_PROVIDER_WIRE_API_KEY: &str = "model_providers.OpenAi.wire_api";
-pub const CODEX_MANAGED_PROVIDER_TOKEN_KEY: &str =
+/// The retired custom-provider table written by the preceding routing
+/// contract. Its individual keys remain owned only so the next projection
+/// removes them without touching unrelated host entries in the same table.
+pub const CODEX_LEGACY_PROVIDER_ID: &str = "OpenAi";
+pub const CODEX_LEGACY_PROVIDER_NAME_KEY: &str = "model_providers.OpenAi.name";
+pub const CODEX_LEGACY_PROVIDER_BASE_URL_KEY: &str = "model_providers.OpenAi.base_url";
+pub const CODEX_LEGACY_PROVIDER_WIRE_API_KEY: &str = "model_providers.OpenAi.wire_api";
+pub const CODEX_LEGACY_PROVIDER_TOKEN_KEY: &str =
     "model_providers.OpenAi.experimental_bearer_token";
 
 const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
@@ -128,33 +128,6 @@ const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     },
     ProviderSettingSpec {
         app: AppKind::Codex,
-        key: CODEX_MANAGED_PROVIDER_NAME_KEY,
-        value_type: SettingValueType::String,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: CODEX_MANAGED_PROVIDER_BASE_URL_KEY,
-        value_type: SettingValueType::String,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: CODEX_MANAGED_PROVIDER_WIRE_API_KEY,
-        value_type: SettingValueType::String,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: CODEX_MANAGED_PROVIDER_TOKEN_KEY,
-        value_type: SettingValueType::Secret,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: "model_context_window",
-        value_type: SettingValueType::PositiveInteger,
-    },
-    // The prior top-level Codex route is removed by the next projection. It
-    // is not a supported runtime route and cannot receive a profile value.
-    ProviderSettingSpec {
-        app: AppKind::Codex,
         key: "openai_base_url",
         value_type: SettingValueType::String,
     },
@@ -162,6 +135,31 @@ const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
         app: AppKind::Codex,
         key: "experimental_bearer_token",
         value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_NAME_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_BASE_URL_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_WIRE_API_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_TOKEN_KEY,
+        value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model_context_window",
+        value_type: SettingValueType::PositiveInteger,
     },
     ProviderSettingSpec {
         app: AppKind::Claude,
@@ -1035,7 +1033,7 @@ const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         related_paths: &["auth.json", "SQLite / 会话状态"],
         disposition: OfficialSettingDisposition::PreserveOnly,
         detail:
-            "属于组织策略与运行态；通用设置只观测不写入。auth.json 仅在用户发起官方登录或重新登录时由专用登录流程写入，其余时间只读观测。",
+            "属于组织策略与运行态；通用设置只观测不写入。专用切换事务可更新 auth.json 的 Codex API-key 登录字段，官方登录流程才写 OAuth 凭据；两条路径均不触及 SQLite / 会话状态。",
     },
 ];
 
@@ -1423,10 +1421,10 @@ mod tests {
     }
 
     #[test]
-    fn codex_routing_keys_include_the_managed_provider_table() {
+    fn codex_routing_keys_include_the_builtin_openai_override() {
         assert!(is_owned(AppKind::Codex, "model"));
         assert!(is_owned(AppKind::Codex, "model_provider"));
-        assert!(is_owned(AppKind::Codex, "model_providers.OpenAi.base_url"));
+        assert!(is_owned(AppKind::Codex, "openai_base_url"));
         assert!(is_owned(AppKind::Codex, "model_reasoning_effort"));
         assert!(is_owned(AppKind::Codex, "model_context_window"));
     }
@@ -1489,10 +1487,7 @@ mod tests {
             model.provider_absent_action,
             Some(ProviderAbsentAction::Remove)
         );
-        assert!(is_provider_owned(
-            AppKind::Codex,
-            "model_providers.OpenAi.experimental_bearer_token"
-        ));
+        assert!(is_provider_owned(AppKind::Codex, "openai_base_url"));
         assert_eq!(owner_for(AppKind::Codex, "threads"), SettingOwner::Host);
     }
 }

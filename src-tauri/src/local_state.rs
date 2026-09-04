@@ -495,6 +495,12 @@ impl LocalState {
         self.root.join("usage-cache.json")
     }
 
+    /// The single credential-free usage-history ledger. Its schema, parsing,
+    /// pruning, and atomic replacement are owned by `usage_history`.
+    pub(crate) fn usage_history_path(&self) -> PathBuf {
+        self.root.join("usage-history.json")
+    }
+
     fn discovery_cache_path(&self) -> PathBuf {
         self.root.join("discovery-cache.json")
     }
@@ -838,6 +844,7 @@ mod tests {
         let report = asb_core::discovery::discover(
             &asb_core::discovery::DiscoveryPaths {
                 codex: "missing-codex.toml".into(),
+                codex_auth: "missing-auth.json".into(),
                 claude: "claude.json".into(),
             },
             |path| {
@@ -878,6 +885,7 @@ mod tests {
         let report = asb_core::discovery::discover(
             &asb_core::discovery::DiscoveryPaths {
                 codex: "c".into(),
+                codex_auth: "a".into(),
                 claude: "s".into(),
             },
             |_| Ok(Some(String::new())),

@@ -1,7 +1,10 @@
+import { useCallback } from "react";
 import { queryCodexOfficialQuota, type CodexOfficialQuota } from "../api/client";
+import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
 import { useAutoQuery } from "./use-auto-query";
+import { useUsageHistory } from "./use-usage-history";
 
 interface Props {
   id: string;
@@ -29,10 +32,16 @@ function statusCopy(quota: CodexOfficialQuota): string | null {
 export function CodexOfficialQuotaPanel({ id, profileId, profileName }: Props) {
   /** The official read has no configurable query, so it stays manual-only:
    * read on mount, then refresh by hand. */
+  const history = useUsageHistory({ kind: "official" });
+  const query = useCallback(async (nextProfileId: string) => {
+    const quota = await queryCodexOfficialQuota(nextProfileId);
+    if (quota.status === "available" && !quota.stale) void history.refresh();
+    return quota;
+  }, [history.refresh]);
   const { data: reading, querying, error: requestError, run } = useAutoQuery(
     profileId,
     0,
-    queryCodexOfficialQuota,
+    query,
     "订阅额度读取失败",
   );
 
@@ -58,6 +67,12 @@ export function CodexOfficialQuotaPanel({ id, profileId, profileName }: Props) {
         </div>
       </header>
 
+      <OfficialQuotaTrend
+        series={history.series}
+        loading={history.loading}
+        error={history.error}
+        ariaLabel={`${profileName} 官方额度趋势`}
+      />
       {showsWindows && (
         <QuotaWindowsTable
           windows={reading!.windows}

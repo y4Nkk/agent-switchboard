@@ -61,9 +61,9 @@
 ## 5. 密钥与数据
 
 - 不得将 API 密钥、令牌、凭据或私有 URL 写入源码、测试数据、快照、日志、`README.md` 或截图。
-- 应用数据目录的 `state/configuration/providers/{codex,claude}/{id}.json` 是唯一允许明文持久化供应商 API 密钥的位置；每个档案文件同时保存名称、模型和服务地址。密钥只允许经编辑器输入或本机 Codex / Claude / CC Switch 配置导入。
-- Codex 切换将档案 `apiKey` 写入受管 `[model_providers.OpenAi]` 表内的 `experimental_bearer_token`（`OpenAi` 为非保留自定义 id）；不得写入顶层 token 或 `auth.json`。Claude 切换将其写入受管 `env.ANTHROPIC_AUTH_TOKEN`。两者都必须经执行器事务路径写入；预览、差异、日志、错误、诊断和截图只可出现稳定脱敏标记。
-- 官方 `Codex` 与 `Claude` 登录缓存（`auth.json`、`.credentials.json`）仅能由专用官方登录流程在用户明确发起登录或重新登录时写入；登录令牌不进入供应商档案、渲染层、日志或错误信息。
+- 应用数据目录的 `state/configuration/providers/{codex,claude}/{id}.json` 保存供应商 API 密钥、名称、模型和服务地址；活动 Codex 自定义档案另以官方 API-key 缓存形态写入用户的 `auth.json`。密钥只允许经编辑器输入或本机 Codex / Claude / CC Switch 配置导入。
+- Codex 自定义切换固定写入 `model_provider = "openai"` 和顶层 `openai_base_url`，并在同一执行器事务内将档案 `apiKey` 写入 `auth.json` 的 `auth_mode = "apikey"` / `OPENAI_API_KEY`；不得写入顶层或 `model_providers.*` 的 bearer token。官方 Codex 档案移除 `openai_base_url`，恢复 `auth_mode = "chatgpt"` 并保留已有 OAuth `tokens`。Claude 切换将密钥写入受管 `env.ANTHROPIC_AUTH_TOKEN`。预览、差异、日志、错误、诊断和截图只可出现稳定脱敏标记。
+- 官方 Codex / Claude 登录流程只在用户明确发起登录或重新登录时写 OAuth 凭据；Codex 自定义切换仅更新 `auth.json` 的 API-key 登录字段，不复制、展示或记录 OAuth 令牌。登录令牌不进入供应商档案、渲染层、日志或错误信息。
 - 渲染差异、错误、审计记录或诊断前必须脱敏密钥。
 
 ## 6. 契约、代码与测试

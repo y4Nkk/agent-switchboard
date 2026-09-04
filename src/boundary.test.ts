@@ -127,22 +127,27 @@ describe("UI boundary", () => {
     }
   });
 
-  it("releases successful platform artifacts after a partial tag build", () => {
+  it("publishes a complete signed updater release only after all payloads are ready", () => {
     const workflow = readFileSync(
       join(repoRoot, ".github", "workflows", "package.yml"),
       "utf8",
     );
 
     expect(workflow).toContain(
-      "if: ${{ always() && !cancelled() && startsWith(github.ref, 'refs/tags/v') }}",
+      "if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' }}",
     );
+    expect(workflow).toContain("TAURI_SIGNING_PRIVATE_KEY");
+    expect(workflow).toContain("src-tauri/tauri.updater.conf.json");
     expect(workflow).toContain("pattern: agent-switchboard-*");
+    expect(workflow).toContain("node scripts/updater-release.mjs manifest");
     expect(workflow).toContain(
       'gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber',
     );
-    expect(workflow).toContain(
-      'gh release create "$GITHUB_REF_NAME" "${assets[@]}"',
+    expect(workflow).toContain('[[ "$asset" == "dist/latest.json" ]] && continue');
+    expect(workflow).toContain('gh release upload "$GITHUB_REF_NAME" dist/latest.json --clobber');
+    expect(workflow.indexOf('gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber')).toBeLessThan(
+      workflow.indexOf('gh release upload "$GITHUB_REF_NAME" dist/latest.json --clobber'),
     );
-    expect(workflow).toContain("未创建空 Release");
+    expect(workflow).not.toContain("always() && !cancelled()");
   });
 });

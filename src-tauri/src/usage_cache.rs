@@ -30,7 +30,10 @@ struct CachedUsage {
     summary: UsageSummary,
 }
 
-fn query_digest(query: &UsageQuery) -> Result<String, String> {
+/// The stable digest for every persisted representation of a usage query.
+/// It is intentionally one-way because the source can mention private URLs
+/// or contain script text that must not enter display-oriented state.
+pub(crate) fn query_digest(query: &UsageQuery) -> Result<String, String> {
     let serialized =
         serde_json::to_string(query).map_err(|_| "用量查询摘要序列化失败".to_string())?;
     Ok(sha256_hex(&serialized))

@@ -14,6 +14,7 @@ use toml_edit::Item;
 /// Paths the caller wants inspected, as display strings.
 pub struct DiscoveryPaths {
     pub codex: String,
+    pub codex_auth: String,
     pub claude: String,
 }
 
@@ -133,10 +134,7 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
 }
 
 fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
-    if route.route_mode != RouteMode::Custom
-        || route.base_url.is_none()
-        || route.wire_api.as_deref() != Some("responses")
-    {
+    if route.route_mode != RouteMode::Custom || route.base_url.is_none() {
         return false;
     }
     let Ok(doc) = text.parse::<toml_edit::DocumentMut>() else {
@@ -147,19 +145,19 @@ fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
         .get("model_provider")
         .and_then(Item::as_value)
         .and_then(|value| value.as_str());
-    let Some(provider_id) =
-        provider_id.filter(|id| *id != crate::adapter::codex::OFFICIAL_PROVIDER)
-    else {
-        return false;
-    };
-    doc.get("model_providers")
-        .and_then(Item::as_table_like)
-        .and_then(|table| table.get(provider_id))
-        .and_then(Item::as_table_like)
-        .and_then(|table| table.get("experimental_bearer_token"))
-        .and_then(Item::as_value)
-        .and_then(|value| value.as_str())
-        .is_some_and(|value| !value.trim().is_empty())
+    provider_id == Some(crate::adapter::codex::OFFICIAL_PROVIDER)
+}
+
+fn codex_auth_api_key(text: Option<&str>) -> Option<String> {
+    let root: serde_json::Value = serde_json::from_str(text?).ok()?;
+    (root.get("auth_mode").and_then(serde_json::Value::as_str) == Some("apikey"))
+        .then(|| {
+            root.get("OPENAI_API_KEY")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        })
+        .flatten()
+        .filter(|value| !value.trim().is_empty())
 }
 
 /// Converts only the externally valid Claude wire spelling into the profile
@@ -220,12 +218,12 @@ fn inspect_codex(text: &str) -> (bool, Vec<String>) {
         .and_then(Item::as_value)
         .and_then(|value| value.as_str())
         .unwrap_or(crate::adapter::codex::OFFICIAL_PROVIDER);
-    let managed = provider_id == crate::ownership::CODEX_MANAGED_PROVIDER_ID
+    let managed = provider_id == crate::adapter::codex::OFFICIAL_PROVIDER
         && doc
-            .get("model_providers")
-            .and_then(Item::as_table_like)
-            .and_then(|table| table.get(provider_id))
-            .and_then(Item::as_table_like)
+            .as_table()
+            .get("openai_base_url")
+            .and_then(Item::as_value)
+            .and_then(|value| value.as_str())
             .is_some();
 
     (managed, vec![])
@@ -253,7 +251,11 @@ fn inspect_claude(text: &str) -> (bool, Vec<String>) {
 /// Builds an import proposal from a discovered file and its locally-read raw
 /// configuration. The API key enters only the returned draft; route state,
 /// warnings and diagnostics never carry its value.
-pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<ImportProposal> {
+pub fn import_proposal(
+    file: &DiscoveredFile,
+    text: Option<&str>,
+    codex_auth: Option<&str>,
+) -> Option<ImportProposal> {
     let text = text?;
     let DiscoveredState::Ok {
         route, importable, ..
@@ -288,20 +290,7 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
     }
     match file.app {
         AppKind::Codex => {
-            let doc = text.parse::<toml_edit::DocumentMut>().ok()?;
-            let provider_id = doc
-                .as_table()
-                .get("model_provider")
-                .and_then(Item::as_value)
-                .and_then(|value| value.as_str())?;
-            let key = doc
-                .get("model_providers")
-                .and_then(Item::as_table_like)
-                .and_then(|table| table.get(provider_id))
-                .and_then(Item::as_table_like)
-                .and_then(|table| table.get("experimental_bearer_token"))
-                .and_then(Item::as_value)
-                .and_then(|value| value.as_str())?;
+            let key = codex_auth_api_key(codex_auth)?;
             let model_options = route
                 .codex_model_options
                 .clone()
@@ -318,7 +307,7 @@ pub fn import_proposal(file: &DiscoveredFile, text: Option<&str>) -> Option<Impo
                         .unwrap_or_else(|| "当前 Codex 配置".to_string()),
                     model: route.model.clone(),
                     base_url: route.base_url.clone(),
-                    api_key: key.to_string(),
+                    api_key: key,
                     model_options,
                     notes: None,
                     website_url: None,
@@ -376,12 +365,32 @@ pub fn discover(
     read: impl Fn(&str) -> Result<Option<String>, String>,
 ) -> DiscoveryReport {
     let codex_text = read(&paths.codex);
+    let codex_auth = read(&paths.codex_auth);
     let claude_text = read(&paths.claude);
-    let codex = inspect_read(AppKind::Codex, &paths.codex, codex_text.clone());
+    let mut codex = inspect_read(AppKind::Codex, &paths.codex, codex_text.clone());
+    if let DiscoveredState::Ok {
+        route,
+        warnings,
+        importable,
+        ..
+    } = &mut codex.state
+    {
+        if route.route_mode == RouteMode::Custom
+            && codex_auth_api_key(codex_auth.as_ref().ok().and_then(|text| text.as_deref()))
+                .is_none()
+        {
+            *importable = false;
+            warnings.push("当前 Codex API-key 登录缓存不可导入".to_string());
+        }
+    }
     let claude = inspect_read(AppKind::Claude, &paths.claude, claude_text.clone());
     let import_proposals = [
-        (import_proposal(&codex, codex_text.ok().flatten().as_deref())),
-        (import_proposal(&claude, claude_text.ok().flatten().as_deref())),
+        (import_proposal(
+            &codex,
+            codex_text.ok().flatten().as_deref(),
+            codex_auth.ok().flatten().as_deref(),
+        )),
+        (import_proposal(&claude, claude_text.ok().flatten().as_deref(), None)),
     ]
     .into_iter()
     .flatten()
@@ -396,13 +405,14 @@ pub fn discover(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{CLAUDE_JSON, CODEX_TOML};
+    use crate::test_support::{CLAUDE_JSON, CODEX_AUTH_JSON, CODEX_TOML};
 
     #[test]
     fn missing_files_are_reported_not_guessed() {
         let report = discover(
             &DiscoveryPaths {
                 codex: "~/.codex/config.toml".into(),
+                codex_auth: "~/.codex/auth.json".into(),
                 claude: "~/.claude/settings.json".into(),
             },
             |_| Ok(None),
@@ -417,6 +427,7 @@ mod tests {
         let report = discover(
             &DiscoveryPaths {
                 codex: "c".into(),
+                codex_auth: "a".into(),
                 claude: "s".into(),
             },
             |p| {
@@ -438,11 +449,14 @@ mod tests {
         let report = discover(
             &DiscoveryPaths {
                 codex: "c".into(),
+                codex_auth: "a".into(),
                 claude: "s".into(),
             },
             |p| {
                 if p == "c" {
                     Ok(Some(CODEX_TOML.to_string()))
+                } else if p == "a" {
+                    Ok(Some(CODEX_AUTH_JSON.to_string()))
                 } else {
                     Ok(Some(CLAUDE_JSON.to_string()))
                 }
@@ -453,8 +467,8 @@ mod tests {
         };
         assert!(managed);
         assert_eq!(route.route_mode, RouteMode::Custom);
-        assert_eq!(route.provider_name.as_deref(), Some("Relay A"));
-        assert_eq!(route.wire_api.as_deref(), Some("responses"));
+        assert_eq!(route.provider_name, None);
+        assert_eq!(route.wire_api, None);
         let codex_proposal = report
             .import_proposals
             .iter()
@@ -484,7 +498,7 @@ mod tests {
     fn importing_claude_configuration_decodes_lowercase_one_m_into_semantic_state() {
         let current = r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"TEST_CLAUDE_IMPORT_KEY","ANTHROPIC_MODEL":"claude-opus-4-1[1m]","ANTHROPIC_DEFAULT_SONNET_MODEL":"claude-sonnet-4-6[1m]","ANTHROPIC_DEFAULT_OPUS_MODEL":"claude-opus-4-1[1m]"}}"#;
         let file = inspect(AppKind::Claude, "s", Some(current));
-        let proposal = import_proposal(&file, Some(current)).expect("must be importable");
+        let proposal = import_proposal(&file, Some(current), None).expect("must be importable");
 
         assert_eq!(proposal.draft.model.as_deref(), Some("claude-opus-4-1"));
         let Some(ModelOptions::Claude(settings)) = proposal.draft.model_options.as_ref() else {
@@ -515,7 +529,7 @@ mod tests {
         assert!(warnings
             .iter()
             .any(|warning| warning.contains("1M 标记无效")));
-        assert!(import_proposal(&file, Some(current)).is_none());
+        assert!(import_proposal(&file, Some(current), None).is_none());
     }
 
     #[test]
@@ -552,7 +566,7 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
         assert!(warnings
             .iter()
             .any(|w| w.contains("无法作为供应商档案导入")));
-        assert!(import_proposal(&file, Some(current)).is_none());
+        assert!(import_proposal(&file, Some(current), None).is_none());
     }
 
     #[test]
@@ -570,8 +584,9 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
             panic!("should parse");
         };
         assert!(*importable);
-        assert_eq!(route.wire_api.as_deref(), Some("responses"));
-        let proposal = import_proposal(&file, Some(&current)).expect("must be importable");
+        assert_eq!(route.wire_api, None);
+        let proposal = import_proposal(&file, Some(&current), Some(CODEX_AUTH_JSON))
+            .expect("must be importable");
         let Some(ModelOptions::Codex(options)) = proposal.draft.model_options else {
             panic!("Codex run options should be retained");
         };
@@ -595,7 +610,8 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
         };
         assert!(*importable);
         assert!(warnings.is_empty());
-        let proposal = import_proposal(&file, Some(&current)).expect("official route imports");
+        let proposal =
+            import_proposal(&file, Some(&current), None).expect("official route imports");
         assert_eq!(proposal.draft.route_mode, RouteMode::Official);
         assert!(proposal.draft.api_key.is_empty());
         assert!(proposal.draft.base_url.is_none());
@@ -606,6 +622,7 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
         let report = discover(
             &DiscoveryPaths {
                 codex: "c".into(),
+                codex_auth: "a".into(),
                 claude: "s".into(),
             },
             |path| {
@@ -632,7 +649,7 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
             panic!("should parse");
         };
         assert!(*importable);
-        let proposal = import_proposal(&file, Some(current)).expect("official route imports");
+        let proposal = import_proposal(&file, Some(current), None).expect("official route imports");
         assert_eq!(proposal.draft.route_mode, RouteMode::Official);
         assert!(proposal.draft.model.is_none());
     }

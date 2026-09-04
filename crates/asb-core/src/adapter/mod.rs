@@ -8,6 +8,7 @@
 
 pub mod claude;
 pub mod codex;
+pub mod codex_auth;
 
 use crate::contracts::{AppKind, CommonSettings, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
@@ -117,6 +118,27 @@ pub fn validate_syntax(app: AppKind, text: &str) -> Result<(), AdapterError> {
         AppKind::Codex => codex::check_syntax(text),
         AppKind::Claude => claude::check_syntax(text),
     }
+}
+
+/// Produces the credential-cache candidate for Codex's built-in `openai`
+/// provider. The caller supplies and writes the cache through the switch
+/// executor; this adapter stays filesystem-free.
+pub fn render_codex_auth(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
+    codex_auth::render(current, plan)
+}
+
+/// Returns the redacted credential-cache changes implied by one Codex switch.
+pub fn preview_codex_auth(
+    current: &str,
+    plan: &SwitchPlan,
+) -> Result<Vec<crate::contracts::KeyChange>, AdapterError> {
+    codex_auth::preview(current, plan)
+}
+
+/// Validates Codex's file-backed credential cache before it is atomically
+/// replaced by the switch executor.
+pub fn validate_codex_auth(text: &str) -> Result<(), AdapterError> {
+    codex_auth::validate(text)
 }
 
 /// Reads the active routing facts from configuration text. Panics on invalid

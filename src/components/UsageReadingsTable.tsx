@@ -1,4 +1,5 @@
 import type { UsageReading } from "../api/client";
+import { UsageRatioMeter } from "./charts/UsageRatioMeter";
 import { Table, type TableColumn } from "./Table";
 
 function usageValue(value: number | null): string {
@@ -47,18 +48,11 @@ const USAGE_COLUMNS: Array<TableColumn<UsageRow>> = [
     header: "占比",
     render: (row) => {
       const progress = usageProgress(row.reading);
-      if (progress === null) return "—";
       return (
-        <div
-          className="asb-provider-usage-progress"
-          role="progressbar"
-          aria-label={`${row.name} 已用比例`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress)}
-        >
-          <span style={{ width: `${progress}%` }} />
-        </div>
+        <UsageRatioMeter
+          percent={progress}
+          ariaLabel={`${row.name} 已用比例`}
+        />
       );
     },
   },

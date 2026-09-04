@@ -100,6 +100,14 @@ fi
 }
 
 try {
+  $signatureArtifact = Join-Path $testRoot 'fixture.sig'
+  [IO.File]::WriteAllText($signatureArtifact, 'ordinary signature content')
+  Invoke-Scanner $signatureArtifact
+
+  $syntheticToken = 'sk-abcdefghijklmnopqrstuvwxyz1234567890'
+  [IO.File]::WriteAllText($signatureArtifact, $syntheticToken)
+  Assert-ScannerRejects $signatureArtifact $syntheticToken
+
   if ($IsMacOS) {
     $source = Join-Path $testRoot 'source'
     $payload = Join-Path $source 'Agent Switchboard.app/Contents/Resources/payload.txt'
@@ -128,9 +136,27 @@ try {
 
     New-TestAppImage $artifact $systemLibrary -AppendPrivateKey
     Assert-ScannerRejects $artifact
+
+    $archiveSource = Join-Path $testRoot 'updater-source'
+    $archivePayload = Join-Path $archiveSource 'Agent Switchboard.app/Contents/Resources/payload.txt'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $archivePayload) -Force | Out-Null
+    [IO.File]::WriteAllText($archivePayload, 'ordinary updater archive content')
+    $archive = Join-Path $testRoot 'fixture.app.tar.gz'
+    & tar -czf $archive -C $archiveSource .
+    if ($LASTEXITCODE -ne 0) {
+      throw "tar could not create the updater archive fixture (exit code $LASTEXITCODE)."
+    }
+    Invoke-Scanner $archive
+
+    [IO.File]::WriteAllText($archivePayload, $syntheticToken)
+    & tar -czf $archive -C $archiveSource .
+    if ($LASTEXITCODE -ne 0) {
+      throw "tar could not recreate the updater archive fixture (exit code $LASTEXITCODE)."
+    }
+    Assert-ScannerRejects $archive $syntheticToken
   }
   else {
-    throw 'Release artifact scanner fixtures require macOS or Linux.'
+    'Package extraction fixtures require macOS or Linux; raw signature scan completed.'
   }
 
   'Release artifact scanner fixtures passed.'

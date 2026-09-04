@@ -15,6 +15,9 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ onResized: () => Promise.resolve(() => {}) }),
 }));
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(() => Promise.resolve(null)),
+}));
 import { invoke } from "@tauri-apps/api/core";
 
 const invokeMock = vi.mocked(invoke);
@@ -169,14 +172,6 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         return Promise.resolve((args as { settings: unknown }).settings);
       case "list_system_fonts":
         return Promise.resolve(["Microsoft YaHei", "Noto Sans SC"]);
-      case "check_update":
-        return Promise.resolve({
-          currentVersion: "0.1.1",
-          latestVersion: "0.1.1",
-          updateAvailable: false,
-          releaseUrl: "https://github.com/y4Nkk/agent-switchboard/releases/tag/v0.1.1",
-          checkedAt: "2026-09-01T00:00:00Z",
-        });
       case "get_common_settings_editor":
         return Promise.resolve({
           app: targetFrom(args),
@@ -236,6 +231,7 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
             createdAt: "2026-08-26T08:00:00Z",
             contentHash: "h",
             targetExisted: true,
+            linkedBackupId: null,
             reason: "switch",
           },
           preview: filePreview.preview,
@@ -409,6 +405,7 @@ describe("App integration with the typed client boundary", () => {
             createdAt: "2026-08-26T08:01:00Z",
             contentHash: "hash-after",
             targetExisted: true,
+            linkedBackupId: null,
             reason: "restore-precheck",
           },
           restoredHash: "hash-before",

@@ -7,8 +7,10 @@ import {
   type CodexOfficialQuotaStatus,
 } from "../api/client";
 import { Button } from "./Button";
+import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
+import { useUsageHistory } from "./use-usage-history";
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
@@ -32,6 +34,7 @@ function resetKindLabel(kind: CodexOfficialQuotaReset["kind"]): string {
 /** An explicit, read-only view of the machine's own Codex official quota
  * reset state. It never reads the public reset-signal feed above it. */
 export function CodexOfficialResetPanel() {
+  const history = useUsageHistory({ kind: "official" });
   const [snapshot, setSnapshot] = useState<CodexOfficialQuota | null>(null);
   const [freshness, setFreshness] = useState<"cached" | "live">("cached");
   const [cacheLoading, setCacheLoading] = useState(true);
@@ -84,6 +87,7 @@ export function CodexOfficialResetPanel() {
       if (next.status === "available") {
         setSnapshot(next);
         setFreshness("live");
+        void history.refresh();
       } else {
         setStatusNotice(statusCopy(next.status));
       }
@@ -135,6 +139,12 @@ export function CodexOfficialResetPanel() {
       )}
       {quota !== null && (
         <>
+          <OfficialQuotaTrend
+            series={history.series}
+            loading={history.loading}
+            error={history.error}
+            ariaLabel="Codex 官方额度趋势"
+          />
           <QuotaWindowsTable windows={quota.windows} ariaLabel="Codex 官方额度窗口" />
           <p className="asb-official-reset-meta">
             {quota.lastReset ? (

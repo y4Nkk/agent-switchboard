@@ -1,4 +1,5 @@
 import type { CodexOfficialQuotaWindow } from "../api/client";
+import { UsageRatioMeter } from "./charts/UsageRatioMeter";
 import { countdownLabel } from "../lib/time";
 import { Table, type TableColumn } from "./Table";
 import { Time } from "./Time";
@@ -25,18 +26,7 @@ const WINDOW_COLUMNS: Array<TableColumn<CodexOfficialQuotaWindow>> = [
   {
     key: "ratio",
     header: "占比",
-    render: (window) => (
-      <div
-        className="asb-provider-usage-progress"
-        role="progressbar"
-        aria-label={`${window.label} 已用比例`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(window.usedPercent)}
-      >
-        <span style={{ width: `${window.usedPercent}%` }} />
-      </div>
-    ),
+    render: (window) => <UsageRatioMeter percent={window.usedPercent} ariaLabel={`${window.label} 已用比例`} />,
   },
 ];
 

@@ -7,7 +7,7 @@ import { WindowControls } from "../components/WindowControls";
 import appIcon from "../assets/app-icon.png";
 import { isBrowserDevelopment } from "../lib/runtime";
 
-export const PAGES = ["概览", "供应商", "通用设置", "会话", "日志", "备份", "发现", "设置"] as const;
+export const PAGES = ["概览", "供应商", "通用设置", "用量", "会话", "日志", "备份", "发现", "设置"] as const;
 export type Page = (typeof PAGES)[number];
 
 interface AppShellProps {

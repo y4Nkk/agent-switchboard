@@ -1047,24 +1047,306 @@ button:disabled {
   font: var(--asb-text-label);
 }
 
-/* The shared progress rail for usage tables; it owns geometry only — the
-   table cell owns its placement. */
-.asb-provider-usage-progress {
-  height: 3px;
-  overflow: hidden;
-  border-radius: var(--asb-radius-pill);
-  background: var(--asb-hairline);
+.asb-provider-usage-state {
+  margin: 0;
 }
 
-.asb-provider-usage-progress > span {
+/* Shared usage visualizations: a neutral ledger grid gives charts structure
+   without competing with the route state. Series hues are always paired with
+   labels and values in markup. */
+.asb-chart,
+.asb-chart-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+.asb-chart-empty {
+  display: grid;
+  min-height: var(--asb-chart-height);
+  place-items: center;
+  padding: var(--asb-space-3);
+  margin: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  text-align: center;
+}
+
+.asb-chart-plot {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-chart-svg {
+  display: block;
+  width: 100%;
+  min-width: var(--asb-chart-min-width);
+  height: var(--asb-chart-height);
+  overflow: visible;
+}
+
+.asb-chart-gridline,
+.asb-chart-axis-line {
+  stroke: var(--asb-chart-grid);
+  stroke-width: var(--asb-chart-grid-width);
+  vector-effect: non-scaling-stroke;
+}
+
+.asb-chart-axis-label {
+  fill: var(--asb-chart-axis);
+  font: var(--asb-text-label);
+  font-size: var(--asb-chart-axis-font-size);
+}
+
+.asb-chart-series[data-tone="0"],
+.asb-chart-distribution-item[data-tone="0"],
+.asb-chart-legend-item[data-tone="0"] {
+  --asb-chart-series-color: var(--asb-chart-series-0);
+}
+
+.asb-chart-series[data-tone="1"],
+.asb-chart-distribution-item[data-tone="1"],
+.asb-chart-legend-item[data-tone="1"] {
+  --asb-chart-series-color: var(--asb-chart-series-1);
+}
+
+.asb-chart-series[data-tone="2"],
+.asb-chart-distribution-item[data-tone="2"],
+.asb-chart-legend-item[data-tone="2"] {
+  --asb-chart-series-color: var(--asb-chart-series-2);
+}
+
+.asb-chart-series[data-tone="3"],
+.asb-chart-distribution-item[data-tone="3"],
+.asb-chart-legend-item[data-tone="3"] {
+  --asb-chart-series-color: var(--asb-chart-series-3);
+}
+
+.asb-chart-series[data-tone="4"],
+.asb-chart-distribution-item[data-tone="4"],
+.asb-chart-legend-item[data-tone="4"] {
+  --asb-chart-series-color: var(--asb-chart-series-4);
+}
+
+.asb-chart-line {
+  fill: none;
+  stroke: var(--asb-chart-series-color);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: var(--asb-chart-line-width);
+  vector-effect: non-scaling-stroke;
+}
+
+.asb-chart-point {
+  r: var(--asb-chart-point-radius);
+  fill: var(--asb-chart-point-fill);
+  stroke: var(--asb-chart-series-color);
+  stroke-width: var(--asb-chart-line-width);
+  transition: stroke-width var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-chart-point:hover,
+.asb-chart-point:focus-visible {
+  stroke: var(--asb-action);
+  stroke-width: calc(var(--asb-chart-line-width) + var(--asb-chart-line-width));
+}
+
+.asb-chart-point:focus-visible {
+  outline: none;
+}
+
+.asb-chart-tooltip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--asb-space-1) var(--asb-space-2);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  margin: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-chart-tooltip-bg);
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+}
+
+.asb-chart-tooltip span:nth-child(2),
+.asb-chart-tooltip time {
+  color: var(--asb-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-chart-tooltip span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.asb-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--asb-space-1) var(--asb-space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.asb-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  max-width: 100%;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-chart-legend-swatch {
+  flex: none;
+  width: var(--asb-chart-legend-swatch-size);
+  height: var(--asb-chart-legend-swatch-size);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-chart-series-color);
+}
+
+.asb-chart-legend-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-chart-legend-detail {
+  color: var(--asb-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-chart-distribution-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.asb-chart-distribution-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 0;
+}
+
+.asb-chart-distribution-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--asb-space-2);
+  align-items: baseline;
+  font: var(--asb-text-label);
+}
+
+.asb-chart-distribution-label {
+  overflow: hidden;
+  color: var(--asb-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-chart-distribution-value {
+  color: var(--asb-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.asb-chart-distribution-track,
+.asb-usage-ratio-meter-track {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-content-muted);
+}
+
+.asb-chart-distribution-track {
+  height: var(--asb-chart-ratio-track-height);
+}
+
+.asb-chart-distribution-fill,
+.asb-usage-ratio-meter-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--asb-action);
+  background: var(--asb-chart-series-color, var(--asb-action));
+  transition: width var(--asb-motion-fast) var(--asb-easing);
 }
 
-.asb-provider-usage-state {
+.asb-chart-distribution-fill {
+  width: var(--asb-chart-distribution-width);
+}
+
+.asb-usage-ratio-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.asb-usage-ratio-meter-track {
+  flex: none;
+  width: var(--asb-chart-ratio-track-width);
+  height: var(--asb-chart-ratio-track-height);
+}
+
+.asb-usage-ratio-meter-fill {
+  width: var(--asb-usage-ratio-meter-width);
+}
+
+.asb-usage-ratio-meter-value {
+  color: var(--asb-text);
+}
+
+.asb-usage-ratio-meter-empty {
+  display: inline-block;
+}
+
+/* History is an unframed analysis layer inside an existing usage surface.
+   The divider separates a current ledger read from its retained timeline
+   without nesting another card. */
+.asb-usage-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-history h4,
+.asb-usage-history-metric h5,
+.asb-usage-history-unit {
   margin: 0;
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-usage-history-metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-usage-history-unit {
+  color: var(--asb-text-muted);
+  font-weight: 400;
+}
+
+.asb-usage-history-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
 }
 
 /* Official login pending state: the device-code line and the wait line each
@@ -3165,6 +3447,163 @@ button:disabled {
   color: var(--asb-warning);
 }
 
+/* Model usage is a local-session ledger, not a provider-quota surface. The
+   panel owns its narrow horizontal scroll region so its exact token columns
+   remain legible without widening the application workspace. */
+.asb-panel.asb-model-usage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.asb-model-usage-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+.asb-model-usage-controls .asb-segments {
+  margin: 0;
+}
+
+.asb-model-usage-notice,
+.asb-model-usage-issues {
+  margin: 0 0 var(--asb-space-3);
+  padding: var(--asb-space-2);
+  font: var(--asb-text-label);
+}
+
+.asb-model-usage-notice {
+  color: var(--asb-danger);
+}
+
+.asb-model-usage-undated {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-model-usage-issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  padding-left: calc(var(--asb-space-2) + var(--asb-space-2));
+}
+
+.asb-model-usage-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  padding: var(--asb-space-5);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+.asb-model-usage-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-model-usage-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--asb-hairline);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-model-usage-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--asb-space-2) var(--asb-space-3);
+}
+
+.asb-model-usage-summary > div + div {
+  border-left: 1px solid var(--asb-hairline);
+}
+
+.asb-model-usage-summary dt {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-model-usage-summary dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-model-usage-analysis {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.75fr);
+  gap: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-model-usage-trend,
+.asb-model-usage-distribution,
+.asb-model-usage-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+.asb-model-usage-trend h3,
+.asb-model-usage-distribution h3,
+.asb-model-usage-detail h3 {
+  margin: 0;
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-model-usage-detail {
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-model-usage-table {
+  min-width: max-content;
+}
+
+.asb-model-usage-number {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .asb-model-usage-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asb-model-usage-summary > div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--asb-hairline);
+  }
+
+  .asb-model-usage-summary > div:nth-child(4) {
+    border-top: 1px solid var(--asb-hairline);
+  }
+
+  .asb-model-usage-analysis {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Session manager — a restrained master/detail workspace. The list stays
    compact and operational; transcript text is intentionally near-solid so
    project paths and past instructions remain easy to audit. The panel fills
@@ -3840,6 +4279,12 @@ button:disabled {
 
   .asb-sheet {
     animation: none;
+  }
+
+  .asb-chart-point,
+  .asb-chart-distribution-fill,
+  .asb-usage-ratio-meter-fill {
+    transition: none;
   }
 }
 

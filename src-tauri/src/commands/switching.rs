@@ -11,8 +11,8 @@ use asb_core::contracts::{
 };
 use asb_switch::io::{FsIo, SwitchIo};
 use asb_switch::{
-    execute, list_backups as scan_backups, read_preview, restore, sha256_hex, RestoreOutcome,
-    SwitchOutcome,
+    execute, execute_codex, list_backups as scan_backups, read_codex_preview, read_preview,
+    restore, restore_codex, sha256_hex, RestoreOutcome, SwitchOutcome,
 };
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -48,8 +48,21 @@ pub async fn preview_switch(
             .target(plan.app())
             .map_err(|error| CommandError::new("config-path-unavailable", error))?;
         let backup_dir = state.backup_dir();
-        let mut preview = read_preview(&FsIo, &target, &plan, &backup_dir.to_string_lossy())
-            .map_err(CommandError::from)?;
+        let mut preview = match plan.app() {
+            AppKind::Codex => {
+                let auth_target = crate::local_state::LocalState::codex_auth_path()
+                    .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
+                read_codex_preview(
+                    &FsIo,
+                    &target,
+                    &auth_target,
+                    &plan,
+                    &backup_dir.to_string_lossy(),
+                )
+            }
+            AppKind::Claude => read_preview(&FsIo, &target, &plan, &backup_dir.to_string_lossy()),
+        }
+        .map_err(CommandError::from)?;
         preview.preview.target = target.to_string_lossy().to_string();
         Ok(preview)
     })
@@ -82,26 +95,53 @@ pub async fn execute_switch(
                 at: String::new(),
                 operation: WriteOperation::Projection,
             };
-            let mut outcome = execute(
-                &FsIo,
-                &asb_switch::SwitchRequest {
-                    target: &target,
-                    plan: &plan,
-                    backup_dir: &backup_dir,
-                    expected_hash: &expected_hash,
-                    expected_rendered_hash: &expected_rendered_hash,
-                },
-                move |outcome| {
-                    state
-                        .configuration()
-                        .record_config_write(ConfigWriteRecord {
-                            content_hash: outcome.final_hash.clone(),
-                            backup_id: outcome.backup.id.clone(),
-                            at: outcome.backup.created_at.clone(),
-                            ..record
-                        })
-                },
-            )
+            let mut outcome = match plan.app() {
+                AppKind::Codex => {
+                    let auth_target = crate::local_state::LocalState::codex_auth_path()
+                        .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
+                    execute_codex(
+                        &FsIo,
+                        &asb_switch::CodexSwitchRequest {
+                            target: &target,
+                            auth_target: &auth_target,
+                            plan: &plan,
+                            backup_dir: &backup_dir,
+                            expected_hash: &expected_hash,
+                            expected_rendered_hash: &expected_rendered_hash,
+                        },
+                        move |outcome| {
+                            state
+                                .configuration()
+                                .record_config_write(ConfigWriteRecord {
+                                    content_hash: outcome.final_hash.clone(),
+                                    backup_id: outcome.backup.id.clone(),
+                                    at: outcome.backup.created_at.clone(),
+                                    ..record
+                                })
+                        },
+                    )
+                }
+                AppKind::Claude => execute(
+                    &FsIo,
+                    &asb_switch::SwitchRequest {
+                        target: &target,
+                        plan: &plan,
+                        backup_dir: &backup_dir,
+                        expected_hash: &expected_hash,
+                        expected_rendered_hash: &expected_rendered_hash,
+                    },
+                    move |outcome| {
+                        state
+                            .configuration()
+                            .record_config_write(ConfigWriteRecord {
+                                content_hash: outcome.final_hash.clone(),
+                                backup_id: outcome.backup.id.clone(),
+                                at: outcome.backup.created_at.clone(),
+                                ..record
+                            })
+                    },
+                ),
+            }
             .map_err(CommandError::from)?;
             outcome.preview.target = target.to_string_lossy().to_string();
             crate::tray::refresh(&app);
@@ -136,7 +176,7 @@ fn local_backups(
             targets.iter().any(|(app, target)| {
                 record.app == *app
                     && PathBuf::from(&record.target_path).as_path() == target.as_path()
-            })
+            }) && record.linked_backup_id.is_none()
         })
         .collect())
 }
@@ -149,6 +189,35 @@ fn find_backup(
         .into_iter()
         .find(|record| record.id == backup_id)
         .ok_or_else(|| CommandError::new("backup-not-found", "找不到指定备份"))
+}
+
+/// Credential backups are hidden from the standalone backup list because they
+/// are meaningful only with their linked Codex configuration snapshot.
+fn linked_codex_auth_backup(
+    state: &crate::local_state::LocalState,
+    record: &BackupRecord,
+) -> Result<BackupRecord, CommandError> {
+    if record.app != AppKind::Codex {
+        return Err(CommandError::new(
+            "codex-auth-backup-invalid",
+            "只有 Codex 配置备份可以关联 auth.json 快照",
+        ));
+    }
+    let auth_target = crate::local_state::LocalState::codex_auth_path()
+        .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
+    scan_backups(&FsIo, &state.backup_dir())
+        .into_iter()
+        .find(|candidate| {
+            candidate.app == AppKind::Codex
+                && candidate.linked_backup_id.as_deref() == Some(record.id.as_str())
+                && PathBuf::from(&candidate.target_path) == auth_target
+        })
+        .ok_or_else(|| {
+            CommandError::new(
+                "codex-auth-backup-missing",
+                "Codex 配置备份缺少同次切换的 auth.json 快照，已拒绝只恢复配置以避免端点与密钥错配",
+            )
+        })
 }
 
 /// Shared restore path: validates the target, restores, and records the
@@ -175,16 +244,41 @@ fn run_restore(
         at: String::new(),
         operation: WriteOperation::Restore,
     };
-    restore(&FsIo, record, &target, move |outcome| {
-        state
-            .configuration()
-            .record_config_write(ConfigWriteRecord {
-                content_hash: outcome.restored_hash.clone(),
-                backup_id: outcome.pre_restore_backup.id.clone(),
-                at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                ..write_record
-            })
-    })
+    match record.app {
+        AppKind::Codex => {
+            let auth_backup = linked_codex_auth_backup(state, record)?;
+            let auth_target = crate::local_state::LocalState::codex_auth_path()
+                .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
+            restore_codex(
+                &FsIo,
+                record,
+                &auth_backup,
+                &target,
+                &auth_target,
+                move |outcome| {
+                    state
+                        .configuration()
+                        .record_config_write(ConfigWriteRecord {
+                            content_hash: outcome.restored_hash.clone(),
+                            backup_id: outcome.pre_restore_backup.id.clone(),
+                            at: chrono::Utc::now()
+                                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                            ..write_record
+                        })
+                },
+            )
+        }
+        AppKind::Claude => restore(&FsIo, record, &target, move |outcome| {
+            state
+                .configuration()
+                .record_config_write(ConfigWriteRecord {
+                    content_hash: outcome.restored_hash.clone(),
+                    backup_id: outcome.pre_restore_backup.id.clone(),
+                    at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                    ..write_record
+                })
+        }),
+    }
     .map_err(CommandError::from)
 }
 
