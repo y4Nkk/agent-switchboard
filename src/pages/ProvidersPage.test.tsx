@@ -38,7 +38,8 @@ function renderPage(overrides: Partial<PageProps> = {}) {
       profiles={[profile]}
       appFilter="codex"
       activeProfileId={null}
-      activeModel={null}
+      userConfigModel={null}
+      userConfigWarnings={[]}
       selectedId={null}
       selectedProfile={null}
       editorMode={null}
@@ -99,11 +100,18 @@ describe("ProvidersPage", () => {
     const onRequestSwitch = vi.fn();
     renderPage({
       preview: { profileId: profile.id, file: previewFile },
+      userConfigModel: "gpt-5.3-codex",
+      userConfigWarnings: ["使用 --profile 启动时会覆盖这里的用户级设置"],
       onCancelPreview,
       onRequestSwitch,
     });
 
     const previewPanel = screen.getByRole("region", { name: "变更预览" });
+    expect(within(previewPanel).getByText("当前用户级配置模型")).toBeInTheDocument();
+    expect(within(previewPanel).getByText("gpt-5.3-codex")).toBeInTheDocument();
+    expect(
+      within(previewPanel).getByText("使用 --profile 启动时会覆盖这里的用户级设置"),
+    ).toBeInTheDocument();
     await user.click(within(previewPanel).getByRole("button", { name: "取消" }));
     expect(onCancelPreview).toHaveBeenCalledTimes(1);
 

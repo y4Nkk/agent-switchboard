@@ -29,9 +29,11 @@ interface Props {
   busy: boolean;
   /** Clients that already own their single official profile. */
   officialTakenApps: AppKind[];
-  /** Model currently live in the client's real configuration, shown for
-   * context while editing; null means nothing to display. */
-  activeModel: string | null;
+  /** Model read from the client's user-level configuration, shown for context
+   * while editing; null means the client selects its default model. */
+  userConfigModel: string | null;
+  /** Known conditions that can override the user-level configuration. */
+  userConfigWarnings: string[];
   onSave: (draft: ProviderDraft) => void;
   onCancel: () => void;
 }
@@ -113,7 +115,8 @@ export function ProviderEditor({
   initialApp,
   busy,
   officialTakenApps,
-  activeModel,
+  userConfigModel,
+  userConfigWarnings,
   onSave,
   onCancel,
 }: Props) {
@@ -390,7 +393,14 @@ export function ProviderEditor({
             </Button>
           </div>
         </div>
-        {activeModel && <p className="asb-scope-note">当前启用模型：{activeModel}</p>}
+        {userConfigModel && (
+          <p className="asb-scope-note">当前用户级配置模型：{userConfigModel}</p>
+        )}
+        {userConfigWarnings.map((warning) => (
+          <p key={warning} className="asb-scope-note asb-warn-text">
+            {warning}
+          </p>
+        ))}
         {modelsError && <span className="asb-warn-text">{modelsError}</span>}
       </div>
       )}

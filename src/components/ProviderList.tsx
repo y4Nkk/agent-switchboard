@@ -41,6 +41,8 @@ interface Props {
   profiles: ProviderProfile[];
   /** Profile id the live file actually matches, when the app can tell. */
   activeProfileId: string | null;
+  /** Model read from the displayed client's user-level configuration file. */
+  userConfigModel: string | null;
   selectedId: string | null;
   /** Profile whose preview is currently unfolded under the list. */
   openPreviewId?: string | null;
@@ -76,6 +78,7 @@ function hostLabel(url: string): string {
 interface RowProps {
   profile: ProviderProfile;
   active: boolean;
+  userConfigModel: string | null;
   selected: boolean;
   previewOpen: boolean;
   usageOpen: boolean;
@@ -99,6 +102,7 @@ interface RowProps {
 function ProviderRow({
   profile,
   active,
+  userConfigModel,
   selected,
   previewOpen,
   usageOpen,
@@ -130,6 +134,10 @@ function ProviderRow({
   const moreTriggerRef = useRef<HTMLButtonElement>(null);
   const official = profile.routeMode === "official";
   const officialQuota = official && profile.app === "codex";
+  const displayedModel = active ? userConfigModel : profile.model;
+  const modelText = active
+    ? `当前用户级配置模型：${displayedModel ?? "默认模型"}`
+    : displayedModel;
   const hasUsageQuery = profile.usageQuery !== null && profile.usageQuery !== undefined;
   const usageLabel = hasUsageQuery
     ? usageOpen
@@ -200,10 +208,10 @@ function ProviderRow({
         </span>
         <span className="asb-row-main">
           <span className="asb-row-name">{profile.name}</span>
-          {(profile.model || websiteUrl || official) && (
+          {(modelText || websiteUrl || official) && (
             <span className="asb-row-meta">
-              {profile.model}
-              {profile.model && (websiteUrl || official) && " · "}
+              {modelText}
+              {modelText && (websiteUrl || official) && " · "}
               {websiteUrl ? (
                 <a
                   className="asb-row-host"
@@ -421,6 +429,7 @@ function ProviderRow({
 export function ProviderList({
   profiles,
   activeProfileId,
+  userConfigModel,
   selectedId,
   openPreviewId,
   collapsedUsageIds = [],
@@ -459,6 +468,7 @@ export function ProviderList({
               key={profile.id}
               profile={profile}
               active={profile.id === activeProfileId}
+              userConfigModel={userConfigModel}
               selected={selectedId === profile.id}
               previewOpen={profile.id === openPreviewId}
               usageOpen={Boolean(profile.usageQuery) && !collapsedUsageIds.includes(profile.id)}

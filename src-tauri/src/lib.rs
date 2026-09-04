@@ -9,6 +9,7 @@ mod dev_api;
 mod fonts;
 mod local_state;
 mod model_usage;
+mod model_usage_cache;
 mod official_login;
 mod probe;
 mod runtime_log;
@@ -27,7 +28,7 @@ const WRY_DEFAULT_WEBVIEW2_BROWSER_ARGS: &str =
     "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 
 #[cfg(debug_assertions)]
-fn web_development_enabled(value: Option<&std::ffi::OsStr>) -> bool {
+pub(crate) fn web_development_enabled(value: Option<&std::ffi::OsStr>) -> bool {
     value == Some(std::ffi::OsStr::new("1"))
 }
 
@@ -138,6 +139,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::status::config_status,
+            commands::status::runtime_overview,
             commands::list_profiles,
             commands::reset_profile_store,
             commands::create_profile,

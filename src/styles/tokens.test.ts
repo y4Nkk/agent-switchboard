@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 const srcRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const tokenOwner = "styles/tokens.css";
 
+// The vendored BoardUI foundation is a quarantined second owner: it defines
+// the upstream design-system primitives the BoardUI components consume. App
+// code must never add raw colors outside tokens.css or this file.
+const vendoredFoundationOwners = new Set(["styles/theme.css"]);
+
 function collectSourceFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -25,7 +30,7 @@ describe("token ownership", () => {
     const offenders: string[] = [];
     for (const file of collectSourceFiles(srcRoot)) {
       const rel = relative(srcRoot, file).replace(/\\/g, "/");
-      if (rel === tokenOwner) continue;
+      if (rel === tokenOwner || vendoredFoundationOwners.has(rel)) continue;
       const text = readFileSync(file, "utf8");
       const hex = text.match(/#[0-9a-fA-F]{3,8}\b/g);
       if (hex) offenders.push(`${rel}: raw color ${hex.join(", ")}`);

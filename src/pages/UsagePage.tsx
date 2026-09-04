@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { RiDatabase2Line, RiLoginBoxLine, RiLogoutBoxLine, RiStackLine } from "@remixicon/react";
 import {
-  getModelUsageReport,
   type ModelUsageGroup,
   type ModelUsageRange,
   type ModelUsageReport,
@@ -11,8 +11,12 @@ import {
 } from "../components/charts/ModelUsageDistributionChart";
 import { UsageTrendChart } from "../components/charts/UsageTrendChart";
 import { RadioOption } from "../components/RadioOption";
+import { StatCards } from "../components/application/dashboard/stat-cards";
 import { Table, type TableColumn } from "../components/Table";
+import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
+import { TOKEN_UNIT, formatCompactTokenCount, formatTokenCount } from "../lib/token-format";
+import { useModelUsageReport } from "./use-model-usage-report";
 
 const RANGE_OPTIONS: ReadonlyArray<{ value: ModelUsageRange; label: string }> = [
   { value: "today", label: "今日" },
@@ -20,12 +24,6 @@ const RANGE_OPTIONS: ReadonlyArray<{ value: ModelUsageRange; label: string }> = 
   { value: "last30Days", label: "近 30 天" },
   { value: "all", label: "全部" },
 ];
-
-const tokenFormatter = new Intl.NumberFormat("zh-CN");
-
-function tokenCount(value: number): string {
-  return tokenFormatter.format(value);
-}
 
 function cachedTokenCount(group: ModelUsageGroup): number {
   return group.cacheReadInputTokens + group.cacheCreationInputTokens;
@@ -40,13 +38,13 @@ function dailyTrend(report: ModelUsageReport) {
     {
       id: "fresh-input",
       label: "新输入",
-      unit: "token",
+      unit: TOKEN_UNIT,
       points: report.days.map((day) => ({ at: `${day.date}T12:00:00`, value: day.inputTokens })),
     },
     {
       id: "cache",
       label: "缓存",
-      unit: "token",
+      unit: TOKEN_UNIT,
       points: report.days.map((day) => ({
         at: `${day.date}T12:00:00`,
         value: day.cacheReadInputTokens + day.cacheCreationInputTokens,
@@ -55,7 +53,7 @@ function dailyTrend(report: ModelUsageReport) {
     {
       id: "output",
       label: "输出",
-      unit: "token",
+      unit: TOKEN_UNIT,
       points: report.days.map((day) => ({ at: `${day.date}T12:00:00`, value: day.outputTokens })),
     },
   ];
@@ -83,77 +81,45 @@ const USAGE_COLUMNS: Array<TableColumn<ModelUsageGroup>> = [
   },
   {
     key: "input",
-    header: "输入",
+    header: "输入（tokens）",
     cellClassName: "asb-model-usage-number",
-    render: (group) => tokenCount(group.inputTokens),
+    render: (group) => formatTokenCount(group.inputTokens),
   },
   {
     key: "cache",
-    header: "缓存",
+    header: "缓存（tokens）",
     cellClassName: "asb-model-usage-number",
-    render: (group) => tokenCount(cachedTokenCount(group)),
+    render: (group) => formatTokenCount(cachedTokenCount(group)),
   },
   {
     key: "output",
-    header: "输出",
+    header: "输出（tokens）",
     cellClassName: "asb-model-usage-number",
-    render: (group) => tokenCount(group.outputTokens),
+    render: (group) => formatTokenCount(group.outputTokens),
   },
   {
     key: "total",
-    header: "总计",
+    header: "总计（tokens）",
     cellClassName: "asb-model-usage-number",
-    render: (group) => tokenCount(group.totalTokens),
+    render: (group) => formatTokenCount(group.totalTokens),
   },
   {
     key: "sessions",
     header: "会话",
     cellClassName: "asb-model-usage-number",
-    render: (group) => tokenCount(group.sessionCount),
+    render: (group) => formatTokenCount(group.sessionCount),
   },
 ];
-
-function errorMessage(caught: unknown): string {
-  return (caught as { message?: string }).message ?? "无法汇总本地模型消耗";
-}
 
 /** Read-only local session token totals. Provider quota remains in provider panels. */
 export function UsagePage({ active }: { active: boolean }) {
   const [range, setRange] = useState<ModelUsageRange>("today");
-  const [report, setReport] = useState<ModelUsageReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const requestVersion = useRef(0);
-
-  const refresh = useCallback(async () => {
-    if (!active) return;
-
-    const version = ++requestVersion.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await getModelUsageReport(range);
-      if (requestVersion.current === version) setReport(next);
-    } catch (caught) {
-      if (requestVersion.current === version) setError(errorMessage(caught));
-    } finally {
-      if (requestVersion.current === version) setLoading(false);
-    }
-  }, [active, range]);
-
-  useEffect(() => {
-    if (!active) {
-      requestVersion.current += 1;
-      setLoading(false);
-      return;
-    }
-    void refresh();
-  }, [active, refresh]);
+  const { read, loading, error, refresh } = useModelUsageReport(active, range);
+  const report = read?.report ?? null;
 
   const changeRange = (nextRange: ModelUsageRange) => {
     if (nextRange === range) return;
     setRange(nextRange);
-    setReport(null);
   };
 
   const freshInput = report ? reportTotal(report, (group) => group.inputTokens) : 0;
@@ -167,7 +133,15 @@ export function UsagePage({ active }: { active: boolean }) {
       <div className="asb-panel-heading">
         <div>
           <h2 className="asb-panel-title">模型消耗</h2>
-          <p className="asb-scope-note">仅汇总本地会话记录，不表示供应商剩余额度。</p>
+          <p className="asb-scope-note">
+            仅汇总本地会话记录，不表示供应商剩余额度。页面可见时按本地快照时间自动刷新。
+          </p>
+          {report && (
+            <p className="asb-model-usage-snapshot" role="status">
+              {read?.freshness === "cached" ? "本地快照" : "本次汇总"}：<Time iso={report.generatedAt} />
+              {loading ? " · 正在更新" : null}
+            </p>
+          )}
         </div>
         <div className="asb-model-usage-controls">
           <div className="asb-segments" role="radiogroup" aria-label="模型消耗时间范围">
@@ -188,6 +162,7 @@ export function UsagePage({ active }: { active: boolean }) {
         </div>
       </div>
       {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}
+      {read?.cacheWarning && <p className="asb-warn-text" role="alert">{read.cacheWarning}</p>}
       {report?.issues.length ? (
         <ul className="asb-model-usage-issues" aria-label="模型消耗提示">
           {report.issues.map((issue) => (
@@ -203,44 +178,38 @@ export function UsagePage({ active }: { active: boolean }) {
         </p>
       ) : report?.groups.length ? (
         <>
-          <dl className="asb-model-usage-summary" aria-label="模型消耗汇总">
-            <div>
-              <dt>总计</dt>
-              <dd>{tokenCount(total)}</dd>
-            </div>
-            <div>
-              <dt>新输入</dt>
-              <dd>{tokenCount(freshInput)}</dd>
-            </div>
-            <div>
-              <dt>缓存</dt>
-              <dd>{tokenCount(cachedInput)}</dd>
-            </div>
-            <div>
-              <dt>输出</dt>
-              <dd>{tokenCount(output)}</dd>
-            </div>
-          </dl>
+          <div role="group" aria-label="模型消耗汇总" className="bui-scope">
+            <StatCards
+              variant="summary"
+              stats={[
+                { icon: RiStackLine, label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
+                { icon: RiLoginBoxLine, label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
+                { icon: RiDatabase2Line, label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
+                { icon: RiLogoutBoxLine, label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
+              ]}
+              columns={4}
+            />
+          </div>
           {undated > 0 && (
             <p className="asb-model-usage-undated" role="status">
-              {tokenCount(undated)} token 未记录时间，已保留在明细总计中，但未纳入日趋势。
+              {formatTokenCount(undated)} tokens 未记录时间，已保留在明细总计中，但未纳入日趋势。
             </p>
           )}
           <div className="asb-model-usage-analysis">
-            <section className="asb-model-usage-trend" aria-labelledby="model-usage-trend-heading">
-              <h3 id="model-usage-trend-heading">日趋势</h3>
-              <UsageTrendChart
-                series={dailyTrend(report)}
-                ariaLabel="模型消耗日趋势"
-                emptyMessage="当前范围内没有带时间的模型消耗记录。"
-              />
-            </section>
-            <section className="asb-model-usage-distribution" aria-labelledby="model-usage-distribution-heading">
-              <h3 id="model-usage-distribution-heading">模型构成</h3>
+            <section className="asb-model-usage-distribution" aria-label="模型构成">
               <ModelUsageDistributionChart
                 items={modelComposition(report)}
                 ariaLabel="模型消耗构成"
                 emptyMessage="当前范围内没有可比较的模型消耗记录。"
+              />
+            </section>
+            <section className="asb-model-usage-trend" aria-label="每日 Token 趋势">
+              <UsageTrendChart
+                series={dailyTrend(report)}
+                ariaLabel="模型消耗日趋势"
+                title="每日 Token 趋势"
+                emptyMessage="当前范围内没有带时间的模型消耗记录。"
+                sumAcrossSeries
               />
             </section>
           </div>

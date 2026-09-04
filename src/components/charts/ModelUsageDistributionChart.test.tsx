@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ModelUsageDistributionChart } from "./ModelUsageDistributionChart";
 
 describe("ModelUsageDistributionChart", () => {
-  it("keeps the five largest real models and names the summarized tail", () => {
+  it("keeps the five largest real models and names the summarized tail with exact values", () => {
     render(
       <ModelUsageDistributionChart
         ariaLabel="模型构成"
@@ -20,12 +20,16 @@ describe("ModelUsageDistributionChart", () => {
       />,
     );
 
+    expect(screen.getByRole("figure", { name: "模型构成" })).toBeInTheDocument();
+    expect(screen.getByText("模型构成")).toBeInTheDocument();
+    expect(screen.getByText("280")).toBeInTheDocument();
     expect(screen.getByText("模型一")).toBeInTheDocument();
     expect(screen.getByText("模型五")).toBeInTheDocument();
     expect(screen.queryByText("模型六")).not.toBeInTheDocument();
-    expect(screen.getByText("其他（2 个模型）")).toBeInTheDocument();
-    expect(screen.getByText("其他（2 个模型）").parentElement).toHaveTextContent("30");
-    expect(screen.getAllByRole("progressbar")).toHaveLength(6);
+    const other = screen.getByText("其他（2 个模型）").closest("li");
+    expect(other).toHaveTextContent("30 tokens");
+    // The donut draws one sector per displayed slice.
+    expect(document.querySelectorAll(".recharts-pie-sector")).toHaveLength(6);
   });
 
   it("uses the empty state when no positive finite model total exists", () => {

@@ -1,6 +1,8 @@
 /// <reference types="vitest/config" />
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { createWebDevelopmentBrowserPlugin } from "./src/dev/vite-browser-launch.ts";
 import tauriConfig from "./src-tauri/tauri.conf.json" with { type: "json" };
 
@@ -14,6 +16,7 @@ const browserDevelopment = Object.freeze({
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     createWebDevelopmentBrowserPlugin({
       enabled: process.env.ASB_WEB_DEVELOPMENT === "1",
       healthUrl: "http://127.0.0.1:1422/health",
@@ -21,6 +24,11 @@ export default defineConfig({
     }),
   ],
   clearScreen: false,
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   server: {
     host: browserDevelopment.host,
     port: browserDevelopment.port,
@@ -42,6 +50,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // Several interaction tests intentionally render large configuration lists.
+    // Keep their deadline explicit and stable under CI worker contention.
+    testTimeout: 10_000,
     // timeLabel renders in the machine timezone; pin it so local-time
     // assertions are identical on dev machines (UTC+8) and CI runners (UTC).
     env: { TZ: "Asia/Shanghai" },

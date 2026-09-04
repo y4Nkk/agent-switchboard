@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import type { CodexOfficialQuota, UsageHistorySeries } from "../api/client";
@@ -63,14 +63,15 @@ describe("CodexOfficialQuotaPanel", () => {
 
     expect(await screen.findByRole("row", { name: /^5 小时/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /^7 天/ })).toBeInTheDocument();
-    expect(screen.getByText("13 %")).toBeInTheDocument();
-    expect(screen.getByText("76 %")).toBeInTheDocument();
+    expect(screen.getAllByText("13 %").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("76 %").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(invokeMock).toHaveBeenCalledWith("query_codex_official_quota", {
       profileId: "codex-official",
     });
     expect(callsFor("query_codex_official_quota")[0]?.[1]).toEqual({ profileId: "codex-official" });
-    expect(await screen.findByRole("img", { name: /5 小时，12.5 %/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".recharts-line")).not.toBeNull());
+    expect(within(screen.getByRole("figure", { name: /官方额度趋势/ })).getAllByText("5 小时").length).toBeGreaterThan(0);
     await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(2));
 
     await user.click(screen.getByRole("button", { name: "刷新" }));

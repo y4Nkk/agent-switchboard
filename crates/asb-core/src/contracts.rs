@@ -269,6 +269,37 @@ pub struct ModelUsageReport {
     pub issues: Vec<ModelUsageIssue>,
 }
 
+/// One read request for the local-session usage cache. A forced refresh
+/// bypasses the saved snapshot and re-scans the approved session roots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ModelUsageRequest {
+    pub range: ModelUsageRange,
+    pub force_refresh: bool,
+}
+
+/// Whether a local-session usage read came from its persisted snapshot or a
+/// scan completed in the current request. It says nothing about provider
+/// billing, quota, or remote account state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelUsageFreshness {
+    Cached,
+    Fresh,
+}
+
+/// A local-session report plus the backend-owned snapshot timing. The
+/// renderer uses `refresh_after` to schedule foreground-only revalidation;
+/// it never invents an independent cache lifetime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageRead {
+    pub report: ModelUsageReport,
+    pub freshness: ModelUsageFreshness,
+    pub refresh_after: String,
+    pub cache_warning: Option<String>,
+}
+
 /// One renderer request for persisted, credential-free usage history.
 /// Provider history is always resolved against the profile's current query
 /// digest by the backend; the renderer never supplies a digest or path.
@@ -850,6 +881,42 @@ mod tests {
         assert_eq!(value["days"][0]["date"], "2026-09-03");
         assert_eq!(value["unassignedTokens"]["totalTokens"], 0);
         assert_eq!(value["issues"][0]["app"], "claude");
+    }
+
+    #[test]
+    fn model_usage_read_contract_requires_an_explicit_cache_policy() {
+        let request = ModelUsageRequest {
+            range: ModelUsageRange::Last7Days,
+            force_refresh: true,
+        };
+        assert_eq!(
+            serde_json::to_value(request).expect("request serializes"),
+            serde_json::json!({"range":"last7Days","forceRefresh":true})
+        );
+        assert!(
+            serde_json::from_value::<ModelUsageRequest>(serde_json::json!({
+                "range":"today"
+            }))
+            .is_err()
+        );
+
+        let read = ModelUsageRead {
+            report: ModelUsageReport {
+                range: ModelUsageRange::Today,
+                generated_at: "2026-09-04T08:00:00Z".to_string(),
+                groups: Vec::new(),
+                days: Vec::new(),
+                unassigned_tokens: ModelUsageTokens::default(),
+                issues: Vec::new(),
+            },
+            freshness: ModelUsageFreshness::Cached,
+            refresh_after: "2026-09-04T08:05:00Z".to_string(),
+            cache_warning: None,
+        };
+        let value = serde_json::to_value(read).expect("read serializes");
+        assert_eq!(value["freshness"], "cached");
+        assert_eq!(value["refreshAfter"], "2026-09-04T08:05:00Z");
+        assert!(value.get("cacheWarning").is_some());
     }
 
     #[test]

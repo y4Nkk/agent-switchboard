@@ -5,6 +5,7 @@ target/
 target-*/
 .zcode/
 .playwright-mcp/
+.tmp/
 *.log
 .DS_Store
 .env

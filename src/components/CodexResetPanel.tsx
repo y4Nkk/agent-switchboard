@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   checkCodexResetStatus,
   getCachedCodexResetStatus,
@@ -26,16 +26,29 @@ function confidenceLabel(confidence: number): string {
   return `信心 ${Math.round(confidence * 100)}%`;
 }
 
-function ResetFact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <article className="asb-codex-reset-item" aria-label={label}>
-      <h3 className="asb-codex-reset-label">{label}</h3>
-      {children}
-    </article>
-  );
+function resetDescription(signal: ResetSignal): string {
+  switch (signal.resetType) {
+    case "global":
+      return "已确认全局重置";
+    case "banked":
+      return "已确认重置卡发放";
+    case "other":
+      return "已确认完成信号";
+  }
 }
 
-/** An explicit, read-only view of public global reset signals. */
+function isSignalOnFeedDay(signal: ResetSignal | null, generatedAt: string): boolean {
+  if (signal === null) return false;
+  const signalDate = new Date(signalTime(signal));
+  const feedDate = new Date(generatedAt);
+  return [
+    signalDate.getFullYear() === feedDate.getFullYear(),
+    signalDate.getMonth() === feedDate.getMonth(),
+    signalDate.getDate() === feedDate.getDate(),
+  ].every(Boolean);
+}
+
+/** An explicit, read-only view of public reset signals. */
 export function CodexResetPanel() {
   const [snapshot, setSnapshot] = useState<CodexResetRead | null>(null);
   const [cacheLoading, setCacheLoading] = useState(true);
@@ -88,6 +101,7 @@ export function CodexResetPanel() {
   };
 
   const status = snapshot?.status ?? null;
+  const hasSignalOnFeedDay = status !== null && isSignalOnFeedDay(status.latestConfirmedSignal, status.generatedAt);
 
   return (
     <section className="asb-panel asb-codex-reset" aria-labelledby="codex-reset-heading">
@@ -126,42 +140,29 @@ export function CodexResetPanel() {
       )}
       {snapshot !== null && status !== null && (
         <>
-          <div className="asb-codex-reset-grid">
-            <ResetFact label="是否重置">
-              {status.latestConfirmedReset ? (
+          <div className="asb-codex-reset-board">
+            <article className="asb-codex-reset-summary" aria-label="本次公开检查结果">
+              <p className="asb-codex-reset-question">本次公开检查当日有重置信号吗？</p>
+              <strong
+                className={`asb-codex-reset-answer${hasSignalOnFeedDay ? " is-confirmed" : ""}`}
+              >
+                {hasSignalOnFeedDay ? "是" : "否"}
+              </strong>
+              {status.latestConfirmedSignal ? (
                 <>
-                  <strong className="asb-codex-reset-value asb-ok-text">已确认全局重置</strong>
+                  <p className="asb-codex-reset-summary-title">
+                    {resetDescription(status.latestConfirmedSignal)}
+                  </p>
                   <p className="asb-codex-reset-detail">
-                    信号时间 <Time iso={status.latestConfirmedReset.announcedAt} />
+                    公开源确认时间 <Time iso={signalTime(status.latestConfirmedSignal)} />
                   </p>
                 </>
               ) : (
-                <>
-                  <strong className="asb-codex-reset-value">尚未发现完成信号</strong>
-                  <p className="asb-codex-reset-detail">公开 feed 未提供已确认的全局重置。</p>
-                </>
+                <p className="asb-codex-reset-detail">公开 feed 尚未提供已确认的完成信号。</p>
               )}
-            </ResetFact>
-            <ResetFact label="预计重置">
-              {status.nextScheduledReset ? (
-                <>
-                  <strong className="asb-codex-reset-value">
-                    <Time iso={signalTime(status.nextScheduledReset)} />
-                  </strong>
-                  <p className="asb-codex-reset-detail">
-                    {scheduleDescription(status.nextScheduledReset)} · {confidenceLabel(status.nextScheduledReset.confidence)}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <strong className="asb-codex-reset-value">暂无公告预计</strong>
-                  <p className="asb-codex-reset-detail">公开 feed 没有待完成的重置安排。</p>
-                </>
-              )}
-            </ResetFact>
-            <ResetFact label="Tibo 最近相关动态">
-              {status.latestRelevantTiboPost ? (
-                <>
+              {status.latestRelevantTiboPost && (
+                <div className="asb-codex-reset-post-summary">
+                  <p className="asb-codex-reset-label">Tibo 最近相关动态</p>
                   <p className="asb-codex-reset-post">{status.latestRelevantTiboPost.text}</p>
                   <div className="asb-codex-reset-post-actions">
                     <span className="asb-codex-reset-detail">
@@ -174,14 +175,43 @@ export function CodexResetPanel() {
                       查看原帖
                     </Button>
                   </div>
-                </>
-              ) : (
-                <>
-                  <strong className="asb-codex-reset-value">暂无相关动态</strong>
-                  <p className="asb-codex-reset-detail">公开 feed 尚未收录可打开的 Tibo 相关帖子。</p>
-                </>
+                </div>
               )}
-            </ResetFact>
+            </article>
+            <dl className="asb-codex-reset-facts" aria-label="公开信号详情">
+              <div className="asb-codex-reset-fact">
+                <dt>最近完成信号</dt>
+                <dd>
+                  {status.latestConfirmedSignal ? (
+                    <>
+                      <span>{resetDescription(status.latestConfirmedSignal)}</span>
+                      <Time iso={signalTime(status.latestConfirmedSignal)} />
+                    </>
+                  ) : (
+                    "暂无"
+                  )}
+                </dd>
+              </div>
+              <div className="asb-codex-reset-fact">
+                <dt>最近检查</dt>
+                <dd><Time iso={status.lastSuccessfulCheckAt} /></dd>
+              </div>
+              <div className="asb-codex-reset-fact">
+                <dt>预计下次重置</dt>
+                <dd>
+                  {status.nextScheduledReset ? (
+                    <>
+                      <Time iso={signalTime(status.nextScheduledReset)} />
+                      <span>
+                        {scheduleDescription(status.nextScheduledReset)} · {confidenceLabel(status.nextScheduledReset.confidence)}
+                      </span>
+                    </>
+                  ) : (
+                    "暂无公告预计"
+                  )}
+                </dd>
+              </div>
+            </dl>
           </div>
           {status.sourceWarning && <p className="asb-warn-text">{status.sourceWarning}</p>}
           {snapshot.cacheWarning && <p className="asb-warn-text">{snapshot.cacheWarning}</p>}

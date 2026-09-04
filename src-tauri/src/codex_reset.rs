@@ -25,7 +25,7 @@ pub struct CodexResetStatus {
     pub generated_at: String,
     pub last_successful_check_at: String,
     pub checked_at: String,
-    pub latest_confirmed_reset: Option<ResetSignal>,
+    pub latest_confirmed_signal: Option<ResetSignal>,
     pub next_scheduled_reset: Option<ResetSignal>,
     pub latest_relevant_tibo_post: Option<TiboPost>,
     pub source_warning: Option<String>,
@@ -76,6 +76,16 @@ pub enum CodexResetFeedStatus {
     Degraded,
 }
 
+/// The public reset category reported by the source. It describes the signal,
+/// never the entitlement of the signed-in account.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResetType {
+    Global,
+    Banked,
+    Other,
+}
+
 /// One confirmed or scheduled reset event. Scheduled events retain their
 /// precision because a date-level estimate must not look like an exact time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,6 +95,7 @@ pub struct ResetSignal {
     pub effective_at: Option<String>,
     pub schedule_precision: Option<String>,
     pub confidence: f64,
+    pub reset_type: ResetType,
 }
 
 /// The newest reset-related public post attributed to Tibo in this feed.
@@ -118,12 +129,28 @@ struct FeedMonitor {
 #[serde(rename_all = "camelCase")]
 struct ResetTimeline {
     next_schedule: Option<FeedEvent>,
+    #[serde(default)]
+    fulfilled_schedules: Vec<TimelineCompletion>,
+    #[serde(default)]
+    manual_completions: Vec<TimelineCompletion>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TimelineCompletion {
+    completed_at: String,
+    #[serde(default)]
+    schedule: Option<FeedEvent>,
+    #[serde(default)]
+    schedules: Vec<FeedEvent>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FeedEvent {
     kind: String,
+    #[serde(default)]
+    reset_type: Option<String>,
     announced_at: String,
     #[serde(default)]
     effective_at: Option<String>,
@@ -165,7 +192,7 @@ impl CodexResetStatus {
         validate_timestamp(&self.checked_at, "本次读取时间")?;
 
         for (label, signal) in [
-            ("确认重置信号", self.latest_confirmed_reset.as_ref()),
+            ("确认重置信号", self.latest_confirmed_signal.as_ref()),
             ("预计重置信号", self.next_scheduled_reset.as_ref()),
         ] {
             let Some(signal) = signal else {
@@ -190,13 +217,6 @@ impl CodexResetStatus {
     }
 }
 
-fn latest_event<'a>(events: impl Iterator<Item = &'a FeedEvent>) -> Option<&'a FeedEvent> {
-    events
-        .filter_map(|event| parse_timestamp(&event.announced_at).map(|at| (at, event)))
-        .max_by(|(left, _), (right, _)| left.cmp(right))
-        .map(|(_, event)| event)
-}
-
 fn reset_signal(event: &FeedEvent) -> Result<ResetSignal, String> {
     validate_timestamp(&event.announced_at, "公告时间")?;
     if let Some(effective_at) = &event.effective_at {
@@ -210,7 +230,53 @@ fn reset_signal(event: &FeedEvent) -> Result<ResetSignal, String> {
         effective_at: event.effective_at.clone(),
         schedule_precision: event.schedule_precision.clone(),
         confidence: event.confidence,
+        reset_type: match event.reset_type.as_deref() {
+            Some("global") => ResetType::Global,
+            Some("banked") => ResetType::Banked,
+            _ => ResetType::Other,
+        },
     })
+}
+
+fn completion_signal(
+    completion: &TimelineCompletion,
+    event: &FeedEvent,
+) -> Option<(chrono::DateTime<chrono::FixedOffset>, ResetSignal)> {
+    let completed_at = parse_timestamp(&completion.completed_at)?;
+    let mut signal = reset_signal(event).ok()?;
+    signal.announced_at = completion.completed_at.clone();
+    signal.effective_at = None;
+    signal.schedule_precision = None;
+    Some((completed_at, signal))
+}
+
+fn completion_events(completion: &TimelineCompletion) -> impl Iterator<Item = &FeedEvent> {
+    completion
+        .schedule
+        .iter()
+        .chain(completion.schedules.iter())
+}
+
+fn latest_confirmed_signal(feed: &Feed) -> Option<ResetSignal> {
+    let direct_events = feed.events.iter().filter_map(|event| {
+        (event.kind == "reset_completed")
+            .then(|| parse_timestamp(&event.announced_at).zip(reset_signal(event).ok()))
+            .flatten()
+    });
+    let timeline_events = feed
+        .reset_timeline
+        .fulfilled_schedules
+        .iter()
+        .chain(feed.reset_timeline.manual_completions.iter())
+        .flat_map(|completion| {
+            completion_events(completion)
+                .filter_map(move |event| completion_signal(completion, event))
+        });
+
+    direct_events
+        .chain(timeline_events)
+        .max_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, signal)| signal)
 }
 
 fn is_tibo_post_url(url: &str) -> bool {
@@ -248,10 +314,8 @@ fn tibo_post(event: &FeedEvent) -> Option<TiboPost> {
     })
 }
 
-fn latest_tibo_post(events: &[FeedEvent], next_schedule: Option<&FeedEvent>) -> Option<TiboPost> {
+fn latest_tibo_post<'a>(events: impl Iterator<Item = &'a FeedEvent>) -> Option<TiboPost> {
     events
-        .iter()
-        .chain(next_schedule)
         .filter_map(|event| {
             let timestamp = parse_timestamp(&event.announced_at)?;
             tibo_post(event).map(|post| (timestamp, post))
@@ -269,13 +333,7 @@ fn parse_feed(text: &str, checked_at: String) -> Result<CodexResetStatus, String
     validate_timestamp(&feed.generated_at, "生成时间")?;
     validate_timestamp(&feed.last_successful_check_at, "最近成功检查时间")?;
 
-    let latest_confirmed_reset = latest_event(
-        feed.events
-            .iter()
-            .filter(|event| event.kind == "reset_completed"),
-    )
-    .map(reset_signal)
-    .transpose()?;
+    let latest_confirmed_signal = latest_confirmed_signal(&feed);
     let next_scheduled_reset = feed
         .reset_timeline
         .next_schedule
@@ -296,11 +354,19 @@ fn parse_feed(text: &str, checked_at: String) -> Result<CodexResetStatus, String
         generated_at: feed.generated_at,
         last_successful_check_at: feed.last_successful_check_at,
         checked_at,
-        latest_confirmed_reset,
+        latest_confirmed_signal,
         next_scheduled_reset,
         latest_relevant_tibo_post: latest_tibo_post(
-            &feed.events,
-            feed.reset_timeline.next_schedule.as_ref(),
+            feed.events
+                .iter()
+                .chain(feed.reset_timeline.next_schedule.iter())
+                .chain(
+                    feed.reset_timeline
+                        .fulfilled_schedules
+                        .iter()
+                        .chain(feed.reset_timeline.manual_completions.iter())
+                        .flat_map(completion_events),
+                ),
         ),
         source_warning,
     })
@@ -370,7 +436,7 @@ mod tests {
         assert_eq!(status.feed_status, CodexResetFeedStatus::Ok);
         assert_eq!(
             status
-                .latest_confirmed_reset
+                .latest_confirmed_signal
                 .as_ref()
                 .map(|reset| &reset.announced_at),
             Some(&"2026-08-31T02:34:27Z".to_string())
@@ -396,7 +462,7 @@ mod tests {
         let status = parse_fixture("", "null", "error");
 
         assert_eq!(status.feed_status, CodexResetFeedStatus::Degraded);
-        assert!(status.latest_confirmed_reset.is_none());
+        assert!(status.latest_confirmed_signal.is_none());
         assert!(status.next_scheduled_reset.is_none());
         assert!(status.latest_relevant_tibo_post.is_none());
         assert!(status.source_warning.is_some());
@@ -414,6 +480,46 @@ mod tests {
         let status = parse_fixture(event, "null", "ok");
 
         assert!(status.latest_relevant_tibo_post.is_none());
+    }
+
+    #[test]
+    fn normalizes_a_manually_confirmed_reset_card_from_the_timeline() {
+        let body = r#"{
+            "schemaVersion": 1,
+            "generatedAt": "2026-09-04T08:40:02.783Z",
+            "lastSuccessfulCheckAt": "2026-09-04T08:40:02.783Z",
+            "monitor": { "status": "ok" },
+            "events": [],
+            "resetTimeline": {
+                "nextSchedule": null,
+                "manualCompletions": [{
+                    "completedAt": "2026-09-04T02:30:00Z",
+                    "schedules": [{
+                        "kind": "reset_scheduled",
+                        "resetType": "banked",
+                        "announcedAt": "2026-09-03T23:12:09Z",
+                        "effectiveAt": "2026-09-04T02:12:09Z",
+                        "schedulePrecision": "datetime",
+                        "confidence": 0.93,
+                        "source": {
+                            "handle": "thsottiaux",
+                            "url": "https://x.com/thsottiaux/status/2095651088502591861"
+                        },
+                        "text": "The first reset card has landed."
+                    }]
+                }]
+            }
+        }"#;
+
+        let status = parse_feed(body, "2026-09-04T08:45:00Z".to_string()).expect("feed");
+        let signal = status.latest_confirmed_signal.expect("completed signal");
+
+        assert_eq!(signal.announced_at, "2026-09-04T02:30:00Z");
+        assert_eq!(signal.reset_type, ResetType::Banked);
+        assert_eq!(
+            status.latest_relevant_tibo_post.map(|post| post.text),
+            Some("The first reset card has landed.".to_string())
+        );
     }
 
     #[test]

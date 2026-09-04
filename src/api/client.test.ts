@@ -366,13 +366,13 @@ describe("api client boundary", () => {
     });
   });
 
-  it("requests model usage only by its typed local-calendar range", async () => {
-    invokeMock.mockResolvedValue({ groups: [], issues: [] });
+  it("requests model usage through its strict snapshot policy", async () => {
+    invokeMock.mockResolvedValue({ report: { groups: [], issues: [] } });
 
-    await getModelUsageReport("last7Days");
+    await getModelUsageReport({ range: "last7Days", forceRefresh: false });
 
     expect(invokeMock).toHaveBeenCalledWith("get_model_usage_report", {
-      range: "last7Days",
+      request: { range: "last7Days", forceRefresh: false },
     });
   });
 

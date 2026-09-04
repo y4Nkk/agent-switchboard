@@ -21,8 +21,10 @@ interface ProvidersPageProps {
   profiles: ProviderProfile[];
   appFilter: AppKind;
   activeProfileId: string | null;
-  /** Model currently live in this client's real configuration. */
-  activeModel: string | null;
+  /** Model read from this client's user-level configuration file. */
+  userConfigModel: string | null;
+  /** Known conditions that can override the user-level configuration. */
+  userConfigWarnings: string[];
   selectedId: string | null;
   selectedProfile: ProviderProfile | null;
   editorMode: EditorMode;
@@ -53,7 +55,8 @@ export function ProvidersPage({
   profiles,
   appFilter,
   activeProfileId,
-  activeModel,
+  userConfigModel,
+  userConfigWarnings,
   selectedId,
   selectedProfile,
   editorMode,
@@ -126,7 +129,8 @@ export function ProvidersPage({
             initialApp={appFilter}
             busy={busy}
             officialTakenApps={officialTakenApps}
-            activeModel={activeModel}
+            userConfigModel={userConfigModel}
+            userConfigWarnings={userConfigWarnings}
             onSave={onSave}
             onCancel={onCloseEditor}
           />
@@ -170,6 +174,7 @@ export function ProvidersPage({
       <ProviderList
         profiles={visibleProfiles}
         activeProfileId={activeProfileId}
+        userConfigModel={userConfigModel}
         selectedId={selectedId}
         openPreviewId={preview?.profileId ?? null}
         collapsedUsageIds={collapsedUsageIds}
@@ -203,7 +208,11 @@ export function ProvidersPage({
                   </Button>
                 </div>
               </div>
-              <PreviewInspector filePreview={preview.file} activeModel={activeModel} />
+              <PreviewInspector
+                filePreview={preview.file}
+                userConfigModel={userConfigModel}
+                userConfigWarnings={userConfigWarnings}
+              />
             </section>
           )
         }

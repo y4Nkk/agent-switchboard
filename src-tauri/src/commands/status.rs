@@ -13,7 +13,8 @@ use asb_switch::lockfile::{self, RecoveryEntry};
 use asb_switch::sha256_hex;
 use serde::Serialize;
 use std::io::ErrorKind;
-use tauri::AppHandle;
+use std::path::Path;
+use tauri::{AppHandle, Manager};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +27,74 @@ pub struct ConfigFileStatus {
     pub read_error: Option<String>,
     pub match_status: MatchStatus,
     pub last_switch: Option<ConfigWriteRecord>,
+}
+
+/// Stable, non-secret facts about the running Agent Switchboard process.
+/// This is deliberately separate from client configuration status: it owns
+/// only application metadata and never reads Codex or Claude Code files.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeOverview {
+    pub app_version: String,
+    pub build_mode: RuntimeBuildMode,
+    pub platform: String,
+    pub architecture: String,
+    pub transport: RuntimeTransport,
+    pub app_data_path: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RuntimeBuildMode {
+    Debug,
+    Release,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RuntimeTransport {
+    DesktopProtocol,
+    WebDevelopment {
+        host: String,
+        port: u16,
+        #[serde(rename = "healthStatus")]
+        health_status: u16,
+    },
+}
+
+fn runtime_transport() -> RuntimeTransport {
+    #[cfg(debug_assertions)]
+    {
+        let web_development = std::env::var_os("ASB_WEB_DEVELOPMENT");
+        if crate::web_development_enabled(web_development.as_deref()) {
+            return RuntimeTransport::WebDevelopment {
+                host: crate::dev_api::DEV_API_HOST.to_string(),
+                port: crate::dev_api::DEV_API_PORT,
+                health_status: crate::dev_api::DEV_API_HEALTH_STATUS,
+            };
+        }
+    }
+
+    RuntimeTransport::DesktopProtocol
+}
+
+fn runtime_overview_for(
+    app_version: String,
+    app_data_dir: &Path,
+    transport: RuntimeTransport,
+) -> RuntimeOverview {
+    RuntimeOverview {
+        app_version,
+        build_mode: if cfg!(debug_assertions) {
+            RuntimeBuildMode::Debug
+        } else {
+            RuntimeBuildMode::Release
+        },
+        platform: std::env::consts::OS.to_string(),
+        architecture: std::env::consts::ARCH.to_string(),
+        transport,
+        app_data_path: app_data_dir.to_string_lossy().into_owned(),
+    }
 }
 
 fn classify_match_status(
@@ -180,6 +249,19 @@ pub async fn config_status(app: AppHandle) -> Result<Vec<ConfigFileStatus>, Comm
 }
 
 #[tauri::command]
+pub async fn runtime_overview(app: AppHandle) -> Result<RuntimeOverview, CommandError> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| CommandError::new("runtime-path-unavailable", "无法定位应用数据目录"))?;
+    Ok(runtime_overview_for(
+        app.package_info().version.to_string(),
+        &app_data_dir,
+        runtime_transport(),
+    ))
+}
+
+#[tauri::command]
 pub async fn lock_status(app: AppHandle, target: AppKind) -> Result<LockStatus, CommandError> {
     let state = state(&app)?;
     blocking(move || {
@@ -274,6 +356,45 @@ mod tests {
                 profile_id: "p1".to_string(),
                 profile_name: "当前档案".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn runtime_overview_contains_only_application_runtime_facts() {
+        let overview = runtime_overview_for(
+            "0.1.5".to_string(),
+            Path::new("C:/data/Agent Switchboard"),
+            RuntimeTransport::WebDevelopment {
+                host: "127.0.0.1".to_string(),
+                port: 1422,
+                health_status: 204,
+            },
+        );
+
+        assert_eq!(overview.app_version, "0.1.5");
+        assert_eq!(overview.app_data_path, "C:/data/Agent Switchboard");
+        assert!(matches!(
+            overview.build_mode,
+            RuntimeBuildMode::Debug | RuntimeBuildMode::Release
+        ));
+        assert!(!overview.platform.is_empty());
+        assert!(!overview.architecture.is_empty());
+        assert_eq!(
+            overview.transport,
+            RuntimeTransport::WebDevelopment {
+                host: "127.0.0.1".to_string(),
+                port: 1422,
+                health_status: 204,
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(&overview.transport).expect("runtime transport serializes"),
+            serde_json::json!({
+                "kind": "webDevelopment",
+                "host": "127.0.0.1",
+                "port": 1422,
+                "healthStatus": 204,
+            })
         );
     }
 }

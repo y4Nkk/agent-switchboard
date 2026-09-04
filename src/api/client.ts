@@ -173,6 +173,26 @@ export interface ModelUsageReport {
   issues: ModelUsageIssue[];
 }
 
+/** Explicit local-session report cache policy. `forceRefresh` re-scans the
+ * approved local session roots instead of returning their saved snapshot. */
+export interface ModelUsageRequest {
+  range: ModelUsageRange;
+  forceRefresh: boolean;
+}
+
+/** Whether the report came from its persisted local-session snapshot or this
+ * request's completed scan. It does not describe provider quota freshness. */
+export type ModelUsageFreshness = "cached" | "fresh";
+
+/** Backend-owned local-session snapshot timing. The UI schedules its next
+ * foreground refresh from `refreshAfter`, not from a separate client TTL. */
+export interface ModelUsageRead {
+  report: ModelUsageReport;
+  freshness: ModelUsageFreshness;
+  refreshAfter: string;
+  cacheWarning: string | null;
+}
+
 /** The renderer asks for either its current provider's normalized history or
  * the independent account-level Codex official history. */
 export type UsageHistoryRequest =
@@ -485,6 +505,21 @@ export interface ConfigFileStatus {
   lastSwitch: ConfigWriteRecord | null;
 }
 
+/** Read-only application metadata for the overview footer. It never includes
+ * client configuration, credentials, or account information. */
+export interface RuntimeOverview {
+  appVersion: string;
+  buildMode: "debug" | "release";
+  platform: string;
+  architecture: string;
+  transport: RuntimeTransport;
+  appDataPath: string;
+}
+
+export type RuntimeTransport =
+  | { kind: "desktopProtocol" }
+  | { kind: "webDevelopment"; host: string; port: number; healthStatus: number };
+
 export type RecoveryOutcome =
   | { outcome: "not_needed" }
   | { outcome: "restored"; backup: BackupRecord }
@@ -612,6 +647,10 @@ export interface SessionResume {
 
 export function getConfigStatus(): Promise<ConfigFileStatus[]> {
   return invoke<ConfigFileStatus[]>("config_status");
+}
+
+export function getRuntimeOverview(): Promise<RuntimeOverview> {
+  return invoke<RuntimeOverview>("runtime_overview");
 }
 
 export function listProfiles(): Promise<ProviderRecord[]> {
@@ -978,12 +1017,14 @@ export function closeUpdate(update: Update): Promise<void> {
 /** Public, global reset signals from Codex Runway. These do not describe the
  * signed-in account's actual quota or entitlement. */
 export type CodexResetFeedStatus = "ok" | "degraded";
+export type ResetType = "global" | "banked" | "other";
 
 export interface ResetSignal {
   announcedAt: string;
   effectiveAt: string | null;
   schedulePrecision: string | null;
   confidence: number;
+  resetType: ResetType;
 }
 
 export interface TiboPost {
@@ -998,7 +1039,7 @@ export interface CodexResetStatus {
   generatedAt: string;
   lastSuccessfulCheckAt: string;
   checkedAt: string;
-  latestConfirmedReset: ResetSignal | null;
+  latestConfirmedSignal: ResetSignal | null;
   nextScheduledReset: ResetSignal | null;
   latestRelevantTiboPost: TiboPost | null;
   sourceWarning: string | null;
@@ -1044,9 +1085,10 @@ export function listSessions(): Promise<SessionScan> {
   return invoke<SessionScan>("list_sessions");
 }
 
-/** Aggregates token records from the two approved local session roots. */
-export function getModelUsageReport(range: ModelUsageRange): Promise<ModelUsageReport> {
-  return invoke<ModelUsageReport>("get_model_usage_report", { range });
+/** Reads the backend-owned local-session snapshot or explicitly re-scans the
+ * two approved roots. */
+export function getModelUsageReport(request: ModelUsageRequest): Promise<ModelUsageRead> {
+  return invoke<ModelUsageRead>("get_model_usage_report", { request });
 }
 
 /** Reads the app-owned, credential-free history ledger. It never triggers a

@@ -7,6 +7,7 @@
 use crate::codex_official_quota::CodexQuotaBaseline;
 use crate::codex_reset::CodexResetStatus;
 use crate::config_store::ConfigStore;
+use crate::model_usage_cache::ModelUsageCache;
 use crate::runtime_log::RuntimeLogLevel;
 use crate::usage_cache::UsageCache;
 use asb_core::contracts::AppKind;
@@ -439,6 +440,36 @@ impl LocalState {
         }
     }
 
+    /// The last successful local-session usage reports. It contains only
+    /// normalized token totals and model labels, never a credential, endpoint,
+    /// raw session record, or provider-quota reading.
+    pub(crate) fn load_model_usage_cache(&self) -> Result<Option<ModelUsageCache>, String> {
+        let text = match fs::read_to_string(self.model_usage_cache_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("本地会话快照不可读".to_string()),
+        };
+        serde_json::from_str(&text)
+            .map(Some)
+            .map_err(|_| "本地会话快照格式无效".to_string())
+    }
+
+    /// Replaces every range snapshot atomically after a local-session scan.
+    pub(crate) fn save_model_usage_cache(&self, cache: &ModelUsageCache) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(cache)
+            .map_err(|_| "本地会话快照序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self
+            .root
+            .join(format!("model-usage-cache.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content).map_err(|_| "无法写入本地会话快照临时文件".to_string())?;
+        if fs::rename(&temporary, self.model_usage_cache_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存本地会话快照".to_string());
+        }
+        Ok(())
+    }
+
     /// The last successful local discovery scan, for display on the 发现 page
     /// before the next scan runs. The stored copy never carries credentials:
     /// import re-derives the draft from the live files. An absent file is a
@@ -493,6 +524,10 @@ impl LocalState {
 
     fn usage_cache_path(&self) -> PathBuf {
         self.root.join("usage-cache.json")
+    }
+
+    fn model_usage_cache_path(&self) -> PathBuf {
+        self.root.join("model-usage-cache.json")
     }
 
     /// The single credential-free usage-history ledger. Its schema, parsing,
@@ -554,7 +589,7 @@ fn claude_credentials_path_in_home(home: &Path, config_dir: Option<&Path>) -> Pa
 mod tests {
     use super::*;
     use crate::codex_official_quota::BaselineRead;
-    use crate::codex_reset::{CodexResetFeedStatus, ResetSignal};
+    use crate::codex_reset::{CodexResetFeedStatus, ResetSignal, ResetType};
     use asb_core::contracts::{
         CodexOfficialQuotaReset, CodexOfficialQuotaResetKind, CodexOfficialQuotaWindow,
     };
@@ -566,11 +601,12 @@ mod tests {
             generated_at: "2026-08-31T03:08:02.232Z".to_string(),
             last_successful_check_at: "2026-08-31T03:08:02.232Z".to_string(),
             checked_at: "2026-08-31T03:10:00.000Z".to_string(),
-            latest_confirmed_reset: Some(ResetSignal {
+            latest_confirmed_signal: Some(ResetSignal {
                 announced_at: "2026-08-31T02:34:27Z".to_string(),
                 effective_at: None,
                 schedule_precision: None,
                 confidence: 0.98,
+                reset_type: ResetType::Global,
             }),
             next_scheduled_reset: None,
             latest_relevant_tibo_post: None,
@@ -735,6 +771,7 @@ mod tests {
                 effective_at: Some("2026-08-31T09:00:00Z".to_string()),
                 schedule_precision: Some("datetime".to_string()),
                 confidence: 0.84,
+                reset_type: ResetType::Global,
             }),
             ..first.clone()
         };
@@ -754,20 +791,20 @@ mod tests {
     }
 
     #[test]
-    fn malformed_codex_reset_cache_is_rejected_without_rewriting_it() {
+    fn legacy_codex_reset_cache_is_rejected_without_rewriting_it() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = LocalState::from_root(directory.path().join("state"));
         fs::create_dir_all(&state.root).expect("create state directory");
-        let invalid = r#"{"feedStatus":"ok","generatedAt":"2026-08-31T03:08:02.232Z","lastSuccessfulCheckAt":"2026-08-31T03:08:02.232Z","checkedAt":"bad-time","latestConfirmedReset":null,"nextScheduledReset":null,"latestRelevantTiboPost":null,"sourceWarning":null}"#;
-        fs::write(state.codex_reset_cache_path(), invalid).expect("write invalid cache");
+        let legacy = r#"{"sourceUrl":"https://www.codexrunway.com/api/status.json","feedStatus":"ok","generatedAt":"2026-08-31T03:08:02.232Z","lastSuccessfulCheckAt":"2026-08-31T03:08:02.232Z","checkedAt":"2026-08-31T03:10:00.000Z","latestConfirmedReset":null,"nextScheduledReset":null,"latestRelevantTiboPost":null,"sourceWarning":null}"#;
+        fs::write(state.codex_reset_cache_path(), legacy).expect("write legacy cache");
 
         assert_eq!(
             state.load_codex_reset_cache().unwrap_err(),
             "Codex 重置信号缓存格式无效"
         );
         assert_eq!(
-            fs::read_to_string(state.codex_reset_cache_path()).expect("read invalid cache"),
-            invalid
+            fs::read_to_string(state.codex_reset_cache_path()).expect("read legacy cache"),
+            legacy
         );
     }
 

@@ -112,7 +112,8 @@ describe("ProviderUsagePanel", () => {
     expect(within(extraRow).getByText("—")).toBeInTheDocument();
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", { profileId: "relay-a" });
-    expect(await screen.findByRole("img", { name: /主套餐，1,024.5 CNY/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".recharts-line")).not.toBeNull());
+    expect(within(screen.getAllByRole("figure", { name: /余额趋势/ })[0]).getByText("主套餐")).toBeInTheDocument();
     await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(2));
 
     await user.click(screen.getByRole("button", { name: "刷新" }));
@@ -147,7 +148,7 @@ describe("ProviderUsagePanel", () => {
       <ProviderUsagePanel id="provider-usage-relay-a" profile={profile} />,
     );
 
-    expect(await screen.findByRole("img", { name: /主套餐，1,024.5 CNY/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".recharts-line")).not.toBeNull());
 
     rerender(
       <ProviderUsagePanel
@@ -160,7 +161,7 @@ describe("ProviderUsagePanel", () => {
     );
 
     await waitFor(() => expect(callsFor("get_usage_history")).toHaveLength(2));
-    expect(screen.queryByRole("img", { name: /主套餐，1,024.5 CNY/ })).not.toBeInTheDocument();
+    expect(document.querySelector(".recharts-line")).toBeNull();
     expect(screen.getByText("成功读取后会在这里显示趋势。")).toBeInTheDocument();
   });
 
@@ -168,8 +169,7 @@ describe("ProviderUsagePanel", () => {
     mockProviderCommands(new Error("额度接口返回 403"), mixedMetricHistory);
     render(<ProviderUsagePanel id="provider-usage-relay-a" profile={profile} />);
 
-    expect(await screen.findByRole("img", { name: /主套餐余额，1,024.5 CNY/ })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /附加套餐已用，2 USD/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelectorAll(".recharts-line")).toHaveLength(2));
     expect(screen.getByRole("heading", { name: "余额趋势" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "已用趋势" })).toBeInTheDocument();
   });

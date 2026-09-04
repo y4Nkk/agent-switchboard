@@ -8,6 +8,7 @@ import "@fontsource/noto-sans-sc/600.css";
 import "@fontsource/noto-sans-sc/700.css";
 import "./styles/tokens.css";
 import "./styles/base.css";
+import "./styles/boardui.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

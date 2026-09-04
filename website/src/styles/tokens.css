@@ -1,0 +1,81 @@
+/*
+ * 网站唯一视觉变量所有者。组件不得写入散落的色值、阴影、圆角或动画时长。
+ * 色值对齐应用 `src/styles/tokens.css` 浅色段（Frosted Relay）。
+ */
+:root {
+  --site-canvas: #f6f7fb;
+  --site-ink: #14161b;
+  --site-current: #071725;
+  --site-action: #0a84ff;
+  --site-claude: #8b7cff;
+  --site-safe: #30d158;
+
+  --site-text: var(--site-ink);
+  --site-text-muted: rgba(20, 22, 27, 0.62);
+  --site-text-on-action: #ffffff;
+  --site-hairline: rgba(20, 22, 27, 0.12);
+  --site-hairline-strong: rgba(20, 22, 27, 0.2);
+  --site-content: #ffffff;
+  --site-content-muted: #f1f3f8;
+  --site-surface-rail: #eef0f7;
+  --site-code-surface: #f8f9fc;
+  --site-ambient-opacity: 1;
+  --site-ambient-veil-start: rgba(246, 247, 251, 0.24);
+  --site-ambient-veil-mid: rgba(246, 247, 251, 0.08);
+
+  --site-radius-panel: 22px;
+  --site-radius-control: 14px;
+  --site-radius-action: 12px;
+
+  --site-touch-target: 40px;
+  --site-max-width: 1120px;
+
+  --site-motion-fast: 180ms;
+  --site-motion-node: 220ms;
+  --site-easing: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --site-font-ui:
+    "Noto Sans SC", "Segoe UI Variable", "MiSans", "PingFang SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --site-font-code: ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* 路由卡与差异复刻：值对齐应用 tokens.css 浅色段。 */
+  --site-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --site-route-gradient-codex:
+    linear-gradient(180deg, rgba(49, 108, 237, 0) 42%, rgba(49, 108, 237, 0.86) 100%),
+    linear-gradient(100deg, #477ff5 0%, #78a0f4 54%, #f8c09c 100%);
+  --site-route-gradient-claude:
+    linear-gradient(180deg, rgba(112, 84, 238, 0) 42%, rgba(112, 84, 238, 0.86) 100%),
+    linear-gradient(100deg, #8b7cff 0%, #ab97ff 54%, #f8c09c 100%);
+  --site-route-card-text: #ffffff;
+  --site-route-field-surface: rgba(255, 255, 255, 0.94);
+  --site-route-field-text: var(--site-text);
+  --site-route-field-label: var(--site-text-muted);
+  --site-diff-remove-text: #d70015;
+  --site-diff-remove-bg: rgba(215, 0, 21, 0.08);
+  --site-diff-add-text: #1e8e3e;
+  --site-diff-add-bg: rgba(30, 142, 62, 0.1);
+}
+
+[data-theme="dark"] {
+  --site-canvas: #111318;
+  --site-ink: #f4f5f8;
+  --site-current: #e9edf5;
+  --site-text: var(--site-ink);
+  --site-text-muted: rgba(244, 245, 248, 0.64);
+  --site-hairline: rgba(244, 245, 248, 0.14);
+  --site-hairline-strong: rgba(244, 245, 248, 0.24);
+  --site-content: #191c23;
+  --site-content-muted: #232731;
+  --site-surface-rail: #20242d;
+  --site-code-surface: #151820;
+  --site-ambient-opacity: 0.26;
+  --site-ambient-veil-start: rgba(17, 19, 24, 0.62);
+  --site-ambient-veil-mid: rgba(17, 19, 24, 0.82);
+  --site-route-shadow: 0 12px 34px rgba(0, 0, 0, 0.34), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --site-route-field-surface: var(--site-code-surface);
+  --site-diff-remove-text: #ff7b89;
+  --site-diff-remove-bg: rgba(255, 123, 137, 0.15);
+  --site-diff-add-text: #65d98a;
+  --site-diff-add-bg: rgba(101, 217, 138, 0.15);
+}

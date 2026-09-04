@@ -27,6 +27,7 @@ export function OfficialQuotaTrend({ series, loading, error, ariaLabel }: Props)
         <p className="asb-provider-usage-state" role="status">正在读取历史记录…</p>
       ) : (
         <UsageTrendChart
+          size="compact"
           series={quotaSeries}
           ariaLabel={ariaLabel}
           emptyMessage="成功读取官方额度后会在这里显示趋势。"

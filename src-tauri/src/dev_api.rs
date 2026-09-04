@@ -7,7 +7,7 @@
 use crate::commands::{self, error::CommandError};
 use crate::local_state::{AppSettings, CloudBackupSettings};
 use asb_core::contracts::{
-    AppKind, CommonSettings, ModelUsageRange, ProviderDraft, UsageHistoryRequest, UsageQuery,
+    AppKind, CommonSettings, ModelUsageRequest, ProviderDraft, UsageHistoryRequest, UsageQuery,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,13 @@ use std::thread;
 use tauri::AppHandle;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
-pub(crate) const DEV_API_ADDRESS: &str = "127.0.0.1:1422";
+pub(crate) const DEV_API_HOST: &str = "127.0.0.1";
+pub(crate) const DEV_API_PORT: u16 = 1422;
+pub(crate) const DEV_API_HEALTH_STATUS: u16 = 204;
+
+fn dev_api_address() -> String {
+    format!("{DEV_API_HOST}:{DEV_API_PORT}")
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -39,8 +45,8 @@ enum InvokeResponse {
 
 /// Binds the loopback-only RPC bridge before the browser is opened.
 pub(crate) fn start(app: AppHandle, development_origin: String) -> Result<(), String> {
-    let server =
-        Server::http(DEV_API_ADDRESS).map_err(|error| format!("无法启动本机开发后端：{error}"))?;
+    let server = Server::http(dev_api_address())
+        .map_err(|error| format!("无法启动本机开发后端：{error}"))?;
     thread::Builder::new()
         .name("asb-web-dev-api".to_string())
         .spawn(move || serve(server, app, development_origin))
@@ -68,7 +74,7 @@ fn handle_request(
                 "开发后端只接受本机 Vite 页面请求",
             );
         }
-        return Response::from_data(Vec::new()).with_status_code(StatusCode(204));
+        return Response::from_data(Vec::new()).with_status_code(StatusCode(DEV_API_HEALTH_STATUS));
     }
     if request.method() != &Method::Post || request.url() != "/invoke" {
         return error_response(404, "web-command-not-found", "开发后端不存在该接口");
@@ -165,6 +171,7 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
 
         match request.command.as_str() {
             "config_status" => command!(commands::status::config_status(app.clone())),
+            "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
             "list_profiles" => command!(commands::list_profiles(app.clone())),
             "reset_profile_store" => command!(commands::reset_profile_store(
                 app.clone(),
@@ -361,12 +368,10 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
             "discover_local" => command!(commands::discover_local(app.clone())),
             "discover_cached" => command!(commands::discover_cached(app.clone())),
             "get_model_usage_report" => {
-                command!(commands::model_usage::get_model_usage_report(argument::<
-                    ModelUsageRange,
-                >(
-                    &request.args,
-                    "range",
-                )?,))
+                command!(commands::model_usage::get_model_usage_report(
+                    app.clone(),
+                    argument::<ModelUsageRequest>(&request.args, "request")?,
+                ))
             }
             "get_usage_history" => command!(commands::usage_history::get_usage_history(
                 app.clone(),

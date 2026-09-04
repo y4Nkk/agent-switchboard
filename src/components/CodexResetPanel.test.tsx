@@ -19,17 +19,19 @@ const ready: CodexResetStatus = {
   generatedAt: "2026-08-31T03:08:02.232Z",
   lastSuccessfulCheckAt: "2026-08-31T03:08:02.232Z",
   checkedAt: "2026-08-31T03:10:00.000Z",
-  latestConfirmedReset: {
+  latestConfirmedSignal: {
     announcedAt: "2026-08-31T02:34:27Z",
     effectiveAt: null,
     schedulePrecision: null,
     confidence: 0.98,
+    resetType: "global",
   },
   nextScheduledReset: {
     announcedAt: "2026-08-31T03:00:00Z",
     effectiveAt: "2026-08-31T09:00:00Z",
     schedulePrecision: "datetime",
     confidence: 0.84,
+    resetType: "global",
   },
   latestRelevantTiboPost: {
     announcedAt: "2026-08-31T02:34:27Z",
@@ -70,14 +72,17 @@ describe("CodexResetPanel", () => {
     await screen.findByText("尚无本地缓存。手动刷新以读取公开重置信号。");
     await user.click(screen.getByRole("button", { name: "刷新重置信号" }));
 
-    expect(await screen.findByText("已确认全局重置")).toBeInTheDocument();
+    expect(await screen.findAllByText("已确认全局重置")).toHaveLength(2);
     expect(
-      within(screen.getByRole("article", { name: "是否重置" })).getByText(
-        timeLabel(ready.latestConfirmedReset!.announcedAt),
+      within(screen.getByRole("article", { name: "本次公开检查结果" })).getByText("是"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("公开信号详情")).getByText(
+        timeLabel(ready.latestConfirmedSignal!.announcedAt),
       ),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("article", { name: "预计重置" })).getByText(
+      within(screen.getByLabelText("公开信号详情")).getByText(
         timeLabel(ready.nextScheduledReset!.effectiveAt!),
       ),
     ).toBeInTheDocument();
@@ -114,8 +119,30 @@ describe("CodexResetPanel", () => {
     await user.click(screen.getByRole("button", { name: "刷新重置信号" }));
 
     expect(await screen.findByText("暂无公告预计")).toBeInTheDocument();
-    expect(screen.getByText("暂无相关动态")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("article", { name: "本次公开检查结果" })).getByText("是"),
+    ).toBeInTheDocument();
     expect(screen.getByText("公开信号源未确认正常，展示的内容可能不是最新状态。")).toBeInTheDocument();
+  });
+
+  it("labels a confirmed reset-card issuance without calling it a global reset", async () => {
+    invokeMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(live({
+        ...ready,
+        latestConfirmedSignal: {
+          ...ready.latestConfirmedSignal!,
+          resetType: "banked",
+        },
+      } satisfies CodexResetStatus));
+    const user = userEvent.setup();
+    render(<CodexResetPanel />);
+
+    await screen.findByText("尚无本地缓存。手动刷新以读取公开重置信号。");
+    await user.click(screen.getByRole("button", { name: "刷新重置信号" }));
+
+    expect(await screen.findAllByText("已确认重置卡发放")).toHaveLength(2);
+    expect(screen.queryByText("已确认全局重置")).not.toBeInTheDocument();
   });
 
   it("keeps a cached signal visible when refresh fails and permits a later retry", async () => {
@@ -128,17 +155,17 @@ describe("CodexResetPanel", () => {
 
     expect(await screen.findByText("本地缓存")).toBeInTheDocument();
     expect(screen.getByText("缓存于", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("已确认全局重置")).toBeInTheDocument();
+    expect(screen.getAllByText("已确认全局重置")).toHaveLength(2);
 
     await user.click(screen.getByRole("button", { name: "刷新重置信号" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "无法刷新公开重置信号：公开 feed 暂不可用；仍在显示上次成功读取的数据。",
     );
-    expect(screen.getByText("已确认全局重置")).toBeInTheDocument();
+    expect(screen.getAllByText("已确认全局重置")).toHaveLength(2);
     expect(screen.getByText("本地缓存")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "刷新重置信号" }));
-    expect(await screen.findByText("已确认全局重置")).toBeInTheDocument();
+    expect(await screen.findAllByText("已确认全局重置")).toHaveLength(2);
     expect(screen.getByText("刚刚刷新")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledTimes(3);
   });

@@ -1,0 +1,84 @@
+/* BoardUI (https://boardui.com) integration entry.
+ *
+ * Scoped on purpose: the application's own visual language stays owned by
+ * tokens.css and base.css. This file loads Tailwind v4 WITHOUT preflight so
+ * the global reset cannot disturb existing pages, and provides a `.bui-scope`
+ * shim carrying the few reset assumptions BoardUI components make. Dark mode
+ * is bridged from the app's `data-theme` attribute instead of the `.dark`
+ * class BoardUI ships. */
+
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./theme.css";
+@import "./typography.css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Chart hues follow the app palette (Frosted Relay series colors) instead of
+ * BoardUI defaults, so BoardUI-built charts read as part of this app. Declared
+ * after theme.css so the same-specificity :root block wins the cascade. */
+:root {
+  --color-chart-1: var(--asb-action);
+  --color-chart-1-active: var(--asb-action);
+  --color-chart-2: var(--asb-claude);
+  --color-chart-2-active: var(--asb-claude);
+  --color-chart-3: var(--asb-safe);
+  --color-chart-3-active: var(--asb-safe);
+  --color-chart-4: var(--asb-warning);
+  --color-chart-4-active: var(--asb-warning);
+  --color-chart-5: var(--asb-text-muted);
+  --color-chart-5-active: var(--asb-text-muted);
+}
+
+@layer base {
+  /* Soft fade applied to a chart card's count-up figure each time its target
+   * changes (BoardUI's animate-number-fade). */
+  @keyframes number-fade {
+    from {
+      opacity: 0.35;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .animate-number-fade {
+    animation: number-fade 220ms ease-out;
+  }
+
+  /* Minimal preflight replacement for BoardUI-rendered subtrees. Unset
+   * user-agent margins/paddings/borders so the utility classes fully own the
+   * layout, without resetting anything outside `.bui-scope`. */
+  .bui-scope,
+  .bui-scope :where(*, ::before, ::after) {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+
+  .bui-scope :where(button) {
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .bui-scope :where(img, svg) {
+    display: block;
+    vertical-align: middle;
+  }
+
+  /* Recharts marks focused shapes with the UA outline on top of the chart's
+   * own hover/focus feedback, which double-frames the same point. */
+  .bui-scope .recharts-wrapper:focus,
+  .bui-scope .recharts-wrapper :focus {
+    outline: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-number-fade {
+      animation: none;
+    }
+  }
+}

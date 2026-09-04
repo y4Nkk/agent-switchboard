@@ -1,3 +1,5 @@
+import { formatCompactTokenCount, formatTokenValue, isTokenUnit } from "../../lib/token-format";
+
 export interface UsageTrendPoint {
   at: string;
   value: number;
@@ -31,6 +33,7 @@ export interface PreparedTrendSeries {
 export const CHART_TONE_COUNT = 5;
 
 const valueFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+const compactFormatter = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
 
 /** Keep renderer data defensive: malformed points disappear rather than
  * creating an invalid SVG path or a made-up replacement value. */
@@ -58,8 +61,15 @@ export function trendSeriesShareUnit(series: PreparedTrendSeries[]): boolean {
 
 export function formatChartValue(value: number, unit?: string | null): string {
   if (!Number.isFinite(value)) return "—";
+  if (isTokenUnit(unit)) return formatTokenValue(value);
   const formatted = valueFormatter.format(value);
   return unit === null || unit === undefined || unit.trim() === "" ? formatted : `${formatted} ${unit}`;
+}
+
+/** A compact tick label; token axes use the app-wide K/M/B token contract. */
+export function formatChartAxisValue(value: number, unit?: string | null): string {
+  if (!Number.isFinite(value)) return "—";
+  return isTokenUnit(unit) ? formatCompactTokenCount(value) : compactFormatter.format(value);
 }
 
 /** A compact local-time axis label. Full timestamps remain available on each

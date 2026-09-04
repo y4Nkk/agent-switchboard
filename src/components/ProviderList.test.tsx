@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ProviderList } from "./ProviderList";
+import { ProviderList as ProviderListComponent } from "./ProviderList";
 import type { ProviderProfile } from "../api/client";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
@@ -43,6 +44,15 @@ const profiles: ProviderProfile[] = [
     modelOptions: null,
   },
 ];
+
+function ProviderList({
+  userConfigModel = null,
+  ...props
+}: Omit<ComponentProps<typeof ProviderListComponent>, "userConfigModel"> & {
+  userConfigModel?: string | null;
+}) {
+  return <ProviderListComponent {...props} userConfigModel={userConfigModel} />;
+}
 
 describe("ProviderList", () => {
   beforeEach(() => {
@@ -93,6 +103,24 @@ describe("ProviderList", () => {
       <ProviderList profiles={profiles} activeProfileId="codex-relay-a" selectedId={null} onSelect={() => {}} />,
     );
     expect(screen.getByText("使用中")).toBeInTheDocument();
+  });
+
+  it("shows the user-level configuration model instead of the stored profile model on the active row", () => {
+    render(
+      <ProviderList
+        profiles={profiles}
+        activeProfileId="codex-relay-a"
+        userConfigModel="gpt-5.4"
+        selectedId={null}
+        onSelect={() => {}}
+      />,
+    );
+
+    const activeRow = screen.getByRole("option", { name: /中继 A/ });
+    expect(activeRow.querySelector(".asb-row-meta")).toHaveTextContent(
+      "当前用户级配置模型：gpt-5.4",
+    );
+    expect(activeRow.querySelector(".asb-row-meta")).not.toHaveTextContent("gpt-5.1");
   });
 
   it("selects a row on click", async () => {

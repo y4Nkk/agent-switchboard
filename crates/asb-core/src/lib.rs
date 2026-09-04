@@ -15,6 +15,7 @@ pub mod redact;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod validate;
+pub mod website_assembly;
 
 pub use discovery::{discover, inspect, DiscoveredFile, DiscoveredState, DiscoveryReport};
 

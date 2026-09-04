@@ -81,6 +81,7 @@
   --asb-font-ui: var(--asb-font-user), "Segoe UI Variable", "MiSans", system-ui, sans-serif;
   --asb-font-code: "Maple Mono", "Cascadia Mono", ui-monospace, monospace;
   --asb-text-title: 600 17px/1.3 var(--asb-font-display);
+  --asb-text-signal: 700 72px/0.95 var(--asb-font-display);
   --asb-text-body: 400 15px/1.55 var(--asb-font-ui);
   --asb-text-label: 400 13px/1.4 var(--asb-font-ui);
   --asb-text-code: 400 13px/1.6 var(--asb-font-code);
@@ -181,22 +182,7 @@
   /* Usage charts keep the same calm, inspectable material as data tables.
      Series tones are supplementary: every chart also renders text labels and
      exact values. */
-  --asb-chart-axis: var(--asb-text-muted);
-  --asb-chart-grid: var(--asb-hairline);
   --asb-chart-tooltip-bg: var(--asb-content);
-  --asb-chart-point-fill: var(--asb-content);
-  --asb-chart-series-0: var(--asb-action);
-  --asb-chart-series-1: var(--asb-claude);
-  --asb-chart-series-2: var(--asb-safe);
-  --asb-chart-series-3: var(--asb-warning);
-  --asb-chart-series-4: var(--asb-text-muted);
-  --asb-chart-height: 228px;
-  --asb-chart-min-width: 320px;
-  --asb-chart-axis-font-size: 12px;
-  --asb-chart-grid-width: 1px;
-  --asb-chart-line-width: 2px;
-  --asb-chart-point-radius: 4px;
-  --asb-chart-legend-swatch-size: 9px;
   --asb-chart-ratio-track-width: 56px;
   --asb-chart-ratio-track-height: 4px;
 

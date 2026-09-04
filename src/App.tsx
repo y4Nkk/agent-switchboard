@@ -43,9 +43,12 @@ export default function App() {
   const { preview } = switchPreview;
   const { editorMode, setEditorMode } = providers;
   const requestSwitch = () => operations.setConfirmingSwitch(true);
-  // Model currently live in the filtered client's real configuration.
-  const activeModel =
-    snapshot.statuses?.find((status) => status.app === appFilter)?.route?.model ?? null;
+  // Read-only facts from the displayed client's user-level configuration file.
+  // They deliberately do not claim to identify a running session's overrides.
+  const userConfigRoute =
+    snapshot.statuses?.find((status) => status.app === appFilter)?.route ?? null;
+  const userConfigModel = userConfigRoute?.model ?? null;
+  const userConfigWarnings = userConfigRoute?.scopeWarnings ?? [];
   useDevtoolsShortcut();
   useKeyboardFocusMarker();
 
@@ -86,7 +89,8 @@ export default function App() {
                 profiles={snapshot.profiles}
                 appFilter={appFilter}
                 activeProfileId={activeProfileId(appFilter)}
-                activeModel={activeModel}
+                userConfigModel={userConfigModel}
+                userConfigWarnings={userConfigWarnings}
                 selectedId={snapshot.selectedId}
                 selectedProfile={selectedProfile}
                 editorMode={editorMode}

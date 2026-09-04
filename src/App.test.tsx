@@ -153,11 +153,22 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+const runtimeOverview = {
+  appVersion: "0.1.5",
+  buildMode: "debug",
+  platform: "windows",
+  architecture: "x86_64",
+  transport: { kind: "desktopProtocol" },
+  appDataPath: "C:/Users/test/AppData/Roaming/Agent Switchboard",
+} satisfies client.RuntimeOverview;
+
 function primeBackend(logEntries: RuntimeLogEntry[] = []) {
   invokeMock.mockImplementation((command: string, args?: unknown) => {
     switch (command) {
       case "config_status":
         return Promise.resolve(statuses);
+      case "runtime_overview":
+        return Promise.resolve(runtimeOverview);
       case "list_profiles":
         return Promise.resolve(profiles);
       case "list_backups":
@@ -300,8 +311,9 @@ describe("App integration with the typed client boundary", () => {
     expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
     const previewPanel = await screen.findByRole("region", { name: "变更预览" });
-    // The live model shows twice here: the 当前启用模型 summary and the diff's
-    // before-value.
+    // The user-level configuration model shows twice here: the summary and
+    // the diff's before-value.
+    expect(within(previewPanel).getByText("当前用户级配置模型")).toBeInTheDocument();
     expect(within(previewPanel).getAllByText("gpt-5.3-codex").length).toBeGreaterThan(0);
     expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
 
@@ -386,6 +398,7 @@ describe("App integration with the typed client boundary", () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
       if (command === "config_status") return Promise.resolve(statuses);
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
@@ -694,6 +707,7 @@ describe("App integration with the typed client boundary", () => {
   it("keeps the applied appearance when saving a replacement setting fails", async () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "get_app_settings") {
         return Promise.resolve({
           closeBehavior: "hideToTray",
@@ -906,6 +920,7 @@ describe("App integration with the typed client boundary", () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
       if (command === "config_status") return Promise.resolve(statuses);
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
@@ -942,6 +957,7 @@ describe("App integration with the typed client boundary", () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
       if (command === "config_status") return Promise.resolve(statuses);
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
@@ -1030,6 +1046,7 @@ describe("App integration with the typed client boundary", () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
       if (command === "config_status") return Promise.resolve(statuses);
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "list_profiles") return Promise.resolve(profiles);
       if (command === "list_backups") return Promise.resolve([]);
       if (command === "lock_status") return Promise.resolve({ state: "free" });
@@ -1099,6 +1116,7 @@ describe("App integration with the typed client boundary", () => {
   it("scans CC Switch read-only, previews providers, and imports the selection", async () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       if (command === "discover_cached") return Promise.resolve(null);
       if (command === "scan_ccswitch") return Promise.resolve(ccScan);
@@ -1198,6 +1216,7 @@ describe("App integration with the typed client boundary", () => {
   it("does not offer a reset for an unreadable profile store", async () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "list_profiles") {
         return Promise.reject({ code: "store-unreadable", message: "供应商存储不可读" });
       }
@@ -1216,6 +1235,7 @@ describe("App integration with the typed client boundary", () => {
       if (command === "config_status") {
         return Promise.reject({ code: "read-current", message: "无法读取当前配置" });
       }
+      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       return Promise.resolve([]);
     });

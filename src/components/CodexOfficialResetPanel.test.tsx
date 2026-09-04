@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import type { CodexOfficialQuota, UsageHistorySeries } from "../api/client";
@@ -84,7 +84,7 @@ describe("CodexOfficialResetPanel", () => {
     render(<CodexOfficialResetPanel />);
 
     expect(await screen.findByRole("row", { name: /7 天/ })).toBeInTheDocument();
-    expect(screen.getByText("76 %")).toBeInTheDocument();
+    expect(screen.getAllByText("76 %").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
     expect(screen.getByText("本地缓存")).toBeInTheDocument();
     const metas = screen.getAllByText(
@@ -92,7 +92,8 @@ describe("CodexOfficialResetPanel", () => {
     );
     expect(metas[0]).toHaveTextContent("上次检测到重置：例行重置");
     expect(metas[0]).toHaveTextContent("新重置时间");
-    expect(await screen.findByRole("img", { name: /7 天，76.25 %/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".recharts-line")).not.toBeNull());
+    expect(within(screen.getByRole("figure", { name: /官方额度趋势/ })).getAllByText("7 天").length).toBeGreaterThan(0);
     expect(callsFor("get_usage_history")).toHaveLength(1);
   });
 
@@ -109,7 +110,7 @@ describe("CodexOfficialResetPanel", () => {
 
     expect(await screen.findByText("刚刚刷新")).toBeInTheDocument();
     expect(callsFor("refresh_codex_official_reset")).toHaveLength(1);
-    await screen.findByRole("img", { name: /7 天，76.25 %/ });
+    await waitFor(() => expect(document.querySelector(".recharts-line")).not.toBeNull());
     expect(callsFor("get_usage_history")).toHaveLength(2);
     expect(screen.queryByText("尚无官方额度读取记录。手动刷新以读取本机 Codex 官方登录。")).not.toBeInTheDocument();
   });
@@ -125,7 +126,7 @@ describe("CodexOfficialResetPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "无法刷新官方额度：网络不可用；仍在显示上次成功读取的数据。",
     );
-    expect(screen.getByText("76 %")).toBeInTheDocument();
+    expect(screen.getAllByText("76 %").length).toBeGreaterThan(0);
     expect(callsFor("get_usage_history")).toHaveLength(1);
   });
 

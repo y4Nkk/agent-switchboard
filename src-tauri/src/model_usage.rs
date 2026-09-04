@@ -116,7 +116,7 @@ impl CalendarRange {
 /// Builds one report from the fixed user-level session roots. Failures at one
 /// root or file become local issues; readable records from other sources stay
 /// available to the renderer.
-pub(crate) fn get_model_usage_report(range: ModelUsageRange) -> ModelUsageReport {
+pub(crate) fn scan_model_usage_report(range: ModelUsageRange) -> ModelUsageReport {
     let now = Local::now();
     let roots = match crate::session_manager::session_roots() {
         Ok(roots) => roots,

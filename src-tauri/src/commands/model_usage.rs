@@ -1,14 +1,22 @@
 //! Read-only local model-token usage command.
 
+use super::error::state;
 use super::error::{blocking, CommandError};
-use asb_core::contracts::{ModelUsageRange, ModelUsageReport};
+use asb_core::contracts::{ModelUsageRead, ModelUsageRequest};
 
 /// Aggregates token consumption from the fixed local Codex and Claude Code
-/// session roots. The renderer supplies only a calendar range; no profile,
-/// provider credential, session path, or raw session record crosses this API.
+/// session roots. The renderer supplies a typed range plus an explicit cache
+/// policy; no profile, provider credential, session path, or raw session
+/// record crosses this API.
 #[tauri::command]
 pub async fn get_model_usage_report(
-    range: ModelUsageRange,
-) -> Result<ModelUsageReport, CommandError> {
-    blocking(move || Ok(crate::model_usage::get_model_usage_report(range))).await
+    app: tauri::AppHandle,
+    request: ModelUsageRequest,
+) -> Result<ModelUsageRead, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        crate::model_usage_cache::get_or_refresh(&state, request)
+            .map_err(|error| CommandError::new("model-usage-cache-unavailable", error))
+    })
+    .await
 }

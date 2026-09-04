@@ -1,10 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
-import { ProviderEditor } from "./ProviderEditor";
+import { ProviderEditor as ProviderEditorComponent } from "./ProviderEditor";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+
+function ProviderEditor({
+  userConfigWarnings = [],
+  ...props
+}: Omit<ComponentProps<typeof ProviderEditorComponent>, "userConfigWarnings"> & {
+  userConfigWarnings?: string[];
+}) {
+  return <ProviderEditorComponent {...props} userConfigWarnings={userConfigWarnings} />;
+}
 
 describe("ProviderEditor", () => {
   it("decorates the client field with the selected client's brand mark", async () => {
@@ -15,7 +25,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -44,7 +54,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -62,20 +72,22 @@ describe("ProviderEditor", () => {
     expect(screen.queryByRole("button", { name: "查询用量" })).not.toBeInTheDocument();
   });
 
-  it("shows the currently enabled model for context while editing", () => {
+  it("shows the user-level configuration model and its scope warning while editing", () => {
     const { rerender } = render(
       <ProviderEditor
         profile={null}
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel="glm-4.6"
+        userConfigModel="glm-4.6"
+        userConfigWarnings={["使用 --profile 启动时会覆盖这里的用户级设置"]}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
     );
 
-    expect(screen.getByText("当前启用模型：glm-4.6")).toBeInTheDocument();
+    expect(screen.getByText("当前用户级配置模型：glm-4.6")).toBeInTheDocument();
+    expect(screen.getByText("使用 --profile 启动时会覆盖这里的用户级设置")).toBeInTheDocument();
 
     rerender(
       <ProviderEditor
@@ -83,12 +95,12 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
     );
-    expect(screen.queryByText(/当前启用模型/)).toBeNull();
+    expect(screen.queryByText(/当前用户级配置模型/)).toBeNull();
   });
 
   it("preserves an existing usage query while saving other provider fields", () => {
@@ -115,7 +127,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -147,7 +159,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -191,7 +203,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -227,7 +239,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -266,7 +278,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -340,7 +352,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -362,7 +374,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -396,7 +408,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -440,7 +452,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -468,7 +480,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -484,7 +496,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={["codex"]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -523,7 +535,7 @@ describe("ProviderEditor", () => {
           initialApp="codex"
           busy={false}
           officialTakenApps={[]}
-          activeModel={null}
+          userConfigModel={null}
           onSave={onSave}
           onCancel={() => {}}
         />,
@@ -588,7 +600,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -618,7 +630,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -658,7 +670,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -686,7 +698,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -723,7 +735,7 @@ describe("ProviderEditor", () => {
         initialApp="codex"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -756,7 +768,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -794,7 +806,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,
@@ -820,7 +832,7 @@ describe("ProviderEditor", () => {
         initialApp="claude"
         busy={false}
         officialTakenApps={[]}
-        activeModel={null}
+        userConfigModel={null}
         onSave={onSave}
         onCancel={() => {}}
       />,

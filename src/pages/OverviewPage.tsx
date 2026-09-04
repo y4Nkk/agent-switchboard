@@ -10,6 +10,7 @@ import { ClientLogo } from "../components/ClientLogo";
 import { CodexOfficialResetPanel } from "../components/CodexOfficialResetPanel";
 import { CodexResetPanel } from "../components/CodexResetPanel";
 import { DualRelay } from "../components/DualRelay";
+import { RuntimeOverviewPanel } from "../components/RuntimeOverviewPanel";
 import { Button } from "../components/Button";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
@@ -221,6 +222,7 @@ export function OverviewPage({
       </section>
       <CodexResetPanel />
       <CodexOfficialResetPanel />
+      <RuntimeOverviewPanel />
     </>
   );
 }

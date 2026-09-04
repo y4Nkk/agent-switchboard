@@ -1051,20 +1051,9 @@ button:disabled {
   margin: 0;
 }
 
-/* Shared usage visualizations: a neutral ledger grid gives charts structure
-   without competing with the route state. Series hues are always paired with
-   labels and values in markup. */
-.asb-chart,
-.asb-chart-distribution {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-2);
-  min-width: 0;
-}
-
 .asb-chart-empty {
   display: grid;
-  min-height: var(--asb-chart-height);
+  min-height: 224px;
   place-items: center;
   padding: var(--asb-space-3);
   margin: 0;
@@ -1074,90 +1063,6 @@ button:disabled {
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
   text-align: center;
-}
-
-.asb-chart-plot {
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-gutter: stable;
-}
-
-.asb-chart-svg {
-  display: block;
-  width: 100%;
-  min-width: var(--asb-chart-min-width);
-  height: var(--asb-chart-height);
-  overflow: visible;
-}
-
-.asb-chart-gridline,
-.asb-chart-axis-line {
-  stroke: var(--asb-chart-grid);
-  stroke-width: var(--asb-chart-grid-width);
-  vector-effect: non-scaling-stroke;
-}
-
-.asb-chart-axis-label {
-  fill: var(--asb-chart-axis);
-  font: var(--asb-text-label);
-  font-size: var(--asb-chart-axis-font-size);
-}
-
-.asb-chart-series[data-tone="0"],
-.asb-chart-distribution-item[data-tone="0"],
-.asb-chart-legend-item[data-tone="0"] {
-  --asb-chart-series-color: var(--asb-chart-series-0);
-}
-
-.asb-chart-series[data-tone="1"],
-.asb-chart-distribution-item[data-tone="1"],
-.asb-chart-legend-item[data-tone="1"] {
-  --asb-chart-series-color: var(--asb-chart-series-1);
-}
-
-.asb-chart-series[data-tone="2"],
-.asb-chart-distribution-item[data-tone="2"],
-.asb-chart-legend-item[data-tone="2"] {
-  --asb-chart-series-color: var(--asb-chart-series-2);
-}
-
-.asb-chart-series[data-tone="3"],
-.asb-chart-distribution-item[data-tone="3"],
-.asb-chart-legend-item[data-tone="3"] {
-  --asb-chart-series-color: var(--asb-chart-series-3);
-}
-
-.asb-chart-series[data-tone="4"],
-.asb-chart-distribution-item[data-tone="4"],
-.asb-chart-legend-item[data-tone="4"] {
-  --asb-chart-series-color: var(--asb-chart-series-4);
-}
-
-.asb-chart-line {
-  fill: none;
-  stroke: var(--asb-chart-series-color);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: var(--asb-chart-line-width);
-  vector-effect: non-scaling-stroke;
-}
-
-.asb-chart-point {
-  r: var(--asb-chart-point-radius);
-  fill: var(--asb-chart-point-fill);
-  stroke: var(--asb-chart-series-color);
-  stroke-width: var(--asb-chart-line-width);
-  transition: stroke-width var(--asb-motion-fast) var(--asb-easing);
-}
-
-.asb-chart-point:hover,
-.asb-chart-point:focus-visible {
-  stroke: var(--asb-action);
-  stroke-width: calc(var(--asb-chart-line-width) + var(--asb-chart-line-width));
-}
-
-.asb-chart-point:focus-visible {
-  outline: none;
 }
 
 .asb-chart-tooltip {
@@ -1183,82 +1088,6 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.asb-chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--asb-space-1) var(--asb-space-2);
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.asb-chart-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--asb-space-1);
-  min-width: 0;
-  max-width: 100%;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-chart-legend-swatch {
-  flex: none;
-  width: var(--asb-chart-legend-swatch-size);
-  height: var(--asb-chart-legend-swatch-size);
-  border-radius: var(--asb-radius-pill);
-  background: var(--asb-chart-series-color);
-}
-
-.asb-chart-legend-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asb-chart-legend-detail {
-  color: var(--asb-text);
-  font-variant-numeric: tabular-nums;
-}
-
-.asb-chart-distribution-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-2);
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.asb-chart-distribution-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-1);
-  min-width: 0;
-}
-
-.asb-chart-distribution-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--asb-space-2);
-  align-items: baseline;
-  font: var(--asb-text-label);
-}
-
-.asb-chart-distribution-label {
-  overflow: hidden;
-  color: var(--asb-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asb-chart-distribution-value {
-  color: var(--asb-text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.asb-chart-distribution-track,
 .asb-usage-ratio-meter-track {
   display: block;
   overflow: hidden;
@@ -1266,21 +1095,12 @@ button:disabled {
   background: var(--asb-content-muted);
 }
 
-.asb-chart-distribution-track {
-  height: var(--asb-chart-ratio-track-height);
-}
-
-.asb-chart-distribution-fill,
 .asb-usage-ratio-meter-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--asb-chart-series-color, var(--asb-action));
+  background: var(--asb-action);
   transition: width var(--asb-motion-fast) var(--asb-easing);
-}
-
-.asb-chart-distribution-fill {
-  width: var(--asb-chart-distribution-width);
 }
 
 .asb-usage-ratio-meter {
@@ -1790,8 +1610,44 @@ button:disabled {
   display: block;
 }
 
-/* Public reset signals are a compact three-column ledger, separate from the
-   client-routing cards because they never describe local configuration. */
+/* Runtime overview — application facts remain visually quieter than the
+   configuration and quota surfaces above, while each value stays copyable. */
+.asb-runtime-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+  margin: 0;
+}
+
+.asb-runtime-overview-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-runtime-overview-item dt {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-runtime-overview-item dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: var(--asb-text-body);
+}
+
+.asb-runtime-overview-path {
+  grid-column: span 3;
+}
+
+/* Public reset signals are a two-part reading surface: one current-day answer
+   and a compact source ledger. They remain separate from local configuration. */
 .asb-codex-reset-read-state {
   display: inline-flex;
   align-items: center;
@@ -1815,25 +1671,63 @@ button:disabled {
   color: var(--asb-safe);
 }
 
-.asb-codex-reset-grid {
+.asb-codex-reset-board {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid var(--asb-hairline);
-  border-bottom: 1px solid var(--asb-hairline);
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
 }
 
-.asb-codex-reset-item {
+.asb-codex-reset-summary {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-5);
+  background: var(--asb-content-muted);
+}
+
+.asb-codex-reset-question,
+.asb-codex-reset-summary-title {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 700;
+}
+
+.asb-codex-reset-answer {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-signal);
+  letter-spacing: -0.06em;
+}
+
+.asb-codex-reset-answer.is-confirmed {
+  color: var(--asb-safe);
+}
+
+.asb-codex-reset-facts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+}
+
+.asb-codex-reset-fact {
+  display: grid;
+  gap: var(--asb-space-1);
   min-width: 0;
   padding: var(--asb-space-3);
 }
 
-.asb-codex-reset-item + .asb-codex-reset-item {
-  border-left: 1px solid var(--asb-hairline);
+.asb-codex-reset-fact + .asb-codex-reset-fact {
+  border-top: 1px solid var(--asb-hairline);
 }
 
+.asb-codex-reset-fact dt,
 .asb-codex-reset-label {
   margin: 0;
   color: var(--asb-text-muted);
@@ -1841,8 +1735,11 @@ button:disabled {
   font-weight: 600;
 }
 
-.asb-codex-reset-value {
-  display: block;
+.asb-codex-reset-fact dd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-unit);
+  min-width: 0;
   margin: 0;
   color: var(--asb-text);
   font: var(--asb-text-body);
@@ -1868,6 +1765,15 @@ button:disabled {
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
+}
+
+.asb-codex-reset-post-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  margin-top: var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
 }
 
 .asb-codex-reset-post-actions {
@@ -3309,6 +3215,14 @@ button:disabled {
   min-width: 64px;
 }
 
+/* A data table never shares an edge with the trend block above it (user
+   directive 2026-09-04): the chart card carries no own margin (.bui-scope
+   reset), so the table keeps breathing room whatever spacing model its
+   parent uses — flex gap or plain block flow. */
+.asb-usage-history + .asb-table {
+  margin-top: var(--asb-space-3);
+}
+
 /* The local backup tab owns its scroll region. The page panel fills the
    workspace, keeping the controls fixed while long backup histories scroll
    inside the history module instead of extending .asb-main. */
@@ -3469,6 +3383,12 @@ button:disabled {
   margin: 0;
 }
 
+.asb-model-usage-snapshot {
+  margin: var(--asb-space-1) 0 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
 .asb-model-usage-notice,
 .asb-model-usage-issues {
   margin: 0 0 var(--asb-space-3);
@@ -3511,45 +3431,10 @@ button:disabled {
   scrollbar-gutter: stable;
 }
 
-.asb-model-usage-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 0;
-  border-top: 1px solid var(--asb-hairline);
-  border-bottom: 1px solid var(--asb-hairline);
-}
-
-.asb-model-usage-summary > div {
+.asb-model-usage-analysis {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  padding: var(--asb-space-2) var(--asb-space-3);
-}
-
-.asb-model-usage-summary > div + div {
-  border-left: 1px solid var(--asb-hairline);
-}
-
-.asb-model-usage-summary dt {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-model-usage-summary dd {
-  margin: 0;
-  overflow: hidden;
-  color: var(--asb-text);
-  font: var(--asb-text-title);
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asb-model-usage-analysis {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.75fr);
-  gap: var(--asb-space-4);
+  gap: var(--asb-space-5);
   min-width: 0;
 }
 
@@ -3562,8 +3447,6 @@ button:disabled {
   min-width: 0;
 }
 
-.asb-model-usage-trend h3,
-.asb-model-usage-distribution h3,
 .asb-model-usage-detail h3 {
   margin: 0;
   font: var(--asb-text-body);
@@ -3583,25 +3466,6 @@ button:disabled {
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .asb-model-usage-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .asb-model-usage-summary > div:nth-child(3) {
-    border-left: 0;
-    border-top: 1px solid var(--asb-hairline);
-  }
-
-  .asb-model-usage-summary > div:nth-child(4) {
-    border-top: 1px solid var(--asb-hairline);
-  }
-
-  .asb-model-usage-analysis {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Session manager — a restrained master/detail workspace. The list stays
@@ -4281,8 +4145,6 @@ button:disabled {
     animation: none;
   }
 
-  .asb-chart-point,
-  .asb-chart-distribution-fill,
   .asb-usage-ratio-meter-fill {
     transition: none;
   }
@@ -4326,6 +4188,14 @@ button:disabled {
     scrollbar-gutter: stable;
   }
 
+  .asb-runtime-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asb-runtime-overview-path {
+    grid-column: span 2;
+  }
+
   .asb-session-transcript {
     flex: none;
     overflow: visible;
@@ -4359,17 +4229,29 @@ button:disabled {
     flex: 1;
   }
 
+  .asb-runtime-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asb-runtime-overview-path {
+    grid-column: auto;
+  }
+
   .asb-codex-reset .asb-panel-heading,
   .asb-codex-reset .asb-panel-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .asb-codex-reset-grid {
+  .asb-codex-reset-board {
     grid-template-columns: 1fr;
   }
 
-  .asb-codex-reset-item + .asb-codex-reset-item {
+  .asb-codex-reset-summary {
+    padding: var(--asb-space-4);
+  }
+
+  .asb-codex-reset-fact + .asb-codex-reset-fact {
     border-top: 1px solid var(--asb-hairline);
     border-left: 0;
   }

@@ -150,4 +150,21 @@ describe("UI boundary", () => {
     );
     expect(workflow).not.toContain("always() && !cancelled()");
   });
+
+  it("builds the canonical Linux installer assets in CNB", () => {
+    const pipeline = readFileSync(join(repoRoot, ".cnb.yml"), "utf8");
+
+    expect(pipeline).toMatch(/^\$:\r?\n  push:/m);
+    expect(pipeline).toContain("libxdo-dev");
+    expect(pipeline).toContain("powershell");
+    expect(pipeline).toContain("RUSTUP_TOOLCHAIN=stable");
+    expect(pipeline).toContain("npm run test:updater-release");
+    expect(pipeline).toContain("npm run tauri:build:linux");
+    expect(pipeline).toContain("--build linux-x64");
+    expect(pipeline).toContain("--bundle-directory target/release/bundle");
+    expect(pipeline).toContain("--output-directory release-assets");
+    expect(pipeline).toContain("assert-release-secret-free.ps1");
+    expect(pipeline).toContain("image: cnbcool/attachments:latest");
+    expect(pipeline).toContain('"./release-assets/*"');
+  });
 });

@@ -40,9 +40,11 @@ export function ProviderUsageTrend({ providerName, series, loading, error }: Pro
               <div key={group.unit ?? "unitless"} className="asb-usage-history-group">
                 {selection.groups.length > 1 && <p className="asb-usage-history-unit">{group.unit ?? "未标注单位"}</p>}
                 <UsageTrendChart
+                  size="compact"
                   series={group.series}
                   ariaLabel={`${providerName}${selection.heading}${group.unit ? `（${group.unit}）` : ""}`}
                   emptyMessage="尚无可比较的历史读数。"
+                  sumAcrossSeries
                 />
               </div>
             ))}
@@ -50,6 +52,7 @@ export function ProviderUsageTrend({ providerName, series, loading, error }: Pro
         ))
       ) : (
         <UsageTrendChart
+          size="compact"
           series={[]}
           ariaLabel={`${providerName}${heading}`}
           emptyMessage="成功读取后会在这里显示趋势。"
