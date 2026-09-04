@@ -11,7 +11,7 @@
 - 即使所有技术检查均通过，任何写入真实 `Codex` 或 `Claude Code` 文件的阶段仍需要用户明确授权。
 - `CC Switch` 和 `Codex++` 可为独立编写的后端行为提供启发；界面由 `DESIGN.md` 独立实现，不得从任一项目迁移。
 
-**更新签名密钥轮换（2026-09-05，进行中）：** 已生成并替换 GitHub Actions 的 Tauri 更新签名私钥与口令，`0.1.9` 将内嵌与其配对的新公钥，并在标签构建中用该公钥验证每个签名更新载荷。旧版 `0.1.6` / `0.1.8` 内嵌的已遗失旧公钥无法验证新签名，必须手动安装一次 `0.1.9`；后续直接安装版本将使用新的签名链更新。
+**更新签名密钥轮换（2026-09-05，完成）：** 已生成并替换 GitHub Actions 的 Tauri 更新签名私钥与口令，`0.1.9` 已内嵌与其配对的新公钥。GitHub 标签构建 [33899867961](https://github.com/y4Nkk/agent-switchboard/actions/runs/33899867961) 的 Windows、Linux、macOS Apple Silicon 与 macOS Intel 均使用该公钥验证了更新载荷签名，随后公开 `v0.1.9` Release。旧版 `0.1.6` / `0.1.8` 内嵌的已遗失旧公钥无法验证新签名，必须手动安装一次 `0.1.9`；后续直接安装版本将使用新的签名链更新。
 
 **应用内更新失败恢复与发布签名验收（2026-09-05，完成）：** 更新检查与安装错误现在在 `src/api/client.ts` 的类型边界统一归一；签名密钥不匹配会给出可操作的 GitHub Release 手动安装提示。下载或安装失败后保留同一个已发现更新供直接重试，只有安装成功才释放更新资源，避免失败后误显示「已是最新版本」。标签发布构建在上传资产前使用应用内嵌更新公钥逐个验证已签名载荷，密钥不匹配会在公开 Release 之前阻止发布；`verify_updater_artifact` 的同源测试覆盖有效签名与变更载荷拒绝。版本更新为 `0.1.9`。验证：`npm test -- --run --maxWorkers=1 --no-file-parallelism`（58 文件、346 通过）、`npm run build`、`cargo test --locked --workspace`（197 个应用测试通过、1 个依赖真实 CC Switch 数据库的测试忽略）、`cargo test --locked --manifest-path src-tauri/Cargo.toml --example verify_updater_artifact`、`npm run test:updater-release`、发布标签校验、相关 Rust 格式检查与 `git diff --check` 通过。
 
