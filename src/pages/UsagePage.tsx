@@ -82,31 +82,26 @@ const USAGE_COLUMNS: Array<TableColumn<ModelUsageGroup>> = [
   {
     key: "input",
     header: "输入（tokens）",
-    cellClassName: "asb-model-usage-number",
     render: (group) => formatTokenCount(group.inputTokens),
   },
   {
     key: "cache",
     header: "缓存（tokens）",
-    cellClassName: "asb-model-usage-number",
     render: (group) => formatTokenCount(cachedTokenCount(group)),
   },
   {
     key: "output",
     header: "输出（tokens）",
-    cellClassName: "asb-model-usage-number",
     render: (group) => formatTokenCount(group.outputTokens),
   },
   {
     key: "total",
     header: "总计（tokens）",
-    cellClassName: "asb-model-usage-number",
     render: (group) => formatTokenCount(group.totalTokens),
   },
   {
     key: "sessions",
     header: "会话",
-    cellClassName: "asb-model-usage-number",
     render: (group) => formatTokenCount(group.sessionCount),
   },
 ];
@@ -177,24 +172,26 @@ export function UsagePage({ active }: { active: boolean }) {
           正在汇总本地会话记录…
         </p>
       ) : report?.groups.length ? (
-        <>
-          <div role="group" aria-label="模型消耗汇总" className="bui-scope">
-            <StatCards
-              variant="summary"
-              stats={[
-                { icon: RiStackLine, label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
-                { icon: RiLoginBoxLine, label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
-                { icon: RiDatabase2Line, label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
-                { icon: RiLogoutBoxLine, label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
-              ]}
-              columns={4}
-            />
+        <div className="asb-model-usage-content">
+          <div className="asb-model-usage-summary">
+            <div role="group" aria-label="模型消耗汇总" className="bui-scope">
+              <StatCards
+                variant="summary"
+                stats={[
+                  { icon: RiStackLine, label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
+                  { icon: RiLoginBoxLine, label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
+                  { icon: RiDatabase2Line, label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
+                  { icon: RiLogoutBoxLine, label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
+                ]}
+                columns={4}
+              />
+            </div>
+            {undated > 0 && (
+              <p className="asb-model-usage-undated" role="status">
+                {formatTokenCount(undated)} tokens 未记录时间，已保留在明细总计中，但未纳入日趋势。
+              </p>
+            )}
           </div>
-          {undated > 0 && (
-            <p className="asb-model-usage-undated" role="status">
-              {formatTokenCount(undated)} tokens 未记录时间，已保留在明细总计中，但未纳入日趋势。
-            </p>
-          )}
           <div className="asb-model-usage-analysis">
             <section className="asb-model-usage-distribution" aria-label="模型构成">
               <ModelUsageDistributionChart
@@ -225,7 +222,7 @@ export function UsagePage({ active }: { active: boolean }) {
               />
             </div>
           </section>
-        </>
+        </div>
       ) : report ? (
         <p className="asb-empty asb-model-usage-empty">当前范围内没有可用的模型消耗记录。</p>
       ) : null}

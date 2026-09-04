@@ -255,6 +255,8 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         return Promise.resolve(null);
       case "window_is_maximized":
         return Promise.resolve(false);
+      case "update_channel":
+        return Promise.resolve("github");
       case "get_cached_codex_official_reset":
         return Promise.resolve(null);
       default:

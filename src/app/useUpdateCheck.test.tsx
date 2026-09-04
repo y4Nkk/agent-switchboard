@@ -4,6 +4,7 @@ import type { Update } from "@tauri-apps/plugin-updater";
 import {
   checkUpdate,
   closeUpdate,
+  getUpdateChannel,
   installUpdate,
   restartApplication,
   type UpdateCheck,
@@ -13,6 +14,7 @@ import { useUpdateCheck } from "./useUpdateCheck";
 vi.mock("../api/client", () => ({
   checkUpdate: vi.fn(),
   closeUpdate: vi.fn(),
+  getUpdateChannel: vi.fn(),
   installUpdate: vi.fn(),
   restartApplication: vi.fn(),
 }));
@@ -29,9 +31,11 @@ describe("useUpdateCheck", () => {
   beforeEach(() => {
     vi.mocked(checkUpdate).mockReset();
     vi.mocked(closeUpdate).mockReset();
+    vi.mocked(getUpdateChannel).mockReset();
     vi.mocked(installUpdate).mockReset();
     vi.mocked(restartApplication).mockReset();
     vi.mocked(closeUpdate).mockResolvedValue();
+    vi.mocked(getUpdateChannel).mockResolvedValue("github");
     vi.mocked(restartApplication).mockResolvedValue();
   });
 
@@ -57,6 +61,16 @@ describe("useUpdateCheck", () => {
 
     expect(result.current.updateCheck).toBeNull();
     expect(closeUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves a Store installation to Microsoft Store updates", async () => {
+    vi.mocked(getUpdateChannel).mockResolvedValue("microsoftStore");
+    const { result } = renderHook(() => useUpdateCheck({ onError: vi.fn() }));
+
+    await waitFor(() => expect(result.current.updateChannel).toBe("microsoftStore"));
+
+    expect(checkUpdate).not.toHaveBeenCalled();
+    expect(result.current.lastCheckedAt).toBeNull();
   });
 
   it("keeps startup failures silent but reports a failed user retry", async () => {

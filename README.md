@@ -83,7 +83,9 @@
 
 ### 安装包
 
-Windows、macOS 与 Linux 安装包通过 [GitHub Releases](https://github.com/y4Nkk/agent-switchboard/releases/latest) 提供。
+macOS、Linux 与 Windows 的直接安装包通过 [GitHub Releases](https://github.com/y4Nkk/agent-switchboard/releases/latest) 提供。Windows 直接下载继续使用 NSIS 安装包和应用内签名更新。
+
+Windows 同时构建 Microsoft Store 专用 MSIX。该包只作为标签构建的 Actions 制品保留，供维护者提交 Partner Center；在 Store 认证并重签名之前，它不会作为 GitHub Release 资产公开分发。Store 安装的版本由 Microsoft Store 自动更新，不会调用 GitHub 更新器。
 
 ### 从源码运行
 
@@ -95,6 +97,8 @@ npm run dev:desktop
 ```
 
 若只需开发前端界面，可运行 `npm run dev:frontend`。构建和测试脚本见 [`package.json`](package.json)。
+
+在 Windows 上，`npm run msix:build` 会先生成 NSIS 构建输出，再调用 Windows 10 SDK 的 `MakeAppx.exe` 生成 Store MSIX。MSIX 版本从 Cargo 版本映射为四段数字：`X.Y.Z` 对应 `X+1.Y.Z.0`；第四段保留为 `0`，避免与 Store 的版本规则冲突。
 
 ## 参与项目
 

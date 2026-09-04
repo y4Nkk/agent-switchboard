@@ -87,6 +87,7 @@ pub enum RuntimeLogAction {
     SwitchUndone,
     StaleLockRecovered,
     CloudBackupSettingsSaved,
+    CloudBackupConnectionTested,
     CloudBackupUploaded,
     CloudBackupRestored,
     SessionResumed,

@@ -127,7 +127,7 @@ describe("UI boundary", () => {
     }
   });
 
-  it("publishes a complete signed updater release only after all payloads are ready", () => {
+  it("publishes the complete direct-update release only after all payloads are ready", () => {
     const workflow = readFileSync(
       join(repoRoot, ".github", "workflows", "package.yml"),
       "utf8",
@@ -138,7 +138,7 @@ describe("UI boundary", () => {
     );
     expect(workflow).toContain("TAURI_SIGNING_PRIVATE_KEY");
     expect(workflow).toContain("src-tauri/tauri.updater.conf.json");
-    expect(workflow).toContain("pattern: agent-switchboard-*");
+    expect(workflow).toContain("pattern: agent-switchboard-release-*");
     expect(workflow).toContain("node scripts/updater-release.mjs manifest");
     expect(workflow).toContain(
       'gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber',
@@ -148,7 +148,27 @@ describe("UI boundary", () => {
     expect(workflow.indexOf('gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber')).toBeLessThan(
       workflow.indexOf('gh release upload "$GITHUB_REF_NAME" dist/latest.json --clobber'),
     );
+    expect(workflow).toContain("npm run msix:package");
+    expect(workflow).toContain("agent-switchboard-store-windows-x64");
+    expect(workflow).toContain("target/release/bundle/msix/*.msix");
     expect(workflow).not.toContain("always() && !cancelled()");
+  });
+
+  it("keeps the Microsoft Store identity in the MSIX packaging contract", () => {
+    const identity = JSON.parse(
+      readFileSync(join(repoRoot, "src-tauri", "windows", "store-identity.json"), "utf8"),
+    );
+    const packageScript = readFileSync(join(repoRoot, "scripts", "package-msix.ps1"), "utf8");
+
+    expect(identity).toEqual({
+      name: "yy1.AgentSwitchboard",
+      publisher: "CN=FFA766F3-961D-4013-91DD-95D1867EBC0F",
+      publisherDisplayName: "yy1",
+      displayName: "Agent Switchboard",
+      description: "Manage Codex and Claude Code configuration.",
+    });
+    expect(packageScript).toContain("MakeAppx.exe");
+    expect(packageScript).toContain("makeAppx validate");
   });
 
   it("builds the canonical Linux installer assets in CNB", () => {

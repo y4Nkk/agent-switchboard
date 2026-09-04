@@ -47,6 +47,7 @@ const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   switchUndone: "已撤回上一次切换",
   staleLockRecovered: "已恢复遗留锁",
   cloudBackupSettingsSaved: "已保存云端备份设置",
+  cloudBackupConnectionTested: "已验证云端备份连接",
   cloudBackupUploaded: "已上传云端备份",
   cloudBackupRestored: "已恢复云端备份",
   sessionResumed: "已恢复会话",

@@ -155,6 +155,20 @@ try {
     }
     Assert-ScannerRejects $archive $syntheticToken
   }
+  elseif ($IsWindows) {
+    $source = Join-Path $testRoot 'msix-source'
+    New-Item -ItemType Directory -Path $source -Force | Out-Null
+    $payload = Join-Path $source 'payload.txt'
+    $artifact = Join-Path $testRoot 'fixture.msix'
+
+    [IO.File]::WriteAllText($payload, 'ordinary package content')
+    Compress-Archive -Path (Join-Path $source '*') -DestinationPath $artifact
+    Invoke-Scanner $artifact
+
+    [IO.File]::WriteAllText($payload, $syntheticToken)
+    Compress-Archive -Path (Join-Path $source '*') -DestinationPath $artifact -Force
+    Assert-ScannerRejects $artifact $syntheticToken
+  }
   else {
     'Package extraction fixtures require macOS or Linux; raw signature scan completed.'
   }

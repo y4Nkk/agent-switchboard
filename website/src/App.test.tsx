@@ -52,6 +52,8 @@ describe("App", () => {
     expect(screen.getByText("Amazon Bedrock 设置")).toBeTruthy();
     expect(screen.getByText("config.toml")).toBeTruthy();
     expect(screen.getAllByText('model_provider = "openai"').length).toBeGreaterThan(0);
+    expect(document.querySelector(".assembly-control-segments")).toBeTruthy();
+    expect(document.querySelector(".assembly-control-slider")).toBeTruthy();
   });
 
   it("配置积木台切换 Claude Code 后展示 JSON 目标文件", () => {

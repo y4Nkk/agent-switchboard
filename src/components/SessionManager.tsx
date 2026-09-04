@@ -11,178 +11,33 @@ import {
 import { ClientLogo } from "./ClientLogo";
 import { Button } from "./Button";
 import { Input } from "./Input";
+import { SessionMessageView } from "./session/SessionMessageView";
+import {
+  clientName,
+  codexOutlinePreview,
+  copyText,
+  directoryName,
+  previewLine,
+  sessionMatchesSearch,
+} from "./session/session-content";
 import { Time } from "./Time";
-import { toast } from "./use-toast";
 
 type Filter = "all" | AppKind;
 
-const MESSAGE_COLLAPSE_THRESHOLD = 3000;
-const MESSAGE_COLLAPSED_LENGTH = 1500;
 const TARGET_HIGHLIGHT_MS = 2000;
-/* In-memory cache lifetime, ported from the CC Switch query pattern: within
-   the TTL a re-activation or re-selection serves cache with zero requests;
-   past it the cache is shown while a refresh runs in the background. */
+/* Within the TTL a re-activation or re-selection serves cache with zero
+   requests; past it the cache is shown while a refresh runs in the
+   background. */
 const SESSION_CACHE_TTL_MS = 30_000;
 /* Upper bound on retained transcripts so a long-running tray process cannot
    accumulate unbounded message memory; the oldest fetched entry is evicted. */
 const MAX_CACHED_TRANSCRIPTS = 16;
 
-function clientName(app: AppKind): string {
-  return app === "codex" ? "Codex" : "Claude Code";
-}
-
-function searchMatches(session: SessionMeta, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!needle) return true;
-  return [session.sessionId, session.title, session.summary, session.projectDir]
-    .filter((value): value is string => value !== null)
-    .some((value) => value.toLocaleLowerCase().includes(needle));
-}
-
-function messageRole(role: string): string {
-  switch (role.toLowerCase()) {
-    case "user":
-      return "用户";
-    case "assistant":
-      return "助手";
-    case "system":
-      return "系统";
-    case "tool":
-      return "工具";
-    default:
-      return role;
-  }
-}
-
-function directoryName(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
-
-function previewLine(content: string): string {
-  return content.split(/\s+/).join(" ").trim();
-}
-
-/* Codex records non-conversational payloads as user-role messages: AGENTS.md
-   dumps, environment context, and the IDE context wrapper VS Code injects.
-   The outline lists real prompts only, so these markers are protocol facts to
-   match byte-for-byte, not display copy. */
-const CODEX_IDE_CONTEXT_PREFIX = "# Context from my IDE setup:";
-const CODEX_REQUEST_MARKER = "my request for codex";
-
-function codexRequestHeadingPayload(line: string): string | null {
-  if (!line.startsWith("#")) return null;
-  const heading = line.replace(/^#+\s*/, "");
-  if (!heading.toLowerCase().startsWith(CODEX_REQUEST_MARKER)) return null;
-  const suffix = heading.slice(CODEX_REQUEST_MARKER.length).trimStart();
-  if (!suffix) return "";
-  if (!/^[:：\-—]/.test(suffix)) return null;
-  return suffix.replace(/^[:：\-—\s]+/, "").trim();
-}
-
-/* The real prompt inside an IDE wrapper is the LAST request heading: earlier
-   matches can be headings living inside quoted file content. */
-function codexPromptFromIdeContext(content: string): string | null {
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
-  let prompt: string | null = null;
-  for (const [index, line] of lines.entries()) {
-    const inline = codexRequestHeadingPayload(line.trim());
-    if (inline === null) continue;
-    if (inline) {
-      prompt = inline;
-      continue;
-    }
-    const following = lines.slice(index + 1).join("\n").trim();
-    prompt = following || null;
-  }
-  return prompt;
-}
-
-/* Outline preview for a Codex user message: null hides the entry from the
-   outline (injected payload with no real prompt), otherwise the prompt text. */
-function codexOutlinePreview(content: string): string | null {
-  const trimmed = content.trim();
-  if (
-    trimmed.startsWith("# AGENTS.md instructions for ") ||
-    trimmed.startsWith("<environment_context>")
-  ) {
-    return null;
-  }
-  if (trimmed.startsWith(CODEX_IDE_CONTEXT_PREFIX)) {
-    return codexPromptFromIdeContext(trimmed);
-  }
-  return content;
-}
-
-async function copyText(text: string): Promise<void> {
-  await navigator.clipboard.writeText(text);
-}
-
-function SessionMessageView({
-  message,
-  index,
-  targeted,
-  expanded,
-  onToggleExpanded,
-}: {
-  message: SessionMessage;
-  index: number;
-  targeted: boolean;
-  expanded: boolean;
-  onToggleExpanded: (index: number) => void;
-}) {
-  const isLong = message.content.length > MESSAGE_COLLAPSE_THRESHOLD;
-  const collapsed = isLong && !expanded;
-  const display =
-    collapsed ? `${message.content.slice(0, MESSAGE_COLLAPSED_LENGTH)}…` : message.content;
-
-  const copy = async () => {
-    try {
-      await copyText(message.content);
-      toast({ kind: "success", title: "已复制消息内容" });
-    } catch {
-      toast({ kind: "error", title: "无法复制消息内容" });
-    }
-  };
-
-  return (
-    <article
-      className={`asb-session-message is-${message.role.toLowerCase()}${targeted ? " is-target" : ""}`}
-      data-index={index}
-    >
-      <header>
-        <span>{messageRole(message.role)}</span>
-        <span className="asb-session-message-time">
-          {message.at ? <Time iso={message.at} /> : null}
-        </span>
-        <button type="button" className="asb-session-message-copy" onClick={() => void copy()}>
-          复制
-        </button>
-      </header>
-      <pre>{display}</pre>
-      {isLong && (
-        <button
-          type="button"
-          className="asb-session-message-toggle"
-          aria-expanded={expanded}
-          onClick={() => onToggleExpanded(index)}
-        >
-          {expanded
-            ? "收起"
-            : `展开完整内容（约 ${Math.round(message.content.length / 1000)}k 字符）`}
-        </button>
-      )}
-    </article>
-  );
-}
-
 /**
- * Read-only local history browser. It mirrors the useful CC Switch flow
- * (scan → filter → detail → message outline jump → copy resume command)
- * without importing its UI, multi-client scope, terminal launcher, deletion,
- * or file mutation paths. Scan and transcript results are cached in memory
- * for `SESSION_CACHE_TTL_MS`, so revisiting the page or a recently viewed
- * session displays instantly without rescanning.
+ * Local history browser. Client records remain read-only; an explicit resume
+ * action invokes the backend-owned fixed command. Scan and transcript results
+ * are cached in memory for `SESSION_CACHE_TTL_MS`, so revisiting the page or
+ * a recently viewed session displays instantly without rescanning.
  */
 export function SessionManager({ active }: { active: boolean }) {
   const [sessions, setSessions] = useState<SessionMeta[] | null>(null);
@@ -200,7 +55,7 @@ export function SessionManager({ active }: { active: boolean }) {
   const [resuming, setResuming] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<number>>(() => new Set());
   const [targetMessage, setTargetMessage] = useState<number | null>(null);
-  const requestVersion = useRef(0);
+  const selectionVersion = useRef(0);
   const scanVersion = useRef(0);
   const scanRequest = useRef<Promise<Awaited<ReturnType<typeof listSessions>>> | null>(null);
   const lastScanAt = useRef(0);
@@ -262,7 +117,7 @@ export function SessionManager({ active }: { active: boolean }) {
   const filtered = useMemo(
     () =>
       (sessions ?? []).filter(
-        (session) => (filter === "all" || session.app === filter) && searchMatches(session, query),
+        (session) => (filter === "all" || session.app === filter) && sessionMatchesSearch(session, query),
       ),
     [filter, query, sessions],
   );
@@ -283,15 +138,15 @@ export function SessionManager({ active }: { active: boolean }) {
   }, [messages, selected?.app]);
 
   const selectSession = async (session: SessionMeta) => {
+    const version = ++selectionVersion.current;
     setSelected(session);
     setDetailError(null);
     setCopyStatus(null);
     setResumeStatus(null);
+    setResuming(false);
     setExpandedMessages(new Set());
     setTargetMessage(null);
     window.clearTimeout(highlightTimer.current);
-    const version = requestVersion.current + 1;
-    requestVersion.current = version;
 
     /* Recently viewed transcripts come straight from cache; a stale entry is
        shown immediately and revalidated in the background. */
@@ -306,7 +161,7 @@ export function SessionManager({ active }: { active: boolean }) {
     }
     try {
       const nextMessages = await getSessionMessages(session.app, session.sessionId);
-      if (requestVersion.current !== version) return;
+      if (selectionVersion.current !== version) return;
       messageCache.current.set(key, { fetchedAt: Date.now(), messages: nextMessages });
       if (messageCache.current.size > MAX_CACHED_TRANSCRIPTS) {
         const oldest = [...messageCache.current.entries()].sort(
@@ -316,38 +171,45 @@ export function SessionManager({ active }: { active: boolean }) {
       }
       setMessages(nextMessages);
     } catch (caught) {
-      if (requestVersion.current === version) {
+      if (selectionVersion.current === version) {
         setDetailError((caught as { message?: string }).message ?? "无法读取会话内容");
       }
     } finally {
-      if (requestVersion.current === version) setMessageLoading(false);
+      if (selectionVersion.current === version) setMessageLoading(false);
     }
   };
 
   const copy = async (text: string, label: string) => {
+    const version = selectionVersion.current;
     try {
       await copyText(text);
-      setCopyStatus(`已复制${label}`);
+      if (selectionVersion.current === version) setCopyStatus(`已复制${label}`);
     } catch {
-      setCopyStatus(`无法复制${label}`);
+      if (selectionVersion.current === version) setCopyStatus(`无法复制${label}`);
     }
   };
 
   const resume = async () => {
     if (!selected || resuming) return;
+    const version = selectionVersion.current;
+    const target = selected;
     setResuming(true);
     setResumeStatus(null);
     try {
-      const result = await resumeSession(selected.app, selected.sessionId);
-      setResumeStatus(
-        result.usedProjectDir
-          ? "已在新终端窗口中恢复会话"
-          : "已在新终端窗口中启动恢复；原工作目录不可用",
-      );
+      const result = await resumeSession(target.app, target.sessionId);
+      if (selectionVersion.current === version) {
+        setResumeStatus(
+          result.usedProjectDir
+            ? "已在新终端窗口中恢复会话"
+            : "已在新终端窗口中启动恢复；原工作目录不可用",
+        );
+      }
     } catch (caught) {
-      setResumeStatus((caught as { message?: string }).message ?? "无法启动会话恢复");
+      if (selectionVersion.current === version) {
+        setResumeStatus((caught as { message?: string }).message ?? "无法启动会话恢复");
+      }
     } finally {
-      setResuming(false);
+      if (selectionVersion.current === version) setResuming(false);
     }
   };
 

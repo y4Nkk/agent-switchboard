@@ -21,6 +21,16 @@
 
 **Codex 重置信号单一契约收紧（完成，2026-09-04）：** `latestConfirmedSignal` 是后端缓存、IPC 和界面唯一的最近完成信号字段；旧 `latestConfirmedReset` 已从所有运行时消费者和序列化契约中移除，不提供读取、别名或迁移。旧缓存严格拒绝、保持原文件不改写，用户须手动刷新取得当前快照。验证补充：旧字段缓存拒绝用例、`cargo test -p agent-switchboard codex_reset`（8 通过）、`npx vitest run src/components/CodexResetPanel.test.tsx src/api/client.test.ts`（2 文件、29 测试）与 `npm run build` 通过。
 
+**Windows 双渠道发布（2026-09-04，待 GitHub CI MSIX 验收）：** Windows 保留 GitHub 的 NSIS 直接下载及其现有签名更新链，同时新增由 Partner Center 身份 yy1.AgentSwitchboard 驱动的 Microsoft Store MSIX。标签构建将 MSIX 作为独立 Actions 制品，绝不将未经 Store 重签名的文件上传到公开 GitHub Release；维护者手工上传该制品至 Partner Center，认证后的 Store 版本由 Store 更新。运行时根据真实进程是否具有 MSIX 包身份决定更新所有者：直接安装继续使用 GitHub，Store 安装不调用 GitHub 更新器。MSIX 清单、版本映射、MakeAppx 打包与产物凭据扫描已实现；`cargo test --workspace`（360 通过、1 忽略）、`npm test -- --run --maxWorkers=1 --no-file-parallelism`（56 文件、332 通过）、`npm run build`、脚本与扫描器测试、工作流格式检查均通过。本机未安装 Windows SDK，故实际 `MakeAppx` 生成与验证留待下一次 GitHub Windows Runner 完成。
+
+**Supabase 云端备份连接验证（2026-09-04，完成）：** `cloud_backup.rs` 仍是远端契约唯一所有者，新增无副作用 `test_connection`：使用未保存的项目地址、publishable key、项目 Auth 邮箱与临时密码完成 `/auth/v1/token?grant_type=password` 登录，再只读查询当前 `auth.uid()` 的 `agent_switchboard_cloud_backups` 行。它不写入 Supabase、不持久化草稿、密码、access token 或 refresh token；测试成功只在当前窗口内保留项目 Auth 密码，上传或恢复成功后清空。连接失败明确区分认证、Data API/表不可用和表权限不足；真实响应字段按官方 `access_token` 读取，修复了错误的 camelCase 反序列化。备份页新增「测试连接」并将 Dashboard 身份与项目 Auth 用户明确区分，日志记录成功/失败的无凭据事件。验证：`cargo test -p agent-switchboard --lib`（195 通过、1 忽略）、`npx vitest run src/components/CloudBackupPanel.test.tsx src/pages/BackupsPage.test.tsx src/api/client.test.ts --maxWorkers=1 --no-file-parallelism`（31 通过）、`npm run typecheck` 与 `npm run build` 通过。未使用真实用户凭据执行远端测试。
+
+**Supabase 云端备份可用性修复与从零引导（2026-09-04，完成）：** 备份页加入从零教程，提供填写项目对应的 Dashboard、Data API、SQL Editor 和 Auth Users 直达链接；初始化 SQL 可一键复制。教程改用「Authentication → Users → Add user → Create new user」并保留 Auto Confirm User，避免邮件邀请重定向到本机 `localhost`。加密快照明确包含完整供应商配置（名称、服务地址、模型、API 密钥）、通用设置和切换历史，但不直接读取或覆盖 Codex / Claude Code 原始配置文件。修复了上传和恢复记录错误使用 camelCase（`userId`、`updatedAt`）而被 Supabase Data API 以 HTTP 400 拒绝的问题；远端数据库契约现在唯一使用 `user_id` 和 `updated_at`，并有序列化/反序列化回归测试。版本更新为 `0.1.7`。验证：`cargo test -p agent-switchboard cloud_backup --lib`（8 通过）、`npx vitest run src/components/CloudBackupPanel.test.tsx src/pages/BackupsPage.test.tsx src/api/client.test.ts --maxWorkers=1 --no-file-parallelism`（33 通过）、`npm run build`、Windows NSIS 构建、安装包凭据扫描及 `git diff --check` 通过；未用真实用户凭据执行云端上传。
+
+**Supabase 完整快照回归闭环（2026-09-04，完成）：** 审查确认快照契约只包含受本应用管理的两端供应商档案、通用设置与切换历史；不包含原始 Codex / Claude 配置、OAuth 凭据、应用界面设置、云端连接设置、缓存或日志。修正教程中已过时的「测试成功后清空项目 Auth 密码」表述：密码现在在当前窗口保留，只有上传或恢复成功后才清空。删除原先只覆盖空快照的加密用例，改为通过实际上传与恢复路径验证完整闭环：隔离源状态含 Codex 自定义与官方档案、Claude 自定义档案、端点、模型、模型选项、备注、网站、用量查询、显式通用设置与两端切换历史；上传 JSON 不含夹具 API 密钥明文，模拟远端返回后经实际恢复路径替换目标中的陈旧档案，并与源 `ConfigurationSnapshot` 完全相等。上传和恢复仍各有唯一生产路径，私有请求注入边界仅供该回归测试使用，不存在旧实现或兼容路径。版本更新为 `0.1.8`。验证：`cargo test -p agent-switchboard --lib`（196 通过、1 忽略）、`npx vitest run src/components/CloudBackupPanel.test.tsx src/pages/BackupsPage.test.tsx src/api/client.test.ts --maxWorkers=1 --no-file-parallelism`（33 通过）与 `npm run build` 通过；未使用真实用户凭据执行远端上传。
+
+**用量布局、表格对齐与会话实现审查（2026-09-04，完成）：** 用量页的四项汇总、模型构成、日趋势与精确明细现在是通过固定间距分开的独立模块；汇总指标不再以连接式外框渲染，明细拥有独立内容面。全局 `Table` 是唯一对齐所有者，表头和单元格均由 `asb-table-cell` 左对齐；用量表已删除旧的数字右对齐覆盖。会话审查发现并修复 Linux 把整条恢复命令错误作为一个 shell 词执行的问题，macOS 工作目录现安全地逐参数引用；还修复了异步恢复完成后会错误显示在后续选中会话上的竞态。`session_manager` 已按扫描协调、JSONL 解析与跨平台恢复拆分，`SessionManager` 已按页面编排、内容规则与消息视图拆分，旧实现与别名均已删除。验证：`cargo test -p agent-switchboard --lib`（197 通过、1 忽略）、`npm test -- --maxWorkers=1 --no-file-parallelism`（56 文件、337 通过）、`npm run build`、针对会话、用量和表格的回归测试、Rust 格式及 `git diff --check` 通过。Linux 交叉检查因宿主缺少 `x86_64-linux-gnu-gcc` 无法完成 `ring` 依赖编译，未影响 Windows 交付；Linux 的命令组装由当前平台单元测试覆盖。版本为 `0.1.8`。
+
 ## 阶段图
 
 | 阶段 | 目标 | 状态 |
@@ -203,7 +213,7 @@
 - 删除运行时虚拟路径、预置供应商和相关界面选择器。
 - 提供真实供应商配置档的新增、编辑、删除与只读导入入口。
 - 将 Codex 环境变量名写入受管表，并在所有预览、错误和诊断中脱敏密钥。
-- 备份浏览器、恢复流程，以及 GitHub 三端与 CNB Linux 安装包构建。
+- 备份浏览器、恢复流程、GitHub 三端直接安装包、CNB Linux 安装包，以及 Windows Microsoft Store MSIX 构建。
 - 在通用设置中直接管理 Codex 全局 `AGENTS.md` 与 Claude Code 全局 `CLAUDE.md`，不建立第二份提示词存储；编辑区按内容在受限高度内自适应，达到上限后仅自身滚动。
 
 **验收**
@@ -216,6 +226,8 @@
 - 打包后安装与启动不会丢失应用自身的本地数据。
 - 应用诊断、导出或软件包产物中不出现密钥。
 - 提示词文档保存不暴露绝对路径，并经过版本比对、锁、隔离备份、原子替换和写后恢复验证。
+- Windows 标签构建同时产出公开 GitHub Release 所需的 NSIS 与仅供 Partner Center 上传的 MSIX；后者通过 MakeAppx 验证和凭据扫描，且不进入公开 Release。
+- 直接安装的 Windows 版本继续检查 GitHub 签名更新；具有 MSIX 包身份的版本明确显示由 Microsoft Store 更新且不调用 GitHub 更新器。
 
 **退出条件：** 用户能够安全地将应用用于日常 `Codex` / `Claude Code` 提供商管理。
 
@@ -524,3 +536,5 @@
 **官网配置积木主视觉与顶栏控制组（2026-09-04 完成，用户指令「通用配置组件 + 供应商专属设置 → 实际配置文件」）：** 移除旧 `RelayDiagram` 与顶栏下载按钮，首页唯一下载入口保留在首屏并继续指向 GitHub Releases。新增 `ConfigurationAssembly`：可切换 Codex / Claude Code，分别将本客户端通用设置与 Amazon Bedrock 供应商设置组合为真实目标格式——Codex 展示 `config.toml` 中的 `model_provider = "openai"`、`openai_base_url` 与通用字段；Claude Code 展示 `settings.json` 中的 `effortLevel`、`autoCompactEnabled` 与 `env` 字段。官网不实现或复制配置写入器，积木台只展示由桌面端契约约束的隔离演示配置，且不出现密钥。顶栏替换为语言菜单、可用的浅/深主题切换与 GitHub 图标；中英文页面内容均由 `site-content.ts` 唯一所有，主题与语言只影响展示，不引入路由、环境变量、运行时 API 或持久化状态。验收：`npm test`（2 文件、17 项）与 `npm run build` 在 `website/` 通过；本地浏览器已核对首屏和积木台的桌面布局。
 
 **独立官网审查问题完整修复（2026-09-04 完成，用户指令「无兼容无过渡无技术债完整修复审查出现的问题」）：** 官网配置积木台不再手写任何客户端配置值或输出行。`asb-core::website_assembly` 使用现有纯适配器以固定、无真实凭据的演示计划渲染 Codex `config.toml` 与 Claude `settings.json`，通过既有脱敏标记替换密钥后生成 `website/src/generated/configuration-assembly.ts`；官网只读取该提交的静态产物，Vercel 无须 Rust。生成器和核心测试都严格比对生成物，`npm run verify:assembly` 可在工作树中验证；没有旧的手写配置、回退或第二渲染路径。深色路由卡字段面、字段文字和标题收敛为 `website/src/styles/tokens.css` 的语义令牌，消除近白字近白底且移除组件样式中的原始白色表面值。中英文的路由字段、无障碍名称和全部行动文案均由 locale 内容直接拥有，删除基于对象引用判断语言的旧函数。语言菜单补齐方向键、Home/End、Escape 与焦点回归；配置标签页补齐 roving tabindex 与方向键、Home/End。`website/` 已纳入 Git 索引，作为 Vercel Git 部署输入。验证：`website/npm test`（2 文件、19 项）、`website/npm run build`、`cargo test -p asb-core website_assembly --lib`、生成物 `--check`、`git diff --check` 通过；本地浏览器验证了深色主题、完整英文切换、Claude JSON 输出与凭据脱敏。
+
+**官网概览双路卡与通用设置控件展示（2026-09-04 完成，用户指令「首屏卡片左右布局……通用设置可视化展示」）：** 首屏概览内的 Codex / Claude 路由卡改为与桌面应用一致的桌面双列；窄屏才单列，端点在双列内截断、在单列恢复完整换行，因此不再把模拟应用拉成长列表。积木台的通用设置不再以键值行伪装：`website_assembly` 从桌面 `setting_spec` 导出每项的控件类型和完整档位（含「自动」），网站只将其渲染为只读三段开关与多档滑块；字段、档位与实际 TOML / JSON 都仍由同一生成产物提供，没有任何前端 `key → 控件` 推断或第二配置契约。Codex / Claude Code 标签页移除底部彩色装饰条，只保留清晰的选中边框。验收：`cargo test -p asb-core website_assembly`、`website/npm run verify:assembly`、`website/npm test`（2 文件、20 项）与 `website/npm run build` 全通过；本地浏览器核对首屏双列、Codex TOML 与 Claude JSON 两种控件化积木台，页面正常加载且未见错误覆盖层。

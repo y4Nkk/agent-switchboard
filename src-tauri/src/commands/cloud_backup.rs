@@ -39,6 +39,23 @@ pub fn cloud_backup_setup_sql() -> String {
     cloud_backup::SETUP_SQL.to_string()
 }
 
+/// Verifies the supplied draft without persisting it or writing any remote
+/// data. The password is used only to obtain a short-lived Auth session.
+#[tauri::command]
+pub async fn test_cloud_backup_connection(
+    settings: CloudBackupSettings,
+    account_password: String,
+) -> Result<(), CommandError> {
+    observe(RuntimeLogAction::CloudBackupConnectionTested, async move {
+        blocking(move || {
+            cloud_backup::test_connection(&settings, &account_password)
+                .map_err(|error| CommandError::new("cloud-backup-connection-test-failed", error))
+        })
+        .await
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn upload_cloud_backup(
     app: tauri::AppHandle,

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { UpdateCheck } from "../api/client";
+import type { UpdateChannel, UpdateCheck } from "../api/client";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { Button } from "./Button";
 import { Time } from "./Time";
@@ -14,6 +14,7 @@ function formatProgress(progress: UpdateDownloadProgress): string {
 /** Software-update state on the settings page. Startup checks are silent;
  * download, verification and installation are explicit user actions. */
 export function UpdateSection({
+  channel,
   result,
   busy,
   installing,
@@ -24,6 +25,7 @@ export function UpdateSection({
   onInstall,
   onRestart,
 }: {
+  channel: UpdateChannel | null;
   result: UpdateCheck | null;
   busy: boolean;
   installing: boolean;
@@ -34,6 +36,21 @@ export function UpdateSection({
   onInstall: () => void;
   onRestart: () => void;
 }) {
+  if (channel === "microsoftStore") {
+    return (
+      <section className="asb-app-settings-group" aria-labelledby="software-update">
+        <h3 id="software-update" className="asb-toggle-group-title">
+          软件更新
+        </h3>
+        <div className="asb-app-setting-row">
+          <div className="asb-app-setting-copy">
+            <span className="asb-checkbox-label">由 Microsoft Store 管理更新</span>
+            <span className="asb-app-setting-detail">Store 会自动检查并安装新版本</span>
+          </div>
+        </div>
+      </section>
+    );
+  }
   const label = restartRequired
     ? installing
       ? "正在重新启动"

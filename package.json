@@ -13,6 +13,8 @@
     "test:updater-release": "node --test scripts/updater-release.test.mjs",
     "tauri": "tauri",
     "tauri:build:windows": "tauri build --config src-tauri/tauri.windows.conf.json",
+    "msix:package": "pwsh -NoProfile -File scripts/package-msix.ps1 -ExecutablePath target/release/agent-switchboard.exe -WebView2LoaderPath target/release/WebView2Loader.dll",
+    "msix:build": "npm run tauri:build:windows && npm run msix:package",
     "tauri:build:macos": "tauri build --config src-tauri/tauri.macos.conf.json",
     "tauri:build:linux": "tauri build --config src-tauri/tauri.linux.conf.json"
   },

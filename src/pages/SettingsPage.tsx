@@ -1,4 +1,4 @@
-import type { AppSettings, UpdateCheck } from "../api/client";
+import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
@@ -19,6 +19,7 @@ interface SettingsPageProps {
   onRestart: () => void;
   /** Latest manual update check; null until the first check runs. */
   updateCheck: UpdateCheck | null;
+  updateChannel: UpdateChannel | null;
   /** A startup or user-triggered release lookup is currently in flight. */
   updateChecking: boolean;
   updateInstalling: boolean;
@@ -41,6 +42,7 @@ export function SettingsPage({
   onPatch,
   onRestart,
   updateCheck,
+  updateChannel,
   updateChecking,
   updateInstalling,
   updateProgress,
@@ -90,6 +92,7 @@ export function SettingsPage({
           <p className="asb-empty">加载中</p>
         )}
         <UpdateSection
+          channel={updateChannel}
           result={updateCheck}
           busy={busy || updateChecking}
           installing={updateInstalling}

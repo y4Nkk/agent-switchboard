@@ -25,25 +25,25 @@ jobs:
             runs-on: windows-latest
             rust-toolchain: stable-x86_64-pc-windows-gnu
             build-script: tauri:build:windows
-            artifact-name: agent-switchboard-windows-x64
+            artifact-name: agent-switchboard-release-windows-x64
           - id: macos-arm64
             name: macOS Apple Silicon（dmg + updater）
             runs-on: macos-14
             rust-toolchain: stable
             build-script: tauri:build:macos
-            artifact-name: agent-switchboard-macos-arm64
+            artifact-name: agent-switchboard-release-macos-arm64
           - id: macos-x64
             name: macOS Intel（dmg + updater）
             runs-on: macos-15-intel
             rust-toolchain: stable
             build-script: tauri:build:macos
-            artifact-name: agent-switchboard-macos-x64
+            artifact-name: agent-switchboard-release-macos-x64
           - id: linux-x64
             name: Linux x64（deb + AppImage）
             runs-on: ubuntu-22.04
             rust-toolchain: stable
             build-script: tauri:build:linux
-            artifact-name: agent-switchboard-linux-x64
+            artifact-name: agent-switchboard-release-linux-x64
     env:
       # Overrides the repo's windows-gnu rust-toolchain.toml pin on
       # non-Windows runners; the Windows job re-states its own pin.
@@ -149,11 +149,36 @@ jobs:
             .\scripts\assert-release-secret-free.ps1 -ArtifactPath $_.FullName
           }
 
+      - name: 构建 Microsoft Store MSIX
+        if: matrix.id == 'windows-x64'
+        shell: pwsh
+        run: npm run msix:package
+
+      - name: 扫描 Microsoft Store 包中的凭据
+        if: matrix.id == 'windows-x64'
+        shell: pwsh
+        run: |
+          Get-ChildItem -LiteralPath target/release/bundle/msix -Filter '*.msix' -File | ForEach-Object {
+            .\scripts\assert-release-secret-free.ps1 -ArtifactPath $_.FullName
+          }
+
       - name: 上传安装包
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact-name }}
           path: release-assets/*
+          if-no-files-found: error
+          retention-days: 30
+
+      # The Store replaces this package's signature after certification. Keep
+      # the unsigned build in Actions only; a sideloaded copy is not a public
+      # release artifact.
+      - name: 上传 Microsoft Store 包
+        if: matrix.id == 'windows-x64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-switchboard-store-windows-x64
+          path: target/release/bundle/msix/*.msix
           if-no-files-found: error
           retention-days: 30
 
@@ -178,7 +203,7 @@ jobs:
       - name: 汇集已扫描的发布资产
         uses: actions/download-artifact@v7
         with:
-          pattern: agent-switchboard-*
+          pattern: agent-switchboard-release-*
           path: dist
           merge-multiple: true
 

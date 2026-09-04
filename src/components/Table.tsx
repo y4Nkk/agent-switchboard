@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cx } from "@/utils/cx";
 
 export interface TableColumn<T> {
   /** Stable column identity; also the header/cell React key. */
@@ -28,13 +29,13 @@ interface Props<T> {
 export function Table<T>({ columns, rows, rowKey, ariaLabel, className }: Props<T>) {
   return (
     <table
-      className={className === undefined ? "asb-table" : `asb-table ${className}`}
+      className={cx("asb-table", className)}
       aria-label={ariaLabel}
     >
       <thead>
         <tr>
           {columns.map((column) => (
-            <th key={column.key} scope="col">
+            <th key={column.key} scope="col" className="asb-table-cell">
               {column.header}
             </th>
           ))}
@@ -44,7 +45,7 @@ export function Table<T>({ columns, rows, rowKey, ariaLabel, className }: Props<
         {rows.map((row, index) => (
           <tr key={rowKey(row, index)}>
             {columns.map((column) => (
-              <td key={column.key} className={column.cellClassName}>
+              <td key={column.key} className={cx("asb-table-cell", column.cellClassName)}>
                 {column.render(row)}
               </td>
             ))}

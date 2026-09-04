@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   checkUpdate,
   closeUpdate,
+  getUpdateChannel,
   installUpdate,
   restartApplication,
   type CommandError,
+  type UpdateChannel,
   type UpdateCheck,
 } from "../api/client";
 
@@ -19,6 +21,7 @@ interface UpdateCheckDeps {
 
 /** The sole frontend state owner for signed update checks and installation. */
 export function useUpdateCheck({ onError }: UpdateCheckDeps) {
+  const [updateChannel, setUpdateChannel] = useState<UpdateChannel | null>(null);
   const [updateCheck, setUpdateCheck] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -76,7 +79,13 @@ export function useUpdateCheck({ onError }: UpdateCheckDeps) {
   useEffect(() => {
     if (automaticCheckStarted.current) return;
     automaticCheckStarted.current = true;
-    void runUpdateCheck(false);
+    void getUpdateChannel()
+      .then((channel) => {
+        if (disposed.current) return;
+        setUpdateChannel(channel);
+        if (channel === "github") void runUpdateCheck(false);
+      })
+      .catch(() => undefined);
   }, [runUpdateCheck]);
 
   const installAvailableUpdate = useCallback(async () => {
@@ -129,6 +138,7 @@ export function useUpdateCheck({ onError }: UpdateCheckDeps) {
   }, [installing, onError, restartRequired]);
 
   return {
+    updateChannel,
     updateCheck,
     checking,
     installing,

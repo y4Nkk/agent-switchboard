@@ -170,6 +170,7 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
         }
 
         match request.command.as_str() {
+            "update_channel" => as_json(Ok::<_, CommandError>(crate::distribution::update_channel())),
             "config_status" => command!(commands::status::config_status(app.clone())),
             "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
             "list_profiles" => command!(commands::list_profiles(app.clone())),
@@ -258,6 +259,12 @@ fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandErr
             }
             "cloud_backup_setup_sql" => {
                 as_json(Ok(commands::cloud_backup::cloud_backup_setup_sql()))
+            }
+            "test_cloud_backup_connection" => {
+                command!(commands::cloud_backup::test_cloud_backup_connection(
+                    argument::<CloudBackupSettings>(&request.args, "settings")?,
+                    argument(&request.args, "accountPassword")?,
+                ))
             }
             "upload_cloud_backup" => command!(commands::cloud_backup::upload_cloud_backup(
                 app.clone(),

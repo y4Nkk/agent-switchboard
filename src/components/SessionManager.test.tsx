@@ -119,6 +119,39 @@ describe("SessionManager", () => {
     expect(within(detail).getByText("已复制恢复命令")).toBeInTheDocument();
   });
 
+  it("does not attach an earlier resume result to a newly selected session", async () => {
+    const pendingResume = deferred<{ command: string; usedProjectDir: boolean }>();
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_sessions") return Promise.resolve(scan);
+      if (command === "get_session_messages") {
+        return Promise.resolve([
+          {
+            role: "user",
+            content: `内容 ${(args as { sessionId?: string }).sessionId}`,
+            at: null,
+          },
+        ]);
+      }
+      if (command === "resume_session") return pendingResume.promise;
+      return Promise.resolve(undefined);
+    });
+    const user = userEvent.setup({ writeToClipboard: false });
+    render(<SessionManager active />);
+
+    await user.click(await screen.findByRole("button", { name: /修复供应商预览/ }));
+    const firstDetail = await screen.findByRole("region", { name: "会话详情" });
+    await user.click(within(firstDetail).getByRole("button", { name: "在终端中恢复" }));
+
+    await user.click(screen.getByRole("button", { name: /整理会话记录/ }));
+    const currentDetail = screen.getByRole("region", { name: "会话详情" });
+    expect(within(currentDetail).getByRole("button", { name: "在终端中恢复" })).not.toBeDisabled();
+
+    await act(async () => {
+      pendingResume.resolve({ command: "codex resume codex-1", usedProjectDir: true });
+    });
+    expect(within(currentDetail).queryByText("已在新终端窗口中恢复会话")).not.toBeInTheDocument();
+  });
+
   it("disables directory copying when a session has no recorded project directory", async () => {
     primeBackend();
     const user = userEvent.setup({ writeToClipboard: false });

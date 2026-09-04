@@ -146,7 +146,7 @@ impl CloudBackupSettings {
             || !email.contains('@')
             || email.chars().any(char::is_control)
         {
-            return Err("Supabase 登录邮箱无效".to_string());
+            return Err("项目 Auth 登录邮箱无效".to_string());
         }
         Ok(())
     }

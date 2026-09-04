@@ -200,7 +200,7 @@ function PlainStatCard({ stat }: { stat: Stat }) {
  * independent dashboard cards. */
 function SummaryStatCard({ stat }: { stat: Stat }) {
   return (
-    <section className="flex min-w-0 flex-col items-center justify-center gap-1.5 bg-background-secondary-default px-4 py-5 text-center">
+    <section className="flex min-w-0 flex-col items-center justify-center gap-1.5 rounded-3xl bg-background-secondary-default px-4 py-5 text-center">
       <div className="flex min-w-0 flex-wrap items-baseline justify-center gap-2">
         <p className="text-title-1-medium whitespace-nowrap text-text-primary tabular-nums">{stat.value}</p>
         {stat.unit && <span className="text-body-2-medium text-text-tertiary">{stat.unit}</span>}
@@ -267,10 +267,7 @@ export function StatCards({
   return (
     <div
       className={cx(
-        "grid w-full",
-        variant === "summary"
-          ? "gap-px overflow-hidden rounded-3xl bg-separator-border"
-          : "gap-4",
+        "grid w-full gap-4",
         // The footer cards carry a display-size value, so they go one per
         // row on phones where the plain cards still fit two up.
         columns === 1

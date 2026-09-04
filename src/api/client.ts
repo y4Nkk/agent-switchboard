@@ -413,6 +413,7 @@ export type RuntimeLogAction =
   | "switchUndone"
   | "staleLockRecovered"
   | "cloudBackupSettingsSaved"
+  | "cloudBackupConnectionTested"
   | "cloudBackupUploaded"
   | "cloudBackupRestored"
   | "sessionResumed"
@@ -814,6 +815,14 @@ export function getCloudBackupSetupSql(): Promise<string> {
   return invoke<string>("cloud_backup_setup_sql");
 }
 
+/** Verifies an unsaved cloud-backup draft without writing remote data. */
+export function testCloudBackupConnection(
+  settings: CloudBackupSettings,
+  accountPassword: string,
+): Promise<void> {
+  return invoke<void>("test_cloud_backup_connection", { settings, accountPassword });
+}
+
 export function uploadCloudBackup(
   accountPassword: string,
   backupPassword: string,
@@ -986,6 +995,13 @@ export interface UpdateCheck {
   latestVersion: string;
   checkedAt: string;
   update: Update;
+}
+
+/** Chooses the update owner from the actual installation package. */
+export type UpdateChannel = "github" | "microsoftStore";
+
+export function getUpdateChannel(): Promise<UpdateChannel> {
+  return invoke<UpdateChannel>("update_channel");
 }
 
 /** Checks the signed update manifest. `null` means the installed build is current. */

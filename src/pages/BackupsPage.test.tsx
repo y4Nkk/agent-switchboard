@@ -8,6 +8,7 @@ const cloudBackup: ReturnType<typeof useCloudBackup> = {
   settings: null,
   loaded: true,
   saveSettings: vi.fn().mockResolvedValue(true),
+  testConnection: vi.fn().mockResolvedValue(true),
   upload: vi.fn().mockResolvedValue(true),
   restore: vi.fn().mockResolvedValue(true),
 };

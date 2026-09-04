@@ -10,11 +10,26 @@ export const configurationAssembly = {
     "commonFields": [
       {
         "key": "hide_agent_reasoning",
-        "value": "true"
+        "value": "true",
+        "control": "toggle",
+        "options": [
+          "automatic",
+          "true",
+          "false"
+        ]
       },
       {
         "key": "model_reasoning_effort",
-        "value": "high"
+        "value": "high",
+        "control": "slider",
+        "options": [
+          "automatic",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
       }
     ],
     "providerFields": [
@@ -49,11 +64,25 @@ export const configurationAssembly = {
     "commonFields": [
       {
         "key": "autoCompactEnabled",
-        "value": "true"
+        "value": "true",
+        "control": "toggle",
+        "options": [
+          "automatic",
+          "true",
+          "false"
+        ]
       },
       {
         "key": "effortLevel",
-        "value": "high"
+        "value": "high",
+        "control": "slider",
+        "options": [
+          "automatic",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
       }
     ],
     "providerFields": [
@@ -88,6 +117,14 @@ export const configurationAssembly = {
 
 export type ConfigurationAssemblyClientId = keyof typeof configurationAssembly;
 export type ConfigurationAssemblyClient = (typeof configurationAssembly)[ConfigurationAssemblyClientId];
+export type ConfigurationAssemblyCommonField = {
+  [ClientId in ConfigurationAssemblyClientId]: (typeof configurationAssembly)[ClientId]["commonFields"][number];
+}[ConfigurationAssemblyClientId];
+export type ConfigurationAssemblyProviderField = {
+  [ClientId in ConfigurationAssemblyClientId]: (typeof configurationAssembly)[ClientId]["providerFields"][number];
+}[ConfigurationAssemblyClientId];
 export type ConfigurationAssemblyFieldKey =
-  | ConfigurationAssemblyClient["commonFields"][number]["key"]
-  | ConfigurationAssemblyClient["providerFields"][number]["key"];
+  | ConfigurationAssemblyCommonField["key"]
+  | ConfigurationAssemblyProviderField["key"];
+export type ConfigurationAssemblyControlValue =
+  ConfigurationAssemblyCommonField["options"][number];

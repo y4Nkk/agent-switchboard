@@ -628,9 +628,9 @@ pub async fn get_session_messages(
     .await
 }
 
-/// Starts the selected session in a new Windows Command Prompt window. The
-/// session source is resolved by the backend; the renderer never submits a
-/// path or executable command.
+/// Starts the selected session in the platform terminal. The session source
+/// is resolved by the backend; the renderer never submits a path or
+/// executable command.
 #[tauri::command]
 pub async fn resume_session(
     app: AppKind,

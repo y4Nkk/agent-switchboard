@@ -14,6 +14,7 @@ const available: UpdateCheck = {
 
 function renderSection(overrides: Partial<Parameters<typeof UpdateSection>[0]> = {}) {
   const props = {
+    channel: null,
     result: null,
     busy: false,
     installing: false,
@@ -30,6 +31,13 @@ function renderSection(overrides: Partial<Parameters<typeof UpdateSection>[0]> =
 }
 
 describe("UpdateSection", () => {
+  it("does not offer the GitHub updater in a Store installation", () => {
+    renderSection({ channel: "microsoftStore" });
+
+    expect(screen.getByText("由 Microsoft Store 管理更新")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "检查更新" })).not.toBeInTheDocument();
+  });
+
   it("shows the manual check affordance before any check ran", () => {
     renderSection();
 

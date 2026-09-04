@@ -1,0 +1,7 @@
+{
+  "name": "yy1.AgentSwitchboard",
+  "publisher": "CN=FFA766F3-961D-4013-91DD-95D1867EBC0F",
+  "publisherDisplayName": "yy1",
+  "displayName": "Agent Switchboard",
+  "description": "Manage Codex and Claude Code configuration."
+}

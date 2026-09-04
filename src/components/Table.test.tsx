@@ -56,6 +56,15 @@ describe("Table", () => {
     expect(sizeCell.closest("tr")).toHaveTextContent("中继 B");
   });
 
+  it("gives every header and body cell the shared left-alignment contract", () => {
+    renderTable();
+
+    const table = screen.getByRole("table", { name: "示例表格" });
+    for (const cell of table.querySelectorAll("th, td")) {
+      expect(cell).toHaveClass("asb-table-cell");
+    }
+  });
+
   it("appends the module-owned className next to the table contract", () => {
     renderTable({ className: "asb-runtime-log-table", rows: [] });
 

@@ -1,5 +1,6 @@
 import type {
   ConfigurationAssemblyClientId,
+  ConfigurationAssemblyControlValue,
   ConfigurationAssemblyFieldKey,
 } from "../generated/configuration-assembly";
 
@@ -72,6 +73,7 @@ export interface SiteContent {
     clientSelectorLabel: string;
     combineLabel: string;
     fieldLabels: Record<ConfigurationAssemblyFieldKey, string>;
+    controlLabels: Record<ConfigurationAssemblyControlValue, string>;
     clients: Record<ConfigurationAssemblyClientId, AssemblyClientCopy>;
   };
   preview: {
@@ -192,6 +194,16 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         autoCompactEnabled: "自动压缩上下文",
         "env.ANTHROPIC_BASE_URL": "服务地址",
         "env.ANTHROPIC_AUTH_TOKEN": "访问密钥",
+      },
+      controlLabels: {
+        automatic: "自动",
+        true: "开启",
+        false: "关闭",
+        minimal: "极低",
+        low: "低",
+        medium: "中",
+        high: "高",
+        xhigh: "极高",
       },
       clients: {
         codex: {
@@ -321,6 +333,16 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         autoCompactEnabled: "Auto compact",
         "env.ANTHROPIC_BASE_URL": "Endpoint",
         "env.ANTHROPIC_AUTH_TOKEN": "Access token",
+      },
+      controlLabels: {
+        automatic: "Automatic",
+        true: "On",
+        false: "Off",
+        minimal: "Minimal",
+        low: "Low",
+        medium: "Medium",
+        high: "High",
+        xhigh: "Very high",
       },
       clients: {
         codex: {

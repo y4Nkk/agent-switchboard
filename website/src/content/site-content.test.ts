@@ -52,6 +52,15 @@ describe("site-content 契约", () => {
     expect(configurationAssembly.claude.codeLines).toContain('    "ANTHROPIC_AUTH_TOKEN": "••••••••"');
   });
 
+  it("通用设置展示由桌面端目录提供控件与档位", () => {
+    expect(configurationAssembly.codex.commonFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ control: "toggle", options: ["automatic", "true", "false"] }),
+        expect.objectContaining({ control: "slider", options: expect.arrayContaining(["automatic", "high"]) }),
+      ]),
+    );
+  });
+
   it("中英文内容保持同一导航与积木客户端集合", () => {
     const english = siteContentByLocale.en;
     expect(english.nav.map((item) => item.href)).toEqual(siteContent.nav.map((item) => item.href));

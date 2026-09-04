@@ -14,6 +14,7 @@ import {
   getConfigStatus,
   getGlobalPromptDocument,
   getModelUsageReport,
+  getUpdateChannel,
   getUsageHistory,
   getSessionMessages,
   listSessions,
@@ -32,6 +33,7 @@ import {
   saveGlobalPromptDocument,
   saveCommonSettings,
   previewCommonSettings,
+  testCloudBackupConnection,
   startOfficialLogin,
   queryCodexOfficialQuota,
   queryProfileUsage,
@@ -311,6 +313,14 @@ describe("api client boundary", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
+  it("reads the update channel from the installed package", async () => {
+    invokeMock.mockResolvedValue("microsoftStore");
+
+    await expect(getUpdateChannel()).resolves.toBe("microsoftStore");
+
+    expect(invokeMock).toHaveBeenCalledWith("update_channel");
+  });
+
   it("lists installed system fonts for the interface-font picker", async () => {
     invokeMock.mockResolvedValue(["Segoe UI", "微软雅黑"]);
 
@@ -330,18 +340,23 @@ describe("api client boundary", () => {
     await getCloudBackupSettings();
     await setCloudBackupSettings(settings);
     await getCloudBackupSetupSql();
+    await testCloudBackupConnection(settings, "account-password");
     await uploadCloudBackup("account-password", "backup-password", true);
     await restoreCloudBackup("account-password", "backup-password", true);
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, "get_cloud_backup_settings");
     expect(invokeMock).toHaveBeenNthCalledWith(2, "set_cloud_backup_settings", { settings });
     expect(invokeMock).toHaveBeenNthCalledWith(3, "cloud_backup_setup_sql");
-    expect(invokeMock).toHaveBeenNthCalledWith(4, "upload_cloud_backup", {
+    expect(invokeMock).toHaveBeenNthCalledWith(4, "test_cloud_backup_connection", {
+      settings,
+      accountPassword: "account-password",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(5, "upload_cloud_backup", {
       accountPassword: "account-password",
       backupPassword: "backup-password",
       confirmWrite: true,
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(5, "restore_cloud_backup", {
+    expect(invokeMock).toHaveBeenNthCalledWith(6, "restore_cloud_backup", {
       accountPassword: "account-password",
       backupPassword: "backup-password",
       confirmWrite: true,

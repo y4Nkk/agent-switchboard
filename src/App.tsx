@@ -161,6 +161,7 @@ export default function App() {
                 onPatch={appSettingsState.saveSettingsPatch}
                 onRestart={() => void appSettingsState.restart()}
                 updateCheck={updateCheck.updateCheck}
+                updateChannel={updateCheck.updateChannel}
                 updateChecking={updateCheck.checking}
                 updateInstalling={updateCheck.installing}
                 updateProgress={updateCheck.downloadProgress}

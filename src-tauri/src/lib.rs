@@ -4,6 +4,7 @@ mod codex_official_quota;
 mod codex_reset;
 mod commands;
 mod config_store;
+mod distribution;
 #[cfg(debug_assertions)]
 mod dev_api;
 mod fonts;
@@ -164,6 +165,7 @@ pub fn run() {
             commands::cloud_backup::get_cloud_backup_settings,
             commands::cloud_backup::set_cloud_backup_settings,
             commands::cloud_backup::cloud_backup_setup_sql,
+            commands::cloud_backup::test_cloud_backup_connection,
             commands::cloud_backup::upload_cloud_backup,
             commands::cloud_backup::restore_cloud_backup,
             commands::probe_endpoint,
@@ -194,6 +196,7 @@ pub fn run() {
             commands::window::window_is_maximized,
             commands::window::window_close,
             commands::window::restart_application,
+            distribution::update_channel,
             commands::get_app_settings,
             commands::set_app_settings,
             commands::repair_app_settings,

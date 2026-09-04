@@ -3,6 +3,7 @@ import {
   getCloudBackupSettings,
   setCloudBackupSettings,
   restoreCloudBackup,
+  testCloudBackupConnection,
   uploadCloudBackup,
   type CloudBackupSettings,
   type CommandError,
@@ -91,6 +92,29 @@ export function useCloudBackup({
     [busy, clearError, onError, setBusy],
   );
 
+  const testConnection = useCallback(
+    async (next: CloudBackupSettings, accountPassword: string) => {
+      if (busy) return false;
+      setBusy(true);
+      clearError();
+      try {
+        await testCloudBackupConnection(next, accountPassword);
+        toast({
+          kind: "success",
+          title: "Supabase 连接可用",
+          description: "已验证登录和云端备份表读取权限",
+        });
+        return true;
+      } catch (caught) {
+        onError(caught as CommandError);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, clearError, onError, setBusy],
+  );
+
   const restore = useCallback(
     async (accountPassword: string, backupPassword: string) => {
       if (busy) return false;
@@ -116,5 +140,5 @@ export function useCloudBackup({
     [busy, clearError, invalidateCandidates, onError, refresh, setBusy],
   );
 
-  return { settings, loaded, saveSettings, upload, restore };
+  return { settings, loaded, saveSettings, testConnection, upload, restore };
 }

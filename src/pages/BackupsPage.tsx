@@ -108,6 +108,7 @@ export function BackupsPage({
             loaded={cloudBackup.loaded}
             busy={busy}
             onSave={cloudBackup.saveSettings}
+            onTestConnection={cloudBackup.testConnection}
             onUpload={cloudBackup.upload}
             onRestore={cloudBackup.restore}
           />

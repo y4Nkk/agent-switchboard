@@ -67,7 +67,6 @@ pub struct CloudBackupResult {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct UploadRecord<'a> {
     user_id: &'a str,
     payload: &'a EncryptedBackup,
@@ -75,8 +74,8 @@ struct UploadRecord<'a> {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct AuthResponse {
+    #[serde(rename = "access_token")]
     access_token: String,
     user: AuthUser,
 }
@@ -88,7 +87,6 @@ struct AuthUser {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct RemoteRecord {
     payload: EncryptedBackup,
     updated_at: String,
@@ -120,14 +118,36 @@ pub fn save_settings(state: &LocalState, settings: CloudBackupSettings) -> Resul
     state.set_cloud_backup_settings(&settings)
 }
 
+/// Validates the current, unsaved connection draft without creating or
+/// replacing a remote backup. A successful result proves that the configured
+/// Auth user can read only its own cloud-backup row.
+pub fn test_connection(
+    settings: &CloudBackupSettings,
+    account_password: &str,
+) -> Result<(), String> {
+    test_connection_with_request(settings, account_password, http_request)
+}
+
 pub fn upload(
     state: &LocalState,
     account_password: &str,
     backup_password: &str,
 ) -> Result<CloudBackupResult, String> {
+    upload_with_request(state, account_password, backup_password, &http_request)
+}
+
+fn upload_with_request<F>(
+    state: &LocalState,
+    account_password: &str,
+    backup_password: &str,
+    request: &F,
+) -> Result<CloudBackupResult, String>
+where
+    F: Fn(&str, &str, &str, &[u8]) -> Result<(u16, String), String>,
+{
     let settings = configured_settings(state)?;
     validate_passwords(account_password, backup_password)?;
-    let user = authenticate(&settings, account_password)?;
+    let user = authenticate_with_request(&settings, account_password, request)?;
     let snapshot =
         read_configuration_snapshot(&state.configuration()).map_err(|error| error.to_string())?;
     let payload = encrypt(&snapshot, backup_password)?;
@@ -147,7 +167,7 @@ pub fn upload(
         "{}/rest/v1/{}?on_conflict=user_id",
         settings.project_url, TABLE
     );
-    let (status, _) = http_request("POST", &url, &headers, &body)?;
+    let (status, _) = request("POST", &url, &headers, &body)?;
     if status != 200 && status != 201 {
         return Err(remote_table_error(status));
     }
@@ -162,15 +182,27 @@ pub fn restore(
     account_password: &str,
     backup_password: &str,
 ) -> Result<CloudBackupResult, String> {
+    restore_with_request(state, account_password, backup_password, &http_request)
+}
+
+fn restore_with_request<F>(
+    state: &LocalState,
+    account_password: &str,
+    backup_password: &str,
+    request: &F,
+) -> Result<CloudBackupResult, String>
+where
+    F: Fn(&str, &str, &str, &[u8]) -> Result<(u16, String), String>,
+{
     let settings = configured_settings(state)?;
     validate_passwords(account_password, backup_password)?;
-    let user = authenticate(&settings, account_password)?;
+    let user = authenticate_with_request(&settings, account_password, request)?;
     let headers = data_headers(&settings, &user.access_token, "return=representation");
     let url = format!(
         "{}/rest/v1/{}?select=payload,updated_at&user_id=eq.{}&limit=1",
         settings.project_url, TABLE, user.id
     );
-    let (status, body) = http_request("GET", &url, &headers, &[])?;
+    let (status, body) = request("GET", &url, &headers, &[])?;
     if status != 200 {
         return Err(remote_table_error(status));
     }
@@ -206,44 +238,87 @@ fn configured_settings(state: &LocalState) -> Result<CloudBackupSettings, String
 }
 
 fn validate_passwords(account_password: &str, backup_password: &str) -> Result<(), String> {
-    if account_password.is_empty() {
-        return Err("请输入 Supabase 登录密码".to_string());
-    }
+    validate_account_password(account_password)?;
     if backup_password.len() < 8 {
         return Err("备份密码至少需要 8 个字符".to_string());
     }
     Ok(())
 }
 
-fn authenticate(
+fn validate_account_password(account_password: &str) -> Result<(), String> {
+    if account_password.is_empty() {
+        return Err("请输入项目 Auth 登录密码".to_string());
+    }
+    Ok(())
+}
+
+fn test_connection_with_request<F>(
     settings: &CloudBackupSettings,
     account_password: &str,
-) -> Result<AuthenticatedUser, String> {
+    request: F,
+) -> Result<(), String>
+where
+    F: Fn(&str, &str, &str, &[u8]) -> Result<(u16, String), String>,
+{
+    settings.validate()?;
+    validate_account_password(account_password)?;
+    let user = authenticate_with_request(settings, account_password, &request)?;
+    verify_remote_backup_table_with_request(settings, &user, &request)
+}
+
+fn authenticate_with_request<F>(
+    settings: &CloudBackupSettings,
+    account_password: &str,
+    request: &F,
+) -> Result<AuthenticatedUser, String>
+where
+    F: Fn(&str, &str, &str, &[u8]) -> Result<(u16, String), String>,
+{
     let body = serde_json::to_vec(&serde_json::json!({
         "email": settings.email,
         "password": account_password,
     }))
-    .map_err(|_| "Supabase 登录请求序列化失败".to_string())?;
+    .map_err(|_| "项目 Auth 登录请求序列化失败".to_string())?;
     let headers = format!(
         "apikey: {}\r\nContent-Type: application/json",
         settings.publishable_key
     );
     let url = format!("{}/auth/v1/token?grant_type=password", settings.project_url);
-    let (status, body) = http_request("POST", &url, &headers, &body)?;
+    let (status, body) = request("POST", &url, &headers, &body)?;
     if status != 200 {
-        return Err("Supabase 登录失败，请检查邮箱、密码和项目设置".to_string());
+        return Err("项目 Auth 登录失败，请检查邮箱、密码和项目设置".to_string());
     }
-    let response: AuthResponse = decode_json(&body, "Supabase 登录响应无效")?;
+    let response: AuthResponse = decode_json(&body, "项目 Auth 登录响应无效")?;
     let id = Uuid::parse_str(&response.user.id)
-        .map_err(|_| "Supabase 登录响应无效".to_string())?
+        .map_err(|_| "项目 Auth 登录响应无效".to_string())?
         .to_string();
     if response.access_token.is_empty() {
-        return Err("Supabase 登录响应无效".to_string());
+        return Err("项目 Auth 登录响应无效".to_string());
     }
     Ok(AuthenticatedUser {
         id,
         access_token: response.access_token,
     })
+}
+
+fn verify_remote_backup_table_with_request<F>(
+    settings: &CloudBackupSettings,
+    user: &AuthenticatedUser,
+    request: &F,
+) -> Result<(), String>
+where
+    F: Fn(&str, &str, &str, &[u8]) -> Result<(u16, String), String>,
+{
+    let headers = data_headers(settings, &user.access_token, "return=minimal");
+    let url = format!(
+        "{}/rest/v1/{}?select=user_id&user_id=eq.{}&limit=1",
+        settings.project_url, TABLE, user.id
+    );
+    let (status, _) = request("GET", &url, &headers, &[])?;
+    if status != 200 {
+        return Err(remote_table_error(status));
+    }
+    Ok(())
 }
 
 fn data_headers(settings: &CloudBackupSettings, access_token: &str, prefer: &str) -> String {
@@ -255,7 +330,10 @@ fn data_headers(settings: &CloudBackupSettings, access_token: &str, prefer: &str
 
 fn remote_table_error(status: u16) -> String {
     if status == 404 {
-        "云端备份表不可用，请先在 Supabase SQL Editor 执行初始化 SQL".to_string()
+        "云端备份表不可用，请确认已启用 Data API 并在 Supabase SQL Editor 执行初始化 SQL"
+            .to_string()
+    } else if status == 401 || status == 403 {
+        "云端备份表权限不足，请在 Supabase SQL Editor 重新执行初始化 SQL".to_string()
     } else {
         format!("Supabase 云端备份请求失败（HTTP {status}）")
     }
@@ -343,23 +421,220 @@ fn decode_fixed(value: &str, expected_length: usize, message: &str) -> Result<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    use asb_core::contracts::{
+        AppKind, ClaudeModelSettings, CodexModelSettings, CommonSettingValue, ConfigValue,
+        ConfigWriteRecord, ModelOptions, ProviderDraft, RouteMode, UsageQuery, WriteOperation,
+    };
+    use std::cell::RefCell;
+
+    fn connection_settings() -> CloudBackupSettings {
+        CloudBackupSettings {
+            project_url: "https://example.supabase.co".to_string(),
+            publishable_key: "sb_publishable_example".to_string(),
+            email: "backup@example.com".to_string(),
+        }
+    }
 
     #[test]
-    fn encrypted_backup_round_trips_the_complete_configuration_snapshot() {
-        let snapshot = ConfigurationSnapshot {
-            providers: Default::default(),
-            common: Default::default(),
-            history: Default::default(),
-        };
+    fn upload_and_restore_round_trip_the_complete_configuration_snapshot() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let source = LocalState::from_root(directory.path().join("source-state"));
+        source
+            .set_cloud_backup_settings(&connection_settings())
+            .expect("source connection settings");
+        let source_store = source.configuration();
+        let codex = source_store
+            .create_provider(ProviderDraft {
+                app: AppKind::Codex,
+                route_mode: RouteMode::Custom,
+                name: "Codex relay".to_string(),
+                model: Some("gpt-5.6-codex".to_string()),
+                base_url: Some("https://codex-relay.example/v1".to_string()),
+                api_key: "fixture-codex-value".to_string(),
+                model_options: Some(ModelOptions::Codex(CodexModelSettings {
+                    context_window: Some(272_000),
+                })),
+                notes: Some("primary coding route".to_string()),
+                website_url: Some("https://codex-relay.example".to_string()),
+                usage_query: Some(UsageQuery::Declarative {
+                    url: "{{baseUrl}}/usage".to_string(),
+                    remaining_path: Some("data/remaining".to_string()),
+                    used_path: Some("data/used".to_string()),
+                    total_path: Some("data/total".to_string()),
+                    unit: Some("credits".to_string()),
+                    refresh_interval_minutes: 15,
+                }),
+            })
+            .expect("codex provider");
+        source_store
+            .create_provider(ProviderDraft {
+                app: AppKind::Codex,
+                route_mode: RouteMode::Official,
+                name: "Codex official".to_string(),
+                model: None,
+                base_url: None,
+                api_key: String::new(),
+                model_options: None,
+                notes: None,
+                website_url: None,
+                usage_query: None,
+            })
+            .expect("codex official provider");
+        let claude = source_store
+            .create_provider(ProviderDraft {
+                app: AppKind::Claude,
+                route_mode: RouteMode::Custom,
+                name: "Claude relay".to_string(),
+                model: Some("claude-opus-4-1".to_string()),
+                base_url: Some("https://claude-relay.example".to_string()),
+                api_key: "fixture-claude-value".to_string(),
+                model_options: Some(ModelOptions::Claude(ClaudeModelSettings {
+                    primary_one_m: true,
+                    haiku_model: Some("claude-haiku-4".to_string()),
+                    sonnet_model: Some("claude-sonnet-4-6".to_string()),
+                    sonnet_one_m: true,
+                    opus_model: Some("claude-opus-4-1".to_string()),
+                    opus_one_m: true,
+                    available_models: Some(vec![
+                        "claude-haiku-4".to_string(),
+                        "claude-opus-4-1".to_string(),
+                    ]),
+                })),
+                notes: Some("primary analysis route".to_string()),
+                website_url: Some("https://claude-relay.example/docs".to_string()),
+                usage_query: None,
+            })
+            .expect("claude provider");
+        let codex_common = source_store
+            .get_common_settings(AppKind::Codex)
+            .expect("codex common settings");
+        let mut codex_settings = codex_common.settings;
+        codex_settings.settings.insert(
+            "model_reasoning_effort".to_string(),
+            CommonSettingValue::Explicit {
+                value: ConfigValue::Str("xhigh".to_string()),
+            },
+        );
+        source_store
+            .save_common_settings(AppKind::Codex, codex_settings, &codex_common.settings_hash)
+            .expect("save codex common settings");
+        for (profile, at) in [
+            (&codex.profile, "2026-09-04T12:00:00Z"),
+            (&claude.profile, "2026-09-04T12:01:00Z"),
+        ] {
+            source_store
+                .record_config_write(ConfigWriteRecord {
+                    app: profile.app,
+                    profile_id: Some(profile.id.clone()),
+                    profile_name: Some(profile.name.clone()),
+                    content_hash: "a".repeat(64),
+                    backup_id: format!("backup-{}", profile.id),
+                    at: at.to_string(),
+                    operation: WriteOperation::Projection,
+                })
+                .expect("switch history");
+        }
+        let snapshot = read_configuration_snapshot(&source_store).expect("source snapshot");
+        assert_eq!(snapshot.providers[&AppKind::Codex].len(), 2);
+        assert_eq!(snapshot.providers[&AppKind::Claude].len(), 1);
+        assert_eq!(snapshot.history[&AppKind::Codex].len(), 1);
+        assert_eq!(snapshot.history[&AppKind::Claude].len(), 1);
 
-        let encrypted = encrypt(&snapshot, "cloud-backup-password").expect("encrypt");
-        let mut cleartext = decrypt(&encrypted, "cloud-backup-password").expect("decrypt");
-        let restored: ConfigurationSnapshot =
-            serde_json::from_slice(&cleartext).expect("configuration snapshot");
-        cleartext.fill(0);
+        let requests = RefCell::new(Vec::new());
+        let uploaded = upload_with_request(
+            &source,
+            "project-auth-password",
+            "cloud-backup-password",
+            &|method, url, headers, body| {
+                let index = requests.borrow().len();
+                requests.borrow_mut().push((
+                    method.to_string(),
+                    url.to_string(),
+                    headers.to_string(),
+                    body.to_vec(),
+                ));
+                match index {
+                    0 => Ok((
+                        200,
+                        r#"{"access_token":"session-value","user":{"id":"c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"}}"#
+                            .to_string(),
+                    )),
+                    1 => Ok((201, String::new())),
+                    _ => panic!("unexpected upload request"),
+                }
+            },
+        )
+        .expect("upload");
+        assert_eq!(uploaded.profile_count, 3);
+        let requests = requests.into_inner();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1].0, "POST");
+        assert!(requests[1]
+            .1
+            .ends_with("/rest/v1/agent_switchboard_cloud_backups?on_conflict=user_id"));
+        let upload_body: serde_json::Value =
+            serde_json::from_slice(&requests[1].3).expect("encrypted upload JSON");
+        assert_eq!(
+            upload_body["user_id"],
+            "c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"
+        );
+        assert!(upload_body.get("userId").is_none());
+        let upload_text = String::from_utf8(requests[1].3.clone()).expect("upload text");
+        assert!(!upload_text.contains("fixture-codex-value"));
+        assert!(!upload_text.contains("fixture-claude-value"));
+        let payload: EncryptedBackup =
+            serde_json::from_value(upload_body["payload"].clone()).expect("encrypted payload");
 
-        assert_eq!(restored, snapshot);
-        assert_ne!(encrypted.ciphertext, "{}");
+        let target = LocalState::from_root(directory.path().join("target-state"));
+        target
+            .set_cloud_backup_settings(&connection_settings())
+            .expect("target connection settings");
+        target
+            .configuration()
+            .create_provider(ProviderDraft {
+                app: AppKind::Codex,
+                route_mode: RouteMode::Custom,
+                name: "stale route".to_string(),
+                model: None,
+                base_url: Some("https://stale.example".to_string()),
+                api_key: "stale-value".to_string(),
+                model_options: None,
+                notes: None,
+                website_url: None,
+                usage_query: None,
+            })
+            .expect("stale target provider");
+        let restore_response = serde_json::json!([{
+            "payload": payload,
+            "updated_at": uploaded.updated_at,
+        }])
+        .to_string();
+        let restore_requests = RefCell::new(0usize);
+        let restored = restore_with_request(
+            &target,
+            "project-auth-password",
+            "cloud-backup-password",
+            &|_, _, _, _| {
+                let index = *restore_requests.borrow();
+                *restore_requests.borrow_mut() += 1;
+                match index {
+                    0 => Ok((
+                        200,
+                        r#"{"access_token":"session-value","user":{"id":"c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"}}"#
+                            .to_string(),
+                    )),
+                    1 => Ok((200, restore_response.clone())),
+                    _ => panic!("unexpected restore request"),
+                }
+            },
+        )
+        .expect("restore");
+        assert_eq!(restored.profile_count, 3);
+        assert_eq!(*restore_requests.borrow(), 2);
+        assert_eq!(
+            read_configuration_snapshot(&target.configuration()).expect("restored snapshot"),
+            snapshot
+        );
     }
 
     #[test]
@@ -383,5 +658,112 @@ mod tests {
         assert!(SETUP_SQL.contains("to authenticated"));
         assert!(SETUP_SQL.contains("(select auth.uid()) = user_id"));
         assert!(!SETUP_SQL.contains("service_role"));
+    }
+
+    #[test]
+    fn backup_records_use_the_database_column_names_over_data_api() {
+        let payload = EncryptedBackup {
+            version: ENCRYPTION_VERSION,
+            salt: "salt".to_string(),
+            nonce: "nonce".to_string(),
+            ciphertext: "ciphertext".to_string(),
+        };
+        let record = serde_json::to_value(UploadRecord {
+            user_id: "c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb",
+            payload: &payload,
+            updated_at: "2026-09-04T12:00:00.000Z",
+        })
+        .expect("upload record serializes");
+
+        assert_eq!(record["user_id"], "c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb");
+        assert_eq!(record["updated_at"], "2026-09-04T12:00:00.000Z");
+        assert!(record.get("userId").is_none());
+        assert!(record.get("updatedAt").is_none());
+
+        let remote: RemoteRecord = serde_json::from_value(serde_json::json!({
+            "payload": payload,
+            "updated_at": "2026-09-04T12:00:00.000Z",
+        }))
+        .expect("Supabase record deserializes");
+        assert_eq!(remote.updated_at, "2026-09-04T12:00:00.000Z");
+    }
+
+    #[test]
+    fn connection_test_authenticates_and_reads_only_the_callers_backup_row() {
+        let calls = RefCell::new(Vec::new());
+        test_connection_with_request(&connection_settings(), "account-password", |method, url, headers, body| {
+            let index = calls.borrow().len();
+            calls.borrow_mut().push((
+                method.to_string(),
+                url.to_string(),
+                headers.to_string(),
+                body.to_vec(),
+            ));
+            match index {
+                0 => Ok((
+                    200,
+                    r#"{"access_token":"session-value","user":{"id":"c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"}}"#
+                        .to_string(),
+                )),
+                1 => Ok((200, "[]".to_string())),
+                _ => panic!("unexpected request"),
+            }
+        })
+        .expect("connection succeeds");
+
+        let calls = calls.into_inner();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].0, "POST");
+        assert_eq!(
+            calls[0].1,
+            "https://example.supabase.co/auth/v1/token?grant_type=password"
+        );
+        assert_eq!(
+            calls[0].2,
+            "apikey: sb_publishable_example\r\nContent-Type: application/json"
+        );
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&calls[0].3).expect("auth request JSON"),
+            serde_json::json!({
+                "email": "backup@example.com",
+                "password": "account-password",
+            })
+        );
+        assert_eq!(calls[1].0, "GET");
+        assert_eq!(
+            calls[1].1,
+            "https://example.supabase.co/rest/v1/agent_switchboard_cloud_backups?select=user_id&user_id=eq.c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb&limit=1"
+        );
+        assert!(calls[1].2.contains("Authorization: Bearer session-value"));
+        assert!(calls[1].3.is_empty());
+    }
+
+    #[test]
+    fn connection_test_reports_a_missing_or_unavailable_backup_table() {
+        let request_count = RefCell::new(0usize);
+        let error = test_connection_with_request(
+            &connection_settings(),
+            "account-password",
+            |_, _, _, _| {
+                let index = *request_count.borrow();
+                *request_count.borrow_mut() += 1;
+                if index == 0 {
+                    Ok((
+                        200,
+                        r#"{"access_token":"session-value","user":{"id":"c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"}}"#
+                            .to_string(),
+                    ))
+                } else {
+                    Ok((404, String::new()))
+                }
+            },
+        )
+        .expect_err("missing table is not a successful connection");
+
+        assert_eq!(
+            error,
+            "云端备份表不可用，请确认已启用 Data API 并在 Supabase SQL Editor 执行初始化 SQL"
+        );
+        assert_eq!(*request_count.borrow(), 2);
     }
 }

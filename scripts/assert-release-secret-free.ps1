@@ -5,7 +5,7 @@ param(
   [string]$ArtifactPath
 )
 
-# Extracts one release artifact (.exe NSIS installer, .dmg, .AppImage,
+# Extracts one release artifact (.exe NSIS installer, .msix, .dmg, .AppImage,
 # .deb or .app.tar.gz) into a temp directory and scans every contained file for
 # credential-shaped data. 7z is required for .exe; the other formats use
 # tools preinstalled on their building runner (hdiutil on macOS,
@@ -95,6 +95,19 @@ try {
         throw "7z could not extract the installer (exit code $LASTEXITCODE)."
       }
     }
+    '.msix' {
+      $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
+      if ($null -eq $sevenZip) {
+        $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue
+      }
+      if ($null -eq $sevenZip) {
+        throw '7z is required to inspect the MSIX package contents.'
+      }
+      & $sevenZip.Source x -y "-o$scanRoot" $resolvedArtifact | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        throw "7z could not extract the MSIX package (exit code $LASTEXITCODE)."
+      }
+    }
     '.dmg' {
       $mountPoint = Join-Path $scanRoot 'mount'
       New-Item -ItemType Directory -Path $mountPoint | Out-Null
@@ -150,7 +163,7 @@ try {
       Copy-Item -LiteralPath $resolvedArtifact -Destination $scanRoot
     }
     default {
-      throw "Unsupported artifact type '$extension'; expected .exe, .dmg, .AppImage, .deb, .app.tar.gz or .sig: $resolvedArtifact"
+      throw "Unsupported artifact type '$extension'; expected .exe, .msix, .dmg, .AppImage, .deb, .app.tar.gz or .sig: $resolvedArtifact"
     }
     }
   }

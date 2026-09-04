@@ -91,11 +91,15 @@ describe("UsagePage", () => {
     expect(screen.getByRole("figure", { name: "模型消耗构成" })).toBeInTheDocument();
     expect(screen.getByText("每日 Token 趋势")).toBeInTheDocument();
     const summary = screen.getByRole("group", { name: "模型消耗汇总" });
+    expect(summary.parentElement).toHaveClass("asb-model-usage-summary");
+    expect(summary.parentElement?.parentElement).toHaveClass("asb-model-usage-content");
     expect(within(summary).getByText("新输入")).toBeInTheDocument();
     expect(within(summary).getByText("1.2K")).toBeInTheDocument();
     expect(within(summary).getByText("2.1K")).toBeInTheDocument();
     expect(within(summary).getAllByText("tokens")).toHaveLength(4);
     expect(within(table).getByText("输入（tokens）")).toBeInTheDocument();
+    expect(within(table).getByText("1,200").closest("td")).toHaveClass("asb-table-cell");
+    expect(within(table).getByText("1,200").closest("td")).not.toHaveClass("asb-model-usage-number");
     expect(document.querySelectorAll(".recharts-pie-sector")).toHaveLength(1);
   });
 

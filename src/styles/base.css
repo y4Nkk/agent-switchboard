@@ -3180,7 +3180,6 @@ button:disabled {
   z-index: 1;
   padding: var(--asb-space-2) var(--asb-space-3);
   background: var(--asb-content-muted);
-  text-align: left;
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
   white-space: nowrap;
@@ -3189,6 +3188,10 @@ button:disabled {
 .asb-table td {
   padding: var(--asb-space-3);
   overflow-wrap: anywhere;
+}
+
+.asb-table-cell {
+  text-align: left;
 }
 
 .asb-table tbody tr:hover {
@@ -3267,6 +3270,74 @@ button:disabled {
   flex-direction: column;
   gap: var(--asb-space-3);
   margin: 0;
+}
+
+/* The setup sequence is documentation for a user-owned remote service, not a
+   second card: its ordered structure stays adjacent to the fields it explains. */
+.asb-cloud-backup-guide {
+  display: grid;
+  gap: var(--asb-space-2);
+  margin: 0;
+  padding: var(--asb-space-3) 0;
+  border-top: 1px solid var(--asb-hairline);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-cloud-backup-guide-title,
+.asb-cloud-backup-guide-list h4,
+.asb-cloud-backup-guide-list p {
+  margin: 0;
+}
+
+.asb-cloud-backup-guide-title {
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+}
+
+.asb-cloud-backup-guide-list {
+  display: grid;
+  gap: var(--asb-space-2);
+  margin: 0;
+  padding-left: var(--asb-space-4);
+}
+
+.asb-cloud-backup-guide-list li {
+  padding-left: var(--asb-space-1);
+}
+
+.asb-cloud-backup-guide-list li + li {
+  padding-top: var(--asb-space-2);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-cloud-backup-guide-list h4 {
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+}
+
+.asb-cloud-backup-guide-list p {
+  margin-top: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-cloud-backup-guide-list code {
+  color: var(--asb-text);
+  overflow-wrap: anywhere;
+}
+
+.asb-cloud-backup-guide-link {
+  color: var(--asb-action);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.asb-cloud-backup-guide-link:hover {
+  color: var(--asb-text);
+}
+
+.asb-cloud-backup-guide-link:focus-visible {
+  outline: var(--asb-focus-ring);
 }
 
 /* Runtime log — a single app-owned operational ledger. The renderer sees
@@ -3431,6 +3502,21 @@ button:disabled {
   scrollbar-gutter: stable;
 }
 
+.asb-model-usage-content,
+.asb-model-usage-summary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.asb-model-usage-content {
+  gap: var(--asb-space-4);
+}
+
+.asb-model-usage-summary {
+  gap: var(--asb-space-2);
+}
+
 .asb-model-usage-analysis {
   display: flex;
   flex-direction: column;
@@ -3454,19 +3540,16 @@ button:disabled {
 }
 
 .asb-model-usage-detail {
-  padding-top: var(--asb-space-3);
-  border-top: 1px solid var(--asb-hairline);
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-panel);
+  background: var(--asb-content-muted);
 }
 
 .asb-model-usage-table {
   min-width: max-content;
 }
 
-.asb-model-usage-number {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-}
 
 /* Session manager — a restrained master/detail workspace. The list stays
    compact and operational; transcript text is intentionally near-solid so
