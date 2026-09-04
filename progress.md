@@ -11,6 +11,8 @@
 - 即使所有技术检查均通过，任何写入真实 `Codex` 或 `Claude Code` 文件的阶段仍需要用户明确授权。
 - `CC Switch` 和 `Codex++` 可为独立编写的后端行为提供启发；界面由 `DESIGN.md` 独立实现，不得从任一项目迁移。
 
+**更新签名密钥轮换（2026-09-05，进行中）：** 已生成并替换 GitHub Actions 的 Tauri 更新签名私钥与口令，`0.1.9` 将内嵌与其配对的新公钥，并在标签构建中用该公钥验证每个签名更新载荷。旧版 `0.1.6` / `0.1.8` 内嵌的已遗失旧公钥无法验证新签名，必须手动安装一次 `0.1.9`；后续直接安装版本将使用新的签名链更新。
+
 **应用内更新失败恢复与发布签名验收（2026-09-05，完成）：** 更新检查与安装错误现在在 `src/api/client.ts` 的类型边界统一归一；签名密钥不匹配会给出可操作的 GitHub Release 手动安装提示。下载或安装失败后保留同一个已发现更新供直接重试，只有安装成功才释放更新资源，避免失败后误显示「已是最新版本」。标签发布构建在上传资产前使用应用内嵌更新公钥逐个验证已签名载荷，密钥不匹配会在公开 Release 之前阻止发布；`verify_updater_artifact` 的同源测试覆盖有效签名与变更载荷拒绝。版本更新为 `0.1.9`。验证：`npm test -- --run --maxWorkers=1 --no-file-parallelism`（58 文件、346 通过）、`npm run build`、`cargo test --locked --workspace`（197 个应用测试通过、1 个依赖真实 CC Switch 数据库的测试忽略）、`cargo test --locked --manifest-path src-tauri/Cargo.toml --example verify_updater_artifact`、`npm run test:updater-release`、发布标签校验、相关 Rust 格式检查与 `git diff --check` 通过。
 
 **用量图表单位与真实读数审查（2026-09-05，完成）：** `src/lib/usage-format.ts` 成为供应商用量与官方额度的通用数值/单位唯一所有者，表格、趋势标题和比例轨对同一读数保留至多两位小数；本地模型 Token 继续由 `token-format.ts` 负责。`UsageTrendChart` 现在要求调用方显式声明 `generic`、`local-token` 或 `percentage` 读数语义，供应商即使使用 `tokens` 单位也不会误用本地模型 K/M/B 格式。删除趋势标题与官方窗口的整数化路径，官方百分比趋势固定为 0–100 纵轴，通用负值不再被零基线裁切；比例轨保留实际比例文字，仅限制填充宽度。只有同日完整记录的本地 Token 分量才能聚合；同单位的独立供应商套餐不再相加，时间缺口不会伪造为 0。后端停止生成没有消费者的供应商 `usedPercent` 历史序列，仅官方额度窗口保留该指标；原始账本读数不变，无迁移、兼容或双路径。验证：`npm test -- --maxWorkers=1 --no-file-parallelism`（58 文件、346 通过）、`npm run build`、`cargo test -p agent-switchboard usage_history --lib`（9 通过）、`cargo test -p asb-core contracts --lib`（9 通过）、本次 Rust 文件 `rustfmt --edition 2021 --check --config skip_children=true` 与 `git diff --check` 通过。
