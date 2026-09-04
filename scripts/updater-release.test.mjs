@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 import { generateUpdaterManifest, stageBuildArtifacts } from "./updater-release.mjs";
 
 const VERSION = "0.1.2";
 const TAG = `v${VERSION}`;
 const REPOSITORY = "y4Nkk/agent-switchboard";
+const execFileAsync = promisify(execFile);
+const scriptPath = fileURLToPath(new URL("./updater-release.mjs", import.meta.url));
 
 async function writeFixture(root, relativePath, contents) {
   const fixturePath = path.join(root, relativePath);
@@ -131,4 +136,18 @@ test("generateUpdaterManifest rejects a tag that diverges from the workspace ver
     }),
     /must equal/,
   );
+});
+
+test("workspace-version runs when the release script is invoked by its absolute path", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "asb-updater-cli-"));
+  const cargoManifest = await writeCargoManifest(root);
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    scriptPath,
+    "workspace-version",
+    "--cargo-manifest",
+    cargoManifest,
+  ]);
+
+  assert.equal(stdout, `${VERSION}\n`);
 });

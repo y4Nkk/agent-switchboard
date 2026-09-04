@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PACKAGE_PREFIX = "agent-switchboard";
 
@@ -283,7 +284,7 @@ async function main() {
   );
 }
 
-if (import.meta.url === new URL(process.argv[1], "file:").href) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error(error.message);
     process.exitCode = 1;
