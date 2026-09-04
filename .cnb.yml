@@ -15,8 +15,8 @@ $:
           script: |
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
-            # CNB bind-mounts /etc/localtime; tzdata cannot atomically replace it.
-            apt-mark hold tzdata
+            # CNB bind-mounts /etc/localtime; leave that user-managed clock untouched.
+            rm -f /etc/timezone
             apt-get install -y --no-install-recommends \
               build-essential ca-certificates curl file pkg-config wget \
               libayatana-appindicator3-dev libgtk-3-dev librsvg2-dev \
