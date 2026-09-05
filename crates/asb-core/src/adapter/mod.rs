@@ -10,6 +10,9 @@ pub mod claude;
 pub mod codex;
 pub mod codex_auth;
 
+#[cfg(test)]
+mod identity_tests;
+
 use crate::contracts::{AppKind, CommonSettings, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
 
@@ -147,6 +150,25 @@ pub fn route_state(app: AppKind, text: &str) -> crate::contracts::RouteState {
     match app {
         AppKind::Codex => codex::route_state(text),
         AppKind::Claude => claude::route_state(text),
+    }
+}
+
+/// Matches provider routing and credentials, independently of model and common
+/// settings. Official identity describes the selected route, not OAuth validity.
+pub fn matches_provider_identity(
+    current: &str,
+    codex_auth: Option<&str>,
+    profile: &crate::contracts::ProviderProfile,
+) -> Result<bool, AdapterError> {
+    validate_syntax(profile.app, current)?;
+    let route = route_state(profile.app, current);
+    if route.route_mode != profile.route_mode || route.base_url != profile.base_url {
+        return Ok(false);
+    }
+    match profile.app {
+        AppKind::Codex => Ok(codex::uses_builtin_provider(current)?
+            && self::codex_auth::matches_provider_identity(codex_auth, profile)?),
+        AppKind::Claude => claude::matches_provider_credentials(current, profile),
     }
 }
 

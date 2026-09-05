@@ -21,6 +21,13 @@ use toml_edit::{DocumentMut, Item, TableLike, Value as TomlValue};
 /// Codex's built-in provider id.
 pub const OFFICIAL_PROVIDER: &str = "openai";
 
+pub(crate) fn uses_builtin_provider(text: &str) -> Result<bool, AdapterError> {
+    let doc = parse(text)?;
+    Ok(item_at(&doc, "model_provider")
+        .and_then(item_repr)
+        .is_none_or(|provider| provider == OFFICIAL_PROVIDER))
+}
+
 fn parse(text: &str) -> Result<DocumentMut, AdapterError> {
     text.parse::<DocumentMut>()
         .map_err(|e: toml_edit::TomlError| {

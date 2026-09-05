@@ -21,7 +21,7 @@ jobs:
       matrix:
         include:
           - id: windows-x64
-            name: Windows x64（NSIS）
+            name: Windows x64（自绘安装器）
             runs-on: windows-latest
             rust-toolchain: stable-x86_64-pc-windows-gnu
             build-script: tauri:build:windows
@@ -83,14 +83,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+            libxdo-dev libssl-dev librsvg2-dev
 
       - name: 安装 macOS 7-Zip
         if: runner.os == 'macOS'
         run: brew install p7zip
 
       - name: 测试发布产物扫描器
-        if: runner.os == 'Linux' || runner.os == 'macOS'
         shell: pwsh
         run: .\scripts\assert-release-secret-free.test.ps1
 
@@ -100,6 +99,11 @@ jobs:
       - name: 测试 Updater 发布清单
         if: matrix.id == 'linux-x64'
         run: npm run test:updater-release
+
+      - name: 测试自绘安装器契约
+        if: matrix.id == 'windows-x64'
+        shell: pwsh
+        run: .\scripts\test-windows-installer.ps1
 
       - name: 运行 Rust 测试
         run: cargo test --workspace

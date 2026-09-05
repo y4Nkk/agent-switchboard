@@ -300,7 +300,7 @@ describe("ProviderList", () => {
     expect(onToggleUsage).toHaveBeenCalledWith(configured);
   });
 
-  it("keeps a persisted collapsed usage panel hidden until toggled again", async () => {
+  it("queries a persisted collapsed usage panel while keeping its details hidden", async () => {
     const user = userEvent.setup();
     const onToggleUsage = vi.fn();
     const configured = {
@@ -325,13 +325,74 @@ describe("ProviderList", () => {
     );
 
     expect(screen.queryByRole("region", { name: "中继 A 用量" })).not.toBeInTheDocument();
-    expect(invokeMock).not.toHaveBeenCalledWith("query_profile_usage", {
+    expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", {
       profileId: "codex-relay-a",
     });
     const toggle = screen.getByRole("button", { name: "查看 中继 A 用量" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(toggle);
     expect(onToggleUsage).toHaveBeenCalledWith(configured);
+  });
+
+  it("keeps one polling schedule across collapse and expansion, and stops on unmount", async () => {
+    vi.useFakeTimers();
+    let remaining = 75;
+    invokeMock.mockImplementation((command) => Promise.resolve(command === "query_profile_usage"
+      ? { readings: [{ remaining, used: 100 - remaining, total: 100, unit: "CNY" }], at: "2026-09-05T08:00:00Z" }
+      : []) as never);
+    const configured = { ...profiles[0], usageQuery: {
+      kind: "declarative" as const, url: "{{baseUrl}}/balance", remainingPath: "balance",
+      refreshIntervalMinutes: 2,
+    } };
+    const view = (collapsed: boolean) => <ProviderList profiles={[configured]} activeProfileId={null}
+      selectedId={null} onSelect={() => {}} collapsedUsageIds={collapsed ? [configured.id] : []} />;
+    try {
+      const { rerender, unmount } = render(view(true));
+      await act(async () => {});
+      const calls = () => invokeMock.mock.calls.filter(([command]) => command === "query_profile_usage").length;
+      expect(calls()).toBe(1);
+      expect(screen.getByLabelText("中继 A 用量摘要")).toHaveTextContent("剩余 75% · 余额 75 CNY");
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      rerender(view(false));
+      expect(calls()).toBe(1);
+      expect(screen.queryByLabelText("中继 A 用量摘要")).not.toBeInTheDocument();
+      expect(screen.getByRole("table", { name: "中继 A 用量读数" })).toBeInTheDocument();
+      remaining = 50;
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(calls()).toBe(2);
+      rerender(view(true));
+      expect(screen.getByLabelText("中继 A 用量摘要")).toHaveTextContent("剩余 50%");
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(calls()).toBe(3);
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(calls()).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks a collapsed summary as stale when its refresh fails", async () => {
+    vi.useFakeTimers();
+    let fail = false;
+    invokeMock.mockImplementation((command) => {
+      if (command !== "query_profile_usage") return Promise.resolve([]) as never;
+      if (fail) return Promise.reject(new Error("额度接口返回 403")) as never;
+      return Promise.resolve({ readings: [{ remaining: 20, used: null, total: null, unit: "USD" }], at: "2026-09-05T08:00:00Z" }) as never;
+    });
+    try {
+      const { unmount } = render(<ProviderList profiles={[{ ...profiles[0], usageQuery: {
+        kind: "declarative", url: "{{baseUrl}}/balance", remainingPath: "balance", refreshIntervalMinutes: 1,
+      } }]} activeProfileId={null} selectedId={null} onSelect={() => {}} collapsedUsageIds={[profiles[0].id]} />);
+      await act(async () => {});
+      fail = true;
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(screen.getByLabelText("中继 A 用量摘要")).toHaveTextContent("余额 20 USD（更新失败，显示上次读数）");
+      expect(screen.getByLabelText("中继 A 用量摘要")).toHaveAttribute("title", "额度接口返回 403");
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders an official Codex quota ledger without custom usage settings", async () => {
@@ -363,7 +424,7 @@ describe("ProviderList", () => {
     expect(
       await screen.findByRole("region", { name: "官方 OpenAI 官方订阅额度" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /5 小时/ })).toBeInTheDocument();
+    expect(await screen.findByRole("row", { name: /^5 小时/ })).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("query_codex_official_quota", {
       profileId: "codex-official",
     });

@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { openBackupDir, type AppKind, type CommandError } from "../api/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { onTrayError, onTrayNavigate, openBackupDir, type AppKind, type CommandError } from "../api/client";
 import type { Page } from "./AppShell";
 import { useAppSettings } from "./useAppSettings";
 import { useCcImport } from "./useCcImport";
@@ -25,6 +25,24 @@ export function useSwitchboardModel() {
   const [appFilter, setAppFilter] = useState<AppKind>("codex");
   const frame = useOperationFrame();
   const { busy, reportError, clearError } = frame;
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void onTrayNavigate(() => setPage("供应商")).then((unlisten) => {
+      if (disposed) unlisten();
+      else stop = unlisten;
+    }).catch((error: unknown) => reportError({ code: "TRAY_EVENT", message: error instanceof Error ? error.message : String(error) }));
+    return () => { disposed = true; stop?.(); };
+  }, [reportError]);
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void onTrayError((message) => reportError({ code: "TRAY_WINDOW", message })).then((unlisten) => {
+      if (disposed) unlisten();
+      else stop = unlisten;
+    }).catch((error: unknown) => reportError({ code: "TRAY_EVENT", message: error instanceof Error ? error.message : String(error) }));
+    return () => { disposed = true; stop?.(); };
+  }, [reportError]);
 
   const snapshot = useConfigSnapshot({ onError: reportError });
   const { selectedId, setSelectedId, refresh, activeProfileId, records } = snapshot;

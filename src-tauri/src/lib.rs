@@ -4,9 +4,9 @@ mod codex_official_quota;
 mod codex_reset;
 mod commands;
 mod config_store;
-mod distribution;
 #[cfg(debug_assertions)]
 mod dev_api;
+mod distribution;
 mod fonts;
 mod local_state;
 mod model_usage;
@@ -101,7 +101,9 @@ pub fn run() {
                 runtime_log::set_level(settings.runtime_log_level);
                 let _ = commands::apply_desktop_settings(app.handle(), &settings);
             }
-            tray::setup(app.handle())?;
+            if let Err(error) = tray::setup(app.handle()) {
+                tray::recover_main(app.handle(), &error);
+            }
             runtime_log::record_started();
             #[cfg(debug_assertions)]
             {
@@ -126,6 +128,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            tray::popup::window_event(window, event);
             if window.label() != "main" {
                 return;
             }
@@ -135,10 +138,23 @@ pub fn run() {
                     // A tray has already been built successfully, so hide is
                     // recoverable. Do not let a hide failure destroy the app.
                     let _ = window.hide();
+                } else {
+                    // The persistent hidden tray WebView is still a window;
+                    // closing only main would otherwise leave the process alive.
+                    api.prevent_close();
+                    tray::request_explicit_exit();
+                    window.app_handle().exit(0);
                 }
             }
         })
         .invoke_handler(tauri::generate_handler![
+            tray::tray_snapshot,
+            tray::tray_ready,
+            tray::tray_resize,
+            tray::tray_hide,
+            tray::tray_open_main,
+            tray::tray_switch,
+            tray::tray_quit,
             commands::status::config_status,
             commands::status::runtime_overview,
             commands::list_profiles,
@@ -214,8 +230,8 @@ pub fn run() {
                 if code == Some(tauri::RESTART_EXIT_CODE) {
                     return;
                 }
-                // Tray menu "退出" is the one explicit request allowed to end
-                // the process. Every other exit request stays recoverable.
+                // Explicit quit and the configured close-to-exit action end
+                // the process; implicit exits remain recoverable via the tray.
                 if !tray::take_explicit_exit() && tray::should_absorb(app) {
                     api.prevent_exit();
                     if let Some(window) = app.get_webview_window("main") {

@@ -6,6 +6,7 @@
  */
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import {
   check as checkForUpdate,
   type DownloadEvent,
@@ -14,6 +15,32 @@ import {
 import { isBrowserDevelopment } from "../lib/runtime";
 
 type InvokeArgs = Record<string, unknown>;
+
+export interface TraySnapshot {
+  providers: Array<{ id: string; app: AppKind; name: string; model: string | null; active: boolean; usage: UsageSummary | null }>;
+  settings: AppSettings | null;
+  error: string | null;
+  switching: boolean;
+}
+
+export const getTraySnapshot = (): Promise<TraySnapshot> => invoke("tray_snapshot");
+export const trayReady = (): Promise<void> => invoke("tray_ready");
+export const hideTray = (): Promise<void> => invoke("tray_hide");
+export const openTrayMain = (providers: boolean): Promise<void> => invoke("tray_open_main", { providers });
+export const switchTrayProvider = (profileId: string): Promise<void> => invoke("tray_switch", { profileId });
+export const quitTray = (): Promise<void> => invoke("tray_quit");
+export const resizeTray = (height: number): Promise<void> => invoke("tray_resize", { height });
+export function onTrayChanged(handler: () => void): Promise<() => void> {
+  return listen("tray-changed", handler);
+}
+export function onTrayNavigate(handler: () => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  return listen("tray-navigate", handler);
+}
+export function onTrayError(handler: (message: string) => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  return listen<string>("tray-error", (event) => handler(event.payload));
+}
 
 interface WebCommandResponse<T> {
   kind: "success" | "failure";
@@ -502,6 +529,7 @@ export interface ConfigFileStatus {
   syntaxOk: boolean;
   route: RouteState | null;
   readError: string | null;
+  activeProfileId: string | null;
   matchStatus: MatchStatus;
   lastSwitch: ConfigWriteRecord | null;
 }

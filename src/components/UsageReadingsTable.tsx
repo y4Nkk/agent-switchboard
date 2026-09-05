@@ -1,14 +1,7 @@
 import type { UsageReading } from "../api/client";
-import { formatUsageValue } from "../lib/usage-format";
+import { formatUsageValue, usageProgress } from "../lib/usage-format";
 import { UsageRatioMeter } from "./charts/UsageRatioMeter";
 import { Table, type TableColumn } from "./Table";
-
-function usageProgress(reading: UsageReading): number | null {
-  if (reading.total === null || !Number.isFinite(reading.total) || reading.total <= 0) return null;
-  const used = reading.used ?? (reading.remaining === null ? null : reading.total - reading.remaining);
-  if (used === null || !Number.isFinite(used)) return null;
-  return (used / reading.total) * 100;
-}
 
 /** One reading as a table row: plan identity plus its three measures. */
 interface UsageRow {

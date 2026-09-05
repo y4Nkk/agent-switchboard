@@ -77,6 +77,7 @@ export default function App() {
             {page === "概览" && (
               <OverviewPage
                 statuses={snapshot.statuses}
+                profiles={snapshot.profiles}
                 locks={snapshot.locks}
                 busy={busy}
                 relayHidden={editorMode !== null}

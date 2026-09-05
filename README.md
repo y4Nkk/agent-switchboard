@@ -83,7 +83,7 @@
 
 ### 安装包
 
-macOS、Linux 与 Windows 的直接安装包通过 [GitHub Releases](https://github.com/y4Nkk/agent-switchboard/releases/latest) 提供。Windows 直接下载继续使用 NSIS 安装包和应用内签名更新。
+macOS、Linux 与 Windows 的直接安装包通过 [GitHub Releases](https://github.com/y4Nkk/agent-switchboard/releases/latest) 提供。Windows 使用自绘安装引导（WPF 界面、内嵌静默 NSIS 部署引擎）及应用内签名更新；引导不依赖 WebView2，缺少运行环境时会从 Microsoft 下载并静默安装。
 
 Windows 同时构建 Microsoft Store 专用 MSIX。该包只作为标签构建的 Actions 制品保留，供维护者提交 Partner Center；在 Store 认证并重签名之前，它不会作为 GitHub Release 资产公开分发。Store 安装的版本由 Microsoft Store 自动更新，不会调用 GitHub 更新器。
 
@@ -98,7 +98,7 @@ npm run dev:desktop
 
 若只需开发前端界面，可运行 `npm run dev:frontend`。构建和测试脚本见 [`package.json`](package.json)。
 
-在 Windows 上，`npm run msix:build` 会先生成 NSIS 构建输出，再调用 Windows 10 SDK 的 `MakeAppx.exe` 生成 Store MSIX。MSIX 版本从 Cargo 版本映射为四段数字：`X.Y.Z` 对应 `X+1.Y.Z.0`；第四段保留为 `0`，避免与 Store 的版本规则冲突。
+在 Windows 上，`npm run tauri:build:windows` 通过系统 .NET Framework C# 编译器生成自绘安装包，输出至 `target/release/bundle/installer`；`npm run msix:build` 随后调用 Windows 10 SDK 的 `MakeAppx.exe` 生成独立 Store MSIX。MSIX 不包含自绘引导，由 Microsoft Store 安装和更新。MSIX 版本从 Cargo 版本映射为四段数字：`X.Y.Z` 对应 `X+1.Y.Z.0`；第四段保留为 `0`，避免与 Store 的版本规则冲突。
 
 ## 参与项目
 

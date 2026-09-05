@@ -67,6 +67,25 @@ test("stageBuildArtifacts names distinct macOS updater payloads and preserves si
   );
 });
 
+test("Windows releases stage only the custom installer and its own signature", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "asb-installer-stage-"));
+  const bundleDirectory = path.join(root, "bundle");
+  const outputDirectory = path.join(root, "assets");
+  await writeFixture(bundleDirectory, "nsis/App-setup.exe", "internal engine");
+  await writeFixture(bundleDirectory, "installer/App-setup.exe", "custom installer");
+  await writeFixture(bundleDirectory, "installer/App-setup.exe.sig", "custom signature");
+  await stageBuildArtifacts({ build: "windows-x64", bundleDirectory, outputDirectory, version: VERSION, includeUpdater: true });
+  const artifact = path.join(outputDirectory, `agent-switchboard_${VERSION}_windows-x86_64-nsis.exe`);
+  assert.equal(await readFile(artifact, "utf8"), "custom installer");
+  assert.equal(await readFile(`${artifact}.sig`, "utf8"), "custom signature");
+});
+
+test("Windows releases reject a bare engine without the custom installer", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "asb-installer-missing-"));
+  await writeFixture(root, "bundle/nsis/App-setup.exe", "internal engine");
+  await assert.rejects(stageBuildArtifacts({ build: "windows-x64", bundleDirectory: path.join(root, "bundle"), outputDirectory: path.join(root, "assets"), version: VERSION, includeUpdater: false }), /Missing bundle directory/);
+});
+
 test("generateUpdaterManifest maps every updater asset to the release URL and actual signature text", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "asb-updater-manifest-"));
   const cargoManifest = await writeCargoManifest(root);

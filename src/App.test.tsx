@@ -62,6 +62,7 @@ const statuses: ConfigFileStatus[] = [
       scopeWarnings: [],
     },
     readError: null,
+    activeProfileId: null,
     matchStatus: { kind: "externallyModified", at: "2026-08-26T08:00:00Z" },
     lastSwitch: codexSwitch,
   },
@@ -86,6 +87,7 @@ const statuses: ConfigFileStatus[] = [
       scopeWarnings: [],
     },
     readError: null,
+    activeProfileId: null,
     matchStatus: { kind: "unmanaged" },
     lastSwitch: null,
   },
@@ -299,6 +301,38 @@ const ccScan = {
 };
 
 describe("App integration with the typed client boundary", () => {
+  it("opens suppliers from the tray and releases its event listener", async () => {
+    primeBackend();
+    let navigate: (() => void) | undefined;
+    const stop = vi.fn();
+    const subscribe = vi.spyOn(client, "onTrayNavigate").mockImplementation(async (handler) => {
+      navigate = handler;
+      return stop;
+    });
+    const view = render(<App />);
+    await waitFor(() => expect(navigate).toBeDefined());
+    act(() => navigate?.());
+    expect(await screen.findByRole("region", { name: "供应商工作区" })).toBeInTheDocument();
+    view.unmount();
+    expect(stop).toHaveBeenCalledOnce();
+    subscribe.mockRestore();
+  });
+  it("shows the tray window failure in the main recovery surface", async () => {
+    primeBackend();
+    let report: ((message: string) => void) | undefined;
+    const stop = vi.fn();
+    const subscribe = vi.spyOn(client, "onTrayError").mockImplementation(async (handler) => {
+      report = handler;
+      return stop;
+    });
+    const view = render(<App />);
+    await waitFor(() => expect(report).toBeDefined());
+    act(() => report?.("托盘窗口未完成初始化，请重试"));
+    expect(await screen.findByText("托盘窗口未完成初始化，请重试")).toBeInTheDocument();
+    view.unmount();
+    expect(stop).toHaveBeenCalledOnce();
+    subscribe.mockRestore();
+  });
   it("loads actual status, renders lanes, and completes a confirmed switch", async () => {
     primeBackend();
     const user = userEvent.setup();
@@ -691,7 +725,7 @@ describe("App integration with the typed client boundary", () => {
     expect(screen.queryByRole("region", { name: "备用网关 用量" })).not.toBeInTheDocument();
   });
 
-  it("重启后已持久化的用量收起状态保持收起", async () => {
+  it("重启后保持用量收起状态并查询显示摘要", async () => {
     primeUsageCollapseBackend({ ...defaultSettings, collapsedUsageIds: ["codex-gateway"] });
     const user = userEvent.setup();
     render(<App />);
@@ -703,7 +737,8 @@ describe("App integration with the typed client boundary", () => {
     const usageQueries = invokeMock.mock.calls.filter(
       ([command]) => command === "query_profile_usage",
     );
-    expect(usageQueries).toHaveLength(0);
+    expect(usageQueries).toHaveLength(1);
+    expect(await screen.findByLabelText("备用网关 用量摘要")).toHaveTextContent("余额 18.5 USD");
   });
 
   it("keeps the applied appearance when saving a replacement setting fails", async () => {

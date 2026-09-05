@@ -42,6 +42,7 @@ export function useAutoQuery<T>(
   }, [fallbackError, key, query]);
 
   useEffect(() => {
+    setData(null);
     void run();
     return () => {
       requestVersion.current += 1;

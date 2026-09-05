@@ -8,7 +8,7 @@ const BUILD_ARTIFACTS = {
   "windows-x64": [
     {
       destination: (version) => `${PACKAGE_PREFIX}_${version}_windows-x86_64-nsis.exe`,
-      directory: "nsis",
+      directory: "installer",
       matcher: /-setup\.exe$/i,
       signed: true,
     },

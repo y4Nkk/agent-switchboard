@@ -1,4 +1,4 @@
-//! Credential-free usage snapshots for the native tray.
+//! Credential-free usage snapshots for the custom tray panel.
 //!
 //! A successful provider query replaces its prior snapshot atomically. The
 //! snapshot stores only the normalized readings and a digest of the profile's

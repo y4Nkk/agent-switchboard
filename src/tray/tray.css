@@ -1,0 +1,47 @@
+/* The transparent window material is supplied by the operating system. */
+:root {
+  --asb-tray-surface: color-mix(in srgb, var(--asb-surface-menu) 82%, transparent);
+}
+
+html, body, #root { background: transparent; overflow: hidden; }
+.tray-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100dvh;
+  width: 100%;
+  /* The native window owns the outer silhouette; no second inset card. */
+  border: 0;
+  border-radius: 0;
+  background: var(--asb-tray-surface);
+  color: var(--asb-text);
+  overflow: hidden;
+}
+.tray-header, .tray-footer { flex-shrink: 0; }
+.tray-header { border-bottom: 1px solid var(--asb-hairline); }
+.tray-list { min-height: 0; overflow: auto; }
+.tray-group + .tray-group { border-top: 1px solid var(--asb-hairline); }
+.tray-client-logo { width: 20px; height: 20px; padding: 2px; border-radius: var(--asb-radius-check); background: var(--asb-text-on-action); }
+.tray-provider.asb-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px;
+  gap: 8px;
+  text-align: left;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.tray-provider.asb-btn:disabled { opacity: 1; }
+.tray-provider.asb-btn:disabled:not(.tray-provider-active) { color: var(--asb-text-muted); }
+.tray-provider.asb-btn:not(:disabled):hover { background: var(--asb-content-muted); }
+.tray-provider-active.asb-btn { background: var(--asb-row-selected); }
+.tray-check { display: flex; width: 18px; flex-shrink: 0; color: var(--asb-action); }
+.tray-provider-text { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+.tray-provider-name, .tray-detail { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tray-detail, .tray-time { color: var(--asb-text-muted); font-variant-numeric: tabular-nums; }
+.tray-switch { color: var(--asb-action); flex-shrink: 0; }
+.tray-footer { border-top: 1px solid var(--asb-hairline); }
+.tray-footer-button.asb-btn { border-color: transparent; background: transparent; min-width: 0; gap: 6px; }
+.tray-error { color: var(--asb-danger); overflow-wrap: anywhere; max-height: 96px; overflow: auto; }

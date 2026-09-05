@@ -6,9 +6,8 @@
       "bin/WebView2Loader.dll": "WebView2Loader.dll"
     },
     "windows": {
+      "webviewInstallMode": { "type": "skip" },
       "nsis": {
-        "headerImage": "windows/installer-header.bmp",
-        "sidebarImage": "windows/installer-sidebar.bmp",
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
         "languages": ["SimpChinese", "English"]

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ProviderUsagePanel } from "./ProviderUsagePanel";
+import { ProviderUsagePanel as UsageDetails } from "./ProviderUsagePanel";
+import { useProviderUsage } from "./use-provider-usage";
+import type { ComponentProps } from "react";
 import type { UsageHistorySeries, UsageSummary } from "../api/client";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -9,6 +11,11 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import { invoke } from "@tauri-apps/api/core";
 
 const invokeMock = vi.mocked(invoke);
+
+function ProviderUsagePanel(props: Omit<ComponentProps<typeof UsageDetails>, "usage">) {
+  const usage = useProviderUsage(props.profile);
+  return <UsageDetails {...props} usage={usage} />;
+}
 
 const usageQuery = {
   kind: "declarative" as const,
@@ -172,6 +179,19 @@ describe("ProviderUsagePanel", () => {
     await waitFor(() => expect(document.querySelectorAll(".recharts-line")).toHaveLength(2));
     expect(screen.getByRole("heading", { name: "余额趋势" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "已用趋势" })).toBeInTheDocument();
+  });
+
+  it("discards the old reading and queries again when the saved query changes", async () => {
+    mockProviderCommands(successfulSummary);
+    const { rerender } = render(<ProviderUsagePanel id="usage" profile={profile} />);
+    expect(await screen.findByRole("table", { name: "中继 A 用量读数" })).toBeInTheDocument();
+    mockProviderCommands(new Error("新查询返回 403"));
+    rerender(<ProviderUsagePanel id="usage" profile={{ ...profile, usageQuery: {
+      ...usageQuery, url: "{{baseUrl}}/other-balance",
+    } }} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("新查询返回 403");
+    expect(screen.queryByRole("table", { name: "中继 A 用量读数" })).not.toBeInTheDocument();
+    expect(callsFor("query_profile_usage")).toHaveLength(2);
   });
 
   it("opens the dedicated query workspace through its edit action", async () => {

@@ -40,6 +40,15 @@ import {
   refreshCodexOfficialReset,
   uploadCloudBackup,
   restoreCloudBackup,
+  getTraySnapshot,
+  trayReady,
+  hideTray,
+  openTrayMain,
+  switchTrayProvider,
+  quitTray,
+  resizeTray,
+  onTrayChanged,
+  onTrayNavigate,
 } from "./client";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -48,15 +57,46 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/plugin-updater", () => ({
   check: vi.fn(),
 }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
+import { listen } from "@tauri-apps/api/event";
 
 const invokeMock = vi.mocked(invoke);
 
 describe("api client boundary", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    vi.mocked(listen).mockReset();
+  });
+
+  it("routes the tray window through one typed command boundary", async () => {
+    invokeMock.mockResolvedValue(undefined);
+    await getTraySnapshot();
+    await trayReady();
+    await hideTray();
+    await openTrayMain(true);
+    await switchTrayProvider("profile-2");
+    await resizeTray(420);
+    await quitTray();
+    expect(invokeMock.mock.calls).toEqual([
+      ["tray_snapshot"], ["tray_ready"], ["tray_hide"],
+      ["tray_open_main", { providers: true }],
+      ["tray_switch", { profileId: "profile-2" }],
+      ["tray_resize", { height: 420 }], ["tray_quit"],
+    ]);
+  });
+
+  it("returns event cleanup functions to both window consumers", async () => {
+    const changed = vi.fn();
+    const navigate = vi.fn();
+    const stop = vi.fn();
+    vi.mocked(listen).mockResolvedValue(stop);
+    expect(await onTrayChanged(changed)).toBe(stop);
+    expect(await onTrayNavigate(navigate)).toBe(stop);
+    expect(listen).toHaveBeenCalledWith("tray-changed", changed);
+    expect(listen).toHaveBeenCalledWith("tray-navigate", navigate);
   });
 
   it("requests actual configuration status through the backend command", async () => {

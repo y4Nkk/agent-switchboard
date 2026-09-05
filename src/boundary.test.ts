@@ -89,9 +89,8 @@ describe("UI boundary", () => {
       targets: string[];
       resources: Record<string, string>;
       windows: {
+        webviewInstallMode: { type: string };
         nsis: {
-          headerImage: string;
-          sidebarImage: string;
           installerIcon: string;
           uninstallerIcon: string;
           languages: string[];
@@ -103,28 +102,47 @@ describe("UI boundary", () => {
       "bin/WebView2Loader.dll": "WebView2Loader.dll",
     });
     expect(windows.windows.nsis).toEqual({
-      headerImage: "windows/installer-header.bmp",
-      sidebarImage: "windows/installer-sidebar.bmp",
       installerIcon: "icons/icon.ico",
       uninstallerIcon: "icons/icon.ico",
       languages: ["SimpChinese", "English"],
     });
+    expect(windows.windows.webviewInstallMode).toEqual({ type: "skip" });
 
     expect(readBundle("tauri.macos.conf.json").targets).toEqual(["dmg", "app"]);
     expect(readBundle("tauri.linux.conf.json").targets).toEqual([
       "deb",
       "appimage",
     ]);
+  });
 
-    for (const [asset, width, height] of [
-      [windows.windows.nsis.headerImage, 150, 57],
-      [windows.windows.nsis.sidebarImage, 164, 314],
-    ] as const) {
-      const bitmap = readFileSync(join(repoRoot, "src-tauri", asset));
-      expect(bitmap.subarray(0, 2).toString("ascii")).toBe("BM");
-      expect(bitmap.readUInt32LE(18)).toBe(width);
-      expect(bitmap.readUInt32LE(22)).toBe(height);
-    }
+  it("uses one custom Windows installer for manual installation and updates", () => {
+    const packageConfig = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+    const builder = readFileSync(join(repoRoot, "scripts", "build-windows-installer.ps1"), "utf8");
+    const release = readFileSync(join(repoRoot, "scripts", "updater-release.mjs"), "utf8");
+    expect(packageConfig.scripts["tauri:build:windows"]).toContain("scripts/build-windows-installer.ps1");
+    expect(builder).toContain("node node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.windows.conf.json @TauriArguments");
+    expect(builder).toContain("AgentSwitchboard.Installer.Engine.exe");
+    expect(builder).toContain("AgentSwitchboard.Installer.Theme.xaml");
+    expect(builder).toContain("node node_modules/@tauri-apps/cli/tauri.js signer sign $output");
+    expect(builder).toContain("$engineVersion -ne $version");
+    expect(builder).not.toContain("$EnginePath");
+    expect(release).toContain('directory: "installer"');
+    expect(release).not.toContain('directory: "nsis"');
+  });
+
+  it("lets the native tray window own its only outer outline", () => {
+    const config = JSON.parse(readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"));
+    const tray = config.app.windows.find((window: { label: string }) => window.label === "tray");
+    expect(tray.decorations).toBe(false);
+    expect(tray.shadow).toBe(false);
+    expect(tray.transparent).toBe(true);
+    const css = readFileSync(join(repoRoot, "src", "tray", "tray.css"), "utf8");
+    const panel = css.match(/\.tray-panel\s*\{([^}]+)\}/)?.[1];
+    expect(panel).toContain("border: 0;");
+    expect(panel).toContain("border-radius: 0;");
+    expect(css).not.toContain("--asb-tray-radius");
+    const popup = readFileSync(join(repoRoot, "src-tauri", "src", "tray", "popup.rs"), "utf8");
+    expect(popup).toContain("DWMWA_COLOR_NONE");
   });
 
   it("publishes the complete direct-update release only after all payloads are ready", () => {

@@ -25,6 +25,19 @@ const DEPRECATED_MODEL_KEY: &str = "env.ANTHROPIC_SMALL_FAST_MODEL";
 /// removed whenever a profile declares a primary model.
 const ENV_MODEL_KEY: &str = "env.ANTHROPIC_MODEL";
 
+pub(crate) fn matches_provider_credentials(
+    current: &str,
+    profile: &crate::contracts::ProviderProfile,
+) -> Result<bool, AdapterError> {
+    let root = parse(current)?;
+    let token = get(&root, "env.ANTHROPIC_AUTH_TOKEN").and_then(Json::as_str);
+    let api_key = get(&root, "env.ANTHROPIC_API_KEY").and_then(Json::as_str);
+    Ok(match profile.route_mode {
+        RouteMode::Official => token.is_none_or(str::is_empty) && api_key.is_none_or(str::is_empty),
+        RouteMode::Custom => !profile.api_key.is_empty() && token == Some(profile.api_key.as_str()),
+    })
+}
+
 fn parse(text: &str) -> Result<Json, AdapterError> {
     let value = serde_json::from_str::<Json>(text).map_err(|e| AdapterError {
         message: "JSON 格式无效".to_string(),

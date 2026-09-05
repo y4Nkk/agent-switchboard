@@ -1,19 +1,19 @@
-import type { ConfigFileStatus } from "../api/client";
+import type { ConfigFileStatus, ProviderProfile } from "../api/client";
 
 /**
- * The profile match is the only trustworthy source for the supplier that is
- * currently projected into a client configuration. Route parsing supplies
- * connection facts, but client files do not contain the profile name.
+ * Provider identity comes from the live connection, not configuration drift
+ * or the profile mentioned by a historical write.
  */
-export function currentProviderName(status: ConfigFileStatus | undefined): string {
+export function currentProviderName(
+  status: ConfigFileStatus | undefined,
+  profiles: readonly ProviderProfile[],
+): string {
   if (!status?.route) return "未加载";
 
-  if (
-    status.matchStatus.kind === "matchesProfile" ||
-    status.matchStatus.kind === "profileChanged"
-  ) {
-    return status.matchStatus.profileName;
-  }
+  const active = profiles.find(
+    (profile) => profile.app === status.app && profile.id === status.activeProfileId,
+  );
+  if (active) return active.name;
 
   if (status.route.providerName) return status.route.providerName;
   if (status.route.routeMode === "official") return "官方登录";

@@ -4,6 +4,8 @@ import { cleanup } from "@testing-library/react";
 import { cloneElement, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { clearToasts } from "../components/use-toast";
 
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+
 // jsdom reports every element as 0x0 and has no ResizeObserver, so Recharts'
 // ResponsiveContainer never measures a positive size and renders nothing.
 // Swap in a fixed-size passthrough that stamps the plot size onto the chart

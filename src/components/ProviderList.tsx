@@ -35,6 +35,9 @@ import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { StarlightLayer } from "./experience/StarlightLayer";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
+import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
+import { formatUsageSummary } from "../lib/usage-format";
+import { cx } from "@/utils/cx";
 import { Tooltip } from "./Tooltip";
 
 interface Props {
@@ -96,6 +99,11 @@ interface RowProps {
   renderPreview?: (profile: ProviderProfile) => ReactNode;
 }
 
+function ConfiguredProviderRow(props: RowProps) {
+  const usage = useProviderUsage(props.profile);
+  return <ProviderRow {...props} usage={usage} />;
+}
+
 /** Provider cards use the app's compact routing layout. The grip handle is
  * the only drag affordance; the row body stays a plain click-to-select
  * target. */
@@ -116,7 +124,8 @@ function ProviderRow({
   onConfigureUsage,
   onDelete,
   renderPreview,
-}: RowProps) {
+  usage,
+}: RowProps & { usage?: ProviderUsage }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: profile.id,
     disabled: !sortable,
@@ -208,8 +217,8 @@ function ProviderRow({
         </span>
         <span className="asb-row-main">
           <span className="asb-row-name">{profile.name}</span>
-          {(modelText || websiteUrl || official) && (
-            <span className="asb-row-meta">
+          {(modelText || websiteUrl || official || (usage && !usageOpen)) && (
+            <span className={cx("asb-row-meta", usage && !usageOpen && "asb-row-meta-with-usage")}>
               {modelText}
               {modelText && (websiteUrl || official) && " · "}
               {websiteUrl ? (
@@ -229,6 +238,14 @@ function ProviderRow({
               ) : official ? (
                 <span>官方登录</span>
               ) : null}
+              {usage && !usageOpen && (
+                <span aria-label={`${profile.name} 用量摘要`} title={usage.error ?? undefined}>
+                  {(modelText || websiteUrl || official) && " · "}
+                  {usage.data ? formatUsageSummary(usage.data) : usage.error ? "用量查询失败" : "用量读取中…"}
+                  {usage.data && usage.error && "（更新失败，显示上次读数）"}
+                  {usage.data && usage.querying && "（更新中…）"}
+                </span>
+              )}
             </span>
           )}
         </span>
@@ -398,10 +415,11 @@ function ProviderRow({
           error={probe.error}
         />
       )}
-      {usageOpen && profile.usageQuery && (
+      {usageOpen && usage && (
         <ProviderUsagePanel
           id={`provider-usage-${profile.id}`}
           profile={profile}
+          usage={usage}
           onConfigure={onConfigureUsage}
         />
       )}
@@ -463,8 +481,9 @@ export function ProviderList({
     <ul className="asb-rows" role="listbox" aria-label="供应商列表">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          {profiles.map((profile) => (
-            <ProviderRow
+          {profiles.map((profile) => {
+            const Row = profile.usageQuery ? ConfiguredProviderRow : ProviderRow;
+            return <Row
               key={profile.id}
               profile={profile}
               active={profile.id === activeProfileId}
@@ -486,8 +505,8 @@ export function ProviderList({
               onConfigureUsage={onConfigureUsage}
               onDelete={onDelete}
               renderPreview={renderPreview}
-            />
-          ))}
+            />;
+          })}
         </SortableContext>
       </DndContext>
     </ul>

@@ -1,3 +1,5 @@
+import type { UsageReading, UsageSummary } from "../api/client";
+
 const exactValueFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 const compactValueFormatter = new Intl.NumberFormat("zh-CN", {
   notation: "compact",
@@ -23,4 +25,26 @@ export function formatCompactUsageValue(value: number): string {
 function appendUnit(value: string, unit: string | null | undefined): string {
   const normalized = unit?.trim();
   return normalized ? `${value} ${normalized}` : value;
+}
+
+export function usageProgress(reading: UsageReading): number | null {
+  if (reading.total === null || !Number.isFinite(reading.total) || reading.total <= 0) return null;
+  const used = reading.used ?? (reading.remaining === null ? null : reading.total - reading.remaining);
+  if (used === null || !Number.isFinite(used)) return null;
+  return (used / reading.total) * 100;
+}
+
+/** Keep plans and units separate; a balance alone cannot imply a percentage. */
+export function formatUsageSummary(summary: UsageSummary): string {
+  if (summary.readings.length === 0) return "暂无额度读数";
+  return summary.readings.map((reading, index) => {
+    const usedPercent = usageProgress(reading);
+    const parts: string[] = [];
+    if (usedPercent !== null) parts.push(`剩余 ${exactValueFormatter.format(100 - usedPercent)}%`);
+    if (reading.remaining !== null) parts.push(`余额 ${formatUsageValue(reading.remaining, reading.unit)}`);
+    else if (usedPercent === null && reading.used !== null) parts.push(`已用 ${formatUsageValue(reading.used, reading.unit)}`);
+    if (parts.length === 0) parts.push("暂无额度读数");
+    const name = reading.planName?.trim() || (summary.readings.length > 1 ? `额度 ${index + 1}` : "");
+    return `${name ? `${name}：` : ""}${parts.join(" · ")}`;
+  }).join("；");
 }

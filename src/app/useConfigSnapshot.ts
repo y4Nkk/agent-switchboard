@@ -68,15 +68,11 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
     return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
 
-  /** Profile id the live file of one client actually matches, when the app
-   * can tell; null otherwise. */
+  /** Live provider identity is independent of full configuration equality. */
   const activeProfileId = useCallback(
     (app: AppKind) => {
       const status = (statuses ?? []).find((item) => item.app === app);
-      if (status?.matchStatus.kind === "matchesProfile") {
-        return status.matchStatus.profileId;
-      }
-      return null;
+      return status?.activeProfileId ?? null;
     },
     [statuses],
   );

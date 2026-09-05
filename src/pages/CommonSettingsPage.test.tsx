@@ -75,6 +75,7 @@ const appliedStatus: ConfigFileStatus = {
   syntaxOk: true,
   route: null,
   readError: null,
+  activeProfileId: "gateway",
   matchStatus: { kind: "matchesProfile", profileId: "gateway", profileName: "网关" },
   lastSwitch: null,
 };

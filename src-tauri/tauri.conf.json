@@ -9,6 +9,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Agent Switchboard",
@@ -19,6 +20,29 @@
         "minWidth": 940,
         "minHeight": 640,
         "decorations": false
+      },
+      {
+        "label": "tray",
+        "title": "Agent Switchboard",
+        "url": "tray.html",
+        "create": false,
+        "focus": false,
+        "visible": false,
+        "width": 360,
+        "height": 520,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "windowEffects": {
+          "effects": ["popover", "acrylic"],
+          "state": "active",
+          "radius": 20
+        }
       }
     ],
     "security": {

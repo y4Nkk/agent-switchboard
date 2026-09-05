@@ -7,7 +7,7 @@ import {
   type AppSettings,
   type CommandError,
 } from "../api/client";
-import { quotedFontFamily } from "../lib/font-family";
+import { applyAppAppearance } from "../lib/app-appearance";
 
 interface AppSettingsDeps {
   busy: boolean;
@@ -58,24 +58,7 @@ export function useAppSettings({ busy, onError, clearError, setBusy }: AppSettin
   }, [busy, clearError, onError, setBusy]);
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (!appSettings || appSettings.theme === "system") {
-      delete root.dataset.theme;
-    } else {
-      root.dataset.theme = appSettings.theme;
-    }
-    if (!appSettings || appSettings.motion === "system") {
-      delete root.dataset.motion;
-    } else {
-      root.dataset.motion = appSettings.motion;
-    }
-    // The user font leads the display and interface stacks in tokens.css;
-    // removing the override falls back to the bundled default there.
-    if (appSettings) {
-      root.style.setProperty("--asb-font-user", quotedFontFamily(appSettings.interfaceFont));
-    } else {
-      root.style.removeProperty("--asb-font-user");
-    }
+    applyAppAppearance(appSettings);
   }, [appSettings]);
 
   const saveAppSettings = useCallback(

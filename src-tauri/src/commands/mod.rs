@@ -62,6 +62,7 @@ pub async fn set_app_settings(
     app: tauri::AppHandle,
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
+    let refresh_app = app.clone();
     let saved = observe(RuntimeLogAction::AppSettingsSaved, async move {
         let current_state = state(&app)?;
         settings
@@ -94,6 +95,7 @@ pub async fn set_app_settings(
         saved
     })
     .await?;
+    crate::tray::refresh(&refresh_app);
     Ok(saved)
 }
 
@@ -115,6 +117,7 @@ pub async fn repair_app_settings(app: tauri::AppHandle) -> Result<AppSettings, C
     .await?;
     apply_desktop_settings(&app_for_apply, &repaired)?;
     crate::runtime_log::set_level(repaired.runtime_log_level);
+    crate::tray::refresh(&app_for_apply);
     Ok(repaired)
 }
 
@@ -365,7 +368,7 @@ pub async fn test_usage_query(
 }
 
 /// Runs the persisted query of one provider and records the successful
-/// credential-free summary for the native tray. The renderer passes only the
+/// credential-free summary for the custom tray panel. The renderer passes only the
 /// stable profile id; this backend boundary owns the query and API key.
 #[tauri::command]
 pub async fn query_profile_usage(

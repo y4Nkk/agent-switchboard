@@ -45,6 +45,12 @@ export default defineConfig({
   build: {
     target: "es2022",
     outDir: "dist",
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        tray: fileURLToPath(new URL("./tray.html", import.meta.url)),
+      },
+    },
   },
   test: {
     environment: "jsdom",

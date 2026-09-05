@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConfigFileStatus } from "../api/client";
+import type { ConfigFileStatus, ProviderProfile } from "../api/client";
 import { currentProviderName } from "./current-provider-name";
 
 function status(matchStatus: ConfigFileStatus["matchStatus"]): ConfigFileStatus {
@@ -24,23 +24,42 @@ function status(matchStatus: ConfigFileStatus["matchStatus"]): ConfigFileStatus 
       scopeWarnings: [],
     },
     readError: null,
+    activeProfileId: null,
     matchStatus,
     lastSwitch: null,
   };
 }
 
 describe("currentProviderName", () => {
+  const profiles: ProviderProfile[] = [{
+    id: "zhipu", app: "claude", name: "Zhipu GLM", routeMode: "custom",
+    model: null, baseUrl: "https://open.bigmodel.cn", apiKey: "test-api-key",
+    modelOptions: null, websiteUrl: null,
+  }];
   it("uses the active matching profile name over the custom connection mode", () => {
     expect(
       currentProviderName(
-        status({ kind: "matchesProfile", profileId: "zhipu", profileName: "Zhipu GLM" }),
+        { ...status({ kind: "matchesProfile", profileId: "zhipu", profileName: "Old name" }), activeProfileId: "zhipu" },
+        profiles,
       ),
     ).toBe("Zhipu GLM");
   });
 
   it("does not turn an unrecognized custom route into a supplier name", () => {
-    expect(currentProviderName(status({ kind: "externallyModified", at: "2026-09-01T09:42:30Z" }))).toBe(
+    expect(currentProviderName(status({ kind: "externallyModified", at: "2026-09-01T09:42:30Z" }), profiles)).toBe(
       "未识别的供应商",
     );
+  });
+
+  it.each(["codex", "claude"] as const)("keeps %s provider identity despite model or settings differences", (app) => {
+    const live = status({ kind: "profileChanged", profileName: "Historical supplier" });
+    live.app = app;
+    live.activeProfileId = "zhipu";
+    expect(currentProviderName(live, [{ ...profiles[0], app }])).toBe("Zhipu GLM");
+  });
+
+  it("does not display the historical profile as the active supplier", () => {
+    expect(currentProviderName(status({ kind: "profileChanged", profileName: "Historical supplier" }), profiles))
+      .toBe("未识别的供应商");
   });
 });

@@ -14,6 +14,22 @@ const API_KEY_KEY: &str = "OPENAI_API_KEY";
 const API_KEY_MODE: &str = "apikey";
 const CHATGPT_MODE: &str = "chatgpt";
 
+pub(crate) fn matches_provider_identity(
+    current: Option<&str>,
+    profile: &crate::contracts::ProviderProfile,
+) -> Result<bool, AdapterError> {
+    let root = parse(current.unwrap_or_default())?;
+    let mode = root.get(AUTH_MODE_KEY).and_then(Value::as_str);
+    let key = root.get(API_KEY_KEY).and_then(Value::as_str);
+    Ok(match profile.route_mode {
+        RouteMode::Official => mode != Some(API_KEY_MODE)
+            && (mode == Some(CHATGPT_MODE) || key.is_none_or(str::is_empty)),
+        RouteMode::Custom => mode == Some(API_KEY_MODE)
+            && !profile.api_key.is_empty()
+            && key == Some(profile.api_key.as_str()),
+    })
+}
+
 fn parse(current: &str) -> Result<Map<String, Value>, AdapterError> {
     if current.is_empty() {
         return Ok(Map::new());

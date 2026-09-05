@@ -26,6 +26,7 @@ pub struct ConfigFileStatus {
     pub route: Option<RouteState>,
     pub read_error: Option<String>,
     pub match_status: MatchStatus,
+    pub active_profile_id: Option<String>,
     pub last_switch: Option<ConfigWriteRecord>,
 }
 
@@ -177,12 +178,56 @@ fn match_status_for(
     ))
 }
 
+fn active_profile_id(
+    profiles: &[ProviderProfile],
+    kind: AppKind,
+    text: &str,
+    codex_auth: Option<&str>,
+    last: Option<&ConfigWriteRecord>,
+) -> Result<Option<String>, CommandError> {
+    let mut candidates = Vec::new();
+    for profile in profiles.iter().filter(|profile| profile.app == kind) {
+        if adapter::matches_provider_identity(text, codex_auth, profile).map_err(|error| {
+            CommandError::new("provider-identity-unavailable", error.to_string())
+        })? {
+            candidates.push(profile.id.clone());
+        }
+    }
+    if candidates.len() == 1 {
+        return Ok(candidates.pop());
+    }
+    // Identical connection profiles cannot be distinguished by model or list order.
+    Ok(last
+        .and_then(|record| record.profile_id.as_ref())
+        .filter(|id| candidates.contains(id))
+        .cloned())
+}
+
 /// The logic owner behind the `config_status` command. Also consumed by the
 /// tray, which rebuilds its menu labels outside the command pipeline.
 pub(crate) fn config_status_report(
     state: &crate::local_state::LocalState,
 ) -> Result<Vec<ConfigFileStatus>, CommandError> {
     let io = FsIo;
+    let profiles = state
+        .configuration()
+        .list_providers()
+        .map_err(store_error)?
+        .into_iter()
+        .map(|record| record.profile)
+        .collect::<Vec<_>>();
+    let auth_path = crate::local_state::LocalState::codex_auth_path()
+        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+    let codex_auth = match io.read_file(&auth_path) {
+        Ok(text) => Some(text),
+        Err(error) if error.kind() == ErrorKind::NotFound => None,
+        Err(_) => {
+            return Err(CommandError::new(
+                "provider-identity-unavailable",
+                "无法读取 Codex 登录缓存",
+            ))
+        }
+    };
     [AppKind::Codex, AppKind::Claude]
         .into_iter()
         .map(|kind| {
@@ -203,6 +248,13 @@ pub(crate) fn config_status_report(
                         route: Some(adapter::route_state(kind, &text)),
                         read_error: None,
                         match_status: match_status_for(state, kind, &text)?,
+                        active_profile_id: active_profile_id(
+                            &profiles,
+                            kind,
+                            &text,
+                            codex_auth.as_deref(),
+                            last_switch.as_ref(),
+                        )?,
                         last_switch,
                     },
                     Err(_) => ConfigFileStatus {
@@ -213,6 +265,7 @@ pub(crate) fn config_status_report(
                         route: None,
                         read_error: None,
                         match_status: MatchStatus::Unknown,
+                        active_profile_id: None,
                         last_switch,
                     },
                 },
@@ -224,6 +277,7 @@ pub(crate) fn config_status_report(
                     route: None,
                     read_error: None,
                     match_status: MatchStatus::Unknown,
+                    active_profile_id: None,
                     last_switch,
                 },
                 Err(_) => ConfigFileStatus {
@@ -234,6 +288,7 @@ pub(crate) fn config_status_report(
                     route: None,
                     read_error: Some("无法读取配置文件".to_string()),
                     match_status: MatchStatus::Unknown,
+                    active_profile_id: None,
                     last_switch,
                 },
             };
@@ -356,6 +411,66 @@ mod tests {
                 profile_id: "p1".to_string(),
                 profile_name: "当前档案".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn active_identity_is_independent_of_config_match_and_restores() {
+        for app in [AppKind::Codex, AppKind::Claude] {
+            let mut official = profile();
+            official.app = app;
+            official.route_mode = asb_core::RouteMode::Official;
+            official.base_url = None;
+            official.api_key.clear();
+            let text = match app {
+                AppKind::Codex => {
+                    "model = \"different-model\"\nmodel_reasoning_effort = \"high\"\n"
+                }
+                AppKind::Claude => r#"{"model":"different-model","effortLevel":"high"}"#,
+            };
+            let mut restored = log("same", None, None);
+            restored.operation = WriteOperation::Restore;
+            assert_eq!(
+                active_profile_id(&[official], app, text, None, Some(&restored)).unwrap(),
+                Some("p1".into())
+            );
+        }
+    }
+
+    #[test]
+    fn identical_connections_require_a_unique_match_or_matching_history() {
+        let first = profile();
+        let mut second = first.clone();
+        second.id = "p2".into();
+        second.model = Some("another-model".into());
+        let profiles = [first, second];
+        let text = "openai_base_url = \"https://gateway.example/v1\"\n";
+        let auth = Some(r#"{"auth_mode":"apikey","OPENAI_API_KEY":"test-api-key"}"#);
+        assert_eq!(
+            active_profile_id(&profiles, AppKind::Codex, text, auth, None).unwrap(),
+            None
+        );
+        assert_eq!(
+            active_profile_id(
+                &profiles,
+                AppKind::Codex,
+                text,
+                auth,
+                Some(&log("old", Some("p2"), None))
+            )
+            .unwrap(),
+            Some("p2".into())
+        );
+        assert_eq!(
+            active_profile_id(
+                &profiles,
+                AppKind::Codex,
+                text,
+                auth,
+                Some(&log("old", Some("removed"), None))
+            )
+            .unwrap(),
+            None
         );
     }
 

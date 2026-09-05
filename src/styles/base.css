@@ -1393,6 +1393,11 @@ button:disabled {
   color: var(--asb-text-muted);
 }
 
+.asb-row-meta-with-usage {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* The host is a quiet link, muted until hover: it opens the system browser
    via the opener plugin (wry blocks in-webview new windows). */
 .asb-row-host {

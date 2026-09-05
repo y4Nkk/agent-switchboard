@@ -168,6 +168,22 @@ try {
     [IO.File]::WriteAllText($payload, $syntheticToken)
     Compress-Archive -Path (Join-Path $source '*') -DestinationPath $artifact -Force
     Assert-ScannerRejects $artifact $syntheticToken
+
+    $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+    $fixtureSource = Join-Path $testRoot 'Fixture.cs'
+    [IO.File]::WriteAllText($fixtureSource, 'class Fixture { static void Main() { throw new System.Exception("The scanner must never run this entrypoint"); } }')
+    $engine = Join-Path $testRoot 'Engine.exe'
+    $customInstaller = Join-Path $testRoot 'Custom.exe'
+    foreach ($contents in @('ordinary package content', $syntheticToken)) {
+      [IO.File]::WriteAllText($payload, $contents)
+      Compress-Archive -Path $payload -DestinationPath $engine -Force
+      & $compiler /nologo /target:winexe "/out:$customInstaller" "/resource:$engine,AgentSwitchboard.Installer.Engine.exe" $fixtureSource
+      if ($LASTEXITCODE -ne 0) { throw 'Could not build the custom installer scanner fixture.' }
+      if ($contents -eq $syntheticToken) {
+        Assert-ScannerRejects $customInstaller $syntheticToken
+      }
+      else { Invoke-Scanner $customInstaller }
+    }
   }
   else {
     'Package extraction fixtures require macOS or Linux; raw signature scan completed.'

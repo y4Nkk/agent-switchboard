@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "tray",
+  "description": "Custom tray panel event subscription.",
+  "windows": ["tray"],
+  "permissions": ["core:event:default"]
+}

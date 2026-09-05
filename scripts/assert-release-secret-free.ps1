@@ -5,7 +5,7 @@ param(
   [string]$ArtifactPath
 )
 
-# Extracts one release artifact (.exe NSIS installer, .msix, .dmg, .AppImage,
+# Extracts one release artifact (.exe custom installer, .msix, .dmg, .AppImage,
 # .deb or .app.tar.gz) into a temp directory and scans every contained file for
 # credential-shaped data. 7z is required for .exe; the other formats use
 # tools preinstalled on their building runner (hdiutil on macOS,
@@ -83,6 +83,7 @@ try {
   else {
     switch ($extension) {
     '.exe' {
+      if (-not $IsWindows) { throw 'Windows installer inspection requires Windows.' }
       $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
       if ($null -eq $sevenZip) {
         $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue
@@ -90,7 +91,17 @@ try {
       if ($null -eq $sevenZip) {
         throw '7z is required to inspect the NSIS installer contents.'
       }
-      & $sevenZip.Source x -y "-o$scanRoot" $resolvedArtifact | Out-Null
+      # Reading manifest resources does not invoke the installer's entrypoint.
+      $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($resolvedArtifact))
+      $resource = $assembly.GetManifestResourceStream('AgentSwitchboard.Installer.Engine.exe')
+      if ($null -eq $resource) { throw 'Custom installer contains no installation engine.' }
+      $enginePath = Join-Path $scanRoot 'Engine.exe'
+      $engineFile = [IO.File]::Create($enginePath)
+      try { $resource.CopyTo($engineFile) }
+      finally { $engineFile.Dispose(); $resource.Dispose() }
+      Copy-Item -LiteralPath $resolvedArtifact -Destination (Join-Path $scanRoot 'Installer.exe')
+      $engineContents = Join-Path $scanRoot 'engine-contents'
+      & $sevenZip.Source x -y "-o$engineContents" $enginePath | Out-Null
       if ($LASTEXITCODE -ne 0) {
         throw "7z could not extract the installer (exit code $LASTEXITCODE)."
       }

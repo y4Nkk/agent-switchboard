@@ -9,7 +9,7 @@ interface State {
 }
 
 /** Keeps the desktop shell alive if one workspace surface throws during
-    rendering. The title bar and native tray recovery path remain available. */
+    rendering. The title bar and independent tray window remain available. */
 export class AppErrorBoundary extends Component<Props, State> {
   state: State = { failed: false };
 

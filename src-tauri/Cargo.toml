@@ -49,7 +49,7 @@ tauri = { version = "2", default-features = false, features = [
     "wry",
     "compression",
     "dynamic-acl",
-    "tray-icon",
+    "macos-private-api",
 ] }
 # Opens provider service URLs in the system browser. wry silently blocks
 # `target=_blank` new-window requests, so external links must go through it.
@@ -59,6 +59,13 @@ tauri-plugin-updater = "2.11"
 tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-autostart = "2"
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+tauri = { version = "2", default-features = false, features = ["tray-icon"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+zbus = "5.19"
 
 [dev-dependencies]
 minisign-verify = "0.2.5"

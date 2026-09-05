@@ -4,6 +4,7 @@ import type {
   ConfigFileStatus,
   LockStatus,
   MatchStatus,
+  ProviderProfile,
   RouteState,
 } from "../api/client";
 import { ClientLogo } from "../components/ClientLogo";
@@ -18,6 +19,7 @@ import { currentProviderName } from "../lib/current-provider-name";
 
 interface OverviewPageProps {
   statuses: ConfigFileStatus[] | null;
+  profiles: ProviderProfile[];
   locks: Partial<Record<AppKind, LockStatus>>;
   busy: boolean;
   /** The relay stays hidden while the provider editor is open. */
@@ -34,9 +36,12 @@ function routesFrom(statuses: ConfigFileStatus[]): {
   return { codex: find("codex"), claude: find("claude") };
 }
 
-function providerNamesFrom(statuses: ConfigFileStatus[]): Partial<Record<AppKind, string>> {
+function providerNamesFrom(
+  statuses: ConfigFileStatus[],
+  profiles: ProviderProfile[],
+): Partial<Record<AppKind, string>> {
   return Object.fromEntries(
-    statuses.map((status) => [status.app, currentProviderName(status)]),
+    statuses.map((status) => [status.app, currentProviderName(status, profiles)]),
   ) as Partial<Record<AppKind, string>>;
 }
 
@@ -90,11 +95,13 @@ function statusPill(status: ConfigFileStatus): { ok: boolean; text: string } {
 
 function ConfigStatusCard({
   status,
+  profiles,
   lock,
   busy,
   onRecoverLock,
 }: {
   status: ConfigFileStatus;
+  profiles: ProviderProfile[];
   lock: LockStatus | undefined;
   busy: boolean;
   onRecoverLock: (app: AppKind) => void;
@@ -128,7 +135,7 @@ function ConfigStatusCard({
           <div className="asb-status-row">
             <dt>当前服务</dt>
             <dd>
-              {currentProviderName(status)}
+              {currentProviderName(status, profiles)}
               {" · "}
               {status.route?.model ?? "默认模型"}
             </dd>
@@ -186,6 +193,7 @@ function ConfigStatusCard({
 /** Overview: the dual-client relay plus per-client configuration status. */
 export function OverviewPage({
   statuses,
+  profiles,
   locks,
   busy,
   relayHidden,
@@ -197,7 +205,7 @@ export function OverviewPage({
       {!relayHidden && (
         <DualRelay
           routes={routesFrom(statuses ?? [])}
-          providerNames={providerNamesFrom(statuses ?? [])}
+          providerNames={providerNamesFrom(statuses ?? [], profiles)}
         />
       )}
       <section className="asb-panel" aria-label="配置状态">
@@ -212,6 +220,7 @@ export function OverviewPage({
             <ConfigStatusCard
               key={status.app}
               status={status}
+              profiles={profiles}
               lock={locks[status.app]}
               busy={busy}
               onRecoverLock={onRecoverLock}

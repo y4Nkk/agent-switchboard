@@ -403,7 +403,7 @@ impl LocalState {
         Ok(())
     }
 
-    /// The last successful provider-usage snapshots for the native tray. The
+    /// The last successful provider-usage snapshots for the custom tray panel. The
     /// file contains normalized readings plus query digests only: no API key,
     /// endpoint, raw response, or usage-script source is persisted here.
     pub(crate) fn load_usage_cache(&self) -> Result<Option<UsageCache>, String> {
