@@ -104,6 +104,10 @@ npm run dev:desktop
 
 欢迎通过 [Issues](https://github.com/y4Nkk/agent-switchboard/issues) 提交问题或建议。提交代码前请阅读 [AGENTS.md](AGENTS.md)，其中说明了配置写入、安全边界和验证要求。
 
+## 社区
+
+感谢 [LINUX DO](https://linux.do/) 社区的支持与交流。
+
 ## 项目文档
 
 | 文档 | 内容 |
