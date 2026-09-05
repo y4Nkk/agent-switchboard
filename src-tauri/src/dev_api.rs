@@ -16,6 +16,9 @@ use std::thread;
 use tauri::AppHandle;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
+#[cfg(all(test, target_os = "windows"))]
+mod sandbox_tests;
+
 pub(crate) const DEV_API_HOST: &str = "127.0.0.1";
 pub(crate) const DEV_API_PORT: u16 = 1422;
 pub(crate) const DEV_API_HEALTH_STATUS: u16 = 204;

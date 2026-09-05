@@ -4,6 +4,7 @@ import {
   getLockStatus,
   listBackups,
   listProfiles,
+  onTrayChanged,
   type AppKind,
   type BackupRecord,
   type CommandError,
@@ -67,6 +68,25 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void onTrayChanged(() => {
+      void refresh();
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch((caught) => {
+        if (!disposed) onError(caught as CommandError);
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [onError, refresh]);
 
   /** Live provider identity is independent of full configuration equality. */
   const activeProfileId = useCallback(

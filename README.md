@@ -114,6 +114,7 @@ npm run dev:desktop
 | --- | --- |
 | [DESIGN.md](DESIGN.md) | `Frosted Relay` 的视觉与交互契约 |
 | [progress.md](progress.md) | 当前阶段目标、验收与退出条件 |
+| [CHANGELOG.md](CHANGELOG.md) | GitHub Release 与应用内更新说明 |
 | [AGENTS.md](AGENTS.md) | 贡献规范、产品边界与安全规则 |
 
 ## 许可证

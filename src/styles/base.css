@@ -1864,6 +1864,43 @@ button:disabled {
   color: var(--asb-text-muted);
 }
 
+.asb-update-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  margin-top: var(--asb-space-2);
+}
+
+.asb-update-notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+}
+
+.asb-update-notes-section h4,
+.asb-update-notes-section ul,
+.asb-update-notes-text {
+  margin: 0;
+}
+
+.asb-update-notes-section h4 {
+  color: var(--asb-text-primary);
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-update-notes-section ul {
+  padding-left: var(--asb-space-4);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-update-notes-text {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: pre-wrap;
+}
+
 .asb-recovery-panel {
   align-self: stretch;
 }

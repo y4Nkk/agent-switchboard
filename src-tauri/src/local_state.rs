@@ -193,8 +193,7 @@ impl LocalState {
     }
 
     /// Resolves the one global instruction document owned by each supported
-    /// client. Codex honors an explicit CODEX_HOME when available; Claude
-    /// follows its user-level .claude directory.
+    /// client. Both clients honor their explicit configuration directories.
     pub fn global_prompt_target(&self, app: AppKind) -> Result<PathBuf, String> {
         Self::global_prompt_path(app)
     }
@@ -204,7 +203,15 @@ impl LocalState {
         let codex_home = std::env::var_os("CODEX_HOME")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);
-        Ok(target_in_home(Path::new(&home), codex_home.as_deref(), app))
+        let claude_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Ok(target_in_home(
+            &home,
+            codex_home.as_deref(),
+            claude_dir.as_deref(),
+            app,
+        ))
     }
 
     pub fn global_prompt_path(app: AppKind) -> Result<PathBuf, String> {
@@ -212,9 +219,13 @@ impl LocalState {
         let codex_home = std::env::var_os("CODEX_HOME")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);
+        let claude_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
         Ok(global_prompt_target_in_home(
             Path::new(&home),
             codex_home.as_deref(),
+            claude_dir.as_deref(),
             app,
         ))
     }
@@ -551,24 +562,30 @@ impl LocalState {
     }
 }
 
-fn target_in_home(home: &Path, codex_home: Option<&Path>, app: AppKind) -> PathBuf {
+fn target_in_home(
+    home: &Path,
+    codex_home: Option<&Path>,
+    claude_dir: Option<&Path>,
+    app: AppKind,
+) -> PathBuf {
     match app {
         AppKind::Codex => match codex_home {
             Some(directory) => directory.join("config.toml"),
             None => home.join(".codex").join("config.toml"),
         },
-        AppKind::Claude => home.join(".claude").join("settings.json"),
+        AppKind::Claude => {
+            claude_credentials_path_in_home(home, claude_dir).with_file_name("settings.json")
+        }
     }
 }
 
-fn global_prompt_target_in_home(home: &Path, codex_home: Option<&Path>, app: AppKind) -> PathBuf {
-    match app {
-        AppKind::Codex => match codex_home {
-            Some(directory) => directory.join(app.global_prompt_file_name()),
-            None => home.join(".codex").join(app.global_prompt_file_name()),
-        },
-        AppKind::Claude => home.join(".claude").join(app.global_prompt_file_name()),
-    }
+fn global_prompt_target_in_home(
+    home: &Path,
+    codex_home: Option<&Path>,
+    claude_dir: Option<&Path>,
+    app: AppKind,
+) -> PathBuf {
+    target_in_home(home, codex_home, claude_dir, app).with_file_name(app.global_prompt_file_name())
 }
 
 fn codex_auth_path_in_home(home: &Path, codex_home: Option<&Path>) -> PathBuf {
@@ -640,7 +657,7 @@ mod tests {
 
         assert!(!state.configuration().legacy_store_path().exists());
         assert!(!state.configuration().configuration_dir().exists());
-        let target = target_in_home(&directory.path().join("home"), None, AppKind::Codex);
+        let target = target_in_home(&directory.path().join("home"), None, None, AppKind::Codex);
         assert!(!target.exists());
     }
 
@@ -651,15 +668,15 @@ mod tests {
         let codex_home = directory.path().join("custom-codex-home");
 
         assert_eq!(
-            global_prompt_target_in_home(&home, None, AppKind::Codex),
+            global_prompt_target_in_home(&home, None, None, AppKind::Codex),
             home.join(".codex").join("AGENTS.md")
         );
         assert_eq!(
-            global_prompt_target_in_home(&home, Some(&codex_home), AppKind::Codex),
+            global_prompt_target_in_home(&home, Some(&codex_home), None, AppKind::Codex),
             codex_home.join("AGENTS.md")
         );
         assert_eq!(
-            global_prompt_target_in_home(&home, None, AppKind::Claude),
+            global_prompt_target_in_home(&home, None, None, AppKind::Claude),
             home.join(".claude").join("CLAUDE.md")
         );
     }
@@ -689,7 +706,7 @@ mod tests {
         let codex_home = directory.path().join("alternate-codex-home");
 
         assert_eq!(
-            target_in_home(&home, Some(&codex_home), AppKind::Codex),
+            target_in_home(&home, Some(&codex_home), None, AppKind::Codex),
             codex_home.join("config.toml")
         );
     }
@@ -710,6 +727,29 @@ mod tests {
         );
         assert!(!home.exists());
         assert!(!config_dir.exists());
+    }
+
+    #[test]
+    fn claude_switch_and_prompt_targets_follow_the_credential_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let home = directory.path().join("home");
+        let custom = directory.path().join("alternate-claude-config");
+        for config_dir in [None, Some(custom.as_path())] {
+            let parent = claude_credentials_path_in_home(&home, config_dir)
+                .parent()
+                .unwrap()
+                .to_path_buf();
+            assert_eq!(
+                target_in_home(&home, None, config_dir, AppKind::Claude),
+                parent.join("settings.json")
+            );
+            assert_eq!(
+                global_prompt_target_in_home(&home, None, config_dir, AppKind::Claude),
+                parent.join("CLAUDE.md")
+            );
+        }
+        assert!(!home.exists());
+        assert!(!custom.exists());
     }
 
     #[test]

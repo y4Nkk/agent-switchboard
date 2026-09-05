@@ -23,6 +23,7 @@ const nativeUpdate = {} as Update;
 const discoveredUpdate: UpdateCheck = {
   currentVersion: "0.1.1",
   latestVersion: "0.2.0",
+  releaseNotes: null,
   checkedAt: "2026-09-01T00:00:00Z",
   update: nativeUpdate,
 };

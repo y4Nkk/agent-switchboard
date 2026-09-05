@@ -230,12 +230,20 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: 提取本版本更新说明
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          node scripts/updater-release.mjs release-notes \
+            --changelog-file CHANGELOG.md \
+            --version "$version" > release-notes.md
+
       - name: 生成签名更新清单
         run: |
           version="${GITHUB_REF_NAME#v}"
           node scripts/updater-release.mjs manifest \
             --cargo-manifest Cargo.toml \
             --input-directory dist \
+            --notes-file release-notes.md \
             --output-file dist/latest.json \
             --repository "$GITHUB_REPOSITORY" \
             --tag "$GITHUB_REF_NAME" \
@@ -246,11 +254,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
             gh release delete-asset "$GITHUB_REF_NAME" latest.json --yes || true
             echo "RELEASE_PREEXISTING=true" >> "$GITHUB_ENV"
           else
             gh release create "$GITHUB_REF_NAME" \
-              --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+              --draft --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
             echo "RELEASE_PREEXISTING=false" >> "$GITHUB_ENV"
           fi
 

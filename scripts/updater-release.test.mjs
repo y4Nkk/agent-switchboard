@@ -7,7 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { generateUpdaterManifest, stageBuildArtifacts } from "./updater-release.mjs";
+import { generateUpdaterManifest, readReleaseNotes, stageBuildArtifacts } from "./updater-release.mjs";
 
 const VERSION = "0.1.2";
 const TAG = `v${VERSION}`;
@@ -39,6 +39,12 @@ async function writeAllUpdaterAssets(root) {
     await writeFixture(root, name, `payload:${name}`);
     await writeFixture(root, `${name}.sig`, `signature:${name}\n`);
   }
+}
+
+async function writeReleaseNotes(root, contents = "### 新功能\n\n- 更新说明\n") {
+  const notesFile = path.join(root, "release-notes.md");
+  await writeFile(notesFile, contents);
+  return notesFile;
 }
 
 test("stageBuildArtifacts names distinct macOS updater payloads and preserves signatures", async () => {
@@ -90,11 +96,13 @@ test("generateUpdaterManifest maps every updater asset to the release URL and ac
   const root = await mkdtemp(path.join(tmpdir(), "asb-updater-manifest-"));
   const cargoManifest = await writeCargoManifest(root);
   await writeAllUpdaterAssets(root);
+  const notesFile = await writeReleaseNotes(root);
   const outputFile = path.join(root, "latest.json");
 
   const manifest = await generateUpdaterManifest({
     cargoManifest,
     inputDirectory: root,
+    notesFile,
     outputFile,
     pubDate: "2026-09-03T00:00:00.000Z",
     repository: REPOSITORY,
@@ -118,18 +126,52 @@ test("generateUpdaterManifest maps every updater asset to the release URL and ac
     `https://github.com/${REPOSITORY}/releases/download/${TAG}/agent-switchboard_${VERSION}_linux-x86_64.AppImage`,
   );
   assert.deepEqual(JSON.parse(await readFile(outputFile, "utf8")), manifest);
+  assert.equal(manifest.notes, "### 新功能\n\n- 更新说明");
+});
+
+test("readReleaseNotes returns only the requested version body", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "asb-release-notes-"));
+  const changelogFile = path.join(root, "CHANGELOG.md");
+  await writeFile(changelogFile, "# 更新日志\n\n## [0.1.2] - 2026-09-03\n\n### 新功能\n\n- 最新功能\n\n## [0.1.1] - 2026-09-01\n\n### 修复\n\n- 旧修复\n");
+
+  await assert.doesNotReject(async () => {
+    assert.equal(await readReleaseNotes({ changelogFile, version: VERSION }), "### 新功能\n\n- 最新功能");
+  });
+  await assert.rejects(readReleaseNotes({ changelogFile, version: "0.1.3" }), /Missing release notes/);
+});
+
+test("generateUpdaterManifest rejects empty release notes", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "asb-updater-empty-notes-"));
+  const cargoManifest = await writeCargoManifest(root);
+  await writeAllUpdaterAssets(root);
+  const notesFile = await writeReleaseNotes(root, "\n");
+
+  await assert.rejects(
+    generateUpdaterManifest({
+      cargoManifest,
+      inputDirectory: root,
+      notesFile,
+      outputFile: path.join(root, "latest.json"),
+      repository: REPOSITORY,
+      tag: TAG,
+      version: VERSION,
+    }),
+    /Release notes must not be empty/,
+  );
 });
 
 test("generateUpdaterManifest rejects a missing updater signature", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "asb-updater-missing-signature-"));
   const cargoManifest = await writeCargoManifest(root);
   await writeAllUpdaterAssets(root);
+  const notesFile = await writeReleaseNotes(root);
   await writeFixture(root, `agent-switchboard_${VERSION}_linux-x86_64.deb.sig`, "");
 
   await assert.rejects(
     generateUpdaterManifest({
       cargoManifest,
       inputDirectory: root,
+      notesFile,
       outputFile: path.join(root, "latest.json"),
       repository: REPOSITORY,
       tag: TAG,
@@ -143,11 +185,13 @@ test("generateUpdaterManifest rejects a tag that diverges from the workspace ver
   const root = await mkdtemp(path.join(tmpdir(), "asb-updater-version-"));
   const cargoManifest = await writeCargoManifest(root);
   await writeAllUpdaterAssets(root);
+  const notesFile = await writeReleaseNotes(root);
 
   await assert.rejects(
     generateUpdaterManifest({
       cargoManifest,
       inputDirectory: root,
+      notesFile,
       outputFile: path.join(root, "latest.json"),
       repository: REPOSITORY,
       tag: "v9.9.9",

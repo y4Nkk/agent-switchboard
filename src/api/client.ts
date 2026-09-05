@@ -1021,6 +1021,7 @@ export function cancelOfficialLogin(target: AppKind): Promise<void> {
 export interface UpdateCheck {
   currentVersion: string;
   latestVersion: string;
+  releaseNotes: string | null;
   checkedAt: string;
   update: Update;
 }
@@ -1073,6 +1074,7 @@ export async function checkUpdate(): Promise<UpdateCheck | null> {
       ? {
           currentVersion: update.currentVersion,
           latestVersion: update.version,
+          releaseNotes: update.body?.trim() || null,
           checkedAt: new Date().toISOString(),
           update,
         }

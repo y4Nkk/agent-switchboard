@@ -13,6 +13,7 @@ vi.mock("./use-toast", () => ({ toast: vi.fn() }));
 const available: UpdateCheck = {
   currentVersion: "0.1.0",
   latestVersion: "0.2.0",
+  releaseNotes: "### 新功能\n\n- 支持在应用内阅读更新内容\n\n### 修复\n\n- 修复更新状态不同步",
   checkedAt: "2026-08-31T08:00:00Z",
   update: {} as Update,
 };
@@ -114,6 +115,15 @@ describe("UpdateSection", () => {
     expect(screen.getByText("发现新版本 0.2.0")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "下载并安装" }));
     expect(props.onInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the discovered version's structured release notes", () => {
+    renderSection({ result: available, checkedAt: available.checkedAt });
+
+    const notes = screen.getByLabelText("0.2.0 更新内容");
+    expect(notes).toHaveTextContent("新功能");
+    expect(notes).toHaveTextContent("支持在应用内阅读更新内容");
+    expect(notes).toHaveTextContent("修复更新状态不同步");
   });
 
   it("shows byte progress while an update package has no content length", () => {

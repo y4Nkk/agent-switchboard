@@ -9,6 +9,7 @@ vi.mock("../api/client", () => ({
   listProfiles: vi.fn(() => Promise.resolve([])),
   listBackups: vi.fn(() => Promise.resolve([])),
   getLockStatus: vi.fn(() => Promise.resolve({ state: "free" })),
+  onTrayChanged: vi.fn(() => Promise.resolve(() => {})),
 }));
 
 describe("useConfigSnapshot active provider", () => {
@@ -37,5 +38,34 @@ describe("useConfigSnapshot active provider", () => {
     const { result } = renderHook(() => useConfigSnapshot({ onError }));
     await waitFor(() => expect(result.current.statuses).not.toBeNull());
     expect(result.current.activeProfileId("codex")).toBeNull();
+  });
+
+  it("refreshes the main-window snapshot when a tray switch completes", async () => {
+    const before: ConfigFileStatus = {
+      app: "codex", path: "/isolated/config", exists: true, syntaxOk: true,
+      route: null, readError: null, lastSwitch: null, activeProfileId: "codex-first",
+      matchStatus: { kind: "matchesProfile", profileId: "codex-first", profileName: "第一档案" },
+    };
+    const after = {
+      ...before,
+      activeProfileId: "codex-second",
+      matchStatus: { kind: "matchesProfile" as const, profileId: "codex-second", profileName: "第二档案" },
+    };
+    let changed: (() => void) | undefined;
+    const stop = vi.fn();
+    vi.mocked(client.getConfigStatus).mockResolvedValueOnce([before]).mockResolvedValue([after]);
+    vi.mocked(client.onTrayChanged).mockImplementation(async (handler) => {
+      changed = handler;
+      return stop;
+    });
+    const onError = vi.fn();
+    const { result, unmount } = renderHook(() => useConfigSnapshot({ onError }));
+
+    await waitFor(() => expect(result.current.activeProfileId("codex")).toBe("codex-first"));
+    changed?.();
+    await waitFor(() => expect(result.current.activeProfileId("codex")).toBe("codex-second"));
+
+    unmount();
+    expect(stop).toHaveBeenCalledOnce();
   });
 });

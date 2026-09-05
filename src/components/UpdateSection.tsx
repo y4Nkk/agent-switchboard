@@ -8,6 +8,35 @@ import { toast } from "./use-toast";
 
 const releasesUrl = "https://github.com/y4Nkk/agent-switchboard/releases/latest";
 
+function ReleaseNotes({ notes, version }: { notes: string; version: string }) {
+  const sections = notes
+    .split(/\r?\n(?=### )/)
+    .map((section) => {
+      const [heading, ...lines] = section.trim().split(/\r?\n/);
+      return {
+        title: heading.replace(/^###\s+/, ""),
+        items: lines
+          .map((line) => line.replace(/^-\s+/, "").trim())
+          .filter(Boolean),
+      };
+    })
+    .filter((section) => section.title && section.items.length > 0);
+
+  if (sections.length === 0) {
+    return <p className="asb-update-notes-text">{notes}</p>;
+  }
+  return (
+    <div className="asb-update-notes" aria-label={`${version} 更新内容`}>
+      {sections.map((section) => (
+        <section key={section.title} className="asb-update-notes-section">
+          <h4>{section.title}</h4>
+          <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function formatProgress(progress: UpdateDownloadProgress): string {
   if (progress.totalBytes === null || progress.totalBytes === 0) {
     return `正在下载更新 ${Math.floor(progress.downloadedBytes / 1024)} KB`;
@@ -94,6 +123,7 @@ export function UpdateSection({
         <div className="asb-app-setting-copy">
           <span className="asb-checkbox-label">{label}</span>
           {detail ? <span className="asb-app-setting-detail">{detail}</span> : null}
+          {result?.releaseNotes ? <ReleaseNotes notes={result.releaseNotes} version={result.latestVersion} /> : null}
         </div>
         <div className="asb-panel-actions">
           {restartRequired ? (

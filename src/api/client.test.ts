@@ -332,6 +332,7 @@ describe("api client boundary", () => {
     const nativeUpdate = {
       currentVersion: "0.1.2",
       version: "0.2.0",
+      body: "### 新功能\n\n- 支持更新说明",
       downloadAndInstall,
       close,
     };
@@ -342,6 +343,7 @@ describe("api client boundary", () => {
     expect(update).toEqual(expect.objectContaining({
       currentVersion: "0.1.2",
       latestVersion: "0.2.0",
+      releaseNotes: "### 新功能\n\n- 支持更新说明",
       update: nativeUpdate,
     }));
 

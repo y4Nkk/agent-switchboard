@@ -174,6 +174,23 @@ export async function assertReleaseVersion({ cargoManifest, tag, version }) {
   }
 }
 
+export async function readReleaseNotes({ changelogFile, version }) {
+  assertVersion(version);
+  const changelog = (await readFile(changelogFile, "utf8")).replaceAll("\r\n", "\n");
+  const heading = new RegExp(`^## \\[${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\](?:\\s+-\\s+.+)?\\s*$`, "m");
+  const match = heading.exec(changelog);
+  if (!match || match.index === undefined) {
+    throw new Error(`Missing release notes for version ${version} in ${changelogFile}`);
+  }
+  const afterHeading = changelog.slice(match.index + match[0].length);
+  const nextVersion = afterHeading.search(/^## \[/m);
+  const notes = (nextVersion === -1 ? afterHeading : afterHeading.slice(0, nextVersion)).trim();
+  if (notes.length === 0) {
+    throw new Error(`Release notes for version ${version} are empty`);
+  }
+  return notes;
+}
+
 async function requireAsset(inputDirectory, assetName) {
   const assetPath = path.join(inputDirectory, assetName);
   try {
@@ -191,6 +208,7 @@ export async function generateUpdaterManifest({
   cargoManifest,
   inputDirectory,
   outputFile,
+  notesFile,
   pubDate,
   repository,
   tag,
@@ -198,6 +216,10 @@ export async function generateUpdaterManifest({
 }) {
   assertRepository(repository);
   await assertReleaseVersion({ cargoManifest, tag, version });
+  const notes = (await readFile(notesFile, "utf8")).trim();
+  if (notes.length === 0) {
+    throw new Error("Release notes must not be empty");
+  }
   const platforms = {};
 
   for (const [platform, assetForVersion] of PLATFORM_ASSETS) {
@@ -216,7 +238,7 @@ export async function generateUpdaterManifest({
 
   const manifest = {
     version,
-    notes: "",
+    notes,
     pub_date: pubDate ?? new Date().toISOString(),
     platforms,
   };
@@ -271,6 +293,7 @@ async function main() {
     await generateUpdaterManifest({
       cargoManifest: options.cargoManifest,
       inputDirectory: options.inputDirectory,
+      notesFile: options.notesFile,
       outputFile: options.outputFile,
       pubDate: options.pubDate,
       repository: options.repository,
@@ -279,8 +302,16 @@ async function main() {
     });
     return;
   }
+  if (command === "release-notes") {
+    const notes = await readReleaseNotes({
+      changelogFile: options.changelogFile,
+      version: options.version,
+    });
+    process.stdout.write(`${notes}\n`);
+    return;
+  }
   throw new Error(
-    `Expected command stage, validate-version, workspace-version, or manifest; received ${command ?? "nothing"}`,
+    `Expected command stage, validate-version, workspace-version, release-notes, or manifest; received ${command ?? "nothing"}`,
   );
 }
 
