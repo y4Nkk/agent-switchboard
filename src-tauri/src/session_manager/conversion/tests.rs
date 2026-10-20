@@ -37,6 +37,25 @@ fn messages(source: &SessionSource) -> Vec<SessionMessage> {
 }
 
 #[test]
+fn source_identity_is_shared_by_path_components_discovery_and_saved_copies() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = fixture(temp.path(), "wf_example", &[json!({"type":"result","text":"retained"})]);
+    let root = temp.path().join("projects");
+    let discovered = sources::collect(&root).paths.into_iter().find(|path| is_workflow(path)).unwrap();
+    let equivalent = root.join("encoded-project/./parent-session//subagents/workflows/wf_example/journal.jsonl");
+    assert_eq!(source_key(&path), source_key(&discovered));
+    assert_eq!(source_key(&equivalent), source_key(&discovered));
+    assert_eq!(candidate(&path).unwrap().id(), candidate(&discovered).unwrap().id());
+    let outcome = run(temp.path(), &[candidate(&equivalent).unwrap().id()]);
+    assert_eq!((outcome.converted, outcome.records, outcome.failures.len()), (1, 1, 0));
+    fs::remove_file(&path).unwrap();
+    let (copies, failures) = store::list(&temp.path().join("state"));
+    assert_eq!(copies.len(), 1);
+    assert!(failures.is_empty());
+    assert_eq!(copies[0].0.source_key, source_key(&equivalent));
+}
+
+#[test]
 fn preserves_every_event_field_occurrence_and_time_without_rewriting_the_original() {
     let temp = tempfile::tempdir().unwrap();
     let values = vec![json!({"type":"launched"}), json!({"type":"result", "key":"result-1",

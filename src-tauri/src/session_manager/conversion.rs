@@ -60,7 +60,10 @@ fn candidate(path: &Path) -> Result<Candidate, String> {
         revision: fingerprint(path)?, parent_id, workflow, parent_file })
 }
 
-fn source_key(path: &Path) -> String { format!("{:x}", Sha256::digest(path.as_os_str().as_encoded_bytes())) }
+fn source_key(path: &Path) -> String {
+    let normalized: PathBuf = path.components().collect();
+    format!("{:x}", Sha256::digest(normalized.as_os_str().as_encoded_bytes()))
+}
 
 pub(super) fn pending_issue(path: &Path) -> Result<SessionIssue, String> { Ok(candidate(path)?.issue()) }
 
