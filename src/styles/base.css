@@ -7,6 +7,7 @@
 @import "./base/shell.css";
 @import "./base/workspace-main.css";
 @import "./base/scroll-area.css";
+@import "./base/warning-notice.css";
 @import "./base/buttons.css";
 @import "./base/collapsible.css";
 @import "./base/client-route.css";

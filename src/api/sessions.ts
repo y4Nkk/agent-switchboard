@@ -57,6 +57,18 @@ export const getSessionCopyText = (source: SessionCopySource): Promise<string> =
 export interface SessionIssue {
   app: AppKind;
   message: string;
+  conversionId: string | null;
+}
+
+export interface SessionConversionOutcome {
+  converted: number;
+  records: number;
+  failures: SessionIssue[];
+}
+
+/** Converts only the exact backend-discovered revisions into application-owned records. */
+export function convertSessionSources(ids: string[]): Promise<SessionConversionOutcome> {
+  return invoke("convert_session_sources", { ids });
 }
 
 export interface SessionSearchHit {

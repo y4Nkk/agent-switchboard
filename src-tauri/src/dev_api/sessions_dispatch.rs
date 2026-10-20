@@ -6,9 +6,10 @@ use tauri::AppHandle;
 pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result<Option<Value>, CommandError> {
     macro_rules! command { ($future:expr) => { as_json($future.await) }; }
     let result = match request.command.as_str() {
+        "convert_session_sources" => command!(commands::convert_session_sources(app.clone(), argument(&request.args, "ids")?)),
         "search_sessions" => command!(commands::search_sessions(app.clone(), argument(&request.args, "request")?)),
         "get_session_message_page" => command!(commands::get_session_message_page(app.clone(), argument(&request.args, "request")?)),
-        "get_session_message_content" => command!(commands::get_session_message_content(argument(&request.args, "request")?)),
+        "get_session_message_content" => command!(commands::get_session_message_content(app.clone(), argument(&request.args, "request")?)),
         "get_session_copy_text" => command!(commands::get_session_copy_text(app.clone(), argument(&request.args, "source")?)),
         "get_session_metadata" => command!(commands::get_session_metadata(app.clone(),
             argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
@@ -22,7 +23,7 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
             argument(&request.args, "requests")?, argument(&request.args, "change")?)),
         "export_session_markdown" => command!(commands::export_session_markdown(app.clone(),
             argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
-        "resume_session" => command!(commands::resume_session(argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
+        "resume_session" => command!(commands::resume_session(app.clone(), argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "delete_session" => command!(commands::delete_session(app.clone(),
             argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "delete_sessions" => command!(commands::delete_sessions(app.clone(), argument(&request.args, "requests")?)),

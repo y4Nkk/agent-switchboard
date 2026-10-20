@@ -36,7 +36,7 @@ pub fn search_sessions(
     request: SessionSearchRequest,
 ) -> Result<SessionSearchPage, String> {
     let filters = Filters::parse(request)?;
-    let (mut sources, issues) = scan_sources()?;
+    let (mut sources, issues) = scan_sources(root)?;
     let values = organization::load(root)?;
     for source in &mut sources { organization::apply(&mut source.meta, &values); }
     Ok(search_sources(sources, issues, &filters))
@@ -83,8 +83,8 @@ fn search_sources(
             Ok(ControlFlow::Continue(()))
         });
         match scan {
-            Ok(warnings) => issues.extend(warnings.into_iter().map(|message| SessionIssue { app: source.meta.app, message })),
-            Err(message) => issues.push(SessionIssue { app: source.meta.app, message }),
+            Ok(warnings) => issues.extend(warnings.into_iter().map(|message| SessionIssue::new(source.meta.app, message))),
+            Err(message) => issues.push(SessionIssue::new(source.meta.app, message)),
         }
         if total == before && metadata_fields(&source.meta)
             .iter().any(|field| query.find(field).is_some()) {

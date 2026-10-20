@@ -62,7 +62,7 @@ fn scans_supported_sources_without_exposing_paths() {
 }
 
 #[test]
-fn claude_discovery_reports_journals_without_a_session_identity() {
+fn claude_discovery_identifies_workflow_journals_as_convertible_event_sources() {
     let temp = tempdir().expect("temp");
     let root = temp.path().join("projects");
     let project = root.join("encoded-project");
@@ -79,9 +79,22 @@ fn claude_discovery_reports_journals_without_a_session_identity() {
     let scan = scan_session_roots(&[(AppKind::Claude, root)], &HashMap::new());
 
     assert_eq!(scan.issues.len(), 1);
-    assert!(scan.issues[0].message.contains("不含可识别的会话身份"));
+    assert!(scan.issues[0].message.contains("workflow 事件日志"));
+    assert!(scan.issues[0].conversion_id.is_some());
     assert_eq!(scan.sessions.len(), 1);
     assert_eq!(scan.sessions[0].session_id, "claude-session");
+}
+
+#[test]
+fn unknown_identity_failures_remain_visible_without_a_conversion_action() {
+    let temp = tempdir().unwrap();
+    let root = temp.path().join("projects");
+    write(&root.join("project/unknown.jsonl"), "{\"type\":\"unidentified\"}\n");
+    let scan = scan_session_roots(&[(AppKind::Claude, root)], &HashMap::new());
+    assert!(scan.sessions.is_empty());
+    assert_eq!(scan.issues.len(), 1);
+    assert!(scan.issues[0].message.contains("不含可识别的会话身份"));
+    assert!(scan.issues[0].conversion_id.is_none());
 }
 
 #[test]

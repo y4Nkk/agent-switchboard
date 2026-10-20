@@ -153,7 +153,7 @@ pub fn save_bookmark(
     session_id: &str,
     message_id: &str,
 ) -> Result<BookmarkSummary, String> {
-    let mut source = resolve_session(app, session_id)?;
+    let mut source = resolve_session(root, app, session_id)?;
     organization::apply(&mut source.meta, &organization::load(root)?);
     let message = source.find(message_id)?;
     save_snapshot(root, &source.meta, &message).map(Into::into)

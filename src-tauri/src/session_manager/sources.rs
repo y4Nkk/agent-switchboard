@@ -1,4 +1,4 @@
-use super::{codex_titles, native, parser, SessionIssue, SessionMessage, SessionMeta};
+use super::{codex_titles, conversion, native, parser, SessionIssue, SessionMessage, SessionMeta};
 use asb_core::contracts::AppKind;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -10,6 +10,7 @@ pub(crate) struct SessionSource {
     pub meta: SessionMeta,
     pub paths: Vec<PathBuf>,
     pub native_history: Option<PathBuf>,
+    pub converted: Option<PathBuf>,
 }
 
 impl SessionSource {
@@ -17,6 +18,7 @@ impl SessionSource {
         &self,
         mut visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>,
     ) -> Result<Vec<String>, String> {
+        if let Some(path) = &self.converted { return conversion::visit(path, visitor); }
         if self.native_history.is_none() && self.paths.is_empty() {
             return Ok(vec!["仅保留会话身份，原始记录和原生消息正文均不可用".into()]);
         }
@@ -64,7 +66,7 @@ pub(crate) fn collect(root: &Path) -> CollectedFiles {
     result
 }
 
-pub(crate) fn scan() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+pub(super) fn scan() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
     let roots = super::session_roots()?;
     let codex_root = super::codex_root()?;
     let mut indexed = HashMap::new();
@@ -72,35 +74,35 @@ pub(crate) fn scan() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> 
     let mut native_unavailable = false;
     match native::threads(&codex_root) {
         Ok((threads, warnings)) => {
-            issues.extend(warnings.into_iter().map(|message| SessionIssue { app: AppKind::Codex, message }));
+            issues.extend(warnings.into_iter().map(|message| SessionIssue::new(AppKind::Codex, message)));
             for thread in threads {
                 let mut paths = Vec::new();
                 if roots.iter().any(|(app, root)| *app == AppKind::Codex && thread.rollout.starts_with(root))
                     && thread.rollout.is_file() && !thread.rollout.is_symlink() {
                     match parser::session_identity(&thread.rollout) {
                         Ok(Some(identity)) if identity.id == thread.meta.session_id => paths.push(thread.rollout),
-                        _ => issues.push(SessionIssue { app: AppKind::Codex, message: format!("会话 {} 的原生记录身份与登记信息不一致", thread.meta.session_id) }),
+                        _ => issues.push(SessionIssue::new(AppKind::Codex, format!("会话 {} 的原生记录身份与登记信息不一致", thread.meta.session_id))),
                     }
                 }
                 let history = match thread.history.try_exists() {
                     Ok(false) => None,
                     Ok(true) => Some(thread.history),
                     Err(error) => {
-                        issues.push(SessionIssue { app: AppKind::Codex, message: error.to_string() });
+                        issues.push(SessionIssue::new(AppKind::Codex, error.to_string()));
                         Some(thread.history)
                     }
                 };
                 indexed.insert((AppKind::Codex, thread.meta.session_id.clone()), SessionSource {
-                    meta: thread.meta, paths, native_history: history });
+                    meta: thread.meta, paths, native_history: history, converted: None });
             }
         },
-        Err(message) => { native_unavailable = true; issues.push(SessionIssue { app: AppKind::Codex, message }); },
+        Err(message) => { native_unavailable = true; issues.push(SessionIssue::new(AppKind::Codex, message)); },
     }
     scan_roots(&roots, &mut indexed, &mut issues);
     let (titles, warnings) = if indexed.values().any(|source| source.meta.app == AppKind::Codex && source.meta.can_delete) {
         codex_titles::load(&codex_root)
     } else { (HashMap::new(), Vec::new()) };
-    issues.extend(warnings.into_iter().map(|message| SessionIssue { app: AppKind::Codex, message }));
+    issues.extend(warnings.into_iter().map(|message| SessionIssue::new(AppKind::Codex, message)));
     for source in indexed.values_mut() {
         source.paths.sort();
         if source.meta.app == AppKind::Codex && source.meta.can_delete {
@@ -118,11 +120,15 @@ pub(super) fn scan_roots(
 ) {
     for (app, root) in roots {
         let files = collect(root);
-        issues.extend(files.issues.into_iter().map(|message| SessionIssue { app: *app, message }));
+        issues.extend(files.issues.into_iter().map(|message| SessionIssue::new(*app, message)));
         for path in files.paths {
+            if *app == AppKind::Claude && conversion::is_workflow(&path) {
+                issues.push(conversion::pending_issue(&path).unwrap_or_else(|message| SessionIssue::new(*app, message)));
+                continue;
+            }
             match index_file(*app, path, indexed) {
-                Ok(warnings) => issues.extend(warnings.into_iter().map(|message| SessionIssue { app: *app, message })),
-                Err(message) => issues.push(SessionIssue { app: *app, message }),
+                Ok(warnings) => issues.extend(warnings.into_iter().map(|message| SessionIssue::new(*app, message))),
+                Err(message) => issues.push(SessionIssue::new(*app, message)),
             }
         }
     }
@@ -162,6 +168,6 @@ fn index_file(app: AppKind, path: PathBuf, indexed: &mut HashMap<(AppKind, Strin
     let (mut meta, warnings) = parser::parse_session(app, &path).map_err(|error| format!("{}: {error}", path.display()))?;
     issues.extend(warnings);
     if child { meta.parent_session_id = Some(id); meta.session_id = key_id.clone(); }
-    indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_history: None });
+    indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_history: None, converted: None });
     Ok(issues)
 }

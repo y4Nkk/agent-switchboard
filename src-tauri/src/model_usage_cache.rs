@@ -70,9 +70,9 @@ pub(crate) fn get_or_refresh(
     let roots = crate::session_manager::session_roots()?;
     let native_root = crate::local_state::codex_paths::sqlite_root(&crate::session_manager::codex_root()?);
     let calendar = Local::now().format("%Y-%m-%d%:z").to_string();
-    let encoded = serde_json::to_string(&("response-receipts-v1", &roots, native_root, calendar)).map_err(|_| "会话来源目录无法序列化")?;
+    let encoded = serde_json::to_string(&("response-receipts-workflow-sources", &roots, native_root, calendar)).map_err(|_| "会话来源目录无法序列化")?;
     resolve_source(state, request, asb_switch::sha256_hex(&encoded), |range| {
-        let (sources, issues) = crate::session_manager::scan_sources()?;
+        let (sources, issues) = crate::session_manager::scan_native_sources()?;
         Ok(crate::model_usage::report(range, sources, issues, chrono::Local::now()))
     })
 }

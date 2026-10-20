@@ -132,6 +132,7 @@ macro_rules! handler {
             crate::commands::codex_probe::delete_codex_probe_batches,
             crate::commands::usage_history::get_usage_history,
             crate::commands::search_sessions,
+            crate::commands::convert_session_sources,
             crate::commands::storage::storage_usage,
             crate::commands::storage::clear_webview_cache,
             crate::commands::storage::preview_history_archive,

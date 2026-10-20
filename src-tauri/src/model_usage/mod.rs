@@ -98,9 +98,10 @@ pub(crate) fn report(
     source_issues: Vec<crate::session_manager::SessionIssue>,
     now: DateTime<Local>,
 ) -> ModelUsageReport {
+    sources.retain(|source| source.converted.is_none());
     let mut aggregate = Accumulator::new(CalendarRange::new(range, now));
     sources.sort_by(|left, right| (left.meta.app, &left.meta.session_id).cmp(&(right.meta.app, &right.meta.session_id)));
-    let mut issues: Vec<ModelUsageIssue> = source_issues.into_iter()
+    let mut issues: Vec<ModelUsageIssue> = source_issues.into_iter().filter(|issue| issue.conversion_id.is_none())
         .map(|issue| ModelUsageIssue { app: issue.app, message: issue.message }).collect();
     let mut codex = HashMap::new();
     let mut claude = HashMap::new();

@@ -5,6 +5,17 @@ use asb_core::contracts::AppKind;
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
+#[tauri::command]
+pub async fn convert_session_sources(
+    app_handle: AppHandle,
+    ids: Vec<String>,
+) -> Result<session_manager::SessionConversionOutcome, CommandError> {
+    let local = state(&app_handle)?;
+    blocking(move || session_manager::convert_session_sources(local.root(), &ids)
+        .map_err(|message| CommandError::localized("session-conversion-failed", "errors.sessions.conversionFailed",
+            message.clone(), serde_json::json!({ "detail": message })))).await
+}
+
 /// Searches only backend-resolved session roots and returns a bounded page.
 #[tauri::command]
 pub async fn search_sessions(
@@ -166,9 +177,11 @@ pub async fn get_session_message_page(
 
 #[tauri::command]
 pub async fn get_session_message_content(
+    app_handle: AppHandle,
     request: session_manager::MessageContentRequest,
 ) -> Result<session_manager::ContentPage, CommandError> {
-    blocking(move || session_manager::load_content(request).map_err(session_content_error)).await
+    let local = state(&app_handle)?;
+    blocking(move || session_manager::load_content(local.root(), request).map_err(session_content_error)).await
 }
 
 #[tauri::command]
@@ -198,12 +211,14 @@ pub async fn get_session_copy_text(app_handle: AppHandle, source: session_manage
 /// executable command.
 #[tauri::command]
 pub async fn resume_session(
+    app_handle: AppHandle,
     app: AppKind,
     session_id: String,
 ) -> Result<crate::session_manager::SessionResume, CommandError> {
+    let local = state(&app_handle)?;
     observe(RuntimeLogAction::SessionResumed, async move {
         blocking(move || {
-            crate::session_manager::resume_session(app, &session_id)
+            crate::session_manager::resume_session(local.root(), app, &session_id)
                 .map_err(|message| CommandError::localized(
                     "session-resume-failed",
                     "errors.sessions.resumeFailed",

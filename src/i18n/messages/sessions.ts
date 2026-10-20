@@ -3,6 +3,11 @@ import type { MessageEntry } from "../types";
 /** Domain dictionary for sessions (zh-CN / en-US pairs). Keys are prefixed with
  * "sessions." and must never collide with another domain file. */
 export const messages = {
+  "sessions.convert.action": ["一键完整转换（{count} 份）", "Convert all records ({count})"],
+  "sessions.convert.busy": ["正在完整转换…", "Converting complete records…"],
+  "sessions.convert.note": ["转换副本保存在本机，保留全部事件字段；在终端恢复时打开所属主会话。", "Local converted copies preserve every event field. Resume opens the parent session."],
+  "sessions.convert.done": ["已完整转换 {count} 份日志，共 {records} 条事件。", "Converted {count} complete logs containing {records} events."],
+  "sessions.convert.failures": ["{count} 份来源未确认完成转换，原始日志已保留，请查看具体原因。", "Conversion could not be confirmed for {count} sources. Original logs were retained; see the details."],
   "sessions.message.expandImages": ["展开消息与 {count} 张图片", "Expand message and {count} images"],
   "sessions.message.imageAlt": ["会话图片 {index}", "Session image {index}"],
   "sessions.message.imageUnavailable": ["图片 {index} 无法解码，原始内容仍可复制或导出。", "Image {index} cannot be decoded. The original content can still be copied or exported."],

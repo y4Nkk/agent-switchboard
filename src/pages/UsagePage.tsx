@@ -4,6 +4,7 @@ import { UsageTrendChart } from "../components/charts/UsageTrendChart";
 import { StatCards } from "../components/charts/stat-cards";
 import { ModelUsageTable } from "../components/ModelUsageTable";
 import { ModuleHeader } from "../components/WorkspaceHeader";
+import { WarningNotice, type WarningNoticeItem } from "../components/WarningNotice";
 import { UsageIcon } from "../components/icons";
 import { useI18n, type TFunction } from "../i18n";
 import { clientName } from "../lib/client-name";
@@ -73,14 +74,15 @@ export function UsagePage({ usage }: { usage: ReturnType<typeof useModelUsageRep
   const { read, loading, error } = usage;
   const report = read?.report ?? null;
   const hasData = report !== null && report.groups.length > 0;
+  const notices: WarningNoticeItem[] = (report?.issues ?? []).map((issue) => ({
+    id: JSON.stringify([issue.app, issue.message]),
+    content: t("usage.issues.entry", { client: clientName(issue.app), message: issue.message }),
+  }));
+  if (read?.cacheWarning) notices.unshift({ id: JSON.stringify(["cache", read.report.generatedAt, read.cacheWarning]), content: read.cacheWarning });
   return <section className="asb-panel asb-model-usage" aria-label={t("usage.consumption")}>
     <ModuleHeader title={t("usage.consumption")} />
     {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}
-    {read?.cacheWarning && <p className="asb-warn-text" role="alert">{read.cacheWarning}</p>}
-    {report && report.issues.length > 0 && <ul className="asb-model-usage-issues" aria-label={t("usage.issues.aria")}>
-      {report.issues.map((issue) => <li key={`${issue.app}-${issue.message}`} className="asb-warn-text">
-        {t("usage.issues.entry", { client: clientName(issue.app), message: issue.message })}</li>)}
-    </ul>}
+    <WarningNotice label={t("usage.issues.aria")} items={notices} />
     {loading && report === null ? <div className="asb-model-usage-loading" role="status" aria-label={t("usage.loading")}>
       <div className="asb-usage-stat-band">{[0, 1, 2, 3].map((key) => <div key={key} className="asb-skeleton" />)}</div>
       <div className="asb-skeleton asb-model-usage-loading-chart" />

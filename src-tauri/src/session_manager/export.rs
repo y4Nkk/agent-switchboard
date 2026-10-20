@@ -12,7 +12,7 @@ impl Drop for ExportFile {
 }
 
 pub fn export_markdown(root: &Path, app: AppKind, session_id: &str, target: &Path) -> Result<(), String> {
-    let mut source = resolve_session(app, session_id)?;
+    let mut source = resolve_session(root, app, session_id)?;
     validate_target(root, &source, target)?;
     organization::apply(&mut source.meta, &organization::load(root)?);
     let parent = target.parent().ok_or("导出位置无效")?;

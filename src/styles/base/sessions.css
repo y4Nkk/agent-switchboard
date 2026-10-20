@@ -32,18 +32,6 @@
   flex: none;
 }
 
-.asb-session-issues {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-1);
-  padding: var(--asb-space-2) var(--asb-space-3);
-  margin: 0;
-  border: 1px solid var(--asb-warning);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
-  list-style: none;
-}
-
 /* The outer .asb-panel owns the base surface; the list reads as its own
    rounded muted module inside it, so the master/detail split needs no
    structural divider and the detail sits directly on the panel surface. */

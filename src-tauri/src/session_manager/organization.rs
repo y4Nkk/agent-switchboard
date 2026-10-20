@@ -45,7 +45,7 @@ pub fn update_session_organization(
     change: &SessionOrganizationChange,
 ) -> Result<Vec<SessionMeta>, String> {
     validate_request(requests, change)?;
-    let (sources, issues) = scan_sources()?;
+    let (sources, issues) = scan_sources(root)?;
     let mut seen = HashSet::new();
     let metas = requests.iter().filter(|request| seen.insert((request.app, request.session_id.clone())))
         .map(|request| locate(&sources, &issues, request.app, &request.session_id).map(|source| source.meta.clone()))

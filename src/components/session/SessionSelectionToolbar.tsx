@@ -7,15 +7,16 @@ import type { SessionDeletionState } from "./SessionDeletion";
 import type { SessionSearch } from "./use-session-search";
 import type { SessionOrganization } from "./use-session-organization";
 
-export function SessionSelectionToolbar({ search, selection, organization }: {
+export function SessionSelectionToolbar({ search, selection, organization, disabled: externalBusy = false }: {
   search: SessionSearch; selection: SessionDeletionState; organization: SessionOrganization;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   const tagPanelId = useId();
   const [tagging, setTagging] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const sessions = [...selection.chosen.values()];
-  const busy = selection.busy || organization.busy;
+  const busy = selection.busy || organization.busy || externalBusy;
   const overLimit = sessions.length > 200;
   const disabled = busy || !sessions.length || overLimit;
   useEffect(() => {

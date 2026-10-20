@@ -8,6 +8,7 @@ import type { MessageEntry } from "../types";
  * Third-party diagnostics stay verbatim through `{detail}`-style parameters.
  */
 export const messages = {
+  "errors.sessions.conversionFailed": ["转换会话来源失败：{detail}", "Could not convert session sources: {detail}"],
   "errors.storage.operationFailed": ["存储维护失败：{detail}", "Storage maintenance failed: {detail}"],
   "errors.sessions.organizationFailed": ["无法整理会话：{detail}", "Could not organize sessions: {detail}"],
   "errors.sessions.searchFailed": ["搜索会话失败：{detail}", "Could not search sessions: {detail}"],

@@ -6,6 +6,8 @@
 //! new terminal after resolving an approved local session source. An
 //! explicit delete removes the resolved raw records from approved roots.
 //! Codex's registered native history remains owned by Codex and read-only.
+//! Explicit workflow conversion saves complete application-owned copies; all
+//! consumers resolve the same local state root and shared message contract.
 
 pub(crate) mod codex_titles;
 pub(crate) mod parser;
@@ -27,7 +29,9 @@ mod organization;
 mod messages;
 mod text;
 mod copy;
+mod conversion;
 pub use copy::{load_copy_text, SessionCopySource};
+pub use conversion::{convert_session_sources, SessionConversionOutcome};
 
 pub use bookmarks::{delete_bookmark, load_bookmark_content, save_bookmark, search_bookmarks,
     BookmarkPage, BookmarkSearchRequest, BookmarkSummary};
@@ -49,8 +53,8 @@ use std::path::{Path, PathBuf};
 
 const TITLE_LIMIT: usize = 120;
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SessionMeta {
     pub app: AppKind,
     pub session_id: String,
@@ -67,8 +71,8 @@ pub struct SessionMeta {
     pub can_delete: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SessionMessage {
     pub id: String,
     pub role: String,
@@ -82,6 +86,11 @@ pub struct SessionMessage {
 pub struct SessionIssue {
     pub app: AppKind,
     pub message: String,
+    pub conversion_id: Option<String>,
+}
+
+impl SessionIssue {
+    pub(super) fn new(app: AppKind, message: String) -> Self { Self { app, message, conversion_id: None } }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -111,7 +120,7 @@ pub struct SessionDeleteOutcome {
 
 
 pub fn load_metadata(root: &Path, app: AppKind, session_id: &str) -> Result<SessionMeta, String> {
-    let mut meta = resolve_session(app, session_id)?.meta;
+    let mut meta = resolve_session(root, app, session_id)?.meta;
     organization::apply(&mut meta, &organization::load(root)?);
     Ok(meta)
 }
@@ -119,8 +128,8 @@ pub fn load_metadata(root: &Path, app: AppKind, session_id: &str) -> Result<Sess
 /// Opens the selected local session in a new terminal window. The renderer
 /// supplies only the supported client plus a validated session id; the source
 /// path and working directory stay resolved inside this module.
-pub fn resume_session(app: AppKind, session_id: &str) -> Result<SessionResume, String> {
-    let source = resolve_session(app, session_id)?;
+pub fn resume_session(root: &Path, app: AppKind, session_id: &str) -> Result<SessionResume, String> {
+    let source = resolve_session(root, app, session_id)?;
     let project_dir = source
         .meta
         .project_dir
@@ -141,7 +150,7 @@ pub fn resume_session(app: AppKind, session_id: &str) -> Result<SessionResume, S
 /// keeps an optional directory named after the transcript stem beside the
 /// record; it belongs to this session's identity and is removed with it.
 pub fn delete_session(root: &Path, app: AppKind, session_id: &str) -> Result<(), String> {
-    let (sources, issues) = scan_sources()?;
+    let (sources, issues) = scan_sources(root)?;
     let source = locate(&sources, &issues, app, session_id)?;
     let ids = removed_organization_ids(source, &sources);
     organization::delete_with_sources(root, app, &ids, || remove_source(source))
@@ -154,7 +163,7 @@ pub fn delete_sessions(
     root: &Path,
     requests: &[SessionDeleteRequest],
 ) -> Result<Vec<SessionDeleteOutcome>, String> {
-    let (sources, issues) = scan_sources()?;
+    let (sources, issues) = scan_sources(root)?;
     Ok(delete_resolved(root, &sources, &issues, requests))
 }
 
@@ -177,7 +186,8 @@ fn delete_resolved(
                 || remove_source(source))
         });
         let deleted = result.is_ok() || source.is_ok_and(|source| source.meta.can_delete
-            && !source.paths.is_empty() && source.paths.iter().all(|path| matches!(path.try_exists(), Ok(false))));
+            && ((!source.paths.is_empty() && source.paths.iter().all(|path| matches!(path.try_exists(), Ok(false))))
+                || source.converted.as_ref().is_some_and(|path| matches!(path.try_exists(), Ok(false)))));
         outcomes.push(SessionDeleteOutcome {
             app: request.app,
             session_id: request.session_id.clone(),
@@ -220,6 +230,7 @@ fn removed_organization_ids(source: &SessionSource, sources: &[SessionSource]) -
 }
 
 fn remove_source(source: &SessionSource) -> Result<(), String> {
+    if let Some(path) = &source.converted { return conversion::remove(path); }
     if !source.meta.can_delete {
         return Err("Codex 原生历史由 Codex 管理，请在 Codex 中删除此会话；本应用只读原生历史库".into());
     }
@@ -227,8 +238,8 @@ fn remove_source(source: &SessionSource) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn resolve_session(app: AppKind, session_id: &str) -> Result<SessionSource, String> {
-    let (sources, issues) = scan_sources()?;
+pub(crate) fn resolve_session(root: &Path, app: AppKind, session_id: &str) -> Result<SessionSource, String> {
+    let (sources, issues) = scan_sources(root)?;
     locate(&sources, &issues, app, session_id).cloned()
 }
 
@@ -252,7 +263,13 @@ fn locate<'a>(
         })
 }
 
-pub(crate) fn scan_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+pub(crate) fn scan_sources(root: &Path) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+    let (mut sources, mut issues) = scan_native_sources()?;
+    conversion::include(root, &mut sources, &mut issues);
+    Ok((sources, issues))
+}
+
+pub(crate) fn scan_native_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
     sources::scan()
 }
 
@@ -298,7 +315,7 @@ fn scan_session_source_roots(
 
 #[cfg(test)]
 pub(crate) fn fixture_source(path: &Path, app: AppKind, id: &str) -> SessionSource {
-    SessionSource { paths: vec![path.to_path_buf()], native_history: None,
+    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None,
         meta: SessionMeta { app, session_id: id.into(), title: id.into(), summary: String::new(),
             project_dir: None, created_at: None, last_active_at: None,
             resume_command: resume_command(app, id), alias: None, pinned: false, tags: Vec::new(),

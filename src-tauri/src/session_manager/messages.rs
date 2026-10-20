@@ -88,8 +88,8 @@ pub(super) fn content_page(content: &str, offset: usize) -> Result<ContentPage, 
     ContentPage::from_part(content.chars().skip(offset).take(CONTENT_PAGE_CHARS).collect(), offset, total)
 }
 
-pub fn load_content(request: MessageContentRequest) -> Result<ContentPage, String> {
-    let source = resolve_session(request.app, &request.session_id)?;
+pub fn load_content(root: &Path, request: MessageContentRequest) -> Result<ContentPage, String> {
+    let source = resolve_session(root, request.app, &request.session_id)?;
     let message = source.find(&request.message_id)?;
     let mut page = content_page(&message.content, request.offset)?;
     if request.offset == 0 { (page.images, page.issues) = super::images::resolve(&message.images); }
@@ -98,7 +98,7 @@ pub fn load_content(request: MessageContentRequest) -> Result<ContentPage, Strin
 
 pub fn load_page(root: &Path, request: MessagePageRequest) -> Result<MessagePage, String> {
     if request.offset % PAGE_SIZE != 0 { return Err("消息页码无效".into()); }
-    let source = resolve_session(request.app, &request.session_id)?;
+    let source = resolve_session(root, request.app, &request.session_id)?;
     let mut page = scan_page(&source, request.offset, request.anchor_id.as_deref())?;
     super::organization::apply(&mut page.session, &super::organization::load(root)?);
     if let Err(detail) = bookmarks::mark_messages(root, request.app, &request.session_id, &mut page.items) {

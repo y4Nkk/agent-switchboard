@@ -16,6 +16,7 @@ import { sessionKey } from "./session/session-content";
 import { useSessionBookmarks } from "./session/use-session-bookmarks";
 import { useSessionDetail } from "./session/use-session-detail";
 import { useSessionSearch } from "./session/use-session-search";
+import { useSessionConversion } from "./session/use-session-conversion";
 
 export function SessionManager({ active }: { active: boolean }) {
   const { t } = useI18n();
@@ -33,7 +34,8 @@ export function SessionManager({ active }: { active: boolean }) {
   const organization = useSessionOrganization((updated) => {
     detail.updateMetadata(updated); deletion.updateMetadata(updated); search.refresh();
   });
-  const busy = deletion.busy || organization.busy;
+  const conversion = useSessionConversion(() => { search.refresh(); detail.refresh(); });
+  const busy = deletion.busy || organization.busy || conversion.busy;
   const open = (session: SessionMeta, messageId: string | null = null, contentOffset = 0) => {
     setView("history");
     detail.select(session, messageId, contentOffset);
@@ -71,10 +73,10 @@ export function SessionManager({ active }: { active: boolean }) {
     </div>}
     {view === "history" && organization.error && <p className="asb-warn-text" role="alert">{organization.error}</p>}
     {view === "history" && organization.status && <p className="asb-scope-note" role="status">{organization.status}</p>}
-    {view === "history" && <SessionDeletion state={deletion} disabled={organization.busy} />}
+    {view === "history" && <SessionDeletion state={deletion} disabled={organization.busy || conversion.busy} />}
     <div className="asb-session-panel" id="sessions-history-panel" role="tabpanel" aria-labelledby="sessions-history-tab" hidden={view !== "history"}>
       <SessionHistory search={search} detail={detail} bookmarks={bookmarks} organization={organization}
-        deletion={deletion} onOpen={open} />
+        deletion={deletion} conversion={conversion} onOpen={open} />
     </div>
     <div className="asb-session-panel" id="sessions-bookmarks-panel" role="tabpanel" aria-labelledby="sessions-bookmarks-tab" hidden={view !== "bookmarks"}>
       <SessionBookmarksPane bookmarks={bookmarks} onOpen={open} />

@@ -97,7 +97,10 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  gap: var(--asb-space-3);
 }
+
+.asb-model-usage > .asb-module-header { margin-bottom: 0; }
 
 .asb-model-usage-controls {
   display: flex;
@@ -126,9 +129,8 @@
   width: 4.5rem;
 }
 
-.asb-model-usage-notice,
-.asb-model-usage-issues {
-  margin: 0 0 var(--asb-space-3);
+.asb-model-usage-notice {
+  margin: 0;
   padding: var(--asb-space-2);
   font: var(--asb-text-label);
 }
@@ -141,13 +143,6 @@
   margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
-}
-
-.asb-model-usage-issues {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-1);
-  padding-left: calc(var(--asb-space-2) + var(--asb-space-2));
 }
 
 /* Frame modifier: the model-usage panel's empty state keeps its slot through

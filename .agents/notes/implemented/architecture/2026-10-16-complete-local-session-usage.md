@@ -36,6 +36,7 @@ Codex 目录规则对照仓库锁定版本的[原生配置实现](https://raw.gi
 
 ## Related decisions
 
+- [workflow 转换与提示确认](../feature/2026-10-20-session-warning-conversion.md)：部分重叠；workflow 执行事件独立识别并显式保存为应用可读副本，不冒充主会话、子代理会话或调用收据。会话和用量共用可确认提示，转换来源不进入用量覆盖计数。
 - [本地资源边界](./2026-10-14-bounded-local-resources.md)：部分重叠，保留有界传输、显式归档和缓存清理；本篇接管会话来源、完整性及日志筛选，旧篇同步边界并互链。
 - [工作区生命周期](./2026-10-13-desktop-workspace-uiux.md)：部分重叠，沿用隐藏停止副作用及草稿保留，收紧到实际页签可见性。
 - [会话操作与长内容布局](../bug-fix/2026-09-24-session-operations-layout.md)、[会话项目筛选](../bug-fix/2026-09-24-session-layout.md)：布局决定不变，新增内容仍消费现有原语。

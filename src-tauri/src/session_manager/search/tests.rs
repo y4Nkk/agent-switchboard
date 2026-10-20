@@ -10,7 +10,7 @@ fn search(sources: Vec<SessionSource>, issues: Vec<SessionIssue>, query: &str, a
 }
 
 fn source(path: &Path, id: &str) -> SessionSource {
-    SessionSource { paths: vec![path.to_path_buf()], native_history: None, meta: SessionMeta {
+    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None, meta: SessionMeta {
         app: AppKind::Codex, session_id: id.into(), title: "metadata title".into(),
         summary: "summary".into(), project_dir: Some("/projects/example".into()),
         created_at: None, last_active_at: Some("2026-09-22T00:00:00Z".into()),
