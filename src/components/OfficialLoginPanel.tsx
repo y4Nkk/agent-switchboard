@@ -67,10 +67,10 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
       stopPolling();
       sessionLive.current = false;
       setPhase(status.phase);
-      if (status.phase === "failed") setMessage(status.message ?? uiMessage("clientConfig.login.failedFallback"));
+      setMessage(status.message ?? (status.phase === "failed" ? uiMessage("clientConfig.login.failedFallback") : null));
       onFinished?.(status.phase === "completed");
     },
-    [onFinished, stopPolling],
+    [onFinished, setMessage, stopPolling],
   );
 
   const startPolling = useCallback(
@@ -141,9 +141,8 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
 
   if (phase === "completed") {
     return (
-      <p className="asb-provider-usage-state" role="status">
-        {t("clientConfig.login.completed")}
-      </p>
+      <div><p className="asb-provider-usage-state" role="status">{t("clientConfig.login.completed")}</p>
+        {message && <p className="asb-warn-text" role="status">{message}</p>}</div>
     );
   }
 

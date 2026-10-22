@@ -93,7 +93,8 @@ pub async fn official_login_start(target: AppKind) -> Result<OfficialLoginStart,
 /// native credential write. Terminal results drop the session so a retry
 /// always starts clean.
 #[tauri::command]
-pub async fn official_login_poll(target: AppKind) -> Result<OfficialLoginStatus, CommandError> {
+pub async fn official_login_poll(app: tauri::AppHandle, target: AppKind) -> Result<OfficialLoginStatus, CommandError> {
+    let local = state(&app)?;
     let status = blocking(move || {
         let mut guard = official_login::sessions().lock().expect("login sessions");
         let Some(session) = guard.get(&target) else {
@@ -111,7 +112,7 @@ pub async fn official_login_poll(target: AppKind) -> Result<OfficialLoginStatus,
         }
         match target {
             AppKind::Codex => poll_codex(&mut guard, target),
-            AppKind::Claude => poll_claude(&mut guard, target),
+            AppKind::Claude => poll_claude(&mut guard, target, local.root()),
         }
     })
     .await?;
@@ -176,6 +177,7 @@ fn poll_codex(
 fn poll_claude(
     guard: &mut std::collections::BTreeMap<AppKind, LoginSession>,
     target: AppKind,
+    root: &std::path::Path,
 ) -> Result<OfficialLoginStatus, CommandError> {
     let Some(LoginSession::Claude { listener, .. }) = guard.get(&target) else {
         return Err(CommandError::keyed(
@@ -190,12 +192,14 @@ fn poll_claude(
             listener.authorize_url.clone(),
         )),
         Ok(Some(code)) => {
-            let outcome = claude::exchange_code(
+            let preservation = crate::session_manager::history::preserve_before_switch(root);
+            let warning = preservation.as_ref().ok().map(|warnings| warnings.iter().map(|warning| warning.text.clone()).collect::<Vec<_>>().join("；"));
+            let outcome = preservation.and_then(|_| claude::exchange_code(
                 &claude::ClaudeOAuthEndpoints::default(),
                 &code,
                 &listener.verifier,
                 &listener.redirect_uri,
-            )
+            ))
             .and_then(|tokens| {
                 LocalState::claude_credentials_path().and_then(|path| {
                     official_login::claude_credentials::write_claude_credentials(&path, &tokens)
@@ -205,7 +209,11 @@ fn poll_claude(
             // dropping the session is all the teardown needed.
             guard.remove(&target);
             Ok(match outcome {
-                Ok(()) => OfficialLoginStatus::completed(),
+                Ok(()) => {
+                    let mut status = OfficialLoginStatus::completed();
+                    status.message = warning.filter(|warning| !warning.is_empty());
+                    status
+                }
                 Err(message) => OfficialLoginStatus::failed(message),
             })
         }

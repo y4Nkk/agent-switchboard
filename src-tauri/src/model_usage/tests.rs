@@ -106,6 +106,21 @@ fn native_history_without_call_records_reports_coverage_without_fabricating_cons
 }
 
 #[test]
+fn every_range_reuses_the_same_indexed_events_and_removed_sources_stop_contributing() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = source(temp.path(), "shared.jsonl", "same", AppKind::Codex, &codex("same", 16, 10));
+    let root = temp.path().join("state");
+    let first = reports(&root, vec![source.clone()], vec![], now()).unwrap();
+    assert_eq!(first.len(), 4);
+    let before = crate::session_manager::records::decoded_record_count();
+    let second = reports(&root, vec![source], vec![], now()).unwrap();
+    assert_eq!(crate::session_manager::records::decoded_record_count(), before);
+    assert!(second.iter().all(|report| total(report) == 13));
+    let empty = reports(&root, vec![], vec![], now()).unwrap();
+    assert!(empty.iter().all(|report| total(report) == 0 && report.coverage.source_sessions == 0));
+}
+
+#[test]
 fn forked_prefix_receipts_retain_the_original_owner_without_counting_inherited_totals() {
     let temp = tempfile::tempdir().unwrap();
     let parent_records = codex("parent", 15, 10);

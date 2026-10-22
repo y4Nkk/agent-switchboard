@@ -96,37 +96,36 @@ impl BatchWorker {
                 stop(registry, ledger, batch_id, status, Some(message), Vec::new());
                 return;
             }
-            if let Err(error) = ledger.start_run(batch_id, seq) {
-                stop_unsaved(registry, batch_id, Vec::new(),
-                    ProbeBatchStatus::Failed,
-                    Some(format!("运行记录创建失败，已停止后续调用：{error}")));
-                return;
-            }
-            let (result, progress) = self.run(seq);
+            let clock = match registry.start_run(ledger, batch_id, seq, self.question.timeout_seconds) {
+                Ok(clock) => clock,
+                Err(error) => {
+                    let message = format!("运行记录创建失败，已停止后续调用：{error}");
+                    if let Err(error) = registry.fail_start(batch_id, message) { log::error!("检测启动状态无法保存：{error}"); }
+                    return;
+                }
+            };
+            let (result, progress) = self.run(seq, &clock);
+            clock.collecting();
             match result {
                 Err(reason) => {
                     let (status, message) = abort_status(&reason);
                     let mut record = undetermined(seq, &message);
                     record.session_id = progress.id;
                     backfill_usage(&mut record);
+                    record.duration_ms = Some(clock.started().elapsed().as_millis() as u64);
+                    clock.saving();
                     stop(registry, ledger, batch_id, status, Some(message), vec![record]);
                     return;
                 }
                 Ok(result) => {
                     let record = run_record(seq, result);
+                    clock.saving();
                     if seq == *run_count {
                         stop(registry, ledger, batch_id, ProbeBatchStatus::Completed, None, vec![record]);
                         return;
                     }
-                    if let Err(error) = ledger.save_run_result(batch_id, &record) {
+                    if let Err(error) = registry.save_run(ledger, batch_id, record) {
                         log::warn!("检测运行结果保存失败，已停止后续调用：{error}");
-                        registry.worker_finished(batch_id, Some(UnsavedProbe {
-                            batch_id: batch_id.clone(),
-                            pending_runs: vec![record],
-                            save_error: error,
-                            terminal: (ProbeBatchStatus::Failed,
-                                Some("检测结果保存失败，已停止后续调用".to_string())),
-                        }));
                         return;
                     }
                 }
@@ -143,13 +142,15 @@ impl BatchWorker {
         }
     }
 
-    fn run(&self, seq: u32) -> (Result<ProbeRunResult, ProbeAbort>, SessionProgress) {
+    fn run(&self, seq: u32, clock: &Arc<progress::RunProgress>) -> (Result<ProbeRunResult, ProbeAbort>, SessionProgress) {
+        let session_clock = Arc::clone(clock);
         let progress = Arc::new(Mutex::new(SessionProgress::default()));
         let sink = Arc::clone(&progress);
         let ledger = self.ledger.clone();
         let batch_id = self.batch_id.clone();
         let cancel = self.cancel.clone();
         let on_session_id: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |id| {
+            session_clock.running();
             let mut progress = sink.lock().expect("probe session progress");
             if progress.id.is_none() { progress.id = Some(id.to_string()); }
             if let Err(error) = ledger.save_run_session(&batch_id, seq, id) {
@@ -157,7 +158,7 @@ impl BatchWorker {
                 cancel.store(true, Ordering::SeqCst);
             }
         });
-        let result = run_once(&self.question, &self.cancel, &on_session_id, &|| self.check_config());
+        let result = run_once(&self.question, &self.cancel, &on_session_id, &|| self.check_config(), clock);
         let mut progress = progress.lock().expect("probe session progress");
         let result = match progress.save_error.as_ref() {
             Some(error) => Err(ProbeAbort::Spawn(format!("会话记录保存失败：{error}"))),
@@ -219,32 +220,9 @@ fn stop(
     status_error: Option<String>,
     pending_runs: Vec<ledger::ProbeRunRecord>,
 ) {
-    let unsaved = match ledger.finish_batch(batch_id, status, status_error.clone(), &pending_runs) {
-        Ok(()) => None,
-        Err(error) => {
-            log::warn!("检测结束结果保存失败：{error}");
-            Some(UnsavedProbe { batch_id: batch_id.to_string(), pending_runs, save_error: error,
-                terminal: (status, status_error) })
-        }
-    };
-    registry.worker_finished(batch_id, unsaved);
-}
-
-/// A stop where no run row could even be created; everything lands in the
-/// retry stash.
-fn stop_unsaved(
-    registry: &ProbeRegistry,
-    batch_id: &str,
-    pending_runs: Vec<ledger::ProbeRunRecord>,
-    status: ProbeBatchStatus,
-    status_error: Option<String>,
-) {
-    registry.worker_finished(batch_id, Some(UnsavedProbe {
-        batch_id: batch_id.to_string(),
-        pending_runs,
-        save_error: status_error.clone().unwrap_or_else(|| "运行记录未保存".into()),
-        terminal: (status, status_error),
-    }));
+    if let Err(error) = registry.finish_batch(ledger, batch_id, status, status_error, pending_runs) {
+        log::warn!("检测结束结果保存失败：{error}");
+    }
 }
 
 fn undetermined(seq: u32, error: &str) -> ledger::ProbeRunRecord {

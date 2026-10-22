@@ -4,7 +4,7 @@ import { deleteSessionBookmark, searchSessionBookmarks, saveSessionBookmark,
 import { useMessageState } from "../../i18n/use-message-state";
 import type { ClientFilterValue } from "../ClientFilter";
 import { toast, toastMessage } from "../use-toast";
-import { useSessionReadQueue } from "./use-session-read-queue";
+import { useReadQueue } from "../../hooks/use-read-queue";
 
 export function useSessionBookmarks(active: boolean, query: string, filter: ClientFilterValue) {
   const [result, setResult] = useState<SessionBookmarkPage | null>(null);
@@ -15,7 +15,7 @@ export function useSessionBookmarks(active: boolean, query: string, filter: Clie
   const [revision, setRevision] = useState(0);
   const generation = useRef(0);
   const locked = useRef(false);
-  const enqueue = useSessionReadQueue();
+  const enqueue = useReadQueue();
   useEffect(() => setPage(1), [query, filter]);
 
   useEffect(() => {

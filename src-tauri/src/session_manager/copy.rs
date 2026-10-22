@@ -13,7 +13,8 @@ pub enum SessionCopySource {
 pub fn load_copy_text(root: &Path, source: SessionCopySource) -> Result<String, String> {
     match source {
         SessionCopySource::Session { app, session_id, message_id } => {
-            super::images::copy_text(&resolve_session(root, app, &session_id)?.find(&message_id)?)
+            let source = resolve_session(root, app, &session_id)?;
+            source.copy_text(&source.find(&message_id)?)
         }
         SessionCopySource::Bookmark { id } => bookmarks::load_copy_text(root, &id),
     }

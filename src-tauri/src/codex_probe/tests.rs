@@ -1,7 +1,6 @@
 use super::*;
 use super::questions::CUSTOM_QUESTION_ID;
 use std::path::Path;
-use std::sync::atomic::Ordering;
 
 pub(super) fn write_rollout(root: &std::path::Path, id: &str, total: u64) -> std::path::PathBuf {
     let directory = root.join("sessions").join("t");
@@ -125,48 +124,6 @@ fn linuxdo_animation_keeps_its_full_prompt_and_html_output_contract() {
 }
 
 #[test]
-fn registry_holds_one_worker_and_clears_it_when_finished() {
-    let registry = ProbeRegistry::new();
-    let cancel = registry.begin("batch-1").expect("first begin");
-    assert!(registry.begin("batch-2").is_err());
-    assert!(registry.cancel());
-    // The second signal finds the flag already set.
-    assert!(!registry.cancel());
-
-    cancel.store(true, Ordering::SeqCst);
-    registry.worker_finished("batch-1", None);
-    // No worker left to cancel, and a new batch may take the slot.
-    assert!(!registry.cancel());
-    assert!(registry.begin("batch-2").is_ok());
-}
-
-#[test]
-fn unsaved_results_stay_visible_until_flushed() {
-    let registry = ProbeRegistry::new();
-    let _cancel = registry.begin("batch-1").unwrap();
-    let unsaved = UnsavedProbe {
-        save_error: "模拟保存失败".into(),
-        batch_id: "batch-1".to_string(),
-        pending_runs: vec![ledger::ProbeRunRecord {
-            seq: 2,
-            status: ledger::ProbeRunStatus::Passed,
-            ..Default::default()
-        }],
-        terminal: (ProbeBatchStatus::Failed, Some("检测结果保存失败".to_string())),
-    };
-    registry.worker_finished("batch-1", Some(unsaved));
-    assert!(registry.unsaved("batch-1").is_some());
-
-    assert!(registry.begin("batch-2").is_err());
-    let temp = tempfile::tempdir().unwrap();
-    let blocked_root = temp.path().join("not-a-directory");
-    std::fs::write(&blocked_root, "occupied").unwrap();
-    assert!(registry.retry_save(&ProbeLedger::new(&blocked_root)).is_err());
-    assert!(registry.unsaved("batch-1").is_some());
-    assert!(registry.begin("batch-2").is_err());
-}
-
-#[test]
 fn fingerprint_changes_only_when_the_client_files_change() {
     let _guard = crate::test_client_paths::redirect_client_paths();
     let local = crate::local_state::LocalState::from_root(Path::new("state").to_path_buf());
@@ -220,35 +177,4 @@ openai_base_url = "https://user:secret@example.test/v1?key=secret#secret"
     assert_eq!(config.profile_model.as_deref(), Some("actual-model"));
     assert_eq!(config.reasoning_effort.as_deref(), Some("high"));
     assert_eq!(config.connection_identity.as_deref(), Some("https://example.test/v1"));
-}
-
-#[test]
-fn pending_results_are_visible_in_both_views_and_retry_releases_the_slot() {
-    let directory = tempfile::tempdir().unwrap();
-    let local = crate::local_state::LocalState::from_root(directory.path().to_path_buf());
-    let ledger = ProbeLedger::new(local.root());
-    let registry = ProbeRegistry::new();
-    registry.begin("pending").unwrap();
-    ledger.insert_batch(&ledger::NewProbeBatch {
-        id: "pending".into(), started_at: ledger::now_rfc3339(), planned_runs: 1,
-        question: ledger::ProbeQuestionSnapshot { id: "custom".into(), label: "题".into(),
-            text: "题干".into(), expected_answer: "45".into() },
-        grading_version: ProbeGrading::Integer, cli_version: None, config: Default::default(),
-    }).unwrap();
-    ledger.start_run("pending", 1).unwrap();
-    registry.worker_finished("pending", Some(UnsavedProbe {
-        save_error: "模拟保存失败".into(),
-        batch_id: "pending".into(), terminal: (ProbeBatchStatus::Completed, None),
-        pending_runs: vec![ledger::ProbeRunRecord { seq: 1, status: ProbeRunStatus::Passed,
-            final_answer: Some("45".into()), ..Default::default() }],
-    }));
-    let current = current_view(&local, &registry).unwrap().unwrap();
-    let historical = batch_view(&local, &registry, "pending").unwrap().unwrap();
-    for view in [current, historical] {
-        assert!(view.persist_pending);
-        assert_eq!(view.runs[0].final_answer.as_deref(), Some("45"));
-    }
-    retry_save(&local, &registry).unwrap();
-    assert!(!batch_view(&local, &registry, "pending").unwrap().unwrap().persist_pending);
-    assert!(registry.begin("next").is_ok());
 }

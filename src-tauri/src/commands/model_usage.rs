@@ -16,7 +16,7 @@ pub async fn get_model_usage_report(
     let state = state(&app)?;
     blocking(move || {
         crate::model_usage_cache::get_or_refresh(&state, request)
-            .map_err(|error| CommandError::new("model-usage-cache-unavailable", error))
+            .map_err(|error| CommandError::new("model-usage-index-unavailable", error))
     })
     .await
 }

@@ -1,82 +1,98 @@
-use super::{parser, records, SessionMessage};
+use super::{parser, read_index::ReadIndex, records, timeline::{Location, Position}};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufReader, Seek, SeekFrom};
 use std::ops::ControlFlow;
-use std::path::PathBuf;
+use std::path::Path;
 
-struct Entry { file: usize, offset: u64, id: String, digest: String, order_at: Option<String> }
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecordPosition {
+    offset: u64,
+    id: String,
+    digest: String,
+    occurrence: usize,
+    at: Option<String>,
+    order_at: Option<String>,
+    projected: Option<String>,
+}
 
-pub(super) fn visit(
-    paths: &[PathBuf],
-    visitor: &mut impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>,
-) -> Result<Vec<String>, String> {
-    let _guard = parser::SCAN_GATE.lock().map_err(|_| "会话读取锁不可用")?;
-    if paths.len() <= 1 { return scan(paths, &mut |_, message| visitor(message)); }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FilePositions { entries: Vec<RecordPosition>, issues: Vec<String> }
+
+pub(super) fn positions(index: &ReadIndex, paths: &[records::Source], protocol: bool) -> Result<(Vec<Position>, Vec<String>), String> {
     let mut entries = Vec::new();
-    let mut issues = scan(paths, &mut |entry, _| { entries.push(entry); Ok(ControlFlow::Continue(())) })?;
-    entries.sort_by(|left, right| left.order_at.cmp(&right.order_at));
-    let mut current = None;
-    for entry in entries {
-        match load(paths, &entry, &mut current) {
-            Ok(message) => { if visitor(message)?.is_break() { break; } }
-            Err(error) => issues.push(error),
+    let mut issues = Vec::new();
+    let mut seen = HashMap::<String, usize>::new();
+    for path in paths {
+        let file = match indexed(index, path) {
+            Ok(file) => file,
+            Err(error) => { issues.push(error); continue; }
+        };
+        issues.extend(file.issues);
+        for entry in file.entries {
+            if !protocol || entry.projected.is_none() {
+                let key = if entry.id.starts_with("claude-") { &entry.id } else { &entry.digest };
+                if seen.get(key).is_some_and(|count| *count >= entry.occurrence) { continue; }
+                seen.insert(key.clone(), entry.occurrence);
+            }
+            let id = if protocol { entry.projected.clone().unwrap_or_else(|| format!("protocol-{}-{}", entry.digest, entry.occurrence)) }
+                else { entry.id };
+            entries.push(Position { id, at: entry.at, order_at: entry.order_at,
+                projected: protocol && entry.projected.is_some(),
+                location: match path {
+                    records::Source::File(path) => Location::Jsonl { path: path.clone(), offset: entry.offset, digest: entry.digest },
+                    records::Source::Saved(source) => Location::Saved { source: source.clone(), offset: entry.offset, digest: entry.digest },
+                } });
         }
     }
-    Ok(issues)
+    if !protocol && paths.len() > 1 { entries.sort_by(|left, right| left.order_at.cmp(&right.order_at)); }
+    Ok((entries, issues))
 }
 
-fn scan(
-    paths: &[PathBuf],
-    visitor: &mut impl FnMut(Entry, SessionMessage) -> Result<ControlFlow<()>, String>,
-) -> Result<Vec<String>, String> {
-    let mut seen = HashMap::<String, usize>::new();
-    let mut issues = Vec::new();
-    let mut stopped = false;
-    for (file, path) in paths.iter().enumerate() {
-        let mut occurrences = HashMap::<String, usize>::new();
-        let mut prefix = Sha256::new();
-        let mut order_at = None;
-        let mut visitor_failure = None;
-        let scan = records::visit_records(path, 0, |_, offset, value| {
-            prefix.update(value.to_string().as_bytes());
-            prefix.update(b"\n");
-            let Some(mut message) = parser::message_from(&value) else { return Ok(ControlFlow::Continue(())); };
-            let digest = parser::record_identity(&value);
-            let occurrence = occurrences.entry(digest.clone()).or_default();
-            *occurrence += 1;
-            if message.at.is_some() { order_at = message.at.clone(); }
-            if seen.get(&digest).is_some_and(|count| *count >= *occurrence) { return Ok(ControlFlow::Continue(())); }
-            message.id = format!("raw-{:x}-{}", prefix.clone().finalize(), *occurrence);
-            seen.insert(digest.clone(), *occurrence);
-            let entry = Entry { file, offset, id: message.id.clone(), digest, order_at: order_at.clone() };
-            let flow = visitor(entry, message).map_err(|error| { visitor_failure = Some(error.clone()); error })?;
-            stopped = flow.is_break();
-            Ok(flow)
-        });
-        if let Some(error) = visitor_failure { return Err(error); }
-        match scan { Ok(warnings) => issues.extend(warnings), Err(error) => issues.push(error) }
-        if stopped { break; }
+fn indexed(index: &ReadIndex, source: &records::Source) -> Result<FilePositions, String> {
+    match source {
+        records::Source::File(path) => index.file("raw-messages", path, || scan(source)),
+        records::Source::Saved(saved) => {
+            if let Some(value) = index.get("saved-messages", &saved.id, &saved.revision)? { return Ok(value); }
+            let value = scan(source)?;
+            index.put("saved-messages", &saved.id, &saved.revision, &value)?;
+            Ok(value)
+        }
     }
-    Ok(issues)
 }
 
-fn load(paths: &[PathBuf], entry: &Entry, current: &mut Option<(usize, BufReader<File>)>) -> Result<SessionMessage, String> {
-    let path = &paths[entry.file];
-    if current.as_ref().is_none_or(|(file, _)| *file != entry.file) {
-        let file = File::open(path).map_err(|error| format!("无法读取会话记录 {}: {error}", path.display()))?;
-        *current = Some((entry.file, BufReader::new(file)));
-    }
-    let (_, reader) = current.as_mut().ok_or("会话读取位置不可用")?;
-    reader.seek(SeekFrom::Start(entry.offset)).map_err(|error| error.to_string())?;
-    let mut record = None;
-    records::visit_reader(&path.display().to_string(), entry.offset, reader, |_, _, value| {
-        record = Some(value); Ok(ControlFlow::Break(()))
+fn scan(path: &records::Source) -> Result<FilePositions, String> {
+    let mut entries = Vec::new();
+    let mut occurrences = HashMap::<String, usize>::new();
+    let mut prefix = Sha256::new();
+    let mut order_at = None;
+    let issues = path.visit(0, |_, offset, value| {
+        let encoded = value.to_string();
+        prefix.update(encoded.as_bytes());
+        prefix.update(b"\n");
+        let Some(message) = parser::message_from(&value) else { return Ok(ControlFlow::Continue(())); };
+        let digest = format!("{:x}", Sha256::digest(encoded.as_bytes()));
+        let occurrence = occurrences.entry(digest.clone()).or_default();
+        *occurrence += 1;
+        if message.at.is_some() { order_at = message.at.clone(); }
+        let projected = if value.get("type").and_then(serde_json::Value::as_str) == Some("event_msg")
+            && value.pointer("/payload/type").and_then(serde_json::Value::as_str) == Some("item_completed") {
+            value.pointer("/payload/item").map(parser::native_identity)
+        } else { None };
+        entries.push(RecordPosition { offset, id: parser::claude_record_id(&value)
+                .unwrap_or_else(|| format!("raw-{:x}-{}", prefix.clone().finalize(), *occurrence)),
+            digest, occurrence: *occurrence, at: message.at, order_at: order_at.clone(), projected });
+        Ok(ControlFlow::Continue(()))
     })?;
-    let record = record.ok_or("原会话记录已经改变，请重新打开会话")?;
-    if parser::record_identity(&record) != entry.digest { return Err("原会话记录已经改变，请重新打开会话".into()); }
-    let mut message = parser::message_from(&record).ok_or("原会话记录已经不可读")?;
-    message.id = entry.id.clone();
-    Ok(message)
+    Ok(FilePositions { entries, issues })
+}
+
+pub(super) fn value(path: &Path, offset: u64, digest: &str) -> Result<serde_json::Value, String> {
+    let mut found = None;
+    records::visit_records(path, offset, |_, _, value| { found = Some(value); Ok(ControlFlow::Break(())) })?;
+    let value = found.ok_or("原会话记录已经改变，请重新打开会话")?;
+    if parser::record_identity(&value) != digest { return Err("原会话记录已经改变，请重新打开会话".into()); }
+    Ok(value)
 }

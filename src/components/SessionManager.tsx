@@ -17,10 +17,12 @@ import { useSessionBookmarks } from "./session/use-session-bookmarks";
 import { useSessionDetail } from "./session/use-session-detail";
 import { useSessionSearch } from "./session/use-session-search";
 import { useSessionConversion } from "./session/use-session-conversion";
+import { SessionSourcesDialog } from "./session/SessionSourcesDialog";
 
 export function SessionManager({ active }: { active: boolean }) {
   const { t } = useI18n();
   const [view, setView] = useState<"history" | "bookmarks">("history");
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [bookmarkQuery, setBookmarkQuery] = useState("");
   const [bookmarkFilter, setBookmarkFilter] = useState<ClientFilterValue>("all");
   const current = useWorkspaceVisible(active);
@@ -57,15 +59,17 @@ export function SessionManager({ active }: { active: boolean }) {
         { value: "history", label: t("sessions.list.heading"), controls: "sessions-history-panel", disabled: busy },
         { value: "bookmarks", label: t("sessions.bookmarks.title"), controls: "sessions-bookmarks-panel", disabled: busy },
       ]} />
-    } primaryActions={<SessionPageActions filter={view === "history" ? search.filter : bookmarkFilter}
+    } primaryActions={<><Button variant="secondary" disabled={busy} onClick={() => setSourcesOpen(true)}>{t("sessions.sources.title")}</Button>
+      <SessionPageActions filter={view === "history" ? search.filter : bookmarkFilter}
       onFilterChange={view === "history" ? search.changeFilter : setBookmarkFilter}
       refresh={view === "history" ? refresh : bookmarks.refresh}
       refreshKey={view === "history" ? "sessions.refresh" : "sessions.bookmarks.refresh"}
-      busy={view === "history" ? search.busy || busy : bookmarks.loading || bookmarks.busy} />}
+      busy={view === "history" ? search.busy || busy : bookmarks.loading || bookmarks.busy} /></>}
       secondary={view === "history" ? <SessionSearchControls search={search} disabled={busy} />
         : <div className="asb-session-bookmark-search"><Input type="search" value={bookmarkQuery}
           onChange={(event) => setBookmarkQuery(event.target.value)} aria-label={t("sessions.bookmarks.search")}
           placeholder={t("sessions.bookmarks.search")} /></div>} />
+    {sourcesOpen && <SessionSourcesDialog onClose={() => setSourcesOpen(false)} onChanged={refresh} />}
     {bookmarks.error && <div className="asb-session-bookmark-error" role="alert">
       <p className="asb-warn-text">{bookmarks.error}</p>
       <Button variant="secondary" disabled={bookmarks.loading || bookmarks.busy}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSessionReadQueue } from "../src/components/session/use-session-read-queue.ts";
+import { createReadQueue } from "../src/hooks/use-read-queue.ts";
 
 function deferred() {
   let release!: () => void;
@@ -9,7 +9,7 @@ function deferred() {
 }
 
 test("慢读取期间只执行当前任务和最新请求", async () => {
-  const enqueue = createSessionReadQueue();
+  const enqueue = createReadQueue();
   const first = deferred();
   const last = deferred();
   const started: number[] = [];
@@ -26,7 +26,7 @@ test("慢读取期间只执行当前任务和最新请求", async () => {
 });
 
 test("过期生命周期的取消不移除新的待执行任务", async () => {
-  const enqueue = createSessionReadQueue();
+  const enqueue = createReadQueue();
   const first = deferred();
   const last = deferred();
   const started: string[] = [];
@@ -41,7 +41,7 @@ test("过期生命周期的取消不移除新的待执行任务", async () => {
 });
 
 test("取消待执行读取后不再读取其数据，执行中的原生操作仍能结束", async () => {
-  const enqueue = createSessionReadQueue();
+  const enqueue = createReadQueue();
   const first = deferred();
   const last = deferred();
   const started: string[] = [];
@@ -59,7 +59,7 @@ test("取消待执行读取后不再读取其数据，执行中的原生操作�
 });
 
 test("读取失败交给原请求所有者处理，随后继续最新请求", async () => {
-  const enqueue = createSessionReadQueue();
+  const enqueue = createReadQueue();
   const first = deferred();
   const last = deferred();
   const error = new Error("disk read failed");

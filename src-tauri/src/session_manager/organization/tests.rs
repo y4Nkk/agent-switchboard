@@ -5,7 +5,7 @@ use tempfile::tempdir;
 fn meta(app: AppKind, id: &str) -> SessionMeta {
     SessionMeta { app, session_id: id.into(), title: "来源标题".into(), summary: String::new(),
         project_dir: Some("/project".into()), created_at: None, last_active_at: None,
-        resume_command: String::new(), alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true }
+        resume_command: None, alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true, preservation: None }
 }
 
 #[test]

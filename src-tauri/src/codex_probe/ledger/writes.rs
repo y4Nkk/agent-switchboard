@@ -42,7 +42,8 @@ impl ProbeLedger {
             .execute(
                 "INSERT INTO probe_runs (batch_id, seq, status) SELECT ?1,?2,'running' \
                  WHERE EXISTS (SELECT 1 FROM probe_batches WHERE id=?1 AND status='running' AND planned_runs>=?2) \
-                 AND NOT EXISTS (SELECT 1 FROM probe_runs WHERE batch_id=?1 AND status='running')",
+                 AND NOT EXISTS (SELECT 1 FROM probe_runs WHERE batch_id=?1 AND status='running') \
+                 AND ?2=(SELECT COALESCE(MAX(seq),0)+1 FROM probe_runs WHERE batch_id=?1)",
                 params![batch_id, seq as i64],
             )
             .map_err(db_error)?;

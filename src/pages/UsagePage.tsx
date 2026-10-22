@@ -78,7 +78,6 @@ export function UsagePage({ usage }: { usage: ReturnType<typeof useModelUsageRep
     id: JSON.stringify([issue.app, issue.message]),
     content: t("usage.issues.entry", { client: clientName(issue.app), message: issue.message }),
   }));
-  if (read?.cacheWarning) notices.unshift({ id: JSON.stringify(["cache", read.report.generatedAt, read.cacheWarning]), content: read.cacheWarning });
   return <section className="asb-panel asb-model-usage" aria-label={t("usage.consumption")}>
     <ModuleHeader title={t("usage.consumption")} />
     {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}

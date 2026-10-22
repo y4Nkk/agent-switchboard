@@ -1,7 +1,6 @@
 use super::{AppSettings, CloudBackupSettings, LocalState};
 use crate::codex_official_quota::CodexQuotaBaseline;
 use crate::codex_reset::CodexResetStatus;
-use crate::model_usage_cache::ModelUsageCache;
 use crate::usage_cache::UsageCache;
 use asb_core::discovery::DiscoveryReport;
 use std::fs;
@@ -188,36 +187,6 @@ impl LocalState {
         if fs::rename(&temporary, self.usage_cache_path()).is_err() {
             let _ = fs::remove_file(&temporary);
             return Err("无法原子保存托盘用量缓存".to_string());
-        }
-        Ok(())
-    }
-
-    /// The last successful local-session usage reports. It contains only
-    /// normalized token totals and model labels, never a credential, endpoint,
-    /// raw session record, or provider-quota reading.
-    pub(crate) fn load_model_usage_cache(&self) -> Result<Option<ModelUsageCache>, String> {
-        let text = match fs::read_to_string(self.model_usage_cache_path()) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(_) => return Err("本地会话快照不可读".to_string()),
-        };
-        serde_json::from_str(&text)
-            .map(Some)
-            .map_err(|_| "本地会话快照格式无效".to_string())
-    }
-
-    /// Replaces every range snapshot atomically after a local-session scan.
-    pub(crate) fn save_model_usage_cache(&self, cache: &ModelUsageCache) -> Result<(), String> {
-        let content = serde_json::to_string_pretty(cache)
-            .map_err(|_| "本地会话快照序列化失败".to_string())?;
-        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
-        let temporary = self
-            .root
-            .join(format!("model-usage-cache.{}.tmp", Uuid::new_v4()));
-        fs::write(&temporary, content).map_err(|_| "无法写入本地会话快照临时文件".to_string())?;
-        if fs::rename(&temporary, self.model_usage_cache_path()).is_err() {
-            let _ = fs::remove_file(&temporary);
-            return Err("无法原子保存本地会话快照".to_string());
         }
         Ok(())
     }

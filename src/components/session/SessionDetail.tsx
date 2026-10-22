@@ -47,6 +47,7 @@ function useDetailActions(session: SessionMeta) {
 
 function SessionFacts({ session, copy }: { session: SessionMeta; copy: (text: string, labelKey: MessageKey) => Promise<void> }) {
   const { t } = useI18n();
+  const resumeCommand = session.app === "codex" ? session.resumeCommand : null;
   return <FactList rows={[
     { label: t("sessions.fact.sessionId"), value: <code>{session.sessionId}</code> },
     { label: t("sessions.fact.lastActive"), value: session.lastActiveAt
@@ -55,12 +56,13 @@ function SessionFacts({ session, copy }: { session: SessionMeta; copy: (text: st
       <Button variant="unstyled" className="asb-fact-path"
         title={t("sessions.projectDir.copyHint", { dir: session.projectDir })}
         onClick={() => void copy(session.projectDir!, "sessions.label.projectDir")}>{session.projectDir}</Button> }] : []),
-    { label: t("sessions.label.resumeCommand"), value: <span className="asb-session-resume-fact">
-      <code className="asb-code" title={session.resumeCommand}>{session.resumeCommand}</code>
+    ...(resumeCommand ? [{ label: t("sessions.label.resumeCommand"), value: <span className="asb-session-resume-fact">
+      <code className="asb-code" title={resumeCommand}>{resumeCommand}</code>
       <Button variant="icon" aria-label={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
         title={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
-        onClick={() => void copy(session.resumeCommand, "sessions.label.resumeCommand")}><Copy aria-hidden="true" /></Button>
-    </span> },
+        onClick={() => void copy(resumeCommand, "sessions.label.resumeCommand")}><Copy aria-hidden="true" /></Button>
+    </span> }] : []),
+    ...(session.preservation ? [{ label: t("sessions.preservation.saved"), value: <Time iso={session.preservation.savedAt} /> }] : []),
   ]} />;
 }
 
@@ -112,6 +114,9 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
       </div>
     </header>
     <SessionFacts session={session} copy={actions.copy} />
+    {session.preservation && <p className="asb-scope-note">{t("sessions.preservation.resume")}</p>}
+    {session.preservation?.needsAttention && <p className="asb-warn-text" role="status">{t("sessions.preservation.attention")}</p>}
+    {session.preservation && !session.preservation.sourceAvailable && <p className="asb-scope-note">{t("sessions.preservation.sourceMissing")}</p>}
     {!session.canDelete && <p className="asb-scope-note">{t("sessions.nativeHistoryManaged")}</p>}
     {organizing && <SessionOrganizationEditor session={session} organization={organization}
       disabled={deleting || detail.busy} onClose={() => setOrganizing(false)} />}

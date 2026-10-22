@@ -1,5 +1,5 @@
 use super::*;
-use crate::codex_probe::{resolve_question, tests::write_rollout, ProbeRunOutcome};
+use crate::codex_probe::{resolve_question, tests::write_rollout, ProbeRunOutcome, QUESTIONS};
 use std::sync::Mutex;
 
 const ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -18,6 +18,25 @@ fn exit_status(success: bool) -> ExitStatus {
 fn events() -> String {
     format!(r#"{{"type":"thread.started","thread_id":"{ID}"}}
 {{"type":"turn.completed"}}"#)
+}
+
+#[test]
+fn runtime_budgets_follow_catalog_questions_and_custom_formats() {
+    let pelican = resolve_question("pelican-riding-bicycle", None, None, None).unwrap();
+    assert_eq!(pelican.timeout_seconds, 900);
+    for entry in QUESTIONS.iter().filter(|entry| entry.grading == ProbeGrading::Integer) {
+        let question = resolve_question(entry.id, None, None, None).unwrap();
+        assert_eq!(question.timeout_seconds, entry.timeout_seconds);
+        assert_eq!(question.timeout_seconds, 180);
+    }
+    for (grading, expected) in [
+        (ProbeGrading::Integer, 300), (ProbeGrading::SvgVisual, 600), (ProbeGrading::HtmlVisual, 900),
+    ] {
+        let answer = (grading == ProbeGrading::Integer).then(|| "45".into());
+        let custom = resolve_question("custom", Some("Question".into()), answer, Some(grading)).unwrap();
+        assert_eq!(custom.timeout_seconds, expected);
+        assert_eq!(custom.timeout_seconds, grading.custom_timeout_seconds());
+    }
 }
 
 #[test]
@@ -50,12 +69,16 @@ fn runner_uses_the_final_answer_file_and_the_emitted_session_id() {
     let hook: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |id| {
         sink.lock().unwrap().push(id.to_string());
     });
-    let result = run_once(&question, &AtomicBool::new(false), &hook, &|| Ok(()));
+    let clock = RunProgress::new(1, question.timeout_seconds);
+    let deadline = clock.deadline();
+    let result = run_once(&question, &AtomicBool::new(false), &hook, &|| Ok(()), &clock);
     match previous {
         Some(value) => std::env::set_var("ASB_TEST_CODEX_BIN", value),
         None => std::env::remove_var("ASB_TEST_CODEX_BIN"),
     }
     let result = result.unwrap();
+    assert_eq!(clock.deadline(), deadline);
+    assert_eq!(clock.view(false).phase, super::super::progress::ProbeRunPhase::Collecting);
     assert_eq!(result.outcome, ProbeRunOutcome::Passed);
     assert_eq!(result.final_answer.as_deref(), Some("45"));
     assert_eq!(result.session_id.as_deref(), Some(ID));
@@ -87,7 +110,27 @@ fn only_a_successful_final_answer_passes_regardless_of_diagnostics() {
         assert_eq!(result.outcome, expected, "{text}, success={success}, timeout={timeout}");
         assert_eq!(result.total_tokens, Some(190));
         if !success || timeout { assert!(result.error.is_some()); }
+        if timeout { assert_eq!(result.error.as_deref(), Some("单次运行超时（上限 3 分钟）")); }
     }
+}
+
+#[test]
+fn timed_out_visual_answers_keep_the_answer_and_the_actual_limit_without_a_verdict() {
+    let _guard = crate::test_client_paths::redirect_client_paths();
+    let home = PathBuf::from(std::env::var_os("CODEX_HOME").unwrap());
+    write_rollout(&home, ID, 190);
+    let workdir = Workdir::create().unwrap();
+    let answer = workdir.0.join("answer.txt");
+    let text = "<!doctype html><html><body><svg></svg></body></html>";
+    std::fs::write(&answer, text).unwrap();
+    let question = resolve_question("pelican-riding-bicycle", None, None, None).unwrap();
+    let result = collect_result(&question, &answer, &events(), "",
+        exit_status(false), true, Instant::now(), None);
+    assert_eq!(result.outcome, ProbeRunOutcome::Undetermined);
+    assert_eq!(result.final_answer.as_deref(), Some(text));
+    assert_eq!(result.error.as_deref(), Some("单次运行超时（上限 15 分钟）"));
+    assert_eq!(result.session_id.as_deref(), Some(ID));
+    assert_eq!(result.total_tokens, Some(190));
 }
 
 #[test]
@@ -184,7 +227,8 @@ fn session_ids_are_extracted_only_from_thread_started_lines() {
 fn cancelled_before_start_never_launches_a_process() {
     let question = resolve_question("divisible-or-contains-3", None, None, None).unwrap();
     assert!(matches!(
-        run_once(&question, &AtomicBool::new(true), &idle_session_hook(), &|| Ok(())),
+        run_once(&question, &AtomicBool::new(true), &idle_session_hook(), &|| Ok(()),
+            &RunProgress::new(1, question.timeout_seconds)),
         Err(ProbeAbort::Cancelled)
     ));
 }

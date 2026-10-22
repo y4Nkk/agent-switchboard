@@ -20,6 +20,7 @@ Claude workflow 的 journal.jsonl 保存执行事件而非带 sessionId 的会�
 
 ## Related decisions
 
+- [跨账号本机会话保留](../bug-fix/2026-10-22-claude-account-session-retention.md)记住配置来源并保留主会话附属材料；显式 workflow 转换仍由本篇拥有，恢复生成的受管理来源也使用同一转换入口。
 - [完整本地会话与用量](../architecture/2026-10-16-complete-local-session-usage.md)：部分重叠，保留主会话、子代理、原生历史及完整消息读取决定；本篇明确 workflow 事件的独立归属，增加显式转换与提示确认。
 - [会话操作布局](../bug-fix/2026-09-24-session-operations-layout.md)、[会话项目布局](../bug-fix/2026-09-24-session-layout.md)：布局决定不变，新增操作复用现有按钮和滚动控件。
 - 检索 proposed、implemented、rejected 的 journal、workflow、会话来源及子代理关键词，未发现同主题提案需要废弃；其余命中保留既有责任。

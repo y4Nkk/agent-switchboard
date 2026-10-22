@@ -7,7 +7,7 @@ import { Button } from "../Button";
 import { Pagination } from "../Pagination";
 import { toast, toastMessage } from "../use-toast";
 import { copyText } from "./session-content";
-import { useSessionReadQueue } from "./use-session-read-queue";
+import { useReadQueue } from "../../hooks/use-read-queue";
 
 function SessionImage({ src, index }: { src: string; index: number }) {
   const { t } = useI18n();
@@ -43,7 +43,7 @@ export function SessionContent({ read, offset, onOffsetChange }: {
   const [part, setPart] = useState<SessionContentPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useMessageState();
-  const enqueue = useSessionReadQueue();
+  const enqueue = useReadQueue();
   useEffect(() => {
     let current = true;
     setPart(null); setLoading(true); setError(null);

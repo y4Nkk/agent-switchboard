@@ -155,7 +155,10 @@ pub fn save_bookmark(
 ) -> Result<BookmarkSummary, String> {
     let mut source = resolve_session(root, app, session_id)?;
     organization::apply(&mut source.meta, &organization::load(root)?);
-    let message = source.find(message_id)?;
+    let mut message = source.find(message_id)?;
+    let (images, issues) = source.resolve_images(&message.images);
+    if !issues.is_empty() { return Err(issues.join("；")); }
+    message.images = images;
     save_snapshot(root, &source.meta, &message).map(Into::into)
 }
 

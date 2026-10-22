@@ -280,6 +280,7 @@ fn start_background_services(app: &mut tauri::App, local: &local_state::LocalSta
     // cadence, so no renderer lifecycle can stop it.
     usage_query::scheduler::spawn(app.handle().clone());
     storage::spawn(app.handle().clone());
+    session_manager::history::spawn(app.handle(), local.root().to_path_buf());
     runtime_log::record_started();
     #[cfg(debug_assertions)]
     {
@@ -331,6 +332,10 @@ fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 
 fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
     use tauri::Manager;
+    if matches!(&event, tauri::RunEvent::Exit) {
+        session_manager::history::flush_on_exit(app);
+        return;
+    }
     if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
         // A user-invoked desktop restart must never enter the
         // close-to-tray path. Tauri uses this dedicated code when it

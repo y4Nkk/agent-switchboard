@@ -4,6 +4,7 @@
 //! history before, during, and after the calls.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};
 
 use crate::codex_probe::{
@@ -21,11 +22,20 @@ pub struct CodexProbeQuestionDto<'a> {
     grading_version: ProbeGrading,
     reference_visual: Option<&'a str>,
     max_runs: u32,
+    timeout_seconds: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexProbeCatalogDto {
+    questions: Vec<CodexProbeQuestionDto<'static>>,
+    custom_timeout_seconds: BTreeMap<&'static str, u64>,
+    custom_max_runs: u32,
 }
 
 #[tauri::command]
-pub async fn list_codex_probe_questions() -> Result<Vec<CodexProbeQuestionDto<'static>>, CommandError> {
-    Ok(codex_probe::QUESTIONS
+pub async fn get_codex_probe_catalog() -> Result<CodexProbeCatalogDto, CommandError> {
+    let questions = codex_probe::QUESTIONS
         .iter()
         .map(|question| CodexProbeQuestionDto {
             id: question.id,
@@ -34,8 +44,12 @@ pub async fn list_codex_probe_questions() -> Result<Vec<CodexProbeQuestionDto<'s
             grading_version: question.grading,
             reference_visual: question.reference_visual,
             max_runs: question.max_runs,
+            timeout_seconds: question.timeout_seconds,
         })
-        .collect())
+        .collect();
+    let custom_timeout_seconds = [ProbeGrading::Integer, ProbeGrading::SvgVisual, ProbeGrading::HtmlVisual]
+        .into_iter().map(|grading| (grading.as_str(), grading.custom_timeout_seconds())).collect();
+    Ok(CodexProbeCatalogDto { questions, custom_timeout_seconds, custom_max_runs: MAX_RUN_COUNT })
 }
 
 #[derive(Deserialize)]

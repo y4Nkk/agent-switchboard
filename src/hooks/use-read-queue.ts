@@ -2,7 +2,7 @@ import { useState } from "react";
 
 type ReadJob = { run: () => Promise<void>; failed: (reason: unknown) => void };
 
-export function createSessionReadQueue() {
+export function createReadQueue() {
   let pending: ReadJob | null = null;
   let running = false;
   const drain = async () => {
@@ -21,12 +21,12 @@ export function createSessionReadQueue() {
     const job = { run, failed };
     pending = job;
     void drain();
-    // Cleanup drops unstarted work; its owner rejects results from active native reads.
+    // Running native reads finish; cleanup releases only unstarted work.
     return () => { if (pending === job) pending = null; };
   };
 }
 
-export function useSessionReadQueue() {
-  const [enqueue] = useState(() => createSessionReadQueue());
+export function useReadQueue() {
+  const [enqueue] = useState(() => createReadQueue());
   return enqueue;
 }

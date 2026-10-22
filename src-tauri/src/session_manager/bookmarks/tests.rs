@@ -5,8 +5,8 @@ use tempfile::tempdir;
 fn snapshot() -> (SessionMeta, SessionMessage) {
     (SessionMeta { app: AppKind::Codex, session_id: "s1".into(), title: "会话标题".into(),
         summary: "摘要".into(), project_dir: Some("/project".into()),
-        created_at: None, last_active_at: None, resume_command: String::new(),
-        alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true },
+        created_at: None, last_active_at: None, resume_command: None,
+        alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true, preservation: None },
     SessionMessage { id: "message-hash".into(), role: "assistant".into(),
         content: "完整消息\n```rust\nlet x = 1;\n```".into(), at: None, images: Vec::new() })
 }

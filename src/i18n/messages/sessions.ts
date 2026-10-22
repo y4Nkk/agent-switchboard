@@ -3,6 +3,19 @@ import type { MessageEntry } from "../types";
 /** Domain dictionary for sessions (zh-CN / en-US pairs). Keys are prefixed with
  * "sessions." and must never collide with another domain file. */
 export const messages = {
+  "sessions.sources.title": ["Claude 会话来源", "Claude session sources"],
+  "sessions.sources.add": ["接入其他目录", "Connect another folder"],
+  "sessions.sources.note": ["会话按本机项目保留，独立于账号。可选择其他账号原先使用的 Claude 配置目录（包含 projects 子目录）。停止读取来源不会删除已保留的会话。", "Sessions stay with local projects across account switches. Choose another account’s Claude configuration folder containing projects. Disconnecting a source keeps its saved sessions."],
+  "sessions.sources.busy": ["正在读取并保留会话…", "Reading and preserving sessions…"],
+  "sessions.sources.available": ["原目录可用", "Original folder available"],
+  "sessions.sources.unavailable": ["原目录不可用，已保留的会话仍可读取", "Original folder unavailable; saved sessions remain readable"],
+  "sessions.sources.forget": ["停止读取", "Disconnect"],
+  "sessions.sources.failed": ["Claude 会话来源操作失败：{detail}", "Claude session source operation failed: {detail}"],
+  "sessions.preservation.saved": ["本机保存时间", "Saved locally"],
+  "sessions.preservation.resume": ["恢复会使用本机已保留的记录和当前账号，继续原来的项目会话。", "Resume uses the locally saved transcript and your current account in the original project."],
+  "sessions.preservation.attention": ["部分来源或附件尚未完整保存，请查看会话来源提示；此前完整保存的内容仍可读取。", "Some sources or attachments could not be fully saved. See source notices; previously saved content remains readable."],
+  "sessions.preservation.sourceMissing": ["原记录已不可用，当前阅读的是本机保留的内容。", "The original record is unavailable. You are reading the locally saved content."],
+  "sessions.preservation.issue": ["部分 Claude 会话尚未完整保留：{detail}", "Some Claude sessions could not be fully preserved: {detail}"],
   "sessions.convert.action": ["一键完整转换（{count} 份）", "Convert all records ({count})"],
   "sessions.convert.busy": ["正在完整转换…", "Converting complete records…"],
   "sessions.convert.note": ["转换副本保存在本机，保留全部事件字段；在终端恢复时打开所属主会话。", "Local converted copies preserve every event field. Resume opens the parent session."],
@@ -77,7 +90,7 @@ export const messages = {
 
   "sessions.delete.title": ["删除会话", "Delete session"],
   "sessions.delete.confirm": ["确认删除", "Delete session"],
-  "sessions.delete.detail": ["此操作不可恢复；若删除后整理数据清理失败，将显示具体结果。", "This cannot be undone. If organization cleanup fails after deletion, the outcome is reported."],
+  "sessions.delete.detail": ["删除原始会话和本机保留副本，之后不会再次导入同一会话；片段收藏不受影响。此操作不可恢复，未完成的清理会显示具体结果。", "Deletes original records and locally saved copies and prevents reimporting the same session. Saved snippets remain. This cannot be undone; incomplete cleanup is reported."],
   "sessions.actions.more": ["更多", "More"],
   "sessions.actions.moreAria": ["更多会话操作", "More session actions"],
 

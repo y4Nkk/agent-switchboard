@@ -48,3 +48,19 @@ fn appended_records_preserve_anchors_and_prefix_edits_invalidate_them() {
     fs::write(&path, transcript(35).replacen("message 0", "edited", 1)).unwrap();
     assert!(scan_page(&crate::session_manager::fixture_source(&path, AppKind::Codex, "test"), 0, Some(&anchor)).is_err());
 }
+
+#[test]
+fn a_warm_message_page_decodes_only_that_page_and_single_message_reads_seek_directly() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("session.jsonl");
+    fs::write(&path, transcript(63)).unwrap();
+    let source = crate::session_manager::fixture_source(&path, AppKind::Codex, "test");
+    scan_page(&source, 0, None).unwrap();
+    let before = crate::session_manager::records::decoded_record_count();
+    let page = scan_page(&source, 25, None).unwrap();
+    assert_eq!(crate::session_manager::records::decoded_record_count() - before, 25);
+    let before = crate::session_manager::records::decoded_record_count();
+    let message = source.find(&page.items[24].id).unwrap();
+    assert_eq!(message.content, "message 49");
+    assert_eq!(crate::session_manager::records::decoded_record_count() - before, 1);
+}

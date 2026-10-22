@@ -1,13 +1,13 @@
 mod filters;
+mod content;
 pub use filters::{SessionProject, SessionSearchRequest};
 use filters::{catalog, Filters};
-use super::{messages::aligned_content_offset, organization, scan_sources,
-    text::{raw_offset, TextQuery}, SessionIssue, SessionMeta, SessionSource};
+use super::{organization, scan_filtered_sources,
+    text::TextQuery, SessionIssue, SessionMeta, SessionSource};
 #[cfg(test)]
 use super::parser::collect_messages;
 use serde::Serialize;
 use std::collections::HashSet;
-use std::ops::ControlFlow;
 use std::path::Path;
 
 const PAGE_SIZE: usize = 50;
@@ -36,7 +36,7 @@ pub fn search_sessions(
     request: SessionSearchRequest,
 ) -> Result<SessionSearchPage, String> {
     let filters = Filters::parse(request)?;
-    let (mut sources, issues) = scan_sources(root)?;
+    let (mut sources, issues) = scan_filtered_sources(root, filters.request.app, None)?;
     let values = organization::load(root)?;
     for source in &mut sources { organization::apply(&mut source.meta, &values); }
     Ok(search_sources(sources, issues, &filters))
@@ -71,19 +71,17 @@ fn search_sources(
             continue;
         }
         let before = total;
-        let scan = source.visit(|message| {
-            if let Some(position) = query.find(&message.content) {
-                if total >= offset && results.len() < PAGE_SIZE {
-                    let raw = raw_offset(&message.content, position).ok_or("搜索正文位置无效")?;
-                    results.push(SessionSearchHit { excerpt: query.excerpt(&message.content),
-                        message_id: Some(message.id), content_offset: aligned_content_offset(raw), session: source.meta.clone() });
+        match content::matches(&source, &query) {
+            Ok(matches) => {
+                for hit in matches.hits {
+                    if total >= offset && results.len() < PAGE_SIZE {
+                        results.push(SessionSearchHit { session: source.meta.clone(), message_id: Some(hit.message_id),
+                            content_offset: hit.content_offset, excerpt: hit.excerpt });
+                    }
+                    total += 1;
                 }
-                total += 1;
+                issues.extend(matches.issues.into_iter().map(|message| SessionIssue::new(source.meta.app, message)));
             }
-            Ok(ControlFlow::Continue(()))
-        });
-        match scan {
-            Ok(warnings) => issues.extend(warnings.into_iter().map(|message| SessionIssue::new(source.meta.app, message))),
             Err(message) => issues.push(SessionIssue::new(source.meta.app, message)),
         }
         if total == before && metadata_fields(&source.meta)

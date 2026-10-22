@@ -204,7 +204,7 @@
 
 
 
-/* The degradation radar is an opt-in probe, not a ledger: one status line,
+/* The degradation radar is an opt-in probe, not a ledger: live progress,
    the shared stat band and table, plus the custom-question form that only a
    `custom` selection reveals. */
 .asb-panel.asb-codex-probe {
@@ -242,6 +242,50 @@
   margin: 0;
   font: var(--asb-text-label);
 }
+
+.asb-probe-task {
+  display: grid;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  margin-bottom: var(--asb-space-3);
+  padding: var(--asb-space-3);
+  border-radius: var(--asb-radius-group);
+  background: var(--asb-content-muted);
+}
+
+.asb-probe-task-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+}
+
+.asb-probe-task-phase {
+  margin: var(--asb-space-unit) 0 0;
+  font: var(--asb-text-section);
+}
+
+.asb-probe-task-clock { margin: 0; }
+.asb-probe-task-clock dt { color: var(--asb-text-muted); font: var(--asb-text-caption); }
+.asb-probe-task-clock dd { margin: 0; font: var(--asb-text-instrument); font-variant-numeric: tabular-nums; }
+.asb-probe-task-completion { display: grid; gap: var(--asb-space-1); }
+
+.asb-probe-task-meter {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: var(--asb-space-unit);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-hairline);
+  accent-color: var(--asb-action);
+}
+.asb-probe-task-meter::-webkit-progress-bar { background: var(--asb-hairline); }
+.asb-probe-task-meter::-webkit-progress-value { background: var(--asb-action); }
+.asb-probe-task-meter::-moz-progress-bar { background: var(--asb-action); }
+.asb-probe-task > .asb-warn-text { margin: 0; font: var(--asb-text-label); }
 
 .asb-codex-probe-table {
   min-width: max-content;

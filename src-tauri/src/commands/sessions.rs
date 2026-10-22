@@ -2,9 +2,32 @@ use super::error::{blocking, observe, state, CommandError};
 use crate::runtime_log::RuntimeLogAction;
 use crate::session_manager;
 use asb_core::contracts::AppKind;
+use std::path::Path;
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
+#[tauri::command]
+pub async fn claude_session_sources(app: AppHandle) -> Result<Vec<session_manager::history::HistoryRoot>, CommandError> {
+    let local = state(&app)?;
+    blocking(move || session_manager::history::roots(local.root()).map_err(history_error)).await
+}
+
+#[tauri::command]
+pub async fn pick_claude_session_source(app: AppHandle) -> Result<Option<Vec<session_manager::history::HistoryRoot>>, CommandError> {
+    let Some(path) = super::window::pick_directory(app.clone()).await? else { return Ok(None); };
+    let local = state(&app)?;
+    blocking(move || session_manager::history::add_root(local.root(), Path::new(&path)).map(Some).map_err(history_error)).await
+}
+
+#[tauri::command]
+pub async fn forget_claude_session_source(app: AppHandle, path: String) -> Result<Vec<session_manager::history::HistoryRoot>, CommandError> {
+    let local = state(&app)?;
+    blocking(move || session_manager::history::forget_root(local.root(), &path).map_err(history_error)).await
+}
+
+fn history_error(message: String) -> CommandError {
+    CommandError::localized("claude-session-sources-failed", "sessions.sources.failed", message.clone(), serde_json::json!({"detail":message}))
+}
 #[tauri::command]
 pub async fn convert_session_sources(
     app_handle: AppHandle,

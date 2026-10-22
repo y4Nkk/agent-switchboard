@@ -21,7 +21,10 @@ pub fn export_markdown(root: &Path, app: AppKind, session_id: &str, target: &Pat
     {
         let mut writer = BufWriter::new(&mut file);
         write_header(&mut writer, &source.meta).map_err(export_error)?;
-        let issues = source.visit(|message| {
+        let issues = source.visit(|mut message| {
+            let (images, issues) = source.resolve_images(&message.images);
+            if !issues.is_empty() { return Err(issues.join("；")); }
+            message.images = images;
             write_message(&mut writer, &message).map_err(export_error)?;
             Ok(ControlFlow::Continue(()))
         })?;
@@ -43,7 +46,6 @@ fn validate_target(root: &Path, source: &super::SessionSource, target: &Path) ->
     if resolved.starts_with(root.canonicalize().map_err(|error| error.to_string())?) {
         return Err("导出目标不能位于应用状态目录，请选择其他保存位置".into());
     }
-    if !exists { return Ok(()); }
     let target = resolved;
     let mut originals = source.paths.clone();
     if source.meta.app == AppKind::Codex {
@@ -51,8 +53,12 @@ fn validate_target(root: &Path, source: &super::SessionSource, target: &Path) ->
         originals.extend([directory.join("state_5.sqlite"), directory.join("thread_history_1.sqlite")]);
     }
     for original in originals {
-        if original.try_exists().map_err(|error| error.to_string())?
-            && original.canonicalize().map_err(|error| error.to_string())? == target {
+        let resolved = if original.try_exists().map_err(|error| error.to_string())? {
+            Some(original.canonicalize().map_err(|error| error.to_string())?)
+        } else if let Some(parent) = original.parent().filter(|parent| parent.is_dir()) {
+            Some(parent.canonicalize().map_err(|error| error.to_string())?.join(original.file_name().ok_or("来源文件名无效")?))
+        } else { None };
+        if resolved.as_ref() == Some(&target) {
             return Err("导出目标不能覆盖原会话记录或原生数据库".into());
         }
     }
@@ -98,7 +104,7 @@ mod tests {
         let meta = SessionMeta { app: AppKind::Codex, session_id: "s-1".into(),
             title: "[title]".into(), summary: String::new(), project_dir: None,
             created_at: Some("2026-09-22T00:00:00Z".into()), last_active_at: None,
-            resume_command: String::new(), alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true };
+            resume_command: None, alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true, preservation: None };
         let content = "```rust\nlet x = 1;\n```\n\n完整正文";
         let mut output = Vec::new();
         write_header(&mut output, &meta).unwrap();

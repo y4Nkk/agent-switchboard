@@ -1,138 +1,128 @@
-use super::{native, parser, records, SessionMessage, SessionSource};
-use chrono::{TimeZone, Utc};
-use rusqlite::{Connection, params};
-use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+mod native_index;
+
+use super::{jsonl, native, parser, read_index::ReadIndex, records, SessionMessage, SessionSource};
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::ops::ControlFlow;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
-enum Location {
+static MESSAGE_INDEX_GATE: Mutex<()> = Mutex::new(());
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) enum Location {
     Native { turn: String, item: String, realtime: bool },
     Jsonl { path: PathBuf, offset: u64, digest: String },
-}
-struct Entry { id: String, at: Option<String>, location: Location }
-
-pub(super) fn visit(
-    source: &SessionSource,
-    mut visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>,
-) -> Result<Vec<String>, String> {
-    let history = source.native_history.as_ref().ok_or("缺少原生历史位置")?;
-    let snapshot = native::open(history).and_then(|connection| {
-        connection.execute_batch("BEGIN DEFERRED").map_err(|error| error.to_string())?;
-        let index = native_index(&connection, &source.meta.session_id)?;
-        Ok((connection, index))
-    });
-    let (connection, (mut entries, mut issues)) = match snapshot {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            let mut issues = vec![error];
-            issues.extend(super::jsonl::visit(&source.paths, &mut visitor)?);
-            return Ok(issues);
-        }
-    };
-    if entries.is_empty() {
-        if source.paths.is_empty() { issues.push("原生历史保留了会话身份，但未保留可读取的消息正文".into()); }
-        else { issues.extend(super::jsonl::visit(&source.paths, &mut visitor)?); }
-        return Ok(issues);
-    }
-    append_protocol(source, &mut entries, &mut issues);
-    entries.sort_by(|left, right| left.at.cmp(&right.at));
-    for entry in entries {
-        let mut message = match load(&connection, &source.meta.session_id, &entry) {
-            Ok(message) => message,
-            Err(error) => { issues.push(error); continue; }
-        };
-        message.id = entry.id;
-        message.at = entry.at;
-        if visitor(message)?.is_break() { break; }
-    }
-    Ok(issues)
+    Converted { path: PathBuf, offset: u64, digest: String },
+    Saved { source: super::history::Transcript, offset: u64, digest: String },
 }
 
-fn append_protocol(source: &SessionSource, entries: &mut Vec<Entry>, issues: &mut Vec<String>) {
-    let mut identities: HashSet<_> = entries.iter().map(|entry| entry.id.clone()).collect();
-    let mut seen = HashMap::<String, usize>::new();
-    for path in &source.paths {
-        let mut occurrences = HashMap::<String, usize>::new();
-        let scan = records::visit_records(path, 0, |_, offset, value| {
-            let Some((mut id, message, projected)) = supplement(&value) else { return Ok(ControlFlow::Continue(())); };
-            if projected {
-                if !identities.insert(id.clone()) { return Ok(ControlFlow::Continue(())); }
-            } else {
-                let occurrence = occurrences.entry(id.clone()).or_default();
-                *occurrence += 1;
-                if seen.get(&id).is_some_and(|count| *count >= *occurrence) { return Ok(ControlFlow::Continue(())); }
-                seen.insert(id.clone(), *occurrence);
-                id = format!("{id}-{occurrence}");
-            }
-            entries.push(Entry { id, at: message.at, location: Location::Jsonl {
-                path: path.clone(), offset, digest: parser::record_identity(&value) } });
-            Ok(ControlFlow::Continue(()))
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct Position {
+    pub id: String,
+    pub at: Option<String>,
+    pub order_at: Option<String>,
+    pub projected: bool,
+    pub location: Location,
+}
+
+pub(super) struct MessageIndex {
+    pub entries: Vec<Position>,
+    pub issues: Vec<String>,
+    connection: Option<Connection>,
+    thread: String,
+}
+
+pub(super) fn index(source: &SessionSource) -> Result<MessageIndex, String> {
+    let _guard = MESSAGE_INDEX_GATE.lock().map_err(|_| "会话消息索引锁不可用")?;
+    let index = ReadIndex::open(&source.index_root)?;
+    if let Some(path) = &source.converted {
+        let (entries, issues) = index.file("converted-messages", path, || converted_positions(path))?;
+        return Ok(MessageIndex { entries, issues, connection: None, thread: source.meta.session_id.clone() });
+    }
+    let mut result = MessageIndex { entries: Vec::new(), issues: Vec::new(), connection: None, thread: source.meta.session_id.clone() };
+    if let Some(history) = &source.native_history {
+        let snapshot = native::open(history).and_then(|connection| {
+            connection.execute_batch("BEGIN DEFERRED").map_err(|error| error.to_string())?;
+            let (entries, issues) = native_index::positions(&index, &connection, history, &source.meta.session_id)?;
+            Ok((connection, entries, issues))
         });
-        match scan { Ok(warnings) => issues.extend(warnings), Err(error) => issues.push(error) }
-    }
-}
-
-fn native_index(connection: &Connection, thread: &str) -> Result<(Vec<Entry>, Vec<String>), String> {
-    let mut statement = connection.prepare(
-        "SELECT turn_id,item_id,created_at_ms,CASE WHEN length(CAST(item_json AS BLOB))<=?2 THEN item_json END,0,rollout_ordinal FROM thread_items WHERE thread_id=?1 \
-         UNION ALL SELECT '',r.item_id,r.created_at_ms,CASE WHEN length(CAST(r.item_json AS BLOB))<=?2 THEN r.item_json END,1,r.rollout_ordinal FROM thread_realtime_items r \
-         WHERE r.thread_id=?1 AND NOT EXISTS (SELECT 1 FROM thread_items i WHERE i.thread_id=r.thread_id AND i.item_id=r.item_id) \
-         ORDER BY 6,3,2").map_err(|error| error.to_string())?;
-    let mut rows = statement.query(params![thread, records::MAX_RECORD_BYTES]).map_err(|error| error.to_string())?;
-    let mut entries = Vec::new();
-    let mut issues = Vec::new();
-    while let Some(row) = rows.next().map_err(|error| error.to_string())? {
-        match native_entry(row) {
-            Ok(Some(entry)) => entries.push(entry),
-            Ok(None) => {},
-            Err(error) => issues.push(format!("会话 {thread} 的一条原生消息不可读: {error}")),
+        match snapshot {
+            Ok((connection, entries, issues)) => { result.connection = Some(connection); result.entries = entries; result.issues.extend(issues); }
+            Err(error) => result.issues.push(error),
         }
     }
+    let protocol = !result.entries.is_empty();
+    let (raw, issues) = jsonl::positions(&index, &source.record_sources(), protocol)?;
+    result.issues.extend(issues);
+    result.issues.extend(source.retained.iter().filter_map(|source| source.issue.clone()));
+    let mut identities: HashSet<_> = result.entries.iter().map(|entry| entry.id.clone()).collect();
+    result.entries.extend(raw.into_iter().filter(|entry| !entry.projected || identities.insert(entry.id.clone())));
+    if protocol { result.entries.sort_by(|left, right| left.at.cmp(&right.at)); }
+    if result.entries.is_empty() && source.paths.is_empty() {
+        result.issues.push("仅保留会话身份，原始记录和原生消息正文均不可用".into());
+    }
+    Ok(result)
+}
+
+fn converted_positions(path: &std::path::Path) -> Result<(Vec<Position>, Vec<String>), String> {
+    let mut entries = Vec::new();
+    let issues = records::visit_records(path, 0, |ordinal, offset, value| {
+        if ordinal == 1 { return Ok(ControlFlow::Continue(())); }
+        let digest = parser::record_identity(&value);
+        let message: SessionMessage = serde_json::from_value(value).map_err(|error| error.to_string())?;
+        entries.push(Position { id: message.id, at: message.at.clone(), order_at: message.at, projected: false,
+            location: Location::Converted { path: path.into(), offset, digest } });
+        Ok(ControlFlow::Continue(()))
+    })?;
     Ok((entries, issues))
 }
 
-fn native_entry(row: &rusqlite::Row<'_>) -> Result<Option<Entry>, String> {
-    let raw: String = row.get::<_, Option<String>>(3).map_err(|error| error.to_string())?
-        .ok_or("原生消息超过 32 MiB 单条读取上限")?;
-    let value: Value = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
-    if parser::message_from(&value).is_none() { return Ok(None); }
-    let milliseconds: i64 = row.get(2).map_err(|error| error.to_string())?;
-    Ok(Some(Entry { id: parser::native_identity(&value),
-        at: Utc.timestamp_millis_opt(milliseconds).single().map(|at| at.to_rfc3339()),
-        location: Location::Native { turn: row.get(0).map_err(|error| error.to_string())?,
-            item: row.get(1).map_err(|error| error.to_string())?, realtime: row.get(4).map_err(|error| error.to_string())? } }))
-}
-
-fn supplement(value: &Value) -> Option<(String, SessionMessage, bool)> {
-    if value.get("type").and_then(Value::as_str) == Some("event_msg") {
-        let payload = value.get("payload")?;
-        if payload.get("type").and_then(Value::as_str) != Some("item_completed") { return None; }
-        let item = payload.get("item")?;
-        return Some((parser::native_identity(item), parser::message_from(value)?, true));
+impl MessageIndex {
+    pub(super) fn load(&self, entry: &Position) -> Result<SessionMessage, String> {
+        let mut message = match &entry.location {
+            Location::Saved { source, offset, digest } => {
+                let value = records::Source::Saved(source.clone()).load(*offset)?;
+                if parser::record_identity(&value) != *digest { return Err("已保留会话在读取期间改变，请重新打开".into()); }
+                let mut message = parser::message_from(&value).ok_or("已保留消息内容不可读")?;
+                message.images = super::history::bind_images(source, message.images);
+                message
+            }
+            Location::Jsonl { path, offset, digest } => parser::message_from(&jsonl::value(path, *offset, digest)?)
+                .ok_or("原消息内容已不可读")?,
+            Location::Converted { path, offset, digest } => serde_json::from_value(jsonl::value(path, *offset, digest)?)
+                .map_err(|error| error.to_string())?,
+            Location::Native { turn, item, realtime } => {
+                let connection = self.connection.as_ref().ok_or("缺少原生消息读取事务")?;
+                let value = native_index::value(connection, &self.thread, turn, item, *realtime)?;
+                if parser::native_identity(&value) != entry.id { return Err("原生消息已经改变，请重新打开会话".into()); }
+                parser::message_from(&value).ok_or("原消息内容已不可读")?
+            }
+        };
+        message.id = entry.id.clone();
+        message.at = entry.at.clone();
+        Ok(message)
     }
-    // Raw protocol fields can retain instructions, encrypted reasoning or messages
-    // absent from the native UI projection; only identical projected items collapse.
-    Some((format!("protocol-{}", parser::record_identity(value)), parser::message_from(value)?, false))
-}
 
-fn load(connection: &Connection, thread: &str, entry: &Entry) -> Result<SessionMessage, String> {
-    let value = match &entry.location {
-        Location::Native { turn, item, realtime } => {
-            let sql = if *realtime { "SELECT item_json FROM thread_realtime_items WHERE thread_id=?1 AND item_id=?3" }
-                else { "SELECT item_json FROM thread_items WHERE thread_id=?1 AND turn_id=?2 AND item_id=?3" };
-            let raw: String = connection.query_row(sql, params![thread,turn,item], |row| row.get(0)).map_err(|error| error.to_string())?;
-            serde_json::from_str::<Value>(&raw).map_err(|error| error.to_string())?
+    pub(super) fn find(&self, id: &str) -> Result<SessionMessage, String> {
+        let entry = self.entries.iter().find(|entry| entry.id == id)
+            .ok_or_else(|| if self.issues.is_empty() { "原消息已改变或不存在；请重新打开会话".into() } else { self.issues.join("；") })?;
+        self.load(entry)
+    }
+
+    pub(super) fn visit(&self, mut visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>) -> Result<Vec<String>, String> {
+        let mut issues = self.issues.clone();
+        for entry in &self.entries {
+            match self.load(entry) {
+                Ok(message) => { if visitor(message)?.is_break() { break; } }
+                Err(error) => issues.push(error),
+            }
         }
-        Location::Jsonl { path, offset, digest } => {
-            let mut found = None;
-            records::visit_records(path, *offset, |_, _, value| { found = Some(value); Ok(ControlFlow::Break(())) })?;
-            let value = found.ok_or("原会话记录已经改变，请重新打开会话")?;
-            if parser::record_identity(&value) != *digest { return Err("原会话记录已经改变，请重新打开会话".into()); }
-            value
-        }
-    };
-    parser::message_from(&value).ok_or_else(|| "原消息内容已不可读".into())
+        let mut seen = HashSet::new();
+        issues.retain(|issue| seen.insert(issue.clone()));
+        Ok(issues)
+    }
 }
 
 #[cfg(test)]

@@ -12,13 +12,20 @@ export interface SessionMeta {
   projectDir: string | null;
   createdAt: string | null;
   lastActiveAt: string | null;
-  resumeCommand: string;
+  resumeCommand: string | null;
   alias: string | null;
   pinned: boolean;
   tags: string[];
   parentSessionId: string | null;
   canDelete: boolean;
+  preservation: { savedAt: string; sourceAvailable: boolean; needsAttention: boolean } | null;
 }
+
+export interface ClaudeSessionSource { path: string; available: boolean; removable: boolean; issue: string | null }
+
+export const listClaudeSessionSources = (): Promise<ClaudeSessionSource[]> => invoke("claude_session_sources");
+export const chooseClaudeSessionSource = (): Promise<ClaudeSessionSource[] | null> => invoke("pick_claude_session_source");
+export const forgetClaudeSessionSource = (path: string): Promise<ClaudeSessionSource[]> => invoke("forget_claude_session_source", { path });
 
 export interface SessionMessagePreview {
   id: string;

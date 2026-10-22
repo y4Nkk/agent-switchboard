@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { CodexProbeGradingVersion, CodexProbeHistoryItem, CodexProbeQuestionSnapshot } from "../api/client";
+import type { CodexProbeBatch, CodexProbeGradingVersion, CodexProbeHistoryItem, CodexProbeQuestionSnapshot } from "../api/client";
 import type { MessageKey, TFunction } from "../i18n";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
@@ -7,6 +7,7 @@ import { Checkbox } from "./Checkbox";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { EditorFrame } from "./EditorFrame";
 import { Pagination } from "./Pagination";
+import { ProbeTaskProgress } from "./ProbeTaskProgress";
 import { Select } from "./Select";
 import { StatCards } from "./charts/stat-cards";
 import {
@@ -170,12 +171,13 @@ function HistoryList({ history, onRequestDelete }: {
   );
 }
 
-function HistoryDetail({ history, onReuseQuestion }: {
+function HistoryDetail({ history, onReuseQuestion, liveBatch }: {
   history: ReturnType<typeof useCodexProbeHistory>;
   onReuseQuestion: Props["onReuseQuestion"];
+  liveBatch: CodexProbeBatch | null;
 }) {
   const { t } = useI18n();
-  const batch = history.detail;
+  const batch = liveBatch?.batchId === history.detailId ? liveBatch : history.detail;
   const summary = batch ? summarizeRuns(batch.runs) : null;
   return (
     <div className="asb-codex-probe-history">
@@ -272,9 +274,13 @@ export function CodexProbeHistory({ active, probe, onClose, onReuseQuestion, onC
         </span>
       ) : undefined}
     >
+      {running && <ProbeTaskProgress batch={running} stale={!probe.synchronized} />}
+      {probe.readError && <p className="asb-warn-text" role="alert">
+        {t("codex.probe.readError", { error: probe.readError })}
+      </p>}
       {history.detailId === null
         ? <HistoryList history={history} onRequestDelete={setPendingDelete} />
-        : <HistoryDetail history={history} onReuseQuestion={onReuseQuestion} />}
+        : <HistoryDetail history={history} onReuseQuestion={onReuseQuestion} liveBatch={probe.status} />}
       {pendingDelete !== null && pendingItems.length > 0 && (
         <ConfirmSheet
           title={t("codex.history.deleteTitle")}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { searchSessions, type SessionSearchPage, type SessionSearchRequest } from "../../api/client";
 import { useMessageState } from "../../i18n/use-message-state";
 import type { ClientFilterValue } from "../ClientFilter";
-import { useSessionReadQueue } from "./use-session-read-queue";
+import { useReadQueue } from "../../hooks/use-read-queue";
 
 export const SESSION_PAGE_SIZE = 50;
 
@@ -19,17 +19,18 @@ export function useSessionSearch(active: boolean) {
   const [tags, setTags] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
-  const [result, setResult] = useState<SessionSearchPage | null>(null);
+  const identity = JSON.stringify([query, filter, page, project, tag, pinnedOnly, dates]);
+  const [snapshot, setSnapshot] = useState<{ identity: string; value: SessionSearchPage } | null>(null);
+  const result = snapshot?.identity === identity ? snapshot.value : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useMessageState();
-  const enqueue = useSessionReadQueue();
+  const enqueue = useReadQueue();
 
   useEffect(() => {
-    if (!active) { setResult(null); setBusy(false); return; }
+    if (!active) { setSnapshot(null); setBusy(false); return; }
     let current = true;
     setBusy(true);
     setError(null);
-    setResult(null);
     const run = async () => {
       if (!current) return;
       try {
@@ -39,14 +40,14 @@ export function useSessionSearch(active: boolean) {
         setProjects(next.projects); setTags(next.tags);
         const lastPage = Math.max(1, Math.ceil(next.total / SESSION_PAGE_SIZE));
         if (page > lastPage) setPage(lastPage);
-        else setResult(next);
+        else setSnapshot({ identity, value: next });
       } finally {
         if (current) setBusy(false);
       }
     };
     const cancel = enqueue(run, (caught) => { if (current) setError(caught); });
     return () => { current = false; cancel(); };
-  }, [active, query, filter, page, revision, project, tag, pinnedOnly, dates, setError, enqueue]);
+  }, [active, query, filter, page, revision, project, tag, pinnedOnly, dates, identity, setError, enqueue]);
 
   const submit = () => { setQuery(draft.trim()); setPage(1); setRevision((value) => value + 1); };
   const changeFilter = (value: ClientFilterValue) => { setFilter(value); setProject(null); setTag(null); setProjects([]); setTags([]); setPage(1); };

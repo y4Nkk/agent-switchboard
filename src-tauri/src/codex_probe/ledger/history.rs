@@ -47,7 +47,7 @@ impl ProbeLedger {
                     status: ProbeBatchStatus::parse(&row.get::<_, String>(3)?)
                         .unwrap_or(ProbeBatchStatus::Failed),
                     question_label: row.get(4)?,
-                    grading_version: map_grading(row, 12)?,
+                    grading_version: map_enum(row, 12, crate::codex_probe::ProbeGrading::parse, "判分规则")?,
                     profile_id: row.get(5)?,
                     profile_name: row.get(6)?,
                     run_count: row.get::<_, i64>(7)?.max(0) as u32,

@@ -1,11 +1,12 @@
 //! Exact local call usage; context estimates never become consumption.
 mod parse;
+mod file_index;
 use asb_core::contracts::{AppKind, ModelUsageCoverage, ModelUsageDay, ModelUsageGroup,
     ModelUsageIssue, ModelUsageRange, ModelUsageReport, ModelUsageTokens};
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub(super) struct TokenTotals {
     pub input: u64,
     pub cache_read: u64,
@@ -50,6 +51,7 @@ impl CalendarRange {
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct UsageEvent {
     pub app: AppKind,
     pub identity: String,
@@ -92,54 +94,77 @@ impl Accumulator {
     }
 }
 
-pub(crate) fn report(
-    range: ModelUsageRange,
+pub(crate) fn reports(
+    root: &std::path::Path,
     mut sources: Vec<crate::session_manager::SessionSource>,
     source_issues: Vec<crate::session_manager::SessionIssue>,
     now: DateTime<Local>,
-) -> ModelUsageReport {
+) -> Result<Vec<ModelUsageReport>, String> {
     sources.retain(|source| source.converted.is_none());
-    let mut aggregate = Accumulator::new(CalendarRange::new(range, now));
     sources.sort_by(|left, right| (left.meta.app, &left.meta.session_id).cmp(&(right.meta.app, &right.meta.session_id)));
     let mut issues: Vec<ModelUsageIssue> = source_issues.into_iter().filter(|issue| issue.conversion_id.is_none())
         .map(|issue| ModelUsageIssue { app: issue.app, message: issue.message }).collect();
+    let index = crate::session_manager::read_index::ReadIndex::open(root)?;
+    let (events, scanned_files) = collect_events(&index, &sources, &mut issues);
+    let mut results = Vec::new();
+    for range in [ModelUsageRange::Today, ModelUsageRange::Last7Days, ModelUsageRange::Last30Days, ModelUsageRange::All] {
+        let mut aggregate = Accumulator::new(CalendarRange::new(range, now));
+        let mut range_issues = issues.clone();
+        for event in &events {
+            if let Err(message) = aggregate.add(event.clone()) { range_issues.push(ModelUsageIssue { app: event.app, message }); }
+        }
+        let coverage = ModelUsageCoverage { source_sessions: sources.len() as u64, scanned_files,
+            sessions_without_usage: sources.iter().filter(|source|
+                !aggregate.measured.contains(&(source.meta.app, source.meta.session_id.clone()))).count() as u64,
+            undated_event_tokens: aggregate.undated_event_tokens };
+        results.push(finish(range, now, aggregate, coverage, range_issues));
+    }
+    Ok(results)
+}
+
+fn collect_events(
+    index: &crate::session_manager::read_index::ReadIndex,
+    sources: &[crate::session_manager::SessionSource], issues: &mut Vec<ModelUsageIssue>,
+) -> (Vec<UsageEvent>, u64) {
     let mut codex = HashMap::new();
     let mut claude = HashMap::new();
-    let mut coverage = ModelUsageCoverage { source_sessions: sources.len() as u64, ..Default::default() };
-    for source in &sources {
-        for path in &source.paths {
-            coverage.scanned_files += 1;
-            let scan = match source.meta.app {
-                AppKind::Codex => crate::codex_metering::visit_token_usage(path, &source.meta.session_id, |event| {
-                    if let Err(message) = crate::codex_metering::merge_token_event(&mut codex, event) {
-                        issues.push(ModelUsageIssue { app: AppKind::Codex, message });
+    let mut scanned_files = 0;
+    for source in sources {
+        for record in source.record_sources() {
+            scanned_files += 1;
+            match file_index::read_source(index, &record, source.meta.app, &source.meta.session_id) {
+                Ok(file) => {
+                    issues.extend(file.issues.into_iter().map(|message| ModelUsageIssue { app: source.meta.app, message }));
+                    match file.state {
+                        file_index::UsageState::Codex(state) => for event in state.events() {
+                            if let Err(message) = crate::codex_metering::merge_token_event(&mut codex, event) {
+                                issues.push(ModelUsageIssue { app: AppKind::Codex, message });
+                            }
+                        },
+                        file_index::UsageState::Claude(state) => for candidate in state.into_values() { parse::merge(&mut claude, candidate); },
                     }
-                    Ok(())
-                }),
-                AppKind::Claude => parse::collect_claude(path, &source.meta.session_id, &mut claude),
-            };
-            match scan {
-                Ok(warnings) => issues.extend(warnings.into_iter().map(|message| ModelUsageIssue { app: source.meta.app, message })),
+                }
                 Err(message) => issues.push(ModelUsageIssue { app: source.meta.app, message }),
             }
         }
     }
-    for event in codex.into_values() {
+    let mut events: Vec<_> = codex.into_values().map(|event| {
         let tokens = event.tokens;
-        let total = tokens.total().expect("validated receipt total");
-        let result = aggregate.add(UsageEvent { app: AppKind::Codex, identity: event.identity, session: event.owner,
+        UsageEvent { app: AppKind::Codex, identity: event.identity, session: event.owner,
             model: event.model, at: event.at, tokens: TokenTotals {
                 input: tokens.input - tokens.cached_input - tokens.cache_write_input,
-                cache_read: tokens.cached_input, cache_creation: tokens.cache_write_input, output: tokens.output, total } });
-        if let Err(message) = result { issues.push(ModelUsageIssue { app: AppKind::Codex, message }); }
-    }
-    for candidate in claude.into_values() {
-        if let Err(message) = aggregate.add(candidate.event) { issues.push(ModelUsageIssue { app: AppKind::Claude, message }); }
-    }
-    coverage.sessions_without_usage = sources.iter()
-        .filter(|source| !aggregate.measured.contains(&(source.meta.app, source.meta.session_id.clone()))).count() as u64;
-    coverage.undated_event_tokens = aggregate.undated_event_tokens;
-    finish(range, now, aggregate, coverage, issues)
+                cache_read: tokens.cached_input, cache_creation: tokens.cache_write_input, output: tokens.output,
+                total: tokens.total().expect("validated receipt total") } }
+    }).collect();
+    events.extend(claude.into_values().map(|candidate| candidate.event));
+    (events, scanned_files)
+}
+
+#[cfg(test)]
+pub(crate) fn report(range: ModelUsageRange, sources: Vec<crate::session_manager::SessionSource>,
+    issues: Vec<crate::session_manager::SessionIssue>, now: DateTime<Local>) -> ModelUsageReport {
+    let temporary = tempfile::tempdir().unwrap();
+    reports(temporary.path(), sources, issues, now).unwrap().into_iter().find(|report| report.range == range).unwrap()
 }
 
 fn finish(

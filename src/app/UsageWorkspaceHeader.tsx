@@ -33,12 +33,12 @@ interface RadarControlsProps {
 function RadarControls({ active, probe, form, onQuestionChange, runCount, onRunCountChange, onOpenHistory }: RadarControlsProps) {
   const { t } = useI18n();
   const custom = form.questionId === CUSTOM_PROBE_QUESTION_ID;
-  const questions = probe.questions ?? [];
-  const catalogMax = Math.max(1, ...questions.map((question) => question.maxRuns));
-  const maxRuns = questions.find((question) => question.id === form.questionId)?.maxRuns ?? catalogMax;
-  const effectiveRuns = Math.min(runCount, maxRuns);
-  const ready = !custom || (form.customQuestion.trim().length > 0
-    && (form.customGradingVersion !== "1" || /^\d+$/.test(form.customAnswer.trim())));
+  const selected = probe.questions?.find((question) => question.id === form.questionId);
+  const maxRuns = custom ? probe.customMaxRuns : selected?.maxRuns ?? null;
+  const effectiveRuns = maxRuns === null ? runCount : Math.min(runCount, maxRuns);
+  const ready = probe.synchronized && maxRuns !== null && probe.customTimeoutSeconds !== null
+    && (!custom || (form.customQuestion.trim().length > 0
+      && (form.customGradingVersion !== "1" || /^\d+$/.test(form.customAnswer.trim()))));
   const locked = !active || probe.running || probe.starting || !!probe.status?.persistPending;
   return (
     <div className="asb-model-usage-controls">
@@ -47,7 +47,7 @@ function RadarControls({ active, probe, form, onQuestionChange, runCount, onRunC
         { value: CUSTOM_PROBE_QUESTION_ID, label: t("usage.radar.customQuestion") },
       ]} placeholder={probe.questions === null ? t("usage.radar.questionsLoading") : t("usage.radar.selectQuestion")}
         ariaLabel={t("usage.radar.questionAria")} disabled={locked} onChange={onQuestionChange} />
-      {probe.questions !== null && <div className="asb-run-count">
+      {maxRuns !== null && <div className="asb-run-count">
         <span className="asb-run-count-label">{t("usage.radar.runCount")}</span>
         <Input type="number" min={1} max={maxRuns} step={1} value={effectiveRuns}
           disabled={locked || maxRuns === 1} aria-label={t("usage.radar.runCountAria")}

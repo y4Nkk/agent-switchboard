@@ -52,6 +52,16 @@
 
 .asb-session-detail { container: transcript / inline-size; }
 
+.asb-session-sources { list-style: none; margin: 0; padding: 0; }
+.asb-session-sources > li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+  padding-block: var(--asb-space-3);
+}
+.asb-session-sources > li > div { min-width: 0; overflow-wrap: anywhere; }
+
 .asb-session-list {
   display: flex;
   flex-direction: column;

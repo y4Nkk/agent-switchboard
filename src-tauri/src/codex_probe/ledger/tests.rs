@@ -63,20 +63,20 @@ fn batches_and_runs_round_trip_with_snapshots() {
     ledger.save_run_result("b1", &zero).unwrap();
     ledger.finish_batch("b1", ProbeBatchStatus::Completed, None, &[]).unwrap();
 
-    let loaded = ledger.load_batch("b1").unwrap().expect("batch");
+    let loaded = ledger.load_snapshot(Some("b1")).unwrap().expect("batch").0;
     assert_eq!(loaded.status, ProbeBatchStatus::Completed);
     assert!(loaded.finished_at.is_some());
     assert_eq!(loaded.question.text, "题目全文");
     assert_eq!(loaded.config.profile_name.as_deref(), Some("主供应商"));
-    let runs = ledger.load_runs("b1").unwrap();
+    let runs = ledger.load_snapshot(Some("b1")).unwrap().unwrap().1;
     assert_eq!(runs.len(), 2);
     assert_eq!(runs[0].status, ProbeRunStatus::Passed);
     assert_eq!(runs[0].total_tokens, Some(210));
     assert_eq!(runs[1].total_tokens, Some(0));
     assert_eq!(runs[1].status, ProbeRunStatus::Failed);
     // The newest batch is the current one, finished or not.
-    assert_eq!(ledger.current_batch().unwrap().expect("current").id, "b1");
-    assert!(ledger.load_batch("missing").unwrap().is_none());
+    assert_eq!(ledger.load_snapshot(None).unwrap().expect("current").0.id, "b1");
+    assert!(ledger.load_snapshot(Some("missing")).unwrap().is_none());
 }
 
 #[test]
@@ -102,11 +102,11 @@ fn visual_answers_survive_reopening_and_share_history_deletion() {
         }]).unwrap();
 
         let reopened = ProbeLedger::new(directory.path());
-        let cached = reopened.current_batch().unwrap().unwrap();
+        let cached = reopened.load_snapshot(None).unwrap().unwrap().0;
         assert_eq!(cached.grading_version, grading);
         assert_eq!(cached.question.text, visual.question.text);
         assert!(cached.question.expected_answer.is_empty());
-        assert_eq!(reopened.load_runs("visual").unwrap()[0].final_answer.as_deref(), Some(raw));
+        assert_eq!(reopened.load_snapshot(Some("visual")).unwrap().unwrap().1[0].final_answer.as_deref(), Some(raw));
         let history = reopened.list_history(&ProbeHistoryQuery { offset: 0, limit: 20,
             days: None, profile: ProbeProfileFilter::All, status: None }).unwrap();
         assert_eq!(history.items[0].grading_version, grading);
@@ -114,8 +114,8 @@ fn visual_answers_survive_reopening_and_share_history_deletion() {
         assert_eq!(history.items[0].passed_count, 0);
         assert_eq!(history.items[0].total_tokens, Some(210));
         assert_eq!(reopened.delete_batches(&["visual".into()]).unwrap().removed, 1);
-        assert!(reopened.current_batch().unwrap().is_none());
-        assert!(reopened.load_runs("visual").unwrap().is_empty());
+        assert!(reopened.load_snapshot(None).unwrap().is_none());
+        assert!(reopened.load_snapshot(Some("visual")).unwrap().is_none());
     }
 }
 
@@ -125,17 +125,17 @@ fn a_finished_batch_keeps_its_first_terminal_state() {
     ledger.insert_batch(&batch("b1", &rfc3339(0), None)).unwrap();
     ledger.finish_batch("b1", ProbeBatchStatus::Completed, None, &[]).unwrap();
     assert!(ledger.finish_batch("b1", ProbeBatchStatus::Cancelled, Some("late".into()), &[]).is_err());
-    let loaded = ledger.load_batch("b1").unwrap().unwrap();
+    let loaded = ledger.load_snapshot(Some("b1")).unwrap().unwrap().0;
     assert_eq!(loaded.status, ProbeBatchStatus::Completed);
     assert_eq!(loaded.status_error, None);
 }
 
 #[test]
-fn current_batch_prefers_the_newest_started_batch() {
+fn current_snapshot_prefers_the_newest_started_batch() {
     let (_directory, ledger) = temp_ledger();
     ledger.insert_batch(&batch("older", &rfc3339(2), None)).unwrap();
     ledger.insert_batch(&batch("newer", &rfc3339(1), None)).unwrap();
-    assert_eq!(ledger.current_batch().unwrap().unwrap().id, "newer");
+    assert_eq!(ledger.load_snapshot(None).unwrap().unwrap().0.id, "newer");
 }
 
 fn history_fixture() -> (tempfile::TempDir, ProbeLedger) {
@@ -248,12 +248,11 @@ fn deletion_refuses_running_batches_and_removes_only_probe_records() {
     let error = ledger.delete_batches(&["finished".into(), "live".into()]).unwrap_err();
     assert!(error.contains("运行中"), "{error}");
     // The refused request deleted nothing.
-    assert!(ledger.load_batch("finished").unwrap().is_some());
+    assert!(ledger.load_snapshot(Some("finished")).unwrap().is_some());
 
     assert_eq!(ledger.delete_batches(&["finished".into()]).unwrap().removed, 1);
-    assert!(ledger.load_batch("finished").unwrap().is_none());
-    assert!(ledger.load_runs("finished").unwrap().is_empty());
-    assert!(ledger.load_batch("live").unwrap().is_some());
+    assert!(ledger.load_snapshot(Some("finished")).unwrap().is_none());
+    assert!(ledger.load_snapshot(Some("live")).unwrap().is_some());
     assert_eq!(ledger.delete_batches(&["finished".into()]).unwrap().removed, 0);
 }
 
@@ -279,10 +278,9 @@ fn archival_retains_running_and_cutoff_batches_and_exports_removed_runs() {
     assert_eq!(entries[1]["record"]["batchId"], "finished");
     assert_eq!(entries[1]["record"]["entry"]["totalTokens"], 9);
     assert_eq!(ledger.prune_archived(cutoff, &preview).unwrap().removed, 2);
-    assert!(ledger.load_batch("finished").unwrap().is_none());
-    assert!(ledger.load_runs("finished").unwrap().is_empty());
-    assert!(ledger.load_batch("live").unwrap().is_some());
-    assert!(ledger.load_batch("protected").unwrap().is_some());
+    assert!(ledger.load_snapshot(Some("finished")).unwrap().is_none());
+    assert!(ledger.load_snapshot(Some("live")).unwrap().is_some());
+    assert!(ledger.load_snapshot(Some("protected")).unwrap().is_some());
 }
 
 #[test]
@@ -313,10 +311,10 @@ fn startup_recovery_interrupts_only_running_batches_and_never_grades() {
         .unwrap();
     assert_eq!(recovered, 2);
 
-    let crashed = ledger.load_batch("crashed").unwrap().unwrap();
+    let crashed = ledger.load_snapshot(Some("crashed")).unwrap().unwrap().0;
     assert_eq!(crashed.status, ProbeBatchStatus::Interrupted);
     assert!(crashed.finished_at.is_some());
-    let runs = ledger.load_runs("crashed").unwrap();
+    let runs = ledger.load_snapshot(Some("crashed")).unwrap().unwrap().1;
     // The finished run keeps its grade.
     assert_eq!(runs[0].status, ProbeRunStatus::Passed);
     // The interrupted run with a saved session gets usage back — no grading.
@@ -325,13 +323,13 @@ fn startup_recovery_interrupts_only_running_batches_and_never_grades() {
     assert_eq!(runs[1].reasoning_tokens, Some(7));
     assert!(runs[1].execution_error.is_some());
     // Without a session id nothing is invented.
-    let missing = ledger.load_runs("no-session").unwrap();
+    let missing = ledger.load_snapshot(Some("no-session")).unwrap().unwrap().1;
     assert_eq!(missing[0].status, ProbeRunStatus::Undetermined);
     assert_eq!(missing[0].total_tokens, None);
     assert!(missing[0].execution_error.is_some());
     // Finished batches are untouched.
     assert_eq!(
-        ledger.load_batch("done").unwrap().unwrap().status,
+        ledger.load_snapshot(Some("done")).unwrap().unwrap().0.status,
         ProbeBatchStatus::Completed
     );
 
@@ -342,7 +340,7 @@ fn startup_recovery_interrupts_only_running_batches_and_never_grades() {
     ledger
         .recover_interrupted_with_usage(|_| Err("未找到".to_string()))
         .unwrap();
-    let runs = ledger.load_runs("crashed-2").unwrap();
+    let runs = ledger.load_snapshot(Some("crashed-2")).unwrap().unwrap().1;
     assert_eq!(runs[0].status, ProbeRunStatus::Undetermined);
     assert!(runs[0].usage_error.as_deref().unwrap().contains("未找到"));
 }
@@ -359,7 +357,7 @@ fn an_unrecognized_database_version_is_rejected_without_touching_the_file() {
     drop(connection);
 
     let ledger = ProbeLedger::new(directory.path());
-    let error = ledger.load_batch("b1").unwrap_err();
+    let error = ledger.load_snapshot(Some("b1")).unwrap_err();
     assert!(error.contains("不受支持"), "{error}");
     assert!(path.exists());
     let size = std::fs::metadata(&path).unwrap().len();
@@ -375,13 +373,13 @@ fn terminal_write_failure_rolls_back_the_last_answer_and_preserves_retry() {
     connection.execute_batch("CREATE TRIGGER fail_finish BEFORE UPDATE OF status ON probe_batches
         BEGIN SELECT RAISE(ABORT, 'disk failure'); END;").unwrap();
     assert!(ledger.finish_batch("atomic", ProbeBatchStatus::Completed, None, &[passed_run(1, Some(12))]).is_err());
-    assert_eq!(ledger.load_batch("atomic").unwrap().unwrap().status, ProbeBatchStatus::Running);
-    assert_eq!(ledger.load_runs("atomic").unwrap()[0].status, ProbeRunStatus::Running);
-    assert!(ledger.load_runs("atomic").unwrap()[0].final_answer.is_none());
+    assert_eq!(ledger.load_snapshot(Some("atomic")).unwrap().unwrap().0.status, ProbeBatchStatus::Running);
+    assert_eq!(ledger.load_snapshot(Some("atomic")).unwrap().unwrap().1[0].status, ProbeRunStatus::Running);
+    assert!(ledger.load_snapshot(Some("atomic")).unwrap().unwrap().1[0].final_answer.is_none());
     connection.execute_batch("DROP TRIGGER fail_finish").unwrap();
     ledger.finish_batch("atomic", ProbeBatchStatus::Completed, None, &[passed_run(1, Some(12))]).unwrap();
-    assert_eq!(ledger.load_runs("atomic").unwrap()[0].final_answer.as_deref(), Some("45"));
-    assert_eq!(ledger.load_batch("atomic").unwrap().unwrap().status, ProbeBatchStatus::Completed);
+    assert_eq!(ledger.load_snapshot(Some("atomic")).unwrap().unwrap().1[0].final_answer.as_deref(), Some("45"));
+    assert_eq!(ledger.load_snapshot(Some("atomic")).unwrap().unwrap().0.status, ProbeBatchStatus::Completed);
 }
 
 #[test]
@@ -396,11 +394,45 @@ fn incomplete_results_cannot_be_archived_or_deleted() {
 }
 
 #[test]
+fn run_creation_requires_the_next_contiguous_sequence() {
+    let (_directory, ledger) = temp_ledger();
+    ledger.insert_batch(&batch("ordered", &rfc3339(0), None)).unwrap();
+    assert!(ledger.start_run("ordered", 0).is_err());
+    assert!(ledger.start_run("ordered", 2).is_err());
+    ledger.start_run("ordered", 1).unwrap();
+    assert!(ledger.start_run("ordered", 1).is_err());
+    ledger.save_run_result("ordered", &passed_run(1, None)).unwrap();
+    assert!(ledger.start_run("ordered", 3).is_err());
+    ledger.start_run("ordered", 2).unwrap();
+    let (_, runs) = ledger.load_snapshot(Some("ordered")).unwrap().unwrap();
+    assert_eq!(runs.iter().map(|run| run.seq).collect::<Vec<_>>(), vec![1, 2]);
+}
+
+#[test]
+fn invalid_statuses_and_unsigned_counters_are_reported_without_substitutes() {
+    for (sql, expected) in [
+        ("UPDATE probe_batches SET status='unknown'", "批次状态"),
+        ("UPDATE probe_runs SET status='unknown'", "运行状态"),
+        ("UPDATE probe_runs SET total_tokens=-1", "数据库错误"),
+        ("UPDATE probe_runs SET seq=4294967296", "数据库错误"),
+    ] {
+        let (_directory, ledger) = temp_ledger();
+        ledger.insert_batch(&batch("invalid", &rfc3339(0), None)).unwrap();
+        ledger.start_run("invalid", 1).unwrap();
+        let connection = ledger.open_write().unwrap();
+        connection.execute_batch("PRAGMA ignore_check_constraints=ON").unwrap();
+        connection.execute_batch(sql).unwrap();
+        let error = ledger.load_snapshot(Some("invalid")).unwrap_err();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
 fn batch_wire_contract_uses_batch_id_and_profile_filters_keep_latest_name() {
     let (_directory, ledger) = temp_ledger();
     ledger.insert_batch(&batch("older", &rfc3339(2), Some(("p", "旧名称")))).unwrap();
     ledger.insert_batch(&batch("newer", &rfc3339(0), Some(("p", "新名称")))).unwrap();
-    let record = ledger.load_batch("newer").unwrap().unwrap();
+    let record = ledger.load_snapshot(Some("newer")).unwrap().unwrap().0;
     let json = serde_json::to_value(record).unwrap();
     assert_eq!(json["batchId"], "newer");
     assert!(json.get("id").is_none());

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getSessionMessagePage, type SessionMessagePage, type SessionMeta } from "../../api/client";
 import { useMessageState } from "../../i18n/use-message-state";
 import { sessionKey } from "./session-content";
-import { useSessionReadQueue } from "./use-session-read-queue";
+import { useReadQueue } from "../../hooks/use-read-queue";
 
 export function useSessionDetail(active: boolean) {
   const [selected, setSelected] = useState<SessionMeta | null>(null);
@@ -16,7 +16,7 @@ export function useSessionDetail(active: boolean) {
   const metadataGeneration = useRef(0);
   const position = useRef({ offset: 0, anchorId: null as string | null });
   const scrollTop = useRef(0);
-  const enqueue = useSessionReadQueue();
+  const enqueue = useReadQueue();
   const [revision, setRevision] = useState(0);
   const app = selected?.app;
   const sessionId = selected?.sessionId;

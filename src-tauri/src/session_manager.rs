@@ -1,10 +1,10 @@
 //! Local session discovery, controlled resume, and explicit deletion for the
 //! two clients Agent Switchboard owns.
 //!
-//! Discovery and transcript reads never index or modify client data. An
-//! explicit resume request only starts the client's fixed CLI command in a
-//! new terminal after resolving an approved local session source. An
-//! explicit delete removes the resolved raw records from approved roots.
+//! Client discovery is read-only. Claude records and referenced assets are
+//! preserved in the application's session library before consumers read them.
+//! Explicit resume reconstructs a managed transcript and starts the fixed CLI
+//! with current credentials. Explicit deletion removes original and saved data.
 //! Codex's registered native history remains owned by Codex and read-only.
 //! Explicit workflow conversion saves complete application-owned copies; all
 //! consumers resolve the same local state root and shared message contract.
@@ -20,6 +20,8 @@ mod jsonl;
 mod layout;
 pub(crate) use layout::initialize_storage;
 mod sources;
+pub(crate) mod read_index;
+pub(crate) mod history;
 pub(crate) use sources::{collect as collect_session_files, SessionSource};
 mod resume;
 mod bookmarks;
@@ -30,6 +32,8 @@ mod messages;
 mod text;
 mod copy;
 mod conversion;
+#[cfg(test)]
+mod black_box;
 pub use copy::{load_copy_text, SessionCopySource};
 pub use conversion::{convert_session_sources, SessionConversionOutcome};
 
@@ -63,12 +67,13 @@ pub struct SessionMeta {
     pub project_dir: Option<String>,
     pub created_at: Option<String>,
     pub last_active_at: Option<String>,
-    pub resume_command: String,
+    pub resume_command: Option<String>,
     pub alias: Option<String>,
     pub pinned: bool,
     pub tags: Vec<String>,
     pub parent_session_id: Option<String>,
     pub can_delete: bool,
+    pub preservation: Option<history::Preservation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,7 +86,7 @@ pub struct SessionMessage {
     pub images: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionIssue {
     pub app: AppKind,
@@ -129,17 +134,24 @@ pub fn load_metadata(root: &Path, app: AppKind, session_id: &str) -> Result<Sess
 /// supplies only the supported client plus a validated session id; the source
 /// path and working directory stay resolved inside this module.
 pub fn resume_session(root: &Path, app: AppKind, session_id: &str) -> Result<SessionResume, String> {
-    let source = resolve_session(root, app, session_id)?;
+    let mut source = resolve_session(root, app, session_id)?;
+    if app == AppKind::Claude {
+        if let Some(parent) = &source.meta.parent_session_id {
+            source = resolve_session(root, app, parent)?;
+        }
+    }
     let project_dir = source
         .meta
         .project_dir
         .as_deref()
         .filter(|path| Path::new(path).is_dir());
-    let resume_id = if app == AppKind::Claude { source.meta.parent_session_id.as_deref().unwrap_or(session_id) } else { session_id };
-    launch_terminal(&resume_arguments(app, resume_id), project_dir)?;
+    let target = if app == AppKind::Claude {
+        history::prepare_resume(root, &source)?.to_str().ok_or("恢复路径无法无损传递给客户端")?.to_string()
+    } else { session_id.to_string() };
+    launch_terminal(&resume_arguments(app, &target), project_dir)?;
 
     Ok(SessionResume {
-        command: resume_command(app, resume_id),
+        command: resume_command(app, &target),
         used_project_dir: project_dir.is_some(),
     })
 }
@@ -153,7 +165,7 @@ pub fn delete_session(root: &Path, app: AppKind, session_id: &str) -> Result<(),
     let (sources, issues) = scan_sources(root)?;
     let source = locate(&sources, &issues, app, session_id)?;
     let ids = removed_organization_ids(source, &sources);
-    organization::delete_with_sources(root, app, &ids, || remove_source(source))
+    organization::delete_with_sources(root, app, &ids, || remove_source(root, source, &ids))
 }
 
 /// Deletes several records against one scan. Each request resolves and
@@ -183,9 +195,9 @@ fn delete_resolved(
         let result = source.as_ref().map_err(|error| error.clone()).and_then(|source| {
             let ids = removed_organization_ids(source, sources);
             organization::delete_with_sources(root, request.app, &ids,
-                || remove_source(source))
+                || remove_source(root, source, &ids))
         });
-        let deleted = result.is_ok() || source.is_ok_and(|source| source.meta.can_delete
+        let deleted = result.is_ok() || source.is_ok_and(|source| source.retained.is_empty() && source.meta.can_delete
             && ((!source.paths.is_empty() && source.paths.iter().all(|path| matches!(path.try_exists(), Ok(false))))
                 || source.converted.as_ref().is_some_and(|path| matches!(path.try_exists(), Ok(false)))));
         outcomes.push(SessionDeleteOutcome {
@@ -198,17 +210,7 @@ fn delete_resolved(
     outcomes
 }
 
-fn remove_session_source(app: AppKind, path: &Path) -> Result<(), String> {
-    if app == AppKind::Claude {
-        if let Some(stem) = path.file_stem() {
-            let sidecar = path.with_file_name(stem);
-            if sidecar.is_dir() {
-                fs::remove_dir_all(&sidecar).map_err(|error| {
-                    format!("无法删除会话附属目录 {}: {error}", sidecar.display())
-                })?;
-            }
-        }
-    }
+fn remove_session_source(path: &Path) -> Result<(), String> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -221,6 +223,11 @@ fn removed_organization_ids(source: &SessionSource, sources: &[SessionSource]) -
     if source.meta.app != AppKind::Claude { return ids; }
     let directories: Vec<_> = source.paths.iter().filter_map(|path| path.file_stem().map(|stem| path.with_file_name(stem))).collect();
     for candidate in sources {
+        if candidate.meta.app == AppKind::Claude && candidate.converted.is_none()
+            && candidate.meta.parent_session_id.as_deref() == Some(source.meta.session_id.as_str()) {
+            ids.push(candidate.meta.session_id.clone());
+            continue;
+        }
         if candidate.meta.app != AppKind::Claude || candidate.meta.session_id == source.meta.session_id || candidate.paths.is_empty() { continue; }
         if candidate.paths.iter().all(|path| directories.iter().any(|directory| path.starts_with(directory))) {
             ids.push(candidate.meta.session_id.clone());
@@ -229,17 +236,20 @@ fn removed_organization_ids(source: &SessionSource, sources: &[SessionSource]) -
     ids
 }
 
-fn remove_source(source: &SessionSource) -> Result<(), String> {
+fn remove_source(root: &Path, source: &SessionSource, ids: &[String]) -> Result<(), String> {
     if let Some(path) = &source.converted { return conversion::remove(path); }
+    if !source.retained.is_empty() { return history::delete(root, ids); }
     if !source.meta.can_delete {
         return Err("Codex 原生历史由 Codex 管理，请在 Codex 中删除此会话；本应用只读原生历史库".into());
     }
-    for path in &source.paths { remove_session_source(source.meta.app, path)?; }
+    if source.meta.app == AppKind::Claude { return Err("Claude 会话必须通过本机保留库管理删除".into()); }
+    for path in &source.paths { remove_session_source(path)?; }
     Ok(())
 }
 
 pub(crate) fn resolve_session(root: &Path, app: AppKind, session_id: &str) -> Result<SessionSource, String> {
-    let (sources, issues) = scan_sources(root)?;
+    if !parser::valid_session_id(session_id) { return Err("会话 ID 无效".into()); }
+    let (sources, issues) = scan_filtered_sources(root, Some(app), Some(session_id))?;
     locate(&sources, &issues, app, session_id).cloned()
 }
 
@@ -264,13 +274,21 @@ fn locate<'a>(
 }
 
 pub(crate) fn scan_sources(root: &Path) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    let (mut sources, mut issues) = scan_native_sources()?;
-    conversion::include(root, &mut sources, &mut issues);
+    scan_filtered_sources(root, None, None)
+}
+
+pub(crate) fn scan_filtered_sources(root: &Path, app: Option<AppKind>, session: Option<&str>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+    let (mut sources, mut issues) = sources::scan(root, app, session)?;
+    if app != Some(AppKind::Codex) && session.is_none_or(|id| id.starts_with("workflow-")) {
+        conversion::include(root, &mut sources, &mut issues);
+    }
+    sources.retain(|source| app.is_none_or(|app| source.meta.app == app)
+        && session.is_none_or(|id| source.meta.session_id == id));
     Ok((sources, issues))
 }
 
-pub(crate) fn scan_native_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    sources::scan()
+pub(crate) fn scan_usage_sources(root: &Path) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+    sources::scan(root, None, None)
 }
 
 /// The Codex root every Codex-owned sidecar (sessions, rename index, state
@@ -283,17 +301,9 @@ pub(crate) fn codex_root() -> Result<PathBuf, String> {
         .ok_or_else(|| "Codex 配置目录无效".to_string())
 }
 
-/// The only approved local JSONL roots. Both session browsing and usage
-/// aggregation consume this list so neither feature accepts a renderer path.
-pub(crate) fn session_roots() -> Result<Vec<(AppKind, PathBuf)>, String> {
-    let claude = crate::local_state::LocalState::user_config_path(AppKind::Claude)?;
-    let claude_root = claude.parent().ok_or("Claude 配置目录无效")?;
-    let mut roots = crate::local_state::codex_paths::session_roots(&codex_root()?)
-        .into_iter()
-        .map(|path| (AppKind::Codex, path))
-        .collect::<Vec<_>>();
-    roots.push((AppKind::Claude, claude_root.join("projects")));
-    Ok(roots)
+/// Codex owns its raw source roots. Claude sources are owned by its persistent library.
+pub(crate) fn codex_session_roots() -> Result<Vec<PathBuf>, String> {
+    Ok(crate::local_state::codex_paths::session_roots(&codex_root()?).into_iter().collect())
 }
 
 #[cfg(test)]
@@ -315,11 +325,12 @@ fn scan_session_source_roots(
 
 #[cfg(test)]
 pub(crate) fn fixture_source(path: &Path, app: AppKind, id: &str) -> SessionSource {
-    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None,
+    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None, retained: Vec::new(),
+        index_root: path.parent().unwrap_or(Path::new(".")).join(".asb-read-index"),
         meta: SessionMeta { app, session_id: id.into(), title: id.into(), summary: String::new(),
             project_dir: None, created_at: None, last_active_at: None,
-            resume_command: resume_command(app, id), alias: None, pinned: false, tags: Vec::new(),
-            parent_session_id: None, can_delete: true } }
+            resume_command: Some(resume_command(app, id)), alias: None, pinned: false, tags: Vec::new(),
+            parent_session_id: None, can_delete: true, preservation: None } }
 }
 
 #[cfg(test)]

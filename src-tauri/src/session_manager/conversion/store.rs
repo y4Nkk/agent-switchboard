@@ -40,7 +40,8 @@ fn header(path: &Path) -> Result<Header, String> {
         || path.file_stem().and_then(|name| name.to_str()) != Some(header.source_key.as_str())
         || header.meta.app != AppKind::Claude || header.meta.session_id != format!("workflow-{}", header.source_key)
         || !crate::session_manager::parser::valid_session_id(parent) || !header.meta.can_delete
-        || header.meta.resume_command != crate::session_manager::resume::resume_command(AppKind::Claude, parent)
+        || header.meta.resume_command.as_deref() != Some(crate::session_manager::resume::resume_command(AppKind::Claude, parent).as_str())
+        || header.meta.preservation.is_some()
         || header.records == 0 {
         return Err("转换记录不符合当前格式，原件已保留".into());
     }
@@ -48,6 +49,10 @@ fn header(path: &Path) -> Result<Header, String> {
 }
 
 pub(super) fn list(root: &Path) -> (Vec<(Header, PathBuf)>, Vec<String>) {
+    let index = match crate::session_manager::read_index::ReadIndex::open(root) {
+        Ok(index) => index,
+        Err(error) => return (Vec::new(), vec![error]),
+    };
     let directory = directory(root);
     let mut converted = Vec::new();
     let mut failures = Vec::new();
@@ -67,10 +72,10 @@ pub(super) fn list(root: &Path) -> (Vec<(Header, PathBuf)>, Vec<String>) {
     }
     paths.sort();
     for path in paths {
-        let read = header(&path).and_then(|header| {
+        let read = index.file("converted-metadata", &path, || header(&path).and_then(|header| {
             validate(&path, header.records)?;
             Ok(header)
-        });
+        }));
         match read {
             Ok(header) => converted.push((header, path)),
             Err(error) => failures.push(format!("{}: {error}", path.display())),

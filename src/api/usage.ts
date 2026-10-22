@@ -258,7 +258,28 @@ export interface CodexProbeQuestion {
   referenceVisual: string | null;
   /** Upper bound of runs per batch for this question. */
   maxRuns: number;
+  timeoutSeconds: number;
 }
+
+export interface CodexProbeCatalog {
+  questions: CodexProbeQuestion[];
+  customTimeoutSeconds: Record<CodexProbeGradingVersion, number>;
+  customMaxRuns: number;
+}
+
+export type CodexProbeRunPhase = "starting" | "running" | "collecting" | "saving" | "cancelling";
+
+/** A snapshot of the runner's monotonic clock, never a frontend deadline. */
+export interface CodexProbeRunProgress {
+  kind: "run";
+  seq: number;
+  phase: CodexProbeRunPhase;
+  elapsedMs: number;
+  timeLimitMs: number;
+}
+
+export type CodexProbeProgress = CodexProbeRunProgress
+  | { kind: "preparing"; seq: number; cancelling: boolean };
 
 export type CodexProbeBatchStatus =
   | "running" | "completed" | "cancelled" | "failed" | "interrupted" | "config-changed";
@@ -302,9 +323,8 @@ export interface CodexProbeQuestionSnapshot {
 
 /** One batch (live or historical) with its runs, read from the local probe
  * history — the only durable source of probe state. */
-export interface CodexProbeBatch {
+interface CodexProbeBatchRecord {
   batchId: string;
-  status: CodexProbeBatchStatus;
   startedAt: string;
   finishedAt: string | null;
   plannedRuns: number;
@@ -320,6 +340,11 @@ export interface CodexProbeBatch {
   persistError: string | null;
 }
 
+export type CodexProbeBatch = CodexProbeBatchRecord & (
+  | { status: "running"; persistPending: false; progress: CodexProbeProgress }
+  | { status: Exclude<CodexProbeBatchStatus, "running">; progress: null }
+);
+
 export interface CodexProbeRequest {
   runCount: number;
   /** A catalog id, or `custom` with an explicit format and integer answer when needed. */
@@ -329,9 +354,9 @@ export interface CodexProbeRequest {
   customGradingVersion?: CodexProbeGradingVersion;
 }
 
-/** The built-in question catalog; the backend owns the bank. */
-export function listCodexProbeQuestions(): Promise<CodexProbeQuestion[]> {
-  return invoke<CodexProbeQuestion[]>("list_codex_probe_questions");
+/** The backend-owned question catalog and custom-format time limits. */
+export function getCodexProbeCatalog(): Promise<CodexProbeCatalog> {
+  return invoke<CodexProbeCatalog>("get_codex_probe_catalog");
 }
 
 /** Starts one probe batch against the active Codex configuration. Every run

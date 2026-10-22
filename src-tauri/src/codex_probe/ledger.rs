@@ -1,9 +1,9 @@
 //! The persistent probe history: one SQLite database owning every batch and
 //! run record. It is the only durable source of probe state — the in-memory
-//! registry keeps control handles, and every read (including "the current
-//! batch") is served from here.
+//! registry keeps control handles and the transient live clock. Every durable
+//! batch and run record (including "the current batch") is served from here.
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -75,15 +75,15 @@ fn map_batch(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProbeBatchRecord> {
         id: row.get(0)?,
         started_at: row.get(1)?,
         finished_at: row.get(2)?,
-        status: ProbeBatchStatus::parse(&row.get::<_, String>(3)?).unwrap_or(ProbeBatchStatus::Failed),
-        planned_runs: row.get::<_, i64>(4)?.max(0) as u32,
+        status: map_enum(row, 3, ProbeBatchStatus::parse, "批次状态")?,
+        planned_runs: row.get(4)?,
         question: ProbeQuestionSnapshot {
             id: row.get(5)?,
             label: row.get(6)?,
             text: row.get(7)?,
             expected_answer: row.get(8)?,
         },
-        grading_version: map_grading(row, 9)?,
+        grading_version: map_enum(row, 9, super::ProbeGrading::parse, "判分规则")?,
         cli_version: row.get(10)?,
         config: ProbeConfigRecord {
             profile_id: row.get(11)?,
@@ -97,25 +97,25 @@ fn map_batch(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProbeBatchRecord> {
     })
 }
 
-fn map_grading(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<super::ProbeGrading> {
-    let version: String = row.get(index)?;
-    super::ProbeGrading::parse(&version).ok_or_else(|| {
+fn map_enum<T>(row: &rusqlite::Row<'_>, index: usize, parse: fn(&str) -> Option<T>, label: &str) -> rusqlite::Result<T> {
+    let value: String = row.get(index)?;
+    parse(&value).ok_or_else(|| {
         rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text,
             Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData,
-                format!("不支持的检测判分规则：{version}"))))
+                format!("不支持的检测{label}：{value}"))))
     })
 }
 
 fn map_run(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProbeRunRecord> {
     Ok(ProbeRunRecord {
-        seq: row.get::<_, i64>(0)?.max(0) as u32,
-        status: ProbeRunStatus::parse(&row.get::<_, String>(1)?).unwrap_or(ProbeRunStatus::Undetermined),
+        seq: row.get(0)?,
+        status: map_enum(row, 1, ProbeRunStatus::parse, "运行状态")?,
         session_id: row.get(2)?,
         final_answer: row.get(3)?,
         reported_model: row.get(4)?,
-        duration_ms: row.get::<_, Option<i64>>(5)?.map(|value| value.max(0) as u64),
-        reasoning_tokens: row.get::<_, Option<i64>>(6)?.map(|value| value.max(0) as u64),
-        total_tokens: row.get::<_, Option<i64>>(7)?.map(|value| value.max(0) as u64),
+        duration_ms: row.get(5)?,
+        reasoning_tokens: row.get(6)?,
+        total_tokens: row.get(7)?,
         execution_error: row.get(8)?,
         usage_error: row.get(9)?,
     })
@@ -152,61 +152,36 @@ impl ProbeLedger {
 
     // -------------------------------------------------------------- reads
 
-    pub(crate) fn load_batch(&self, batch_id: &str) -> Result<Option<ProbeBatchRecord>, String> {
-        let Some(connection) = self.open_read()? else {
-            return Ok(None);
+    /// Batch and run rows always come from the same SQLite read transaction.
+    /// None selects the latest batch; Some selects that exact historical batch.
+    pub(crate) fn load_snapshot(&self, batch_id: Option<&str>) -> Result<Option<(ProbeBatchRecord, Vec<ProbeRunRecord>)>, String> {
+        let Some(mut connection) = self.open_read()? else { return Ok(None); };
+        let transaction = connection.transaction().map_err(db_error)?;
+        let query = match batch_id {
+            Some(_) => format!("SELECT {BATCH_COLUMNS} FROM probe_batches WHERE id=?1"),
+            None => format!("SELECT {BATCH_COLUMNS} FROM probe_batches ORDER BY started_at DESC, rowid DESC LIMIT 1"),
         };
-        connection
-            .query_row(
-                &format!("SELECT {BATCH_COLUMNS} FROM probe_batches WHERE id=?1"),
-                [batch_id],
-                map_batch,
-            )
-            .map(Some)
-            .or_else(|error| match error {
-                rusqlite::Error::QueryReturnedNoRows => Ok(None),
-                other => Err(db_error(other)),
-            })
-    }
-
-    /// The newest batch — live or already finished; this is what the radar
-    /// panel reconnects to after a refresh or restart.
-    pub(crate) fn current_batch(&self) -> Result<Option<ProbeBatchRecord>, String> {
-        let Some(connection) = self.open_read()? else {
-            return Ok(None);
+        let selected = match batch_id {
+            Some(id) => transaction.query_row(&query, [id], map_batch),
+            None => transaction.query_row(&query, [], map_batch),
         };
-        connection
-            .query_row(
-                &format!(
-                    "SELECT {BATCH_COLUMNS} FROM probe_batches \
-                     ORDER BY started_at DESC, rowid DESC LIMIT 1"
-                ),
-                [],
-                map_batch,
-            )
-            .map(Some)
-            .or_else(|error| match error {
-                rusqlite::Error::QueryReturnedNoRows => Ok(None),
-                other => Err(db_error(other)),
-            })
+        let Some(batch) = selected.optional().map_err(db_error)? else { return Ok(None); };
+        let runs = load_snapshot_runs(&transaction, &batch.id)?;
+        transaction.commit().map_err(db_error)?;
+        Ok(Some((batch, runs)))
     }
+}
 
-    pub(crate) fn load_runs(&self, batch_id: &str) -> Result<Vec<ProbeRunRecord>, String> {
-        let Some(connection) = self.open_read()? else {
-            return Ok(Vec::new());
-        };
-        let mut statement = connection
-            .prepare(
-                "SELECT seq, status, session_id, final_answer, reported_model, duration_ms, \
-                 reasoning_tokens, total_tokens, execution_error, usage_error \
-                 FROM probe_runs WHERE batch_id=?1 ORDER BY seq",
-            )
-            .map_err(db_error)?;
-        let rows = statement.query_map([batch_id], map_run).map_err(db_error)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
-    }
-
-
+fn load_snapshot_runs(connection: &Connection, batch_id: &str) -> Result<Vec<ProbeRunRecord>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT seq, status, session_id, final_answer, reported_model, duration_ms, \
+             reasoning_tokens, total_tokens, execution_error, usage_error \
+             FROM probe_runs WHERE batch_id=?1 ORDER BY seq",
+        )
+        .map_err(db_error)?;
+    let rows = statement.query_map([batch_id], map_run).map_err(db_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
 }
 
 fn initialize(connection: &mut Connection) -> Result<(), String> {

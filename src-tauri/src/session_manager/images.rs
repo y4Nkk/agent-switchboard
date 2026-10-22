@@ -53,6 +53,11 @@ fn mime(bytes: &[u8]) -> Option<&'static str> {
     else { None }
 }
 
+pub(super) fn data_uri(bytes: &[u8]) -> Result<String, String> {
+    let mime = mime(bytes).ok_or("已保留图片格式不受支持")?;
+    Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
 pub(super) fn resolve(references: &[String]) -> (Vec<String>, Vec<String>) {
     let mut images = Vec::new();
     let mut issues = Vec::new();

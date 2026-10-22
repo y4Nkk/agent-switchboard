@@ -1,87 +1,53 @@
 import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  getModelUsageReport,
-  type ModelUsageRange,
-  type ModelUsageRead,
-} from "../api/client";
+import { useReadQueue } from "../hooks/use-read-queue";
+import { getModelUsageReport, type ModelUsageRange, type ModelUsageRead } from "../api/client";
 
 function refreshDelay(refreshAfter: string): number {
   const target = new Date(refreshAfter).getTime();
-  return Number.isNaN(target) ? 0 : Math.max(0, target - Date.now());
+  return Number.isNaN(target) ? 30_000 : Math.max(0, target - Date.now());
 }
 
-/** Renders the backend-owned local-session snapshot and revalidates it only
- * while this page is visible. Cache lifetime and persistence stay entirely in
- * the desktop service; the renderer only follows its returned deadline. */
+/** One visible reader owns entry, manual refresh, retries and the next deadline. */
 export function useModelUsageReport(active: boolean, range: ModelUsageRange) {
-  const [displayRange, setDisplayRange] = useState(range);
   const [read, setRead] = useState<ModelUsageRead | null>(null);
-  const [refreshPlan, setRefreshPlan] = useState<{
-    range: ModelUsageRange;
-    refreshAfter: string;
-  } | null>(null);
+  const [displayRange, setDisplayRange] = useState(range);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useMessageState();
-  const requestVersion = useRef(0);
-
-  const load = useCallback(async (forceRefresh: boolean): Promise<ModelUsageRead | null> => {
-    if (!active) return null;
-
-    const version = ++requestVersion.current;
-    setDisplayRange(range);
-    setError(null);
-    setLoading(true);
-    try {
-      const next = await getModelUsageReport({ range, forceRefresh });
-      if (requestVersion.current === version) {
-        setRead(next);
-        setRefreshPlan({ range, refreshAfter: next.refreshAfter });
-      }
-      return next;
-    } catch (caught) {
-      if (requestVersion.current === version) {
-        setError(caught);
-        setRefreshPlan({ range, refreshAfter: new Date(Date.now() + 30_000).toISOString() });
-      }
-      return null;
-    } finally {
-      if (requestVersion.current === version) setLoading(false);
-    }
-  }, [active, range]);
-
-  const refresh = useCallback(() => load(true), [load]);
+  const [revision, setRevision] = useState(0);
+  const requestedRefresh = useRef(false);
+  const enqueue = useReadQueue();
+  const refresh = useCallback(() => { requestedRefresh.current = true; setRevision((value) => value + 1); }, []);
 
   useEffect(() => {
-    if (!active) {
-      requestVersion.current += 1;
-      setLoading(false);
-      return undefined;
-    }
-
-    void load(false);
-
-    return () => {
-      requestVersion.current += 1;
+    if (!active) { setLoading(false); return undefined; }
+    let current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancel: (() => void) | undefined;
+    const load = (forceRefresh: boolean) => {
+      if (!current) return;
+      setDisplayRange(range); setLoading(true); setError(null);
+      cancel = enqueue(async () => {
+        if (!current) return;
+        try {
+          const next = await getModelUsageReport({ range, forceRefresh });
+          if (!current) return;
+          setRead(next);
+          timer = setTimeout(() => load(false), refreshDelay(next.refreshAfter));
+        } catch (caught) {
+          if (!current) return;
+          setError(caught);
+          timer = setTimeout(() => load(false), 30_000);
+        } finally { if (current) setLoading(false); }
+      }, (caught) => { if (current) setError(caught); });
     };
-  }, [active, load, range]);
+    const forceRefresh = requestedRefresh.current;
+    requestedRefresh.current = false;
+    load(forceRefresh);
+    return () => { current = false; cancel?.(); clearTimeout(timer); };
+  }, [active, range, revision, enqueue, setError]);
 
-  useEffect(() => {
-    if (!active || refreshPlan?.range !== range) return undefined;
-
-    const timer = setTimeout(() => {
-      void load(true);
-    }, refreshDelay(refreshPlan.refreshAfter));
-
-    return () => clearTimeout(timer);
-  }, [active, load, range, refreshPlan]);
-
-  const isCurrentRange = displayRange === range;
-
-  return {
-    read: read?.report.range === range ? read : null,
-    loading: isCurrentRange ? loading : false,
-    error: isCurrentRange ? error : null,
-    refresh,
-  };
+  return { read: read?.report.range === range ? read : null,
+    loading: displayRange === range ? loading : active,
+    error: displayRange === range ? error : null, refresh };
 }

@@ -4,7 +4,7 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 pub(super) fn resume_command(app: AppKind, session_id: &str) -> String {
-    resume_arguments(app, session_id).join(" ")
+    resume_arguments(app, session_id).iter().map(|argument| command_quote(argument)).collect::<Vec<_>>().join(" ")
 }
 
 pub(super) fn resume_arguments(app: AppKind, session_id: &str) -> Vec<&str> {
@@ -16,17 +16,22 @@ pub(super) fn resume_arguments(app: AppKind, session_id: &str) -> Vec<&str> {
 
 #[cfg(windows)]
 pub(super) fn launch_terminal(arguments: &[&str], project_dir: Option<&str>) -> Result<(), String> {
-    let mut terminal = Command::new("cmd.exe");
+    use base64::Engine;
+    let (program, arguments) = arguments.split_first().ok_or("缺少恢复客户端")?;
+    let script = format!("& (Get-Command -Name {} -CommandType Application -ErrorAction Stop | Select-Object -First 1 -ExpandProperty Source) {}",
+        command_quote(program), arguments.iter().map(|argument| command_quote(argument)).collect::<Vec<_>>().join(" "));
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let mut terminal = Command::new("powershell.exe");
     terminal
-        .args(["/d", "/k"])
-        .args(arguments)
+        .args(["-NoLogo", "-NoProfile", "-NoExit", "-EncodedCommand", &encoded])
         .creation_flags(CREATE_NEW_CONSOLE);
     if let Some(project_dir) = project_dir {
         terminal.current_dir(project_dir);
     }
     terminal
         .spawn()
-        .map_err(|error| format!("无法启动命令提示符：{error}"))?;
+        .map_err(|error| format!("无法启动恢复终端：{error}"))?;
     Ok(())
 }
 
@@ -95,6 +100,14 @@ pub(super) fn launch_terminal(arguments: &[&str], project_dir: Option<&str>) -> 
 #[cfg(any(unix, test))]
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
+}
+
+fn command_quote(value: &str) -> String {
+    if value.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"-_".contains(&byte)) { return value.into(); }
+    #[cfg(windows)]
+    { format!("'{}'", value.replace('\'', "''")) }
+    #[cfg(not(windows))]
+    { shell_quote(value) }
 }
 
 #[cfg(any(unix, test))]

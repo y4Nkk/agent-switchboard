@@ -170,7 +170,7 @@ pub(super) async fn login(app: &AppHandle, request: &InvokeRequest) -> Result<Op
             )?,))
         }
         "official_login_poll" => {
-            command!(commands::official_login::official_login_poll(argument::<
+            command!(commands::official_login::official_login_poll(app.clone(), argument::<
                 AppKind,
             >(
                 &request.args,

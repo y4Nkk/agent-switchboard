@@ -72,7 +72,7 @@ fn preserves_every_event_field_occurrence_and_time_without_rewriting_the_origina
     assert!(issues.is_empty());
     assert_eq!(source.meta.parent_session_id.as_deref(), Some("parent-session"));
     assert_eq!(source.meta.project_dir.as_deref(), Some("C:/actual-project"));
-    assert_eq!(source.meta.resume_command, "claude --resume parent-session");
+    assert_eq!(source.meta.resume_command.as_deref(), Some("claude --resume parent-session"));
     let messages = messages(&source);
     assert_eq!(messages.len(), values.len());
     for (message, value) in messages.iter().zip(&values) { assert_eq!(message.content, content::json(value)); }
@@ -155,7 +155,7 @@ fn converted_material_is_excluded_from_usage_and_deletion_only_removes_the_copy(
     assert_eq!(report.coverage.scanned_files, 0);
     assert!(report.groups.is_empty());
     assert!(report.issues.is_empty());
-    super::super::remove_source(&source).unwrap();
+    super::super::remove_source(&temp.path().join("state"), &source, &[source.meta.session_id.clone()]).unwrap();
     assert!(path.is_file());
     assert!(!source.converted.unwrap().exists());
 }

@@ -72,11 +72,10 @@ export interface ModelUsageRead {
   report: ModelUsageReport;
   freshness: ModelUsageFreshness;
   refreshAfter: string;
-  cacheWarning: string | null;
 }
 
-/** Reads the backend-owned local-session snapshot or explicitly re-scans the
- * approved native history and session sources. */
+/** Reads the shared local-session snapshot or revalidates approved source
+ * revisions and rebuilds range totals from indexed call facts. */
 export function getModelUsageReport(request: ModelUsageRequest): Promise<ModelUsageRead> {
   return invoke<ModelUsageRead>("get_model_usage_report", { request });
 }

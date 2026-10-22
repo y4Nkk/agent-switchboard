@@ -1,5 +1,6 @@
 use super::output::{diagnostic, parse_events, read_usage};
 use super::questions::answer_matches;
+use super::progress::RunProgress;
 use super::{ProbeGrading, ProbeRunOutcome, ProbeRunResult, ResolvedQuestion};
 use crate::process_control::terminate_process_tree;
 use std::io::{Read, Write};
@@ -10,7 +11,6 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-const PER_RUN_TIMEOUT: Duration = Duration::from_secs(240);
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
@@ -46,10 +46,11 @@ pub(super) fn run_once(
     cancel: &AtomicBool,
     on_session_id: &Arc<dyn Fn(&str) + Send + Sync>,
     check_config: &dyn Fn() -> Result<(), ProbeAbort>,
+    progress: &RunProgress,
 ) -> Result<ProbeRunResult, ProbeAbort> {
     if cancel.load(Ordering::SeqCst) { return Err(ProbeAbort::Cancelled); }
     check_config()?;
-    let started = Instant::now();
+    let started = progress.started();
     let workdir = Workdir::create()?;
     let answer_path = workdir.0.join("answer.txt");
     let mut command = Command::new(codex_executable());
@@ -68,7 +69,8 @@ pub(super) fn run_once(
     let prompt = question.execution_prompt();
     // Stdin preserves multiline custom questions through Windows .cmd launchers.
     let input = std::thread::spawn(move || stdin.write_all(prompt.as_bytes()));
-    let outcome = wait_for_exit(&mut child, cancel, started + PER_RUN_TIMEOUT, check_config);
+    let outcome = wait_for_exit(&mut child, cancel, progress.deadline(), check_config);
+    progress.collecting();
     drop(lifetime);
     let stdout = collect_pipe(stdout);
     let stderr = collect_pipe(stderr);
@@ -147,7 +149,8 @@ fn collect_result(
 ) -> ProbeRunResult {
     let events = parse_events(stdout);
     let mut error = if timed_out {
-        Some("单次运行超时".to_string())
+        Some(format!("单次运行超时（上限 {} 分钟）",
+            question.timeout_seconds / 60))
     } else if !exit.success() {
         Some(format!("Codex 进程退出码 {}：{}", exit.code().unwrap_or(-1), diagnostic(stderr)))
     } else {

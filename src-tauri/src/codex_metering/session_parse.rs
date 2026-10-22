@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::ops::ControlFlow;
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct TokenCounters {
     pub input: u64,
     pub cached_input: u64,
@@ -29,7 +29,7 @@ impl TokenCounters {
     pub(crate) fn total(self) -> Option<u64> { self.input.checked_add(self.output) }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct CodexTokenEvent {
     pub identity: String,
     pub owner: String,
@@ -38,6 +38,7 @@ pub(crate) struct CodexTokenEvent {
     pub tokens: TokenCounters,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct Receipt {
     event: CodexTokenEvent,
     turn: String,
@@ -83,50 +84,64 @@ pub(crate) fn visit_token_usage(
     path: &Path, session_id: &str,
     mut visitor: impl FnMut(CodexTokenEvent) -> Result<(), String>,
 ) -> Result<Vec<String>, String> {
-    let mut seen_meta = false;
-    let mut models = HashMap::new();
-    let mut receipts = Vec::new();
+    let mut state = TokenUsageState::default();
     let mut issues = Vec::new();
     let read_issues = crate::session_manager::records::visit_records(path, 0, |ordinal, _, value| {
+        if let Some(issue) = state.observe(&value, session_id)? {
+            issues.push(format!("{} 第 {ordinal} 条: {issue}", path.display()));
+        }
+        Ok(ControlFlow::Continue(()))
+    });
+    match read_issues { Ok(warnings) => issues.extend(warnings), Err(error) => issues.push(error) }
+    for event in state.events() { visitor(event)?; }
+    Ok(issues)
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) struct TokenUsageState {
+    seen_meta: bool,
+    models: HashMap<String, Option<String>>,
+    receipts: Vec<Receipt>,
+}
+
+impl TokenUsageState {
+    pub(crate) fn observe(&mut self, value: &Value, session_id: &str) -> Result<Option<String>, String> {
         let payload = &value["payload"];
         match value.get("type").and_then(Value::as_str) {
-            Some("session_meta") if !seen_meta => {
+            Some("session_meta") if !self.seen_meta => {
                 if payload.get("id").and_then(Value::as_str) != Some(session_id) {
                     return Err("会话文件身份已改变，未读取另一会话的用量".into());
                 }
-                seen_meta = true;
+                self.seen_meta = true;
             }
             Some("turn_context") => {
                 if let Some(turn) = payload.get("turn_id").and_then(Value::as_str) {
-                    models.insert(turn.to_string(), payload.get("model").and_then(Value::as_str)
+                    self.models.insert(turn.to_string(), payload.get("model").and_then(Value::as_str)
                         .filter(|model| !model.trim().is_empty()).map(str::to_string));
                 }
             }
             Some("token_usage_record" | "compacted") => {
                 let (payload, at) = if value["type"] == "compacted" {
-                    let Some(record) = payload.get("latest_token_usage_record").filter(|record| !record.is_null()) else {
-                        return Ok(ControlFlow::Continue(()));
-                    };
-                    // The checkpoint time is not the original request time.
+                    let Some(record) = payload.get("latest_token_usage_record").filter(|record| !record.is_null()) else { return Ok(None); };
                     (record, None)
-                } else { (payload, crate::session_manager::parser::timestamp_from(&value)) };
-                let result = if seen_meta { receipt(payload, at) }
-                    else { Err("真实调用记录出现于会话身份确认之前".into()) };
-                match result {
-                    Ok(record) => receipts.push(record),
-                    Err(error) => issues.push(format!("{} 第 {ordinal} 条: {error}", path.display())),
+                } else { (payload, crate::session_manager::parser::timestamp_from(value)) };
+                match if self.seen_meta { receipt(payload, at) } else { Err("真实调用记录出现于会话身份确认之前".into()) } {
+                    Ok(receipt) => self.receipts.push(receipt),
+                    Err(error) => return Ok(Some(error)),
                 }
             }
             _ => {}
         }
-        Ok(ControlFlow::Continue(()))
-    });
-    match read_issues { Ok(warnings) => issues.extend(warnings), Err(error) => issues.push(error) }
-    for mut record in receipts {
-        record.event.model = models.get(&record.turn).cloned().flatten();
-        visitor(record.event)?;
+        Ok(None)
     }
-    Ok(issues)
+
+    pub(crate) fn events(&self) -> impl Iterator<Item = CodexTokenEvent> + '_ {
+        self.receipts.iter().map(|record| {
+            let mut event = record.event.clone();
+            event.model = self.models.get(&record.turn).cloned().flatten();
+            event
+        })
+    }
 }
 
 pub(crate) struct SessionTokenSummary {

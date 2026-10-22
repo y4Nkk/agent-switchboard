@@ -6,6 +6,9 @@ use tauri::AppHandle;
 pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result<Option<Value>, CommandError> {
     macro_rules! command { ($future:expr) => { as_json($future.await) }; }
     let result = match request.command.as_str() {
+        "claude_session_sources" => command!(commands::claude_session_sources(app.clone())),
+        "pick_claude_session_source" => command!(commands::pick_claude_session_source(app.clone())),
+        "forget_claude_session_source" => command!(commands::forget_claude_session_source(app.clone(), argument(&request.args, "path")?)),
         "convert_session_sources" => command!(commands::convert_session_sources(app.clone(), argument(&request.args, "ids")?)),
         "search_sessions" => command!(commands::search_sessions(app.clone(), argument(&request.args, "request")?)),
         "get_session_message_page" => command!(commands::get_session_message_page(app.clone(), argument(&request.args, "request")?)),

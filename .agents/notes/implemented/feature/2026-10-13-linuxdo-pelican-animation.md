@@ -22,6 +22,8 @@ Linux.do 的[共建实验帖](https://linux.do/t/topic/2702004)与[鹈鹕跑分�
 
 检索活跃笔记中的 `pelican`、`鹈鹕`、`codex_probe`、`降智雷达`。[SVG 回答与缓存](../../implemented/feature/2026-10-13-pelican-probe.md)部分重叠，其 SVG 自定义回答、已保存的格式契约、原文缓存和人工观察决定仍然有效，双方互链；本篇拥有单一鹈鹕题的现行题干与 HTML 动画展示。[会话操作布局](../../implemented/bug-fix/2026-09-24-session-operations-layout.md)不涉及输出格式，保留。其余诊断和用量笔记无关，无需归档。
 
+[题库限时与真实检测进度](2026-10-20-probe-deadline-progress.md)拥有题目执行预算和单次计时，题干、预览和人工观察规则仍由本篇拥有。
+
 ## Alternatives considered
 
 - **保留经典 SVG 与社区动画两道题**：能比较两个不同输出任务；用户明确要求只实现一道题并以 Linux.do 为标准，因此题库只保留社区题，不建立别名或第二个入口。自定义 SVG 回答是通用输出方式，不是另一道鹈鹕题。

@@ -226,7 +226,8 @@ pub struct ModelUsageCoverage {
 }
 
 /// One read request for the local-session usage cache. A forced refresh
-/// bypasses the saved snapshot and re-scans the approved session roots.
+/// bypasses the aggregate snapshot and revalidates approved source revisions;
+/// unchanged call records remain indexed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelUsageRequest {
@@ -253,7 +254,6 @@ pub struct ModelUsageRead {
     pub report: ModelUsageReport,
     pub freshness: ModelUsageFreshness,
     pub refresh_after: String,
-    pub cache_warning: Option<String>,
 }
 
 /// One renderer request for persisted, credential-free usage history.

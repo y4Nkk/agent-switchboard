@@ -1,7 +1,6 @@
 use super::{bookmarks, resolve_session, SessionMessage, SessionSource};
 use asb_core::contracts::{AppKind, LocalizedMessage};
 use serde::{Deserialize, Serialize};
-use std::ops::ControlFlow;
 use std::path::Path;
 
 const PAGE_SIZE: usize = 25;
@@ -92,7 +91,7 @@ pub fn load_content(root: &Path, request: MessageContentRequest) -> Result<Conte
     let source = resolve_session(root, request.app, &request.session_id)?;
     let message = source.find(&request.message_id)?;
     let mut page = content_page(&message.content, request.offset)?;
-    if request.offset == 0 { (page.images, page.issues) = super::images::resolve(&message.images); }
+    if request.offset == 0 { (page.images, page.issues) = source.resolve_images(&message.images); }
     Ok(page)
 }
 
@@ -110,27 +109,20 @@ pub fn load_page(root: &Path, request: MessagePageRequest) -> Result<MessagePage
 }
 
 fn scan_page(source: &SessionSource, requested_offset: usize, anchor: Option<&str>) -> Result<MessagePage, String> {
-    let mut page = MessagePage { session: source.meta.clone(), items: Vec::new(), total: 0, offset: requested_offset,
+    let index = super::timeline::index(source)?;
+    let total = index.entries.len();
+    let offset = if let Some(anchor) = anchor {
+        index.entries.iter().position(|entry| entry.id == anchor)
+            .ok_or("原消息已改变或不存在；请重新搜索会话")? / PAGE_SIZE * PAGE_SIZE
+    } else { requested_offset.min(total.saturating_sub(1) / PAGE_SIZE * PAGE_SIZE) };
+    let mut page = MessagePage { session: source.meta.clone(), items: Vec::new(), total, offset,
         page_size: PAGE_SIZE, bookmark_issue: None, issues: Vec::new() };
-    let mut bucket = Vec::with_capacity(PAGE_SIZE);
-    let mut bucket_offset = 0;
-    let mut found_anchor = false;
-    page.issues = source.visit(|message| {
-        if bucket.len() == PAGE_SIZE {
-            if bucket_offset == page.offset && (anchor.is_none() || found_anchor) {
-                page.items = std::mem::take(&mut bucket);
-            } else { bucket.clear(); }
-            bucket_offset = page.total;
+    page.issues = index.issues.clone();
+    for entry in index.entries.iter().skip(offset).take(PAGE_SIZE) {
+        match index.load(entry) {
+            Ok(message) => page.items.push(message.into()),
+            Err(error) => page.issues.push(error),
         }
-        if anchor == Some(message.id.as_str()) { page.offset = bucket_offset; found_anchor = true; }
-        bucket.push(message.into());
-        page.total += 1;
-        Ok(ControlFlow::Continue(()))
-    })?;
-    if anchor.is_some() && !found_anchor { return Err("原消息已改变或不存在；请重新搜索会话".into()); }
-    if bucket_offset == page.offset || (anchor.is_none() && page.offset >= page.total) {
-        page.items = bucket;
-        page.offset = bucket_offset;
     }
     Ok(page)
 }

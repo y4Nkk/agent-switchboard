@@ -58,6 +58,9 @@ impl LocalState {
             .initialize_current_layout()
             .map_err(|error| error.to_string())?;
         crate::session_manager::initialize_storage(self.root())?;
+        if let Err(error) = crate::session_manager::history::initialize(self.root()) {
+            log::warn!("Claude 会话保留暂不可用，原库已保留：{error}");
+        }
         if let Err(error) = crate::usage_history::initialize(self) {
             log::warn!("用量历史初始化失败，该历史暂不可读写，其他功能继续可用: {error}");
         }
@@ -227,10 +230,6 @@ impl LocalState {
 
     fn usage_cache_path(&self) -> PathBuf {
         self.root.join("usage-cache.json")
-    }
-
-    fn model_usage_cache_path(&self) -> PathBuf {
-        self.root.join("model-usage-cache.json")
     }
 
     fn discovery_cache_path(&self) -> PathBuf {

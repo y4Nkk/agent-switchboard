@@ -94,14 +94,15 @@ pub(super) fn include(
         }
         completed.insert(format!("{}:{}", header.source_key, header.revision));
         sources.push(SessionSource {
-            meta: header.meta, paths: Vec::new(), native_history: None, converted: Some(path) });
+            meta: header.meta, paths: Vec::new(), native_history: None, converted: Some(path), retained: Vec::new(), index_root: root.into() });
     }
     issues.retain(|issue| issue.conversion_id.as_ref().is_none_or(|id| !completed.contains(id)));
     issues.extend(failures.into_iter().map(|message| SessionIssue::new(AppKind::Claude, message)));
 }
 
 pub fn convert_session_sources(root: &Path, ids: &[String]) -> Result<SessionConversionOutcome, String> {
-    convert_from_roots(root, ids, &super::session_roots()?)
+    let roots = super::history::workflow_roots(root)?.into_iter().map(|path| (AppKind::Claude, path)).collect::<Vec<_>>();
+    convert_from_roots(root, ids, &roots)
 }
 
 fn convert_from_roots(root: &Path, ids: &[String], roots: &[(AppKind, PathBuf)]) -> Result<SessionConversionOutcome, String> {
@@ -170,8 +171,8 @@ fn metadata(source: &Candidate) -> Result<(SessionMeta, usize), String> {
     let title = parser::clamp_title(&format!("Workflow · {}", source.workflow));
     Ok((SessionMeta { app: AppKind::Claude, session_id: format!("workflow-{}", source.source_key),
         title: title.clone(), summary: title, project_dir: parent.and_then(|meta| meta.project_dir),
-        created_at, last_active_at, resume_command: super::resume::resume_command(AppKind::Claude, &source.parent_id),
-        parent_session_id: Some(source.parent_id.clone()), alias: None, pinned: false, tags: Vec::new(), can_delete: true }, count))
+        created_at, last_active_at, resume_command: Some(super::resume::resume_command(AppKind::Claude, &source.parent_id)),
+        parent_session_id: Some(source.parent_id.clone()), alias: None, pinned: false, tags: Vec::new(), can_delete: true, preservation: None }, count))
 }
 
 fn message(ordinal: usize, value: &serde_json::Value) -> SessionMessage {
@@ -179,11 +180,6 @@ fn message(ordinal: usize, value: &serde_json::Value) -> SessionMessage {
         role: if value.get("type").and_then(serde_json::Value::as_str) == Some("result") { "assistant" } else { "tool" }.into(),
         content: content::json(value), at: parser::timestamp_from(value), images: Vec::new() }
 }
-
-pub(super) fn visit(
-    path: &Path,
-    visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>,
-) -> Result<Vec<String>, String> { store::visit(path, visitor) }
 
 pub(super) fn remove(path: &Path) -> Result<(), String> {
     let _guard = CONVERSION_GATE.lock().map_err(|_| "会话转换锁不可用")?;

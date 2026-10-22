@@ -10,17 +10,34 @@ fn search(sources: Vec<SessionSource>, issues: Vec<SessionIssue>, query: &str, a
 }
 
 fn source(path: &Path, id: &str) -> SessionSource {
-    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None, meta: SessionMeta {
+    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None, retained: Vec::new(),
+        index_root: path.parent().unwrap().join(".asb-read-index"), meta: SessionMeta {
         app: AppKind::Codex, session_id: id.into(), title: "metadata title".into(),
         summary: "summary".into(), project_dir: Some("/projects/example".into()),
         created_at: None, last_active_at: Some("2026-09-22T00:00:00Z".into()),
-        resume_command: String::new(),
-        alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true,
+        resume_command: None,
+        alias: None, pinned: false, tags: Vec::new(), parent_session_id: None, can_delete: true, preservation: None,
     } }
 }
 
 fn message(text: &str) -> String {
     format!("{}\n", serde_json::json!({"role":"assistant", "content":text}))
+}
+
+#[test]
+fn search_pagination_reuses_hits_and_append_invalidates_the_query_result() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("search.jsonl");
+    fs::write(&path, (0..80).map(|index| message(&format!("target {index}"))).collect::<String>()).unwrap();
+    let source = source(&path, "search");
+    assert_eq!(search(vec![source.clone()], vec![], "target", None, 0).total, 80);
+    let before = super::super::records::decoded_record_count();
+    let next = search(vec![source.clone()], vec![], "target", None, 50);
+    assert_eq!(next.results.len(), 30);
+    assert_eq!(super::super::records::decoded_record_count(), before);
+    use std::io::Write;
+    fs::OpenOptions::new().append(true).open(&path).unwrap().write_all(message("target appended").as_bytes()).unwrap();
+    assert_eq!(search(vec![source], vec![], "target", None, 0).total, 81);
 }
 
 #[test]

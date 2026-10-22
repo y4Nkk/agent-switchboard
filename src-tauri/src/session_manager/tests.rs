@@ -57,8 +57,8 @@ fn scans_supported_sources_without_exposing_paths() {
         .find(|session| session.app == AppKind::Codex)
         .expect("Codex session");
     assert_eq!(claude.title, "归档整理");
-    assert_eq!(claude.resume_command, "claude --resume claude-456");
-    assert_eq!(codex.resume_command, "codex resume codex-123");
+    assert_eq!(claude.resume_command.as_deref(), Some("claude --resume claude-456"));
+    assert_eq!(codex.resume_command.as_deref(), Some("codex resume codex-123"));
 }
 
 #[test]
@@ -203,7 +203,7 @@ fn claude_subagents_have_separate_identity_and_resume_their_parent() {
     assert_eq!(scan.sessions.len(), 2);
     let child = scan.sessions.iter().find(|session| session.parent_session_id.is_some()).unwrap();
     assert_eq!(child.session_id, "main-agent-one");
-    assert_eq!(child.resume_command, "claude --resume main");
+    assert_eq!(child.resume_command.as_deref(), Some("claude --resume main"));
 }
 
 #[test]
@@ -253,7 +253,7 @@ fn deleting_claude_sidecars_cleans_only_metadata_whose_entire_source_is_removed(
 }
 
 #[test]
-fn removes_the_record_and_claude_sidecar_without_touching_siblings() {
+fn removes_only_the_resolved_codex_record_without_touching_siblings() {
     let temp = tempdir().expect("temp");
     let record = temp.path().join("session-1.jsonl");
     let sidecar = temp.path().join("session-1");
@@ -263,9 +263,9 @@ fn removes_the_record_and_claude_sidecar_without_touching_siblings() {
     let unrelated = temp.path().join("session-2.jsonl");
     write(&unrelated, "{\"type\":\"user\"}\n");
 
-    remove_session_source(AppKind::Claude, &record).expect("delete claude record");
+    remove_session_source(&record).expect("delete raw record");
     assert!(!record.exists(), "会话记录应被删除");
-    assert!(!sidecar.exists(), "同名附属目录应随会话删除");
+    assert!(sidecar.exists(), "原生 Codex 附属目录由客户端拥有");
     assert!(unrelated.exists(), "无关记录必须保留");
 
     let codex_record = temp.path().join("rollout-1.jsonl");
@@ -273,7 +273,7 @@ fn removes_the_record_and_claude_sidecar_without_touching_siblings() {
     write(&codex_record, "{\"type\":\"session_meta\"}\n");
     fs::create_dir_all(&codex_sidecar).expect("create codex sidecar");
 
-    remove_session_source(AppKind::Codex, &codex_record).expect("delete codex record");
+    remove_session_source(&codex_record).expect("delete codex record");
     assert!(!codex_record.exists(), "会话记录应被删除");
     assert!(codex_sidecar.exists(), "Codex 不清理同名目录");
 }
@@ -281,7 +281,7 @@ fn removes_the_record_and_claude_sidecar_without_touching_siblings() {
 #[test]
 fn a_resolved_record_that_is_already_absent_can_finish_metadata_cleanup() {
     let temp = tempdir().expect("temp");
-    remove_session_source(AppKind::Codex, &temp.path().join("gone.jsonl")).unwrap();
+    remove_session_source(&temp.path().join("gone.jsonl")).unwrap();
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! Owns the question catalog, the persisted batch lifecycle, and the single
-//! active probe's execution. Every readable state lives in the ledger; the
-//! registry keeps only the control handle and results awaiting a save retry.
+//! active probe's execution. Durable status lives in the ledger; the registry
+//! keeps the control handle, live clock and results awaiting a save retry.
 mod ledger;
 mod output;
 mod questions;
@@ -8,6 +8,7 @@ mod runner;
 mod process;
 mod snapshot;
 mod config_watch;
+mod progress;
 #[cfg(test)]
 mod tests;
 
@@ -51,7 +52,7 @@ pub(crate) struct ProbeRunResult {
 }
 
 /// The serialized batch view served to the UI: the ledger record, its runs,
-/// and the in-memory "results not yet saved" flag.
+/// the in-memory "results not yet saved" flag and transient run progress.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProbeBatchView {
@@ -61,6 +62,7 @@ pub(crate) struct ProbeBatchView {
     pub runs: Vec<ledger::ProbeRunRecord>,
     pub persist_pending: bool,
     pub persist_error: Option<String>,
+    pub progress: Option<progress::ProbeProgressView>,
 }
 
 /// Results that could not be written to the ledger, kept in memory until the
@@ -87,12 +89,7 @@ pub(crate) fn current_view(
     registry: &ProbeRegistry,
 ) -> Result<Option<ProbeBatchView>, String> {
     let ledger = ProbeLedger::new(local.root());
-    let Some(batch) = ledger.current_batch()? else {
-        return Ok(None);
-    };
-    let runs = ledger.load_runs(&batch.id)?;
-    let pending = registry.unsaved(&batch.id);
-    Ok(Some(assemble_view(batch, runs, pending)))
+    registry.read_view(&ledger, None)
 }
 
 /// One historical batch by id.
@@ -102,17 +99,14 @@ pub(crate) fn batch_view(
     batch_id: &str,
 ) -> Result<Option<ProbeBatchView>, String> {
     let ledger = ProbeLedger::new(local.root());
-    let Some(batch) = ledger.load_batch(batch_id)? else {
-        return Ok(None);
-    };
-    let runs = ledger.load_runs(batch_id)?;
-    Ok(Some(assemble_view(batch, runs, registry.unsaved(batch_id))))
+    registry.read_view(&ledger, Some(batch_id))
 }
 
 fn assemble_view(
     mut batch: ledger::ProbeBatchRecord,
     mut runs: Vec<ledger::ProbeRunRecord>,
     pending: Option<UnsavedProbe>,
+    progress: Option<progress::ProbeProgressView>,
 ) -> ProbeBatchView {
     let persist_pending = pending.is_some();
     let persist_error = pending.as_ref().map(|pending| format!("检测结果尚未保存：{}", pending.save_error));
@@ -135,6 +129,7 @@ fn assemble_view(
         runs,
         persist_pending,
         persist_error,
+        progress,
     }
 }
 

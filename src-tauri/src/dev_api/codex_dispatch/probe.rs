@@ -9,7 +9,7 @@ pub(super) async fn dispatch(
     request: &InvokeRequest,
 ) -> Result<Option<Value>, CommandError> {
     let result = match request.command.as_str() {
-        "list_codex_probe_questions" => as_json(codex_probe::list_codex_probe_questions().await),
+        "get_codex_probe_catalog" => as_json(codex_probe::get_codex_probe_catalog().await),
         "start_codex_probe" => as_json(codex_probe::start_codex_probe(
             app.clone(), argument(&request.args, "request")?,
         ).await),

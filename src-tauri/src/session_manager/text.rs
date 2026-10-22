@@ -46,6 +46,8 @@ impl TextQuery {
 
     pub(super) fn is_empty(&self) -> bool { self.pattern.is_empty() }
 
+    pub(super) fn identity(&self) -> String { self.pattern.iter().collect() }
+
     pub(super) fn find(&self, text: &str) -> Option<usize> {
         if self.is_empty() { return Some(0); }
         let mut matched = 0;

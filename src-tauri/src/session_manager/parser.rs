@@ -5,13 +5,10 @@ use sha2::{Digest, Sha256};
 use std::io;
 use std::ops::ControlFlow;
 use std::path::Path;
-use std::sync::Mutex;
 
 const SUMMARY_LIMIT: usize = 180;
-pub(super) static SCAN_GATE: Mutex<()> = Mutex::new(());
 
 pub(super) fn parse_session(app: AppKind, path: &Path) -> Result<(SessionMeta, Vec<String>), io::Error> {
-    let _guard = SCAN_GATE.lock().map_err(|_| io::Error::other("会话读取锁不可用"))?;
     let mut session_id = None;
     let mut project_dir = None;
     let mut created_at = None;
@@ -47,12 +44,13 @@ pub(super) fn parse_session(app: AppKind, path: &Path) -> Result<(SessionMeta, V
             if issues.is_empty() { "missing session id".into() } else { issues.join("；") }))?;
     let title = custom_title.or_else(|| first_prompt.clone())
         .or_else(|| project_dir.as_deref().and_then(project_name)).unwrap_or_else(|| session_id.clone());
-    Ok((SessionMeta { app, resume_command: super::resume::resume_command(app, &session_id),
+    Ok((SessionMeta { app, resume_command: Some(super::resume::resume_command(app, &session_id)),
         session_id, title: clamp_title(&title), summary: first_prompt.unwrap_or_else(|| clamp_text(&title, SUMMARY_LIMIT)),
         project_dir, created_at: native_created_at.or(created_at), last_active_at, alias: None, pinned: false, tags: Vec::new(),
-        parent_session_id, can_delete: true }, issues))
+        parent_session_id, can_delete: true, preservation: None }, issues))
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct SessionIdentity {
     pub id: String,
     pub parent: Option<String>,
@@ -78,7 +76,8 @@ pub(crate) fn parent_from(payload: &Value) -> Option<String> {
 #[cfg(test)]
 pub(super) fn collect_messages(path: &Path) -> Result<Vec<SessionMessage>, String> {
     let mut messages = Vec::new();
-    super::jsonl::visit(&[path.to_path_buf()], &mut |message| { messages.push(message); Ok(ControlFlow::Continue(())) })?;
+    let source = super::fixture_source(path, AppKind::Codex, "fixture");
+    source.visit(|message| { messages.push(message); Ok(ControlFlow::Continue(())) })?;
     Ok(messages)
 }
 
@@ -89,6 +88,13 @@ pub(super) fn message_from(value: &Value) -> Option<SessionMessage> {
 
 pub(super) fn record_identity(value: &Value) -> String {
     format!("{:x}", Sha256::digest(value.to_string().as_bytes()))
+}
+
+pub(super) fn claude_record_id(value: &Value) -> Option<String> {
+    let session = value.get("sessionId")?.as_str()?;
+    let uuid = value.get("uuid")?.as_str()?;
+    if !valid_session_id(session) || uuid::Uuid::parse_str(uuid).is_err() { return None; }
+    Some(format!("claude-{}-{uuid}", value.get("type")?.as_str()?))
 }
 
 pub(super) fn native_identity(value: &Value) -> String {
