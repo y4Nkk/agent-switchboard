@@ -14,12 +14,17 @@ pub(super) fn roots(connection: &Connection) -> Result<Vec<HistoryRoot>, String>
 }
 
 pub(super) fn sources(connection: &Connection, database: &Path) -> Result<Vec<SessionSource>, String> {
+    sources_observed(connection, database, &|| Ok(()))
+}
+
+pub(super) fn sources_observed(connection: &Connection, database: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<SessionSource>, String> {
     let mut statement = connection.prepare("SELECT id,origin,meta,saved_at,available,issue,revision,capture_issue FROM transcripts
         WHERE session_id NOT IN (SELECT id FROM deleted_sessions)
         AND (parent_id IS NULL OR parent_id NOT IN (SELECT id FROM deleted_sessions)) ORDER BY origin,generation").map_err(db_error)?;
     let mut rows = statement.query([]).map_err(db_error)?;
     let mut sources = BTreeMap::<String, SessionSource>::new();
     while let Some(row) = rows.next().map_err(db_error)? {
+        checkpoint()?;
         let id: String = row.get(0).map_err(db_error)?;
         let origin = PathBuf::from(row.get::<_, String>(1).map_err(db_error)?);
         let mut meta: SessionMeta = serde_json::from_str(&row.get::<_, String>(2).map_err(db_error)?)
@@ -62,11 +67,11 @@ fn merge(current: &mut SessionMeta, next: SessionMeta, preservation: Preservatio
     }
 }
 
-pub(super) fn visit(
-    source: &Transcript, offset: u64,
+pub(super) fn visit_observed(
+    source: &Transcript, offset: u64, checkpoint: &dyn Fn() -> Result<(), String>,
     mut visitor: impl FnMut(usize, u64, serde_json::Value) -> Result<ControlFlow<()>, String>,
 ) -> Result<Vec<String>, String> {
-    visit_bytes(source, offset, |ordinal, position, raw| {
+    visit_bytes_observed(source, offset, checkpoint, |ordinal, position, raw| {
         if raw.iter().all(u8::is_ascii_whitespace) { return Ok(ControlFlow::Continue(())); }
         let value = serde_json::from_slice(raw).map_err(|error| format!("已保留的 Claude 记录无效：{error}"))?;
         visitor(ordinal, position, value)
@@ -75,8 +80,16 @@ pub(super) fn visit(
 
 pub(super) fn visit_bytes(
     source: &Transcript, offset: u64,
+    visitor: impl FnMut(usize, u64, &[u8]) -> Result<ControlFlow<()>, String>,
+) -> Result<Vec<String>, String> {
+    visit_bytes_observed(source, offset, &|| Ok(()), visitor)
+}
+
+fn visit_bytes_observed(
+    source: &Transcript, offset: u64, checkpoint: &dyn Fn() -> Result<(), String>,
     mut visitor: impl FnMut(usize, u64, &[u8]) -> Result<ControlFlow<()>, String>,
 ) -> Result<Vec<String>, String> {
+    checkpoint()?;
     let mut connection = store::read(&source.database)?;
     let transaction = connection.transaction().map_err(db_error)?;
     let revision: String = transaction.query_row("SELECT revision FROM transcripts WHERE id=?1", [&source.id], |row| row.get(0)).map_err(db_error)?;
@@ -85,6 +98,7 @@ pub(super) fn visit_bytes(
         .map_err(db_error)?;
     let mut rows = statement.query(params![source.id, offset]).map_err(db_error)?;
     while let Some(row) = rows.next().map_err(db_error)? {
+        checkpoint()?;
         let raw: Vec<u8> = row.get(2).map_err(db_error)?;
         if visitor(row.get(0).map_err(db_error)?, row.get(1).map_err(db_error)?, &raw)?.is_break() { break; }
     }

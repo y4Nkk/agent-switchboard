@@ -32,6 +32,8 @@ mod profiles;
 mod query;
 mod quota;
 mod sessions;
+mod session_search;
+pub use session_search::*;
 pub(crate) mod storage;
 pub(crate) mod quota_refresh;
 

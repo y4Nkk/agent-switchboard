@@ -39,25 +39,6 @@ pub async fn convert_session_sources(
             message.clone(), serde_json::json!({ "detail": message })))).await
 }
 
-/// Searches only backend-resolved session roots and returns a bounded page.
-#[tauri::command]
-pub async fn search_sessions(
-    app_handle: AppHandle,
-    request: session_manager::SessionSearchRequest,
-) -> Result<session_manager::SessionSearchPage, CommandError> {
-    let local = state(&app_handle)?;
-    blocking(move || {
-        session_manager::search_sessions(local.root(), request)
-            .map_err(|message| CommandError::localized(
-                "session-search-failed",
-                "errors.sessions.searchFailed",
-                message.clone(),
-                serde_json::json!({ "detail": message }),
-            ))
-    })
-    .await
-}
-
 /// Resolves one exact session identity independently of search pagination.
 #[tauri::command]
 pub async fn get_session_metadata(

@@ -14,19 +14,21 @@ export type ButtonVariant = keyof typeof VARIANT_CLASS;
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant: ButtonVariant;
+  size?: "standard" | "compact";
 }
 
 /**
  * Global action control. Owns the geometry contract: every instance emits
- * .asb-btn plus exactly one variant surface class owned by styles/base/buttons.css.
+ * .asb-btn plus one variant class and an optional compact size class;
+ * styles/base/buttons.css owns their geometry and surfaces.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  function Button({ variant, className, type = "button", ...props }, ref) {
+  function Button({ variant, size = "standard", className, type = "button", ...props }, ref) {
     return (
       <button
         ref={ref}
         type={type}
-        className={["asb-btn", VARIANT_CLASS[variant], className]
+        className={["asb-btn", VARIANT_CLASS[variant], size === "compact" && "asb-btn-compact", className]
           .filter(Boolean)
           .join(" ")}
         {...props}

@@ -42,6 +42,8 @@ Status: implemented
 
 ## Related decisions
 
+- [搜索取消、真实进度与全局警示](2026-10-23-session-search-lifecycle.md)：搜索取消进入保留同步的记录和附件分块边界；取消只回滚当前未发布文件，目录原件可用性在完成整目录扫描后原子发布，避免取消导致未检查的历史被误记为不可用。保留模式、完整快照及恢复身份继续由本篇拥有。
+
 - [完整本地会话与用量](../architecture/2026-10-16-complete-local-session-usage.md)：部分重叠；保留逻辑身份、共享读取器、真实消费去重及原生数据库只读约束。本篇接管 Claude 来源跨账号稳定性和完整正文保留，不推翻共享读取契约。
 - [会话读取索引与增量真实用量](../architecture/2026-10-22-incremental-session-read-index.md)：部分重叠；保留库交付按修订校验的原始字节范围，消息位置、搜索命中和计量状态由派生索引拥有，不另设 Claude 原件直读路径。
 - [本地资源边界](../architecture/2026-10-14-bounded-local-resources.md)：部分重叠；继续逐记录有界读取、分页传输及显式维护，持久保留不能引入全量正文常驻内存。

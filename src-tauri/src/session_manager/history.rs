@@ -50,13 +50,19 @@ pub(crate) fn initialize(root: &Path) -> Result<(), String> {
 }
 
 pub(super) fn scan(root: &Path) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    let _guard = GATE.lock().map_err(|_| "Claude 会话保留锁不可用")?;
+    scan_observed(root, &|| Ok(()))
+}
+
+pub(super) fn scan_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+    let _guard = super::read_observer::lock(&GATE, checkpoint)?;
     let mut connection = store::open(root)?;
-    let issues = match capture::initial_roots().and_then(|initial| capture::synchronize(&mut connection, root, &initial)) {
+    let result = capture::initial_roots().and_then(|initial| capture::synchronize_observed(&mut connection, root, &initial, checkpoint));
+    checkpoint()?;
+    let issues = match result {
         Ok(issues) => issues,
         Err(error) => issues(vec![error]),
     };
-    Ok((reading::sources(&connection, &store::path(root))?, issues))
+    Ok((reading::sources_observed(&connection, &store::path(root), checkpoint)?, issues))
 }
 
 pub(crate) fn preserve_before_switch(root: &Path) -> Result<Vec<asb_core::contracts::LocalizedMessage>, String> {
@@ -137,10 +143,10 @@ pub(super) fn bind_images(source: &Transcript, references: Vec<String>) -> Vec<S
     attachments::bind_images(source, references)
 }
 
-pub(crate) fn visit_records(
-    source: &Transcript, offset: u64,
+pub(crate) fn visit_records_observed(
+    source: &Transcript, offset: u64, checkpoint: &dyn Fn() -> Result<(), String>,
     visitor: impl FnMut(usize, u64, serde_json::Value) -> Result<std::ops::ControlFlow<()>, String>,
-) -> Result<Vec<String>, String> { reading::visit(source, offset, visitor) }
+) -> Result<Vec<String>, String> { reading::visit_observed(source, offset, checkpoint, visitor) }
 
 pub(crate) fn visit_record_bytes(
     source: &Transcript, offset: u64,

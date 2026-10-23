@@ -59,7 +59,6 @@ export const messages = {
 	"usage.label.output": ["输出", "Output"],
 
 	"usage.summary.groupAria": ["模型消耗汇总", "Model consumption summary"],
-	"usage.issues.aria": ["模型消耗提示", "Model consumption notices"],
 	"usage.issues.entry": ["{client}：{message}", "{client}: {message}"],
 
 	"usage.column.client": ["客户端", "Client"],

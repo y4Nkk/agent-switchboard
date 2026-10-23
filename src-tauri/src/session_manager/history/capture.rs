@@ -24,6 +24,10 @@ pub(super) fn remember_root(connection: &Connection, directory: &Path, root: &Pa
 }
 
 pub(super) fn synchronize(connection: &mut Connection, root: &Path, initial: &[PathBuf]) -> Result<Vec<SessionIssue>, String> {
+    synchronize_observed(connection, root, initial, &|| Ok(()))
+}
+
+pub(super) fn synchronize_observed(connection: &mut Connection, root: &Path, initial: &[PathBuf], checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<SessionIssue>, String> {
     let mut messages = Vec::new();
     let mut workflows = Vec::new();
     connection.execute("UPDATE roots SET automatic=0", []).map_err(db_error)?;
@@ -33,17 +37,20 @@ pub(super) fn synchronize(connection: &mut Connection, root: &Path, initial: &[P
     let mut directories: Vec<_> = reading::roots(connection)?.into_iter().map(|directory| PathBuf::from(directory.path)).collect();
     directories.extend(super::packages::registered(connection, root)?);
     for directory in directories {
+        checkpoint()?;
         let directory = text(&directory)?;
         let start = messages.len();
-        connection.execute("UPDATE transcripts SET available=0 WHERE root=?1", [directory]).map_err(db_error)?;
-        let collected = sources::collect(&Path::new(directory).join("projects"));
+        let collected = sources::collect_observed(&Path::new(directory).join("projects"), checkpoint)?;
         messages.extend(collected.issues);
-        for path in collected.paths {
+        for path in &collected.paths {
+            checkpoint()?;
             if conversion::is_workflow(&path) {
                 workflows.push(conversion::pending_issue(&path).unwrap_or_else(|message| SessionIssue::new(AppKind::Claude, message)));
                 continue;
             }
-            match capture(connection, directory, &path) {
+            let result = capture(connection, directory, path, checkpoint);
+            checkpoint()?;
+            match result {
                 Ok(warnings) => messages.extend(warnings),
                 Err(error) => {
                     let message = format!("{}：{error}", path.display());
@@ -54,8 +61,17 @@ pub(super) fn synchronize(connection: &mut Connection, root: &Path, initial: &[P
                 }
             }
         }
+        checkpoint()?;
+        let transaction = connection.transaction().map_err(db_error)?;
+        transaction.execute("UPDATE transcripts SET available=0 WHERE root=?1", [directory]).map_err(db_error)?;
+        for path in &collected.paths {
+            checkpoint()?;
+            transaction.execute("UPDATE transcripts SET available=1 WHERE root=?1 AND origin=?2
+                AND generation=(SELECT max(generation) FROM transcripts WHERE origin=?2)", params![directory,text(path)?]).map_err(db_error)?;
+        }
         let issue = (messages.len() > start).then(|| messages[start..].join("；"));
-        connection.execute("UPDATE roots SET issue=?1 WHERE path=?2", params![issue,directory]).map_err(db_error)?;
+        transaction.execute("UPDATE roots SET issue=?1 WHERE path=?2", params![issue,directory]).map_err(db_error)?;
+        transaction.commit().map_err(db_error)?;
     }
     let mut result = issues(messages);
     result.extend(workflows);
@@ -79,17 +95,18 @@ fn previous(connection: &Connection, origin: &str) -> Result<Option<Previous>, S
         .optional().map_err(db_error)
 }
 
-fn capture(connection: &mut Connection, root: &str, path: &Path) -> Result<Vec<String>, String> {
+fn capture(connection: &mut Connection, root: &str, path: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<String>, String> {
+    checkpoint()?;
     let origin = text(path)?;
     let previous = previous(connection, origin)?;
     let id = previous.as_ref().map(|old| old.id.clone()).unwrap_or_else(|| asb_switch::sha256_hex(&format!("{origin}:0")));
     let before = stamp(&path.metadata().map_err(db_error_path)?)?;
-    let inventory = attachments::inventory(connection, &id, path)?;
+    let inventory = attachments::inventory(connection, &id, path, checkpoint)?;
     if previous.as_ref().is_some_and(|old| old.stamp == before && old.asset_stamp == inventory.stamp && !old.retry) {
         connection.execute("UPDATE transcripts SET available=1 WHERE id=?1", [&id]).map_err(db_error)?;
         return Ok(previous.and_then(|old| old.issue).into_iter().collect());
     }
-    let (mut meta, warnings) = parser::parse_session(AppKind::Claude, path).map_err(db_error_path)?;
+    let (mut meta, warnings) = parser::parse_session_observed(AppKind::Claude, path, checkpoint).map_err(db_error_path)?;
     if !warnings.is_empty() { return Err(warnings.join("；")); }
     let native_id = meta.session_id.clone();
     let relative = path.strip_prefix(Path::new(root).join("projects")).map_err(db_error_path)?;
@@ -102,7 +119,7 @@ fn capture(connection: &mut Connection, root: &str, path: &Path) -> Result<Vec<S
     if previous.as_ref().is_some_and(|old| old.session_id != meta.session_id) {
         return Err("原路径的会话身份已改变；已保留原会话，未覆盖".into());
     }
-    let generation = generation(path, previous.as_ref(), inventory.rewritten)?;
+    let generation = generation(path, previous.as_ref(), inventory.rewritten, checkpoint)?;
     let id = asb_switch::sha256_hex(&format!("{origin}:{generation}"));
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(db_error)?;
     let metadata = serde_json::to_string(&meta).map_err(|error| error.to_string())?;
@@ -114,13 +131,13 @@ fn capture(connection: &mut Connection, root: &str, path: &Path) -> Result<Vec<S
         transaction.execute("INSERT INTO attachments SELECT ?1,reference,relative_path,stamp,asset FROM attachments WHERE source=?2", params![id,old.id]).map_err(db_error)?;
         transaction.execute("INSERT INTO image_references SELECT ?1,reference,relative_path FROM image_references WHERE source=?2", params![id,old.id]).map_err(db_error)?;
     }
-    let (revision, length, references) = save_records(&transaction, &id, path, previous.as_ref().filter(|old| old.id == id))?;
+    let (revision, length, references) = save_records(&transaction, &id, path, previous.as_ref().filter(|old| old.id == id), checkpoint)?;
     transaction.execute("UPDATE transcripts SET meta=?1 WHERE id=?2", params![metadata,id]).map_err(db_error)?;
-    let (warnings, asset_stamp) = attachments::save(&transaction, &id, path, &inventory, &references)?;
-    if before != stamp(&path.metadata().map_err(db_error_path)?)? || digest(path, None)? != revision {
+    let (warnings, asset_stamp) = attachments::save(&transaction, &id, path, &inventory, &references, checkpoint)?;
+    if before != stamp(&path.metadata().map_err(db_error_path)?)? || digest_observed(path, None, checkpoint)? != revision {
         return Err("会话在保存期间发生变化；保留上次完整记录，稍后重试".into());
     }
-    let inventory = attachments::inventory(&transaction, &id, path)?;
+    let inventory = attachments::inventory(&transaction, &id, path, checkpoint)?;
     if inventory.stamp != asset_stamp { return Err("会话附件集合在保存期间变化，稍后重试".into()); }
     let issue = (!warnings.is_empty()).then(|| warnings.join("；"));
     transaction.execute("UPDATE transcripts SET capture_issue=NULL WHERE origin=?1", [origin]).map_err(db_error)?;
@@ -128,19 +145,20 @@ fn capture(connection: &mut Connection, root: &str, path: &Path) -> Result<Vec<S
         byte_length=?5,stamp=?6,asset_stamp=?7,saved_at=?8,available=1,issue=?9 WHERE id=?10",
         params![metadata,meta.session_id,meta.parent_session_id,revision,length,before,inventory.stamp,chrono::Utc::now().to_rfc3339(),issue,id]).map_err(db_error)?;
     super::store::remove_unused_assets(&transaction)?;
+    checkpoint()?;
     transaction.commit().map_err(db_error)?;
     Ok(warnings)
 }
 
-fn generation(path: &Path, previous: Option<&Previous>, rewritten_assets: bool) -> Result<u64, String> {
+fn generation(path: &Path, previous: Option<&Previous>, rewritten_assets: bool, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<u64, String> {
     let Some(old) = previous else { return Ok(0); };
-    if !rewritten_assets && digest(path, Some(old.length))? == old.revision { return Ok(old.generation); }
+    if !rewritten_assets && digest_observed(path, Some(old.length), checkpoint)? == old.revision { return Ok(old.generation); }
     old.generation.checked_add(1).ok_or("会话版本超出保存范围".into())
 }
 
-fn save_records(connection: &Connection, id: &str, path: &Path, previous: Option<&Previous>) -> Result<(String, u64, BTreeSet<String>), String> {
+fn save_records(connection: &Connection, id: &str, path: &Path, previous: Option<&Previous>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(String, u64, BTreeSet<String>), String> {
     let append_at = match previous {
-        Some(old) if digest(path, Some(old.length))? == old.revision => old.length,
+        Some(old) if digest_observed(path, Some(old.length), checkpoint)? == old.revision => old.length,
         Some(_) => return Err("原记录在版本确认后再次改写，已保留旧版本，稍后重试".into()),
         None => 0,
     };
@@ -151,6 +169,7 @@ fn save_records(connection: &Connection, id: &str, path: &Path, previous: Option
     let mut ordinal = 0usize;
     let mut references = BTreeSet::new();
     loop {
+        checkpoint()?;
         line.clear();
         let count = (&mut reader).take(records::MAX_RECORD_BYTES + 1).read_until(b'\n', &mut line).map_err(db_error_path)?;
         if count == 0 { break; }
@@ -174,11 +193,12 @@ fn save_records(connection: &Connection, id: &str, path: &Path, previous: Option
     Ok((format!("{:x}", hash.finalize()), position, references))
 }
 
-pub(super) fn digest(path: &Path, limit: Option<u64>) -> Result<String, String> {
+pub(super) fn digest_observed(path: &Path, limit: Option<u64>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<String, String> {
     let mut file = File::open(path).map_err(db_error_path)?.take(limit.unwrap_or(u64::MAX));
     let mut hash = Sha256::new();
     let mut buffer = [0u8; 65_536];
     loop {
+        checkpoint()?;
         let count = file.read(&mut buffer).map_err(db_error_path)?;
         if count == 0 { break; }
         hash.update(&buffer[..count]);

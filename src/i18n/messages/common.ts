@@ -6,7 +6,8 @@ import type { MessageEntry } from "../types";
  * display text lives only here.
  */
 export const messages = {
-  "notice.acknowledge": ["已知晓，关闭", "Acknowledge and close"],
+  "notice.acknowledge": ["标为已知晓", "Acknowledge"],
+  "notice.acknowledged": ["已知晓", "Acknowledged"],
   "notice.review": ["查看已知提示（{count} 条）", "Review acknowledged notices ({count})"],
   "nav.page.providers": ["供应商切换", "Providers"],
   "nav.page.clientConfiguration": ["客户端配置", "Client Config"],

@@ -11,7 +11,7 @@ import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { useI18n, type TFunction } from "../i18n";
 import type { MessageKey } from "../i18n/messages";
 import type { useCodexOfficialReset, useCodexResetSignal } from "../components/quota-reads";
-import type { useCodexProbe } from "../components/use-codex-probe";
+import type { useCodexProbe } from "./useCodexProbe";
 import type { useModelUsageReport } from "../pages/use-model-usage-report";
 import { USAGE_SECTIONS, type UsageSection } from "./navigation";
 

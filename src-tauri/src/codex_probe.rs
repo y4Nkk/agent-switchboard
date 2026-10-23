@@ -80,6 +80,14 @@ pub(crate) use registry::ProbeRegistry;
 mod execution;
 pub(crate) use execution::spawn_probe;
 
+/// Events invalidate the shared read model; the registry and ledger own all data.
+pub(crate) fn notify_changed(app: &tauri::AppHandle, batch_id: &str) {
+    use tauri::Emitter;
+    if let Err(error) = app.emit("codex-probe-changed", batch_id) {
+        log::warn!("无法通知检测状态变化：{error}");
+    }
+}
+
 // -------------------------------------------------------------- read paths
 
 /// The live-or-latest batch view the radar panel reconnects to after a

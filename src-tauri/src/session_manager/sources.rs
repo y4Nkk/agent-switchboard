@@ -65,9 +65,14 @@ pub(super) fn is_link(metadata: &fs::Metadata) -> bool {
 }
 
 pub(crate) fn collect(root: &Path) -> CollectedFiles {
+    collect_observed(root, &|| Ok(())).expect("unobserved discovery cannot be cancelled")
+}
+
+pub(super) fn collect_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<CollectedFiles, String> {
     let mut result = CollectedFiles { paths: Vec::new(), issues: Vec::new() };
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
+        checkpoint()?;
         match fs::symlink_metadata(&directory) {
             Ok(metadata) if is_link(&metadata) => { result.issues.push(format!("会话链接未读取：{}", directory.display())); continue; }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && directory == root => continue,
@@ -80,6 +85,7 @@ pub(crate) fn collect(root: &Path) -> CollectedFiles {
             Err(error) => { result.issues.push(format!("无法读取会话目录 {}: {error}", directory.display())); continue; }
         };
         for entry in entries {
+            checkpoint()?;
             let path = match entry.and_then(|entry| Ok((entry.path(), fs::symlink_metadata(entry.path())?))) {
                 Ok((path, kind)) if is_link(&kind) => { result.issues.push(format!("会话链接未读取，以免循环或跨出来源范围: {}", path.display())); continue; },
                 Ok((path, kind)) if kind.is_dir() => { pending.push(path); continue; }
@@ -91,26 +97,33 @@ pub(crate) fn collect(root: &Path) -> CollectedFiles {
         }
     }
     result.paths.sort();
-    result
+    Ok(result)
 }
 
 pub(super) fn scan(root: &Path, app: Option<AppKind>, session: Option<&str>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    let _guard = DISCOVERY_GATE.lock().map_err(|_| "会话来源索引锁不可用")?;
-    let index = ReadIndex::open(root)?;
+    scan_observed(root, app, session, &|| Ok(()))
+}
+
+pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&str>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+    checkpoint()?;
+    let _guard = super::read_observer::lock(&DISCOVERY_GATE, checkpoint)?;
+    checkpoint()?;
+    let index = ReadIndex::open_observed(root, checkpoint)?;
     let roots: Vec<_> = super::codex_session_roots()?.into_iter().map(|path| (AppKind::Codex, path))
         .filter(|(kind, _)| app.is_none_or(|app| app == *kind)).collect();
     let codex_root = super::codex_root()?;
     let mut indexed = HashMap::new();
     let mut issues = Vec::new();
     let mut native_unavailable = false;
-    match if app == Some(AppKind::Claude) { Ok((Vec::new(), Vec::new())) } else { native::threads_matching(&codex_root, session) } {
+    match if app == Some(AppKind::Claude) { Ok((Vec::new(), Vec::new())) } else { native::threads_matching(&codex_root, session, checkpoint) } {
         Ok((threads, warnings)) => {
             issues.extend(warnings.into_iter().map(|message| SessionIssue::new(AppKind::Codex, message)));
             for thread in threads {
+                checkpoint()?;
                 let mut paths = Vec::new();
                 if roots.iter().any(|(app, root)| *app == AppKind::Codex && thread.rollout.starts_with(root))
                     && thread.rollout.is_file() && !thread.rollout.is_symlink() {
-                    match index.file("identity", &thread.rollout, || parser::session_identity(&thread.rollout).map_err(|error| error.to_string())) {
+                    match index.file("identity", &thread.rollout, || parser::session_identity_observed(&thread.rollout, checkpoint).map_err(|error| error.to_string())) {
                         Ok(Some(identity)) if identity.id == thread.meta.session_id => paths.push(thread.rollout),
                         _ => issues.push(SessionIssue::new(AppKind::Codex, format!("会话 {} 的原生记录身份与登记信息不一致", thread.meta.session_id))),
                     }
@@ -129,9 +142,10 @@ pub(super) fn scan(root: &Path, app: Option<AppKind>, session: Option<&str>) -> 
         },
         Err(message) => { native_unavailable = true; issues.push(SessionIssue::new(AppKind::Codex, message)); },
     }
-    scan_roots_indexed(root, &roots, &mut indexed, &mut issues, &index, session);
+    scan_roots_indexed(root, &roots, &mut indexed, &mut issues, &index, session, checkpoint)?;
+    checkpoint()?;
     if app != Some(AppKind::Codex) {
-        match super::history::scan(root) {
+        match super::history::scan_observed(root, checkpoint) {
             Ok((saved, warnings)) => {
                 issues.extend(warnings);
                 for source in saved.into_iter().filter(|source| session.is_none_or(|id| source.meta.session_id == id)) {
@@ -141,6 +155,7 @@ pub(super) fn scan(root: &Path, app: Option<AppKind>, session: Option<&str>) -> 
             Err(message) => issues.push(SessionIssue::new(AppKind::Claude, message)),
         }
     }
+    checkpoint()?;
     let (titles, warnings) = if indexed.values().any(|source| source.meta.app == AppKind::Codex && source.meta.can_delete) {
         codex_titles::load(&codex_root)
     } else { (HashMap::new(), Vec::new()) };
@@ -164,35 +179,43 @@ pub(super) fn scan_roots(
     let Some((_, first)) = roots.first() else { return; };
     let root = first.join(".asb-read-index");
     match ReadIndex::open(&root) {
-        Ok(index) => scan_roots_indexed(&root, roots, indexed, issues, &index, None),
+        Ok(index) => {
+            if let Err(message) = scan_roots_indexed(&root, roots, indexed, issues, &index, None, &|| Ok(())) {
+                issues.push(SessionIssue::new(roots[0].0, message));
+            }
+        },
         Err(message) => issues.push(SessionIssue::new(roots[0].0, message)),
     }
 }
 
 fn scan_roots_indexed(
     index_root: &Path, roots: &[(AppKind, PathBuf)], indexed: &mut HashMap<(AppKind, String), SessionSource>,
-    issues: &mut Vec<SessionIssue>, index: &ReadIndex, session: Option<&str>,
-) {
+    issues: &mut Vec<SessionIssue>, index: &ReadIndex, session: Option<&str>, checkpoint: &dyn Fn() -> Result<(), String>,
+) -> Result<(), String> {
     for (app, directory) in roots {
-        let files = collect(directory);
+        let files = collect_observed(directory, checkpoint)?;
         issues.extend(files.issues.into_iter().map(|message| SessionIssue::new(*app, message)));
         for path in files.paths {
+            checkpoint()?;
             if *app == AppKind::Claude && conversion::is_workflow(&path) {
                 issues.push(index.file("workflow-issue", &path, || conversion::pending_issue(&path))
                     .unwrap_or_else(|message| SessionIssue::new(*app, message)));
                 continue;
             }
-            match index_file(index_root, *app, path, indexed, index, session) {
+            let result = index_file(index_root, *app, path, indexed, index, session, checkpoint);
+            checkpoint()?;
+            match result {
                 Ok(warnings) => issues.extend(warnings.into_iter().map(|message| SessionIssue::new(*app, message))),
                 Err(message) => issues.push(SessionIssue::new(*app, message)),
             }
         }
     }
+    Ok(())
 }
 
-fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(AppKind, String), SessionSource>, index: &ReadIndex, session: Option<&str>) -> Result<Vec<String>, String> {
+fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(AppKind, String), SessionSource>, index: &ReadIndex, session: Option<&str>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<String>, String> {
     let mut issues = Vec::new();
-    let identity = index.file("identity", &path, || parser::session_identity(&path).map_err(|error| error.to_string()))?;
+    let identity = index.file("identity", &path, || parser::session_identity_observed(&path, checkpoint).map_err(|error| error.to_string()))?;
     let Some(identity) = identity else {
         return Err(format!("{} 不含可识别的会话身份", path.display()));
     };
@@ -208,7 +231,7 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
         }
         if source.paths.contains(&path) { return Ok(issues); }
         if source.meta.can_delete {
-            let (next, warnings) = index.file(&format!("metadata-{}", app.label()), &path, || parser::parse_session(app, &path).map_err(|error| error.to_string()))?;
+            let (next, warnings) = index.file(&format!("metadata-{}", app.label()), &path, || parser::parse_session_observed(app, &path, checkpoint).map_err(|error| error.to_string()))?;
             issues.extend(warnings);
             if next.last_active_at > source.meta.last_active_at {
                 source.meta.last_active_at = next.last_active_at;
@@ -222,7 +245,7 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
         source.paths.push(path);
         return Ok(issues);
     }
-    let (mut meta, warnings) = index.file(&format!("metadata-{}", app.label()), &path, || parser::parse_session(app, &path).map_err(|error| error.to_string()))?;
+    let (mut meta, warnings) = index.file(&format!("metadata-{}", app.label()), &path, || parser::parse_session_observed(app, &path, checkpoint).map_err(|error| error.to_string()))?;
     issues.extend(warnings);
     if child { meta.parent_session_id = Some(id); meta.session_id = key_id.clone(); }
     indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_history: None, converted: None, retained: Vec::new(), index_root: root.into() });

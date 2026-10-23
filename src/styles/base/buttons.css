@@ -11,8 +11,9 @@ button:disabled {
   opacity: 0.45;
 }
 
-/* `unstyled` is a marker: custom action classes own every visual property. */
-.asb-btn:not(.asb-btn-unstyled) {
+/* Keep base geometry at one-class specificity so variants can override it.
+   `unstyled` is a marker: custom action classes own every visual property. */
+.asb-btn:where(:not(.asb-btn-unstyled)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -116,4 +117,13 @@ button:disabled {
   color: var(--asb-text);
   font-size: 1.25rem;
   line-height: 1;
+}
+
+.asb-btn-compact:not(.asb-btn-unstyled) {
+  min-height: var(--asb-control-height-compact);
+}
+
+.asb-btn-compact:is(.asb-btn-icon, .asb-btn-back) {
+  width: var(--asb-control-height-compact);
+  height: var(--asb-control-height-compact);
 }

@@ -8,6 +8,7 @@ import { Pagination } from "../Pagination";
 import { Time } from "../Time";
 import { ScrollArea } from "../ScrollArea";
 import { SessionProjects } from "./SessionProjects";
+import { SessionSearchProgress } from "./SessionSearchProgress";
 import { sessionKey, sessionTitle } from "./session-content";
 import { SESSION_PAGE_SIZE, type SessionSearch } from "./use-session-search";
 
@@ -60,7 +61,7 @@ export function SessionSearchList({ search, selected, selecting, chosen, disable
       </div>
     </div>
     <SessionProjects search={search} disabled={disabled} />
-    {busy && <p role="status">{t("sessions.list.scanning.aria")}</p>}
+    {busy && <SessionSearchProgress progress={search.progress} />}
     {error && <p className="asb-warn-text" role="alert">{error}</p>}
     {result?.total === 0 && <p className="asb-empty-state">{t("sessions.list.empty")}</p>}
     <ScrollArea className="asb-session-items" aria-label={t("sessions.list.aria")}>

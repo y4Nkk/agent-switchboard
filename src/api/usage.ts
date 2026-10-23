@@ -361,9 +361,10 @@ export function getCodexProbeCatalog(): Promise<CodexProbeCatalog> {
 
 /** Starts one probe batch against the active Codex configuration. Every run
  * is a real Codex call and spends quota; the batch is recorded in the local
- * history before the first call. */
-export function startCodexProbe(request: CodexProbeRequest): Promise<void> {
-  return invoke<void>("start_codex_probe", { request });
+ * history before the first call. Returns its id so even a batch that ends
+ * before the first status read can be observed and notified exactly once. */
+export function startCodexProbe(request: CodexProbeRequest): Promise<string> {
+  return invoke<string>("start_codex_probe", { request });
 }
 
 /** The live-or-latest batch. The panel reconnects here after a refresh or

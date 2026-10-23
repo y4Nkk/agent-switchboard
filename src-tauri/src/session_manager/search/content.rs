@@ -13,14 +13,20 @@ pub(super) struct ContentMatch {
 #[derive(Serialize, Deserialize)]
 pub(super) struct Matches { pub hits: Vec<ContentMatch>, pub issues: Vec<String> }
 
-pub(super) fn matches(source: &SessionSource, query: &TextQuery) -> Result<Matches, String> {
-    let messages = timeline::index(source)?;
-    let index = ReadIndex::open(&source.index_root)?;
+pub(super) fn matches(source: &SessionSource, query: &TextQuery, control: &super::SearchControl) -> Result<Matches, String> {
+    control.indexing()?;
+    let messages = timeline::index_observed(source, &|| control.checkpoint())?;
+    control.messages(0, messages.entries.len())?;
+    let index = ReadIndex::open_observed(&source.index_root, &|| control.checkpoint())?;
     let cache_key = key(&(source.meta.app, &source.meta.session_id))?;
     let revision = asb_switch::sha256_hex(&key(&(query.identity(), &messages.entries, &messages.issues))?);
-    if let Some(matches) = index.get("message-search", &cache_key, &revision)? { return Ok(matches); }
+    if let Some(matches) = index.get("message-search", &cache_key, &revision)? {
+        control.messages(messages.entries.len(), messages.entries.len())?;
+        return Ok(matches);
+    }
     let mut hits = Vec::new();
-    let issues = messages.visit(|message| {
+    let issues = messages.visit_observed(|completed, total| control.messages(completed, total), |message| {
+        control.checkpoint()?;
         if let Some(position) = query.find(&message.content) {
             let raw = raw_offset(&message.content, position).ok_or("搜索正文位置无效")?;
             hits.push(ContentMatch { message_id: message.id, content_offset: aligned_content_offset(raw),

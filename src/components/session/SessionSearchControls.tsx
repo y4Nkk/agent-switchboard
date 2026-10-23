@@ -3,6 +3,7 @@ import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { ClientFilter, type ClientFilterValue } from "../ClientFilter";
 import { SearchIcon } from "../icons";
+import { Tooltip } from "../Tooltip";
 import { SessionOrganizationFilters } from "./SessionOrganizationFilters";
 import type { SessionSearch } from "./use-session-search";
 
@@ -19,8 +20,10 @@ export function SessionSearchControls({ search, disabled }: {
             event.preventDefault(); search.submit();
           }
         }} />
-      <Button variant="icon" type="submit" disabled={disabled} aria-label={t("sessions.search.submit")}
-        title={t("sessions.search.submit")}><SearchIcon /></Button>
+      <Tooltip label={t("sessions.search.submit")} side="bottom">
+        <Button variant="icon" size="compact" type="submit" disabled={disabled} aria-label={t("sessions.search.submit")}>
+          <SearchIcon /></Button>
+      </Tooltip>
     </form>
     <SessionOrganizationFilters search={search} disabled={disabled} />
   </div>;

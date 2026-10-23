@@ -95,7 +95,7 @@ fn write_records(connection: &Connection, sources: &[Transcript], references: &H
     for source in sources {
         let mut occurrences = HashMap::<String,usize>::new();
         let mut at = None;
-        super::visit_records(source, 0, |_, position, value| {
+        super::visit_records_observed(source, 0, &|| Ok(()), |_, position, value| {
             let digest = parser::record_identity(&value);
             let key = parser::claude_record_id(&value).unwrap_or_else(|| digest.clone());
             let count = occurrences.entry(key.clone()).or_default();

@@ -26,14 +26,20 @@ struct NativeRow {
 #[derive(Serialize, Deserialize)]
 struct CachedEntry { row: NativeRow, position: Option<Position>, issue: Option<String> }
 
+#[cfg(test)]
 pub(super) fn positions(index: &ReadIndex, connection: &Connection, history: &Path, thread: &str) -> Result<(Vec<Position>, Vec<String>), String> {
+    positions_observed(index, connection, history, thread, &|| Ok(()))
+}
+
+pub(super) fn positions_observed(index: &ReadIndex, connection: &Connection, history: &Path, thread: &str, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<Position>, Vec<String>), String> {
     let cache_key = key(&(history, thread))?;
     let previous = index.previous::<Vec<CachedEntry>>("native-messages", &cache_key)?.unwrap_or_default();
     let mut previous: HashMap<_, _> = previous.into_iter().map(|entry|
         ((entry.row.turn.clone(), entry.row.item.clone(), entry.row.realtime), entry)).collect();
     let mut next = Vec::new();
     let mut changed = false;
-    for row in rows(connection, thread)? {
+    for row in rows(connection, thread, checkpoint)? {
+        checkpoint()?;
         let cached = previous.remove(&(row.turn.clone(), row.item.clone(), row.realtime));
         let entry = match cached {
             Some(entry) if !row.realtime && entry.row == row => entry,
@@ -57,7 +63,7 @@ pub(super) fn positions(index: &ReadIndex, connection: &Connection, history: &Pa
     Ok((positions, issues))
 }
 
-fn rows(connection: &Connection, thread: &str) -> Result<Vec<NativeRow>, String> {
+fn rows(connection: &Connection, thread: &str, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<NativeRow>, String> {
     let mut statement = connection.prepare(
         "SELECT turn_id,item_id,created_at_ms,updated_at_ordinal,0,rollout_ordinal FROM thread_items WHERE thread_id=?1 \
          UNION ALL SELECT '',r.item_id,r.created_at_ms,0,1,r.rollout_ordinal FROM thread_realtime_items r \
@@ -65,7 +71,9 @@ fn rows(connection: &Connection, thread: &str) -> Result<Vec<NativeRow>, String>
          ORDER BY 6,3,2").map_err(|error| error.to_string())?;
     let rows = statement.query_map([thread], |row| Ok(NativeRow { turn: row.get(0)?, item: row.get(1)?,
         created: row.get(2)?, version: row.get(3)?, realtime: row.get(4)?, ordinal: row.get(5)? })).map_err(|error| error.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    let mut result = Vec::new();
+    for row in rows { checkpoint()?; result.push(row.map_err(|error| error.to_string())?); }
+    Ok(result)
 }
 
 fn position(connection: &Connection, thread: &str, row: &NativeRow) -> Result<Option<Position>, String> {

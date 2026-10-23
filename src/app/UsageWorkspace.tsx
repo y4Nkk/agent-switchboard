@@ -6,7 +6,7 @@ import { CodexProbeHistory } from "../components/CodexProbeHistory";
 import { CodexProbePanel, type CodexProbeFormState } from "../components/CodexProbePanel";
 import { CodexResetPanel } from "../components/CodexResetPanel";
 import { useCodexOfficialReset, useCodexResetSignal } from "../components/quota-reads";
-import { useCodexProbe } from "../components/use-codex-probe";
+import type { useCodexProbe } from "./useCodexProbe";
 import { useI18n } from "../i18n";
 import { useWorkspaceVisible } from "../hooks/use-workspace-visible";
 import { UsagePage } from "../pages/UsagePage";
@@ -40,10 +40,11 @@ function useProbeForm(probe: ReturnType<typeof useCodexProbe>, closeHistory: () 
   return { form, runCount, setRunCount, setQuestionId, reuseQuestion };
 }
 
-export function UsageWorkspace({ active, section, onSectionChange }: {
+export function UsageWorkspace({ active, section, onSectionChange, probe }: {
   active: boolean;
   section: UsageSection;
   onSectionChange: (section: UsageSection) => void;
+  probe: ReturnType<typeof useCodexProbe>;
 }) {
   const { t } = useI18n();
   const id = useId();
@@ -55,10 +56,7 @@ export function UsageWorkspace({ active, section, onSectionChange }: {
   useEffect(() => { if (section === "radar") setRadarOpened(true); }, [section]);
   const consumptionActive = visible && section === "consumption";
   const usage = useModelUsageReport(consumptionActive, range);
-  // Polling stays on while the history route is open too: its header keeps a
-  // live entry to a running batch.
   const radarActive = visible && section === "radar";
-  const probe = useCodexProbe(radarActive);
   const { form, runCount, setRunCount, setQuestionId, reuseQuestion } = useProbeForm(probe, () => setHistoryOpen(false));
   const quotaActive = visible && section === "quota";
   const showHistory = section === "radar" && historyOpen;

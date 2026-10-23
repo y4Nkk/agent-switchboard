@@ -26,6 +26,8 @@ pub(crate) use sources::{collect as collect_session_files, SessionSource};
 mod resume;
 mod bookmarks;
 mod search;
+pub(crate) mod search_tasks;
+mod read_observer;
 mod export;
 mod organization;
 mod messages;
@@ -41,7 +43,9 @@ pub use bookmarks::{delete_bookmark, load_bookmark_content, save_bookmark, searc
     BookmarkPage, BookmarkSearchRequest, BookmarkSummary};
 pub use messages::{load_content, load_page, ContentPage, MessageContentRequest, MessagePage, MessagePageRequest};
 pub use export::export_markdown;
-pub use search::{search_sessions, SessionSearchPage, SessionSearchRequest};
+pub use search::{SessionSearchPage, SessionSearchRequest};
+#[cfg(test)]
+pub use search::search_sessions;
 pub use organization::{update_session_organization, SessionOrganizationChange};
 
 use asb_core::contracts::AppKind;

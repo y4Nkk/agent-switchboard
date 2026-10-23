@@ -72,6 +72,8 @@ Review input, cached, and output tokens by time range, with a model breakdown, d
 
 Review pass counts, token consumption, reasoning tokens, final answers, and duration for each run. The pictured results are simulated.
 
+Probes keep running when you switch pages or minimize the window. Completion, cancellation, failures, and unsaved results appear in the titlebar's global information area. Exiting the app stops the probe.
+
 ![Degradation radar with five simulated probe results and token counts](docs/screenshots/radar.png)
 
 **Probe history: filter by time, profile, and status**

@@ -1,0 +1,128 @@
+/* Preview rows stack: the copy column leads, the visual cards flow below at
+   full width (ChatGPT-appearance pattern). */
+.asb-app-setting-row-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Native radio state owns the ring and check; the art and descriptions stay
+   readable without relying on the selection color. */
+.asb-preview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 186px), 186px));
+  gap: var(--asb-space-2);
+}
+
+.asb-preview-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  align-items: stretch;
+  gap: var(--asb-space-1);
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-medium);
+  background: var(--asb-content);
+  cursor: pointer;
+  transition: border-color var(--asb-motion-press) var(--asb-easing), box-shadow var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-preview-card:has(input:not(:disabled)):hover {
+  border-color: var(--asb-action);
+}
+
+.asb-preview-card:has(input:checked) {
+  border-color: var(--asb-action);
+  box-shadow: 0 0 0 1px var(--asb-action);
+}
+
+.asb-preview-card:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.asb-preview-card:has(input:focus-visible) {
+  outline: 2px solid var(--asb-action);
+  outline-offset: 2px;
+}
+
+.asb-preview-card input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.asb-preview-card-art {
+  display: block;
+  width: 100%;
+}
+
+.asb-preview-card-art > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.asb-preview-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--asb-space-1);
+}
+
+.asb-preview-card-name {
+  min-width: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.asb-preview-card-description {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
+.asb-preview-card-check {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--asb-action);
+  visibility: hidden;
+}
+
+.asb-preview-card:has(input:checked) .asb-preview-card-check {
+  visibility: visible;
+}
+
+.asb-preview-card:has(input:checked) .asb-preview-card-name {
+  color: var(--asb-link);
+}
+
+/* The motion preview is the app's one deliberate looping demo: the loop is
+   the option's meaning. It freezes under the same two conditions that zero
+   the motion tokens (the OS reduce preference while following system, or the
+   explicit reduce preference), so the interface never animates while claiming
+   to be still — both cards then rest, which is itself the honest picture of
+   reduce mode. */
+.asb-motion-demo-dot {
+  animation: asb-motion-demo-travel 2.2s var(--asb-easing) infinite;
+}
+
+@keyframes asb-motion-demo-travel {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(var(--asb-preview-travel)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-motion-demo-dot { animation: none; }
+}
+
+:root[data-motion="reduce"] .asb-motion-demo-dot {
+  animation: none;
+}

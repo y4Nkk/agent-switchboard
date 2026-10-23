@@ -63,6 +63,12 @@ export function onClientConfigChanged(handler: () => void): Promise<() => void> 
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen("client-config-changed", handler);
 }
+/** Probe lifecycle invalidation; results always come from the typed read API.
+ * Browser development uses command refreshes and the same live-state polling. */
+export function onCodexProbeChanged(handler: (batchId: string) => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  return listen<string>("codex-probe-changed", (event) => handler(event.payload));
+}
 export function onTrayError(handler: (error: CommandError) => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen<CommandError>("tray-error", (event) => handler(event.payload));
@@ -145,6 +151,7 @@ export * from "./status";
 export * from "./settings";
 export * from "./subagent-settings";
 export * from "./sessions";
+export * from "./session-search";
 export * from "./discovery";
 export * from "./official-login";
 export * from "./extensions/types";

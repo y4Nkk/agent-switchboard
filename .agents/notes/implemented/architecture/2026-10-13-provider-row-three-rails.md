@@ -16,7 +16,7 @@ Status: implemented
 
 视觉样式（颜色、字体、字重、边框、圆角、背景）零改动；CSS 仅调整布局几何（锚点边距、行距、轨高）。词汇表无增删，`providers.label.defaultModel`、`codex.rows.defaultModel`、`usage.summary.previousFailed` 等既有词条全部原样消费。
 
-操作可见性由[供应商行操作按输入能力保持可达](../bug-fix/2026-10-16-row-actions-pointer-capability.md)拥有；该决定保留本篇三轨布局及占位，不改变模型与地址的扫描锚点。
+操作可见性由[供应商行操作统一按悬浮显示](../bug-fix/2026-10-22-provider-row-hover-actions.md)拥有；该决定保留本篇三轨布局及占位，不改变模型与地址的扫描锚点。
 
 ## Alternatives considered
 

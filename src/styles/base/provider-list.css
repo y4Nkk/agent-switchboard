@@ -178,13 +178,11 @@
   min-width: 0;
 }
 
-/* Only precise hover-only input can hide idle actions. Touch and hybrid
-   devices keep controls visible without relying on simulated hover. */
-@media (hover: hover) and (pointer: fine) and (not (any-pointer: coarse)) {
-  .asb-row-item:not(:hover, :focus-within, .is-dragging) .asb-row-action {
-    opacity: 0;
-    pointer-events: none;
-  }
+/* Keyboard-visible focus preserves Tab access without letting mouse clicks
+   keep actions visible after the pointer leaves. */
+.asb-row-item:not(:hover, :has(:focus-visible), .is-dragging) .asb-row-action {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* The reveal fades at node speed, the same rhythm as the row's disclosure

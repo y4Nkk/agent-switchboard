@@ -23,7 +23,7 @@ export function SessionHistory({ search, detail, bookmarks, organization, deleti
   const busy = deletion.busy || organization.busy || conversion.busy;
   return <>
     {deletion.selecting && <SessionSelectionToolbar search={search} selection={deletion} organization={organization} disabled={conversion.busy} />}
-    <SessionSourceNotices issues={search.result?.issues ?? []} conversion={conversion} disabled={busy} />
+    <SessionSourceNotices issues={search.issues} conversion={conversion} disabled={busy} />
     <div className="asb-session-layout">
       <SessionSearchList search={search} selected={detail.selected} selecting={deletion.selecting}
         chosen={deletion.chosen} disabled={busy} onToggle={deletion.toggle}

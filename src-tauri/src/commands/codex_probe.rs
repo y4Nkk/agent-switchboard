@@ -67,7 +67,7 @@ pub struct StartCodexProbeRequest {
 pub async fn start_codex_probe(
     app: AppHandle,
     request: StartCodexProbeRequest,
-) -> Result<(), CommandError> {
+) -> Result<String, CommandError> {
     if request.run_count == 0 || request.run_count > MAX_RUN_COUNT {
         return Err(CommandError::localized(
             "codex-probe-invalid-count",
@@ -96,12 +96,14 @@ pub async fn start_codex_probe(
     let gateway = app
         .try_state::<crate::gateway::GatewayController>()
         .map(|controller| controller.inner().clone());
-    blocking(move || {
-        codex_probe::spawn_probe(&registry, &local, question, request.run_count, gateway.as_ref())
-            .map(|_| ())
+    let worker_app = app.clone();
+    let batch_id = blocking(move || {
+        codex_probe::spawn_probe(&registry, &local, question, request.run_count, gateway.as_ref(), worker_app)
             .map_err(|message| CommandError::new("codex-probe-start-failed", message))
     })
-    .await
+    .await?;
+    codex_probe::notify_changed(&app, &batch_id);
+    Ok(batch_id)
 }
 
 /// The live-or-latest batch; the panel reconnects here after a refresh or
@@ -128,8 +130,14 @@ pub async fn retry_codex_probe_save(app: AppHandle) -> Result<(), CommandError> 
     let local = state(&app)?;
     let registry = app.state::<ProbeRegistry>().inner().clone();
     blocking(move || {
-        codex_probe::retry_save(&local, &registry)
-            .map_err(|message| CommandError::new("codex-probe-save-failed", message))
+        let batch = codex_probe::current_view(&local, &registry)
+            .map_err(|message| CommandError::new("codex-probe-read-failed", message))?;
+        let result = codex_probe::retry_save(&local, &registry)
+            .map_err(|message| CommandError::new("codex-probe-save-failed", message));
+        if let Some(view) = batch.filter(|view| view.persist_pending) {
+            codex_probe::notify_changed(&app, &view.batch.id);
+        }
+        result
     })
     .await
 }

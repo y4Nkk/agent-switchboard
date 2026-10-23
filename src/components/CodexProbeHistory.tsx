@@ -18,7 +18,7 @@ import { Table, type TableColumn } from "./Table";
 import { Time } from "./Time";
 import { ModuleHeader } from "./WorkspaceHeader";
 import { formatCompactTokenCount, TOKEN_UNIT } from "../lib/token-format";
-import type { useCodexProbe } from "./use-codex-probe";
+import type { useCodexProbe } from "../app/useCodexProbe";
 import { useCodexProbeHistory } from "./use-codex-probe-history";
 
 interface Props {

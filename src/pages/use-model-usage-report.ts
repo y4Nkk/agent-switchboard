@@ -1,5 +1,5 @@
 import { useMessageState } from "../i18n/use-message-state";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useReadQueue } from "../hooks/use-read-queue";
 import { getModelUsageReport, type ModelUsageRange, type ModelUsageRead } from "../api/client";
 
@@ -15,9 +15,8 @@ export function useModelUsageReport(active: boolean, range: ModelUsageRange) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useMessageState();
   const [revision, setRevision] = useState(0);
-  const requestedRefresh = useRef(false);
   const enqueue = useReadQueue();
-  const refresh = useCallback(() => { requestedRefresh.current = true; setRevision((value) => value + 1); }, []);
+  const refresh = useCallback(() => setRevision((value) => value + 1), []);
 
   useEffect(() => {
     if (!active) { setLoading(false); return undefined; }
@@ -41,9 +40,7 @@ export function useModelUsageReport(active: boolean, range: ModelUsageRange) {
         } finally { if (current) setLoading(false); }
       }, (caught) => { if (current) setError(caught); });
     };
-    const forceRefresh = requestedRefresh.current;
-    requestedRefresh.current = false;
-    load(forceRefresh);
+    load(true);
     return () => { current = false; cancel?.(); clearTimeout(timer); };
   }, [active, range, revision, enqueue, setError]);
 

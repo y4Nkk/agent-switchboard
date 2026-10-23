@@ -16,6 +16,7 @@ import { latestOverall, useSwitchOperations } from "./useSwitchOperations";
 import { useProviderSwitchFlow } from "./useProviderSwitchFlow";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+import { useCodexProbe } from "./useCodexProbe";
 
 function useTrayEvents(reportError: (error: CommandError) => void) {
   useEffect(() => {
@@ -31,6 +32,7 @@ function useTrayEvents(reportError: (error: CommandError) => void) {
 
 /** Composes domain hooks; each domain owns its state and typed operations. */
 export function useSwitchboardModel() {
+  const probe = useCodexProbe();
   const [appFilter, setAppFilter] = useState<AppKind>("codex");
   const frame = useOperationFrame();
   const { busy, reportError, clearError, setBusy } = frame;
@@ -96,7 +98,7 @@ export function useSwitchboardModel() {
 
   return { ...navigation, appFilter, ...frame, snapshot, activeProfileId, providerSwitch,
     clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
-    ccImport, sqlImport, targetProfile, operations, providers, dataRepair, lastSwitchOverall, openBackupFolder };
+    ccImport, sqlImport, targetProfile, operations, providers, dataRepair, lastSwitchOverall, openBackupFolder, probe };
 }
 
 export type SwitchboardModel = ReturnType<typeof useSwitchboardModel>;

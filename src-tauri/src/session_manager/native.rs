@@ -21,7 +21,8 @@ pub(super) fn open(path: &Path) -> Result<Connection, String> {
     Ok(connection)
 }
 
-pub(super) fn threads_matching(root: &Path, session: Option<&str>) -> Result<(Vec<NativeThread>, Vec<String>), String> {
+pub(super) fn threads_matching(root: &Path, session: Option<&str>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<NativeThread>, Vec<String>), String> {
+    checkpoint()?;
     let database = crate::local_state::codex_paths::sqlite_root(root)?.join("state_5.sqlite");
     if !database.try_exists().map_err(|error| error.to_string())? { return Ok((Vec::new(), Vec::new())); }
     let connection = open(&database)?;
@@ -51,6 +52,7 @@ pub(super) fn threads_matching(root: &Path, session: Option<&str>) -> Result<(Ve
     let mut threads = Vec::new();
     let mut issues = Vec::new();
     for row in rows {
+        checkpoint()?;
         match row {
             Ok(thread) => {
                 threads.push(thread);

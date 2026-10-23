@@ -62,7 +62,51 @@
 
 .asb-session-search-query::placeholder { color: var(--asb-text-muted); }
 
-.asb-session-search-form .asb-btn-icon { flex: none; margin-right: var(--asb-space-1); }
+.asb-session-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3) 0;
+  font: var(--asb-text-label);
+}
+
+.asb-session-progress-ring {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: var(--asb-action);
+  font: var(--asb-text-caption);
+  font-variant-numeric: var(--asb-num-font-variant);
+}
+
+.asb-session-progress-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.asb-session-progress-ring circle { fill: none; stroke-width: 3; }
+.asb-session-progress-track { stroke: var(--asb-hairline-strong); }
+.asb-session-progress-value { stroke: currentColor; stroke-linecap: round; }
+.asb-session-progress-copy { display: grid; gap: var(--asb-space-unit); min-width: 0; }
+
+.asb-session-progress-ring[data-indeterminate="true"] > svg {
+  animation: asb-session-search-spin 1s linear infinite;
+}
+
+@keyframes asb-session-search-spin {
+  from { transform: rotate(-90deg); }
+  to { transform: rotate(270deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-session-progress-ring > svg { animation: none; }
+}
+
+:root[data-motion="reduce"] .asb-session-progress-ring > svg { animation: none; }
+
+.asb-session-search-form > .asb-tooltip-anchor {
+  flex: none;
+  margin-inline-end: var(--asb-space-unit);
+}
 
 .asb-session-bookmark-search { flex: 1; max-width: var(--asb-measure-form); }
 .asb-session-bookmark-search .asb-input { width: 100%; }

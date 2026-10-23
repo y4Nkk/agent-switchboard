@@ -9,10 +9,10 @@ use std::path::{Component, Path, PathBuf};
 
 pub(super) struct Inventory { pub files: BTreeMap<String, PathBuf>, pub stamp: String, pub rewritten: bool }
 
-pub(super) fn inventory(connection: &Connection, id: &str, transcript: &Path) -> Result<Inventory, String> {
+pub(super) fn inventory(connection: &Connection, id: &str, transcript: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Inventory, String> {
     let mut files = BTreeMap::new();
     let sidecar = transcript.with_extension("");
-    if sidecar.try_exists().map_err(io_error)? { collect(&sidecar, transcript.parent().ok_or("会话目录无效")?, &mut files)?; }
+    if sidecar.try_exists().map_err(io_error)? { collect(&sidecar, transcript.parent().ok_or("会话目录无效")?, &mut files, checkpoint)?; }
     let project: Option<String> = connection.query_row("SELECT meta FROM transcripts WHERE id=?1", [id], |row| row.get(0))
         .optional().map_err(db_error)?;
     let project = project.map(|text| serde_json::from_str::<SessionMeta>(&text).map_err(io_error)).transpose()?;
@@ -20,16 +20,18 @@ pub(super) fn inventory(connection: &Connection, id: &str, transcript: &Path) ->
         UNION SELECT reference,relative_path FROM image_references WHERE source=?1").map_err(db_error)?;
     let values = statement.query_map([id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).map_err(db_error)?;
     for value in values {
+        checkpoint()?;
         let (reference, relative) = value.map_err(db_error)?;
         let file = reference_path(&reference, project.as_ref().and_then(|meta| meta.project_dir.as_deref()))?;
         if file.try_exists().map_err(io_error)? { files.insert(relative, file); }
     }
-    Ok(Inventory { stamp: inventory_stamp(&files)?, rewritten: changed_assets(connection, id, &files)?, files })
+    Ok(Inventory { stamp: inventory_stamp(&files, checkpoint)?, rewritten: changed_assets(connection, id, &files, checkpoint)?, files })
 }
 
-fn changed_assets(connection: &Connection, source: &str, files: &BTreeMap<String, PathBuf>) -> Result<bool, String> {
+fn changed_assets(connection: &Connection, source: &str, files: &BTreeMap<String, PathBuf>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<bool, String> {
     let mut statement = connection.prepare("SELECT stamp FROM attachments WHERE source=?1 AND relative_path=?2 LIMIT 1").map_err(db_error)?;
     for (relative, file) in files {
+        checkpoint()?;
         let previous: Option<String> = statement.query_row(params![source,relative], |row| row.get(0)).optional().map_err(db_error)?;
         if let Some(previous) = previous {
             if capture::stamp(&file.metadata().map_err(io_error)?)? != previous { return Ok(true); }
@@ -38,19 +40,21 @@ fn changed_assets(connection: &Connection, source: &str, files: &BTreeMap<String
     Ok(false)
 }
 
-fn inventory_stamp(files: &BTreeMap<String, PathBuf>) -> Result<String, String> {
+fn inventory_stamp(files: &BTreeMap<String, PathBuf>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<String, String> {
     let mut hash = Sha256::new();
     for (relative, file) in files {
+        checkpoint()?;
         hash.update(relative.as_bytes());
         hash.update(capture::stamp(&file.metadata().map_err(io_error)?)?.as_bytes());
     }
     Ok(format!("{:x}", hash.finalize()))
 }
 
-fn collect(directory: &Path, parent: &Path, files: &mut BTreeMap<String, PathBuf>) -> Result<(), String> {
+fn collect(directory: &Path, parent: &Path, files: &mut BTreeMap<String, PathBuf>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(), String> {
     let mut pending = vec![directory.to_path_buf()];
     while let Some(directory) = pending.pop() {
         for entry in std::fs::read_dir(&directory).map_err(io_error)? {
+            checkpoint()?;
             let entry = entry.map_err(io_error)?;
             let kind = entry.file_type().map_err(io_error)?;
             if capture::is_link(&std::fs::symlink_metadata(entry.path()).map_err(io_error)?) {
@@ -70,7 +74,7 @@ fn collect(directory: &Path, parent: &Path, files: &mut BTreeMap<String, PathBuf
 }
 
 pub(super) fn save(connection: &Connection, id: &str, transcript: &Path,
-    inventory: &Inventory, references: &BTreeSet<String>,
+    inventory: &Inventory, references: &BTreeSet<String>, checkpoint: &dyn Fn() -> Result<(), String>,
 ) -> Result<(Vec<String>, String), String> {
     let mut files = inventory.files.clone();
     let mut selected = BTreeMap::new();
@@ -79,6 +83,7 @@ pub(super) fn save(connection: &Connection, id: &str, transcript: &Path,
     let meta: SessionMeta = serde_json::from_str(&meta).map_err(io_error)?;
     connection.execute("DELETE FROM image_references WHERE source=?1", [id]).map_err(db_error)?;
     for reference in references {
+        checkpoint()?;
         let file = match reference_path(reference, meta.project_dir.as_deref()) {
             Ok(file) => file,
             Err(error) => { issues.push(error); continue; }
@@ -103,13 +108,14 @@ pub(super) fn save(connection: &Connection, id: &str, transcript: &Path,
         files.insert(relative.clone(), file.clone());
         selected.insert(reference.clone(), (relative, file));
     }
-    let stamp = inventory_stamp(&files)?;
-    for (relative, file) in &files { save_file(connection, id, capture::text(file)?, relative, file)?; }
-    for (reference, (relative, file)) in selected { save_file(connection, id, &reference, &relative, &file)?; }
+    let stamp = inventory_stamp(&files, checkpoint)?;
+    for (relative, file) in &files { save_file(connection, id, capture::text(file)?, relative, file, checkpoint)?; }
+    for (reference, (relative, file)) in selected { save_file(connection, id, &reference, &relative, &file, checkpoint)?; }
     Ok((issues, stamp))
 }
 
-fn save_file(connection: &Connection, source: &str, reference: &str, relative: &str, path: &Path) -> Result<(), String> {
+fn save_file(connection: &Connection, source: &str, reference: &str, relative: &str, path: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(), String> {
+    checkpoint()?;
     validate_relative(relative)?;
     let metadata = std::fs::symlink_metadata(path).map_err(io_error)?;
     if capture::is_link(&metadata) || !metadata.is_file() { return Err(format!("附件不是普通文件：{}", path.display())); }
@@ -117,7 +123,7 @@ fn save_file(connection: &Connection, source: &str, reference: &str, relative: &
     let previous: Option<String> = connection.query_row("SELECT stamp FROM attachments WHERE source=?1 AND reference=?2",
         params![source,reference], |row| row.get(0)).optional().map_err(db_error)?;
     if previous.as_deref() == Some(&before) { return Ok(()); }
-    let hash = capture::digest(path, None)?;
+    let hash = capture::digest_observed(path, None, checkpoint)?;
     let known: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM assets WHERE id=?1)", [&hash], |row| row.get(0)).map_err(db_error)?;
     if !known {
         connection.execute("INSERT INTO assets(id,size) VALUES(?1,?2)", params![hash,metadata.len()]).map_err(db_error)?;
@@ -126,6 +132,7 @@ fn save_file(connection: &Connection, source: &str, reference: &str, relative: &
         let mut ordinal = 0;
         let mut copied = Sha256::new();
         loop {
+            checkpoint()?;
             let count = input.read(&mut buffer).map_err(io_error)?;
             if count == 0 { break; }
             copied.update(&buffer[..count]);

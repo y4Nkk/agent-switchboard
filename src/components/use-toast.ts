@@ -162,6 +162,7 @@ function hasToastContent(value: React.ReactNode | ToastMessage): boolean {
   return typeof value !== "string" || value.trim().length > 0;
 }
 
+/** The producer can dismiss its own notice when the reported condition resolves. */
 function toast(props: ToastOptions) {
   if (!hasToastContent(props.title) && !hasToastContent(props.description)) {
     throw new TypeError("Toast requires a title or description");
@@ -187,6 +188,7 @@ function toast(props: ToastOptions) {
     if (!retainedIds.has(toastId)) clearToastTimer(toastId);
   }
   if (retainedIds.has(id)) scheduleAutoDismiss(id, props.kind, props.durationMs);
+  return () => dismissToast(id);
 }
 
 function useToast() {

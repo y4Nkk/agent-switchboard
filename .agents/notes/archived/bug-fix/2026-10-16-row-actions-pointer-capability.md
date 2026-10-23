@@ -1,6 +1,7 @@
 # Agent Note: 供应商行操作按输入能力保持可达
 
 Status: implemented
+Archived: 2026-10-22
 
 ## Problem
 

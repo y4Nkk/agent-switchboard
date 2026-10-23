@@ -35,17 +35,21 @@ pub(super) struct MessageIndex {
 }
 
 pub(super) fn index(source: &SessionSource) -> Result<MessageIndex, String> {
-    let _guard = MESSAGE_INDEX_GATE.lock().map_err(|_| "会话消息索引锁不可用")?;
-    let index = ReadIndex::open(&source.index_root)?;
+    index_observed(source, &|| Ok(()))
+}
+
+pub(super) fn index_observed(source: &SessionSource, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<MessageIndex, String> {
+    let _guard = super::read_observer::lock(&MESSAGE_INDEX_GATE, checkpoint)?;
+    let index = ReadIndex::open_observed(&source.index_root, checkpoint)?;
     if let Some(path) = &source.converted {
-        let (entries, issues) = index.file("converted-messages", path, || converted_positions(path))?;
+        let (entries, issues) = index.file("converted-messages", path, || converted_positions(path, checkpoint))?;
         return Ok(MessageIndex { entries, issues, connection: None, thread: source.meta.session_id.clone() });
     }
     let mut result = MessageIndex { entries: Vec::new(), issues: Vec::new(), connection: None, thread: source.meta.session_id.clone() };
     if let Some(history) = &source.native_history {
         let snapshot = native::open(history).and_then(|connection| {
             connection.execute_batch("BEGIN DEFERRED").map_err(|error| error.to_string())?;
-            let (entries, issues) = native_index::positions(&index, &connection, history, &source.meta.session_id)?;
+            let (entries, issues) = native_index::positions_observed(&index, &connection, history, &source.meta.session_id, checkpoint)?;
             Ok((connection, entries, issues))
         });
         match snapshot {
@@ -53,8 +57,9 @@ pub(super) fn index(source: &SessionSource) -> Result<MessageIndex, String> {
             Err(error) => result.issues.push(error),
         }
     }
+    checkpoint()?;
     let protocol = !result.entries.is_empty();
-    let (raw, issues) = jsonl::positions(&index, &source.record_sources(), protocol)?;
+    let (raw, issues) = jsonl::positions(&index, &source.record_sources(), protocol, checkpoint)?;
     result.issues.extend(issues);
     result.issues.extend(source.retained.iter().filter_map(|source| source.issue.clone()));
     let mut identities: HashSet<_> = result.entries.iter().map(|entry| entry.id.clone()).collect();
@@ -66,9 +71,9 @@ pub(super) fn index(source: &SessionSource) -> Result<MessageIndex, String> {
     Ok(result)
 }
 
-fn converted_positions(path: &std::path::Path) -> Result<(Vec<Position>, Vec<String>), String> {
+fn converted_positions(path: &std::path::Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<Position>, Vec<String>), String> {
     let mut entries = Vec::new();
-    let issues = records::visit_records(path, 0, |ordinal, offset, value| {
+    let scan = records::scan_records_observed(path, 0, 0, checkpoint, |ordinal, offset, value| {
         if ordinal == 1 { return Ok(ControlFlow::Continue(())); }
         let digest = parser::record_identity(&value);
         let message: SessionMessage = serde_json::from_value(value).map_err(|error| error.to_string())?;
@@ -76,7 +81,7 @@ fn converted_positions(path: &std::path::Path) -> Result<(Vec<Position>, Vec<Str
             location: Location::Converted { path: path.into(), offset, digest } });
         Ok(ControlFlow::Continue(()))
     })?;
-    Ok((entries, issues))
+    Ok((entries, scan.issues))
 }
 
 impl MessageIndex {
@@ -111,13 +116,21 @@ impl MessageIndex {
         self.load(entry)
     }
 
-    pub(super) fn visit(&self, mut visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>) -> Result<Vec<String>, String> {
+    pub(super) fn visit(&self, visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>) -> Result<Vec<String>, String> {
+        self.visit_observed(|_, _| Ok(()), visitor)
+    }
+
+    pub(super) fn visit_observed(&self, mut progress: impl FnMut(usize, usize) -> Result<(), String>,
+        mut visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>) -> Result<Vec<String>, String> {
         let mut issues = self.issues.clone();
-        for entry in &self.entries {
-            match self.load(entry) {
-                Ok(message) => { if visitor(message)?.is_break() { break; } }
-                Err(error) => issues.push(error),
-            }
+        progress(0, self.entries.len())?;
+        for (completed, entry) in self.entries.iter().enumerate() {
+            let stop = match self.load(entry) {
+                Ok(message) => visitor(message)?.is_break(),
+                Err(error) => { issues.push(error); false },
+            };
+            progress(completed + 1, self.entries.len())?;
+            if stop { break; }
         }
         let mut seen = HashSet::new();
         issues.retain(|issue| seen.insert(issue.clone()));

@@ -21,17 +21,21 @@ struct RecordPosition {
 #[serde(deny_unknown_fields)]
 struct FilePositions { entries: Vec<RecordPosition>, issues: Vec<String> }
 
-pub(super) fn positions(index: &ReadIndex, paths: &[records::Source], protocol: bool) -> Result<(Vec<Position>, Vec<String>), String> {
+pub(super) fn positions(index: &ReadIndex, paths: &[records::Source], protocol: bool, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<Position>, Vec<String>), String> {
     let mut entries = Vec::new();
     let mut issues = Vec::new();
     let mut seen = HashMap::<String, usize>::new();
     for path in paths {
-        let file = match indexed(index, path) {
+        checkpoint()?;
+        let result = indexed(index, path, checkpoint);
+        checkpoint()?;
+        let file = match result {
             Ok(file) => file,
             Err(error) => { issues.push(error); continue; }
         };
         issues.extend(file.issues);
         for entry in file.entries {
+            checkpoint()?;
             if !protocol || entry.projected.is_none() {
                 let key = if entry.id.starts_with("claude-") { &entry.id } else { &entry.digest };
                 if seen.get(key).is_some_and(|count| *count >= entry.occurrence) { continue; }
@@ -51,24 +55,24 @@ pub(super) fn positions(index: &ReadIndex, paths: &[records::Source], protocol: 
     Ok((entries, issues))
 }
 
-fn indexed(index: &ReadIndex, source: &records::Source) -> Result<FilePositions, String> {
+fn indexed(index: &ReadIndex, source: &records::Source, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<FilePositions, String> {
     match source {
-        records::Source::File(path) => index.file("raw-messages", path, || scan(source)),
+        records::Source::File(path) => index.file("raw-messages", path, || scan(source, checkpoint)),
         records::Source::Saved(saved) => {
             if let Some(value) = index.get("saved-messages", &saved.id, &saved.revision)? { return Ok(value); }
-            let value = scan(source)?;
+            let value = scan(source, checkpoint)?;
             index.put("saved-messages", &saved.id, &saved.revision, &value)?;
             Ok(value)
         }
     }
 }
 
-fn scan(path: &records::Source) -> Result<FilePositions, String> {
+fn scan(path: &records::Source, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<FilePositions, String> {
     let mut entries = Vec::new();
     let mut occurrences = HashMap::<String, usize>::new();
     let mut prefix = Sha256::new();
     let mut order_at = None;
-    let issues = path.visit(0, |_, offset, value| {
+    let issues = path.visit_observed(0, checkpoint, |_, offset, value| {
         let encoded = value.to_string();
         prefix.update(encoded.as_bytes());
         prefix.update(b"\n");

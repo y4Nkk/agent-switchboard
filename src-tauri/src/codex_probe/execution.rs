@@ -19,6 +19,7 @@ pub(crate) fn spawn_probe(
     question: ResolvedQuestion,
     run_count: u32,
     gateway: Option<&crate::gateway::GatewayController>,
+    app: tauri::AppHandle,
 ) -> Result<String, String> {
     let ledger = ProbeLedger::new(local.root());
     let batch_id = uuid::Uuid::new_v4().to_string();
@@ -58,8 +59,10 @@ pub(crate) fn spawn_probe(
     let gateway = gateway.cloned();
     let worker_batch_id = batch_id.clone();
     let spawned = std::thread::Builder::new().name("codex-probe".into()).spawn(move || {
-        BatchWorker { registry: worker_registry, ledger: ledger_for_worker, local, gateway, batch_id: worker_batch_id,
-            question, run_count, fingerprint, cancel, config_watch }.execute();
+        let worker = BatchWorker { registry: worker_registry, ledger: ledger_for_worker, local, gateway,
+            batch_id: worker_batch_id, question, run_count, fingerprint, cancel, config_watch };
+        worker.execute();
+        super::notify_changed(&app, &worker.batch_id);
     });
     if let Err(error) = spawned {
         let message = format!("无法启动检测工作线程：{error}");

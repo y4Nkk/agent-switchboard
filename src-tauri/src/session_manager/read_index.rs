@@ -43,12 +43,17 @@ pub(crate) struct ReadIndex { connection: Connection }
 
 impl ReadIndex {
     pub(crate) fn open(root: &Path) -> Result<Self, String> {
+        Self::open_observed(root, &|| Ok(()))
+    }
+
+    pub(super) fn open_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Self, String> {
+        checkpoint()?;
         let directory = layout::directory(root);
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         if directory.is_symlink() { return Err("会话读取索引目录不能是符号链接".into()); }
         let path = directory.join("read-index.sqlite3");
         if path.is_symlink() { return Err("会话读取索引不能是符号链接".into()); }
-        let _guard = SCHEMA_GATE.lock().map_err(|_| "会话索引初始化锁不可用")?;
+        let _guard = super::read_observer::lock(&SCHEMA_GATE, checkpoint)?;
         let connection = Connection::open(&path).map_err(|error| format!("会话读取索引 {} 不可用：{error}", path.display()))?;
         connection.busy_timeout(Duration::from_secs(5)).map_err(error)?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).map_err(error)?;

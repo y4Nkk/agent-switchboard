@@ -22,9 +22,15 @@ impl Source {
     pub(crate) fn visit(&self, offset: u64,
         visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,
     ) -> Result<Vec<String>, String> {
+        self.visit_observed(offset, &|| Ok(()), visitor)
+    }
+
+    pub(crate) fn visit_observed(&self, offset: u64, checkpoint: &dyn Fn() -> Result<(), String>,
+        visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,
+    ) -> Result<Vec<String>, String> {
         match self {
-            Self::File(path) => visit_records(path, offset, visitor),
-            Self::Saved(source) => super::history::visit_records(source, offset, visitor),
+            Self::File(path) => scan_records_observed(path, offset, 0, checkpoint, visitor).map(|scan| scan.issues),
+            Self::Saved(source) => super::history::visit_records_observed(source, offset, checkpoint, visitor),
         }
     }
 
@@ -57,10 +63,18 @@ pub(crate) fn scan_records(
     path: &Path, offset: u64, ordinal: usize,
     visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,
 ) -> Result<RecordScan, String> {
+    scan_records_observed(path, offset, ordinal, &|| Ok(()), visitor)
+}
+
+pub(crate) fn scan_records_observed(
+    path: &Path, offset: u64, ordinal: usize, checkpoint: &dyn Fn() -> Result<(), String>,
+    visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,
+) -> Result<RecordScan, String> {
+    checkpoint()?;
     let mut file = File::open(path)
         .map_err(|error| format!("无法读取会话记录 {}: {error}", path.display()))?;
     file.seek(SeekFrom::Start(offset)).map_err(|error| error.to_string())?;
-    scan_reader(&path.display().to_string(), offset, ordinal, BufReader::new(file), visitor)
+    scan_reader(&path.display().to_string(), offset, ordinal, BufReader::new(file), checkpoint, visitor)
 }
 
 pub(crate) fn visit_reader(
@@ -69,11 +83,12 @@ pub(crate) fn visit_reader(
     reader: impl BufRead,
     visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,
 ) -> Result<Vec<String>, String> {
-    scan_reader(label, offset, 0, reader, visitor).map(|scan| scan.issues)
+    scan_reader(label, offset, 0, reader, &|| Ok(()), visitor).map(|scan| scan.issues)
 }
 
 fn scan_reader(
     label: &str, offset: u64, mut ordinal: usize, mut reader: impl BufRead,
+    checkpoint: &dyn Fn() -> Result<(), String>,
     mut visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,
 ) -> Result<RecordScan, String> {
     let mut line = Vec::new();
@@ -81,6 +96,7 @@ fn scan_reader(
     let mut position = offset;
     let mut appendable = true;
     loop {
+        checkpoint()?;
         line.clear();
         let count = (&mut reader).take(MAX_RECORD_BYTES + 1).read_until(b'\n', &mut line)
             .map_err(|error| format!("读取 {} 第 {} 条记录失败: {error}", label, ordinal + 1))?;
@@ -92,7 +108,16 @@ fn scan_reader(
         if count as u64 > MAX_RECORD_BYTES {
             issues.push(format!("{} 第 {ordinal} 条记录超过 32 MiB 读取上限，其他可读记录已保留", label));
             if line.last() != Some(&b'\n') {
-                position += reader.skip_until(b'\n').map_err(|error| format!("跳过超限记录失败: {error}"))? as u64;
+                loop {
+                    checkpoint()?;
+                    let buffer = reader.fill_buf().map_err(|error| format!("跳过超限记录失败: {error}"))?;
+                    if buffer.is_empty() { break; }
+                    let newline = buffer.iter().position(|byte| *byte == b'\n');
+                    let consumed = newline.map_or(buffer.len(), |position| position + 1);
+                    reader.consume(consumed);
+                    position += consumed as u64;
+                    if newline.is_some() { break; }
+                }
             }
             continue;
         }
@@ -126,5 +151,17 @@ mod tests {
         }).unwrap();
         assert_eq!(values, [1, 2]);
         assert_eq!(issues.len(), 1);
+    }
+
+    #[test]
+    fn cancellation_also_stops_between_invalid_records_without_visiting_messages() {
+        let attempts = std::cell::Cell::new(0);
+        let input = std::io::Cursor::new(b"invalid\ninvalid\ninvalid\ninvalid\n");
+        let result = scan_reader("fixture", 0, 0, input, &|| {
+            attempts.set(attempts.get() + 1);
+            if attempts.get() >= 3 { Err("cancelled".into()) } else { Ok(()) }
+        }, |_, _, _| panic!("invalid records must not reach the visitor"));
+        assert!(result.is_err());
+        assert_eq!(attempts.get(), 3);
     }
 }

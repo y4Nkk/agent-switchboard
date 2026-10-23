@@ -57,6 +57,41 @@ fn messages(source: &SessionSource) -> Vec<SessionMessage> {
     messages
 }
 
+fn appended_fixture() -> Fixture {
+    let mut fixture = Fixture::new();
+    fixture.write(&[user("before")]);
+    assert!(fixture.sync().1.is_empty());
+    fixture.write(&[user("before"), assistant("new-complete-message", 1, 2)]);
+    fixture
+}
+
+#[test]
+fn cancellation_at_each_sync_checkpoint_preserves_complete_records_and_availability() {
+    let mut probe = appended_fixture();
+    let checkpoints = std::cell::Cell::new(0usize);
+    capture::synchronize_observed(&mut probe.connection, &probe.root, &[], &|| {
+        checkpoints.set(checkpoints.get() + 1); Ok(())
+    }).unwrap();
+    for stop in 1..=checkpoints.get() {
+        let mut fixture = appended_fixture();
+        let visited = std::cell::Cell::new(0usize);
+        let result = capture::synchronize_observed(&mut fixture.connection, &fixture.root, &[], &|| {
+            visited.set(visited.get() + 1);
+            if visited.get() >= stop { Err("cancelled".into()) } else { Ok(()) }
+        });
+        assert!(result.is_err(), "checkpoint {stop} must cancel");
+        let saved = reading::sources(&fixture.connection, &store::path(&fixture.root)).unwrap();
+        assert_eq!(saved.len(), 1);
+        assert!(saved[0].meta.preservation.as_ref().unwrap().source_available);
+        let retained = messages(&saved[0]);
+        assert!(retained.len() == 1 || retained.len() == 2);
+        assert_eq!(retained[0].content, "before");
+        if retained.len() == 2 { assert!(retained[1].content.contains("new-complete-message")); }
+        let issues: i64 = fixture.connection.query_row("SELECT count(*) FROM transcripts WHERE capture_issue IS NOT NULL", [], |row| row.get(0)).unwrap();
+        assert_eq!(issues, 0, "cancellation is not a preservation failure");
+    }
+}
+
 #[test]
 fn originals_can_disappear_without_losing_text_images_or_message_identity() {
     let mut fixture = Fixture::new();

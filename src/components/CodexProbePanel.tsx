@@ -15,7 +15,7 @@ import { Time } from "./Time";
 import { ModuleHeader } from "./WorkspaceHeader";
 import { UsageIcon } from "./icons";
 import { StatCards } from "./charts/stat-cards";
-import type { useCodexProbe } from "./use-codex-probe";
+import type { useCodexProbe } from "../app/useCodexProbe";
 
 /** The custom-question form lives with the panel because only a `custom`
  * selection needs it; the header keeps the action and the pickers. */
@@ -148,6 +148,7 @@ export function CodexProbePanel({ probe, form }: {
   return (
     <section className="asb-panel asb-codex-probe" aria-label={t("codex.probe.title")}>
       <ModuleHeader title={t("codex.probe.title")} />
+      <p className="asb-codex-probe-note">{t("codex.probe.backgroundNote")}</p>
       {probe.catalogError && <p className="asb-warn-text" role="alert">
         {t("codex.probe.catalogError", { error: probe.catalogError })}{" "}
         <Button variant="secondary" onClick={probe.refresh}>{t("codex.probe.retryRead")}</Button>

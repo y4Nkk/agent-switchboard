@@ -5,14 +5,15 @@ import {
   cancelCodexProbe, getCurrentCodexProbe, getCodexProbeCatalog, retryCodexProbeSave,
   startCodexProbe, type CodexProbeBatch, type CodexProbeCatalog, type CodexProbeRequest,
 } from "../api/client";
+import { notifyProbeError, useProbeEvents, useProbeNotifications } from "./useProbeNotifications";
 
 const POLL_INTERVAL_MS = 1000;
 
-function useProbeCatalog(enabled: boolean, epoch: number) {
+function useProbeCatalog(epoch: number) {
   const [catalog, setCatalog] = useState<CodexProbeCatalog | null>(null);
   const [catalogError, setCatalogError] = useMessageState();
   useEffect(() => {
-    if (!enabled || catalog !== null) return;
+    if (catalog !== null) return;
     let active = true;
     getCodexProbeCatalog().then((next) => {
       if (active) { setCatalog(next); setCatalogError(null); }
@@ -20,20 +21,19 @@ function useProbeCatalog(enabled: boolean, epoch: number) {
       if (active) setCatalogError(reason);
     });
     return () => { active = false; };
-  }, [enabled, catalog, epoch, setCatalogError]);
+  }, [catalog, epoch, setCatalogError]);
   return { questions: catalog?.questions ?? null,
     customTimeoutSeconds: catalog?.customTimeoutSeconds ?? null,
     customMaxRuns: catalog?.customMaxRuns ?? null, catalogError };
 }
 
-/** Reads the live-or-latest batch from the backend. Polling continues only
- * while a batch is actually running, so a refresh or restart reconnects
- * without the frontend remembering any id. */
-function useProbePolling(enabled: boolean, epoch: number) {
+/** One application-wide reader, independent of workspace/window visibility. */
+function useProbePolling(epoch: number) {
   const [read, setRead] = useState<{ epoch: number; status: CodexProbeBatch | null } | null>(null);
   const [readError, setReadError] = useMessageState();
+  const dismissReadError = useRef<(() => void) | null>(null);
+  useEffect(() => () => { dismissReadError.current?.(); }, []);
   useEffect(() => {
-    if (!enabled) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
@@ -43,22 +43,27 @@ function useProbePolling(enabled: boolean, epoch: number) {
         if (!active) return;
         setRead({ epoch, status: next });
         setReadError(null);
+        dismissReadError.current?.();
+        dismissReadError.current = null;
         // Results that could not be saved leave nothing to poll.
         keepPolling = next !== null && next.status === "running" && !next.persistPending;
       } catch (reason) {
-        if (active) setReadError(reason);
+        if (active) {
+          setReadError(reason);
+          dismissReadError.current ??= notifyProbeError("read", reason);
+        }
         keepPolling = true;
       }
       if (active && keepPolling) timer = setTimeout(() => void tick(), POLL_INTERVAL_MS);
     };
     void tick();
     return () => { active = false; clearTimeout(timer); };
-  }, [enabled, epoch, setReadError]);
+  }, [epoch, setReadError]);
   return { status: read?.status ?? null, synchronized: read?.epoch === epoch && readError === null,
     readError, setReadError };
 }
 
-function useProbeRun(enabled: boolean, bumpEpoch: () => void,
+function useProbeRun(bumpEpoch: () => void, watch: (batchId: string) => void,
   setReadError: (error: string | null) => void) {
   const [starting, setStarting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -74,7 +79,7 @@ function useProbeRun(enabled: boolean, bumpEpoch: () => void,
   }, []);
 
   const start = async (request: CodexProbeRequest) => {
-    if (!enabled || startPending.current) return;
+    if (startPending.current) return;
     startPending.current = true;
     setStarting(true);
     setStartError(null);
@@ -82,10 +87,10 @@ function useProbeRun(enabled: boolean, bumpEpoch: () => void,
     setRetryError(null);
     setReadError(null);
     try {
-      await startCodexProbe(request);
-      if (alive.current) bumpEpoch();
+      const batchId = await startCodexProbe(request);
+      if (alive.current) { watch(batchId); bumpEpoch(); }
     } catch (reason) {
-      if (alive.current) { setStartError(reason); bumpEpoch(); }
+      if (alive.current) { setStartError(reason); notifyProbeError("start", reason); bumpEpoch(); }
     } finally {
       startPending.current = false;
       if (alive.current) setStarting(false);
@@ -100,7 +105,7 @@ function useProbeRun(enabled: boolean, bumpEpoch: () => void,
       const accepted = await cancelCodexProbe();
       if (alive.current && !accepted) setCancelError(uiMessage("codex.probe.cancelNoop"));
     } catch (reason) {
-      if (alive.current) setCancelError(reason);
+      if (alive.current) { setCancelError(reason); notifyProbeError("cancel", reason); }
     } finally {
       if (alive.current) { setCancelling(false); bumpEpoch(); }
     }
@@ -112,11 +117,10 @@ function useProbeRun(enabled: boolean, bumpEpoch: () => void,
     setRetryError(null);
     try {
       await retryCodexProbeSave();
-      if (alive.current) bumpEpoch();
     } catch (reason) {
-      if (alive.current) setRetryError(reason);
+      if (alive.current) { setRetryError(reason); notifyProbeError("save", reason); }
     } finally {
-      if (alive.current) setRetrying(false);
+      if (alive.current) { setRetrying(false); bumpEpoch(); }
     }
   };
 
@@ -124,12 +128,14 @@ function useProbeRun(enabled: boolean, bumpEpoch: () => void,
     start, cancel, retrySave };
 }
 
-export function useCodexProbe(enabled: boolean) {
+export function useCodexProbe() {
   const [epoch, setEpoch] = useState(0);
-  const catalog = useProbeCatalog(enabled, epoch);
+  const catalog = useProbeCatalog(epoch);
   const bumpEpoch = useCallback(() => setEpoch((value) => value + 1), []);
-  const { status, synchronized, readError, setReadError } = useProbePolling(enabled, epoch);
-  const run = useProbeRun(enabled, bumpEpoch, setReadError);
+  const { status, synchronized, readError, setReadError } = useProbePolling(epoch);
+  const watch = useProbeNotifications(status, synchronized);
+  useProbeEvents(bumpEpoch, watch);
+  const run = useProbeRun(bumpEpoch, watch, setReadError);
   const progress = status?.status === "running" ? status.progress : null;
   const stopping = progress?.kind === "preparing" ? progress.cancelling : progress?.phase === "cancelling";
   return {

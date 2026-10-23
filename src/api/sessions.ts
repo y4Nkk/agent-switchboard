@@ -124,10 +124,6 @@ export interface SessionResume {
   usedProjectDir: boolean;
 }
 
-export function searchSessions(request: SessionSearchRequest): Promise<SessionSearchPage> {
-  return invoke("search_sessions", { request });
-}
-
 export function updateSessionOrganization(
   requests: SessionDeleteRequest[], change: SessionOrganizationChange,
 ): Promise<SessionMeta[]> {
