@@ -92,6 +92,7 @@ export function Collapsible({ open, id, ariaLabel, onClosed, className, children
     <div
       ref={frameRef}
       id={id}
+      inert={!open}
       role={ariaLabel ? "region" : undefined}
       aria-label={ariaLabel}
       className={["asb-collapsible", expanded ? "is-open" : "", className]
@@ -149,7 +150,7 @@ export function CollapsibleSection({
         variant="unstyled"
         className="asb-collapsible-summary"
         aria-expanded={open}
-        aria-controls={contentId}
+        aria-controls={open ? contentId : undefined}
         onClick={() => onOpenChange(!open)}
       >
         <span className="asb-collapsible-summary-label">{label}</span>

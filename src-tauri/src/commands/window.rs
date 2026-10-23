@@ -109,6 +109,7 @@ fn apply_interface_scale(
 pub fn window_minimize(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.minimize();
+        crate::workspace_visibility::publish(&app);
     }
 }
 

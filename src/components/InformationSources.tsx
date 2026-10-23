@@ -1,61 +1,38 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import type { ToastContent, ToastKind } from "./use-toast";
+import { createContext, useContext, useEffect, useMemo, useReducer, type Dispatch, type ReactNode } from "react";
+import { reduceInformationSources, type InformationNotice, type InformationSource,
+  type InformationSourceAction, type InformationSourceState } from "./information-source-state";
 
-export interface InformationNotice {
-  id: string;
-  kind: ToastKind;
-  title: ToastContent;
-  description?: ToastContent;
-  action?: ReactNode;
-}
+export type { InformationNotice } from "./information-source-state";
 
 export interface InformationSourceMessage extends InformationNotice {
   acknowledged?: boolean;
   onAcknowledge?: () => void;
+  onDismiss?: () => void;
 }
 
-type Publish = (id: string, messages: readonly InformationSourceMessage[] | null) => void;
-const PublishContext = createContext<Publish | null>(null);
+const DispatchContext = createContext<Dispatch<InformationSourceAction> | null>(null);
 const MessagesContext = createContext<readonly InformationSourceMessage[]>([]);
 
-/** Source owners publish their current view; this provider stores no history or acknowledgement. */
+/** One application owner keeps source decisions across view withdrawal and remount. */
 export function InformationSources({ children }: { children: ReactNode }) {
-  const [sources, setSources] = useState(() => new Map<string, readonly InformationSourceMessage[]>());
-  const publish = useCallback<Publish>((id, messages) => {
-    setSources((previous) => {
-      if (messages === null && !previous.has(id) || previous.get(id) === messages) return previous;
-      const next = new Map(previous);
-      if (messages === null) next.delete(id);
-      else next.set(id, messages);
-      return next;
-    });
-  }, []);
-  const messages = useMemo(() => [...sources].flatMap(([source, items]) =>
-    items.map((item) => ({ ...item, id: `${source}:${item.id}` }))), [sources]);
-  return <PublishContext.Provider value={publish}>
+  const [sources, dispatch] = useReducer(reduceInformationSources, undefined, (): InformationSourceState => new Map());
+  const messages = useMemo(() => [...sources].flatMap(([source, state]) =>
+    (state.messages ?? []).filter((item) => state.statuses.get(item.id) !== "dismissed")
+      .map((item) => ({ ...item, id: `${source}:${item.id}`,
+        acknowledged: state.statuses.get(item.id) === "acknowledged",
+        onAcknowledge: () => dispatch({ type: "acknowledge", source, id: item.id }),
+        onDismiss: () => dispatch({ type: "dismiss", source, id: item.id }),
+      }))), [sources]);
+  return <DispatchContext.Provider value={dispatch}>
     <MessagesContext.Provider value={messages}>{children}</MessagesContext.Provider>
-  </PublishContext.Provider>;
+  </DispatchContext.Provider>;
 }
 
-export function useInformationSource(messages: readonly InformationNotice[]) {
-  const publish = useContext(PublishContext);
-  const id = useId();
-  const [acknowledged, setAcknowledged] = useState(() => new Set<string>());
-  useEffect(() => {
-    const active = new Set(messages.map((message) => message.id));
-    setAcknowledged((previous) => {
-      const next = new Set([...previous].filter((key) => active.has(key)));
-      return next.size === previous.size ? previous : next;
-    });
-  }, [messages]);
-  const presented = useMemo(() => messages.map((message) => ({ ...message,
-    acknowledged: acknowledged.has(message.id),
-    onAcknowledge: () => setAcknowledged((previous) => previous.has(message.id)
-      ? previous : new Set([...previous, message.id])),
-  })), [messages, acknowledged]);
-  if (!publish) throw new Error("Information source requires the application information provider");
-  useEffect(() => { publish(id, presented); }, [publish, id, presented]);
-  useEffect(() => () => publish(id, null), [publish, id]);
+export function useInformationSource(source: InformationSource, messages: readonly InformationNotice[] | null) {
+  const dispatch = useContext(DispatchContext);
+  if (!dispatch) throw new Error("Information source requires the application information provider");
+  useEffect(() => { dispatch({ type: "publish", source, messages }); }, [dispatch, source, messages]);
+  useEffect(() => () => dispatch({ type: "publish", source, messages: null }), [dispatch, source]);
 }
 
 export const useInformationSources = () => useContext(MessagesContext);

@@ -48,6 +48,7 @@ pub(crate) mod client_configuration_apply;
 pub(crate) mod client_configuration_manual;
 pub(crate) mod client_configuration_repair;
 pub(crate) mod model_usage;
+pub(crate) mod resource_usage;
 pub(crate) mod official_login;
 pub(crate) mod prompt_management;
 pub(crate) mod provider_endpoints;

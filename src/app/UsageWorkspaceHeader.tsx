@@ -13,6 +13,7 @@ import type { MessageKey } from "../i18n/messages";
 import type { useCodexOfficialReset, useCodexResetSignal } from "../components/quota-reads";
 import type { useCodexProbe } from "./useCodexProbe";
 import type { useModelUsageReport } from "../pages/use-model-usage-report";
+import type { useResourceUsage } from "../pages/use-resource-usage";
 import { USAGE_SECTIONS, type UsageSection } from "./navigation";
 
 const RANGES: ReadonlyArray<{ value: ModelUsageRange; labelKey: MessageKey }> = [
@@ -90,6 +91,7 @@ interface HeaderProps {
   officialReset: ReturnType<typeof useCodexOfficialReset>;
   resetSignal: ReturnType<typeof useCodexResetSignal>;
   radar: RadarControlsProps;
+  resources: ReturnType<typeof useResourceUsage> & { active: boolean };
 }
 
 function ConsumptionControls({ active, range, onRangeChange, usage }: HeaderProps["consumption"]) {
@@ -113,7 +115,7 @@ function freshnessLabel(freshness: "cached" | "live", t: TFunction) {
 }
 
 export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption,
-  officialReset, resetSignal, radar }: HeaderProps) {
+  officialReset, resetSignal, radar, resources }: HeaderProps) {
   const { t } = useI18n();
   const { usage } = consumption;
   const report = usage.read?.report;
@@ -141,6 +143,14 @@ export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption
       {" · "}{t("usage.quota.resetLabel")}
       {resetSignal.snapshot ? freshnessLabel(resetSignal.snapshot.freshness, t) : t("usage.quota.noCache")}
     </>;
+  } else if (section === "resources") {
+    actions = <Button variant="secondary" disabled={resources.loading || !resources.active} onClick={resources.refresh}>
+      {t(resources.loading ? "usage.action.refreshing" : "usage.action.refresh")}
+    </Button>;
+    status = resources.read ? <>
+      {t("resources.sampledAt")}<Time iso={resources.read.sampledAt} />
+      {resources.loading ? t("usage.status.updating") : null}
+    </> : t("resources.noReadings");
   } else {
     actions = <RadarControls {...radar} />;
     status = t("usage.radar.statusNote");
@@ -148,5 +158,5 @@ export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption
   return <WorkspaceHeader title={t("nav.page.usage")} primary={
     <Tabs value={section} onChange={onSectionChange} scope={id} label={t("usage.tabs.aria")}
       tabs={USAGE_SECTIONS.map((tab) => ({ value: tab.value, label: t(tab.labelKey), controls: `${id}-${tab.value}-panel` }))} />
-  } primaryActions={actions} secondary={<p className="asb-header-status" role="status">{status}</p>} />;
+  } primaryActions={actions} secondary={<p className="asb-header-status" role={section === "resources" ? undefined : "status"}>{status}</p>} />;
 }

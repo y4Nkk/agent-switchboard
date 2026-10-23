@@ -16,7 +16,7 @@ Claude workflow 的 journal.jsonl 保存执行事件而非带 sessionId 的会�
 
 转换快照是显式保存的可读记录，搜索、正文、复制、收藏、导出与整理共用 SessionSource 和 SessionMessage。相同来源的新快照原子替换旧快照，不维护第二份拼接正文、迁移格式或双读回退。来源内容改变后重新出现可转换提示。删除转换记录只删除应用副本，原始 journal 仍由 Claude 管理。
 
-会话及用量的来源提示通过 `useInformationSource` 接入标题栏 GlobalInformation，确认按当前提示身份生效；新问题仍可见，已确认提示在同一全局入口复查。确认状态只属于当前应用界面生命周期，不写浏览器或用户配置。提示正文与转换操作在全局面板的共享 ScrollArea 内完整阅读，警示不再挤占结果区。缓存重建提示继续保留其现有确认入口，确认均不改变统计事实或后端错误结果。[搜索生命周期与全局警示](../bug-fix/2026-10-23-session-search-lifecycle.md)拥有本次展示迁移和真实进度。
+会话及用量的来源提示通过 `useInformationSource` 接入标题栏 GlobalInformation，确认按当前提示身份生效；新问题仍可见，已确认提示在同一全局入口复查。确认和删除状态由[应用级来源生命周期](2026-10-23-information-source-lifecycle.md)拥有，不写浏览器或用户配置；转换入口的提示身份包含排序去重后的 conversionId 集合，新集合不继承旧集合的删除状态。提示正文与转换操作在全局面板的共享 ScrollArea 内完整阅读，警示不再挤占结果区。缓存重建提示继续保留其现有确认入口，确认均不改变统计事实或后端错误结果。[搜索生命周期与全局警示](../bug-fix/2026-10-23-session-search-lifecycle.md)拥有展示迁移和真实进度。
 
 ## Related decisions
 

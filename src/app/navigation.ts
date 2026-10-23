@@ -36,9 +36,10 @@ export type ExtensionSection = "skill" | "mcp";
 export const USAGE_SECTIONS = [
   { value: "consumption", labelKey: "nav.section.consumption" },
   { value: "quota", labelKey: "nav.section.quota" },
+  { value: "resources", labelKey: "nav.section.resources" },
   { value: "radar", labelKey: "nav.section.radar" },
 ] as const satisfies ReadonlyArray<{ value: UsageSection; labelKey: MessageKey }>;
-export type UsageSection = "consumption" | "quota" | "radar";
+export type UsageSection = "consumption" | "quota" | "resources" | "radar";
 
 export const DIAGNOSTIC_SECTIONS = [
   { value: "configuration", labelKey: "nav.section.configuration" },

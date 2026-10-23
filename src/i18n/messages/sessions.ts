@@ -150,6 +150,7 @@ export const messages = {
   "sessions.list.empty": ["未找到匹配的 Codex 或 Claude Code 会话", "No matching Codex or Claude Code sessions found"],
   "sessions.time.unknown": ["时间未知", "Unknown time"],
   "sessions.detail.aria": ["会话详情", "Session details"],
+  "sessions.detail.information": ["会话信息", "Session information"],
   "sessions.detail.empty": ["选择一条会话即可查看内容并复制恢复命令。", "Select a session to view its content and copy the resume command."],
   "sessions.fact.sessionId": ["会话 ID", "Session ID"],
   "sessions.fact.lastActive": ["最近活动", "Last active"],

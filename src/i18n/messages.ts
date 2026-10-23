@@ -35,6 +35,7 @@ import { messages as skillWorkbench } from "./messages/skill-workbench.ts";
 import { messages as settings } from "./messages/settings.ts";
 import { messages as tray } from "./messages/tray.ts";
 import { messages as usage } from "./messages/usage.ts";
+import { messages as resources } from "./messages/resources.ts";
 
 export const messages = Object.freeze({
   ...backup,
@@ -67,6 +68,7 @@ export const messages = Object.freeze({
   ...skillWorkbench,
   ...tray,
   ...usage,
+  ...resources,
 } as const);
 
 export type MessageKey = keyof typeof messages;

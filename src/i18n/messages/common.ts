@@ -25,6 +25,7 @@ export const messages = {
 
   "nav.section.consumption": ["消耗统计", "Consumption"],
   "nav.section.quota": ["额度与重置", "Quota & Resets"],
+  "nav.section.resources": ["资源占用", "Resources"],
   "nav.section.radar": ["降智雷达", "Degradation Radar"],
 
   "nav.section.configuration": ["配置与环境", "Config & Environment"],
@@ -37,10 +38,14 @@ export const messages = {
   "shell.nav.aria": ["主导航", "Primary navigation"],
   "shell.nav.expand": ["展开导航", "Expand navigation"],
   "shell.nav.collapse": ["收起导航", "Collapse navigation"],
+  "shell.nav.retry": ["重新读取导航状态", "Reload navigation state"],
   "shell.busy": ["处理中", "Working"],
   "shell.information.aria": ["全局信息", "Global information"],
   "shell.information.show": ["查看全局信息（{count} 条）", "View global information ({count})"],
   "shell.information.close": ["收起全局信息", "Close global information"],
+  "shell.information.delete": ["删除通知", "Delete notification"],
+  "shell.information.clear": ["清空通知", "Clear notifications"],
+  "shell.information.empty": ["暂无通知", "No notifications"],
   "shell.banner.repairData": ["一键智能修复", "Repair application data"],
   "shell.banner.settingsUnavailable": ["应用设置不可用：{detail}", "App settings unavailable: {detail}"],
   "shell.banner.repair": ["一键修复", "Quick repair"],
@@ -63,7 +68,6 @@ export const messages = {
   "update.check": ["检查更新", "Check for updates"],
   "update.checking": ["正在检查更新", "Checking for updates"],
 
-  "toast.dismiss": ["关闭通知", "Dismiss notification"],
   "common.operationFailed": ["操作失败", "Operation failed"],
 
   "confirm.cancel": ["取消", "Cancel"],

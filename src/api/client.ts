@@ -144,6 +144,7 @@ export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> 
 export * from "./shared";
 export * from "./usage";
 export * from "./model-usage";
+export * from "./resource-usage";
 export * from "./providers";
 export * from "./provider-request";
 export * from "./switching";
@@ -315,4 +316,20 @@ export function getWindowMaximized(): Promise<boolean> {
 export function onWindowResized(handler: () => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return getCurrentWindow().onResized(() => handler());
+}
+
+/** Native visibility includes close-to-tray and minimization, independently of focus. */
+export async function onWorkspaceVisibilityChanged(handler: (visible: boolean) => void): Promise<() => void> {
+  if (isBrowserDevelopment) { handler(true); return () => {}; }
+  let revision = 0;
+  const unlisten = await listen<boolean>("workspace-visibility-changed", (event) => {
+    revision += 1;
+    handler(event.payload);
+  });
+  const beforeRead = revision;
+  try {
+    const visible = await invoke<boolean>("workspace_visible");
+    if (revision === beforeRead) handler(visible);
+  } catch (error) { console.error("Initial workspace visibility could not be read", error); }
+  return unlisten;
 }

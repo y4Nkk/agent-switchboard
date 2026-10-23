@@ -5,7 +5,8 @@ import { canRepairApplicationData } from "../api/data-repair";
 import { useI18n } from "../i18n";
 import { commandErrorText } from "../i18n/errors";
 import { Button } from "./Button";
-import { CloseIcon } from "./icons";
+import { CloseIcon, TrashIcon } from "./icons";
+import { Tooltip } from "./Tooltip";
 import { ToastStatusIcon } from "./ToastStatusIcon";
 import { ToastText } from "./ToastContent";
 import { ScrollArea } from "./ScrollArea";
@@ -24,12 +25,11 @@ interface InformationMessage extends InformationSourceMessage {
   toastId?: string;
 }
 
-function InformationRow({ message, onDismiss }: {
+function InformationRow({ message, onBeforeDismiss }: {
   message: InformationMessage;
-  onDismiss: (id: string) => void;
+  onBeforeDismiss: () => void;
 }) {
   const { t } = useI18n();
-  const { toastId } = message;
   return (
     <div className="asb-information-row">
       <ToastStatusIcon kind={message.kind} />
@@ -46,10 +46,15 @@ function InformationRow({ message, onDismiss }: {
           </Button>
         </div>}
       </div>
-      {toastId && (
-        <Button variant="icon" aria-label={t("toast.dismiss")} onClick={() => onDismiss(toastId)}>
-          <CloseIcon />
-        </Button>
+      {message.onDismiss && (
+        <Tooltip label={t("shell.information.delete")} className="asb-information-tooltip">
+          <Button variant="icon" aria-label={t("shell.information.delete")} onClick={() => {
+            onBeforeDismiss();
+            message.onDismiss?.();
+          }}>
+            <TrashIcon />
+          </Button>
+        </Tooltip>
       )}
     </div>
   );
@@ -74,6 +79,7 @@ function useInformationMessages({ error, settingsError, busy, onRepairData, onRe
   const toastMessages = queue.toasts.map((toast): InformationMessage => ({
     id: `toast-${toast.id}`, toastId: toast.id, kind: toast.kind,
     title: toast.title || toast.description, description: toast.title ? toast.description : undefined,
+    onDismiss: () => queue.dismiss(toast.id),
   }));
   messages.push(...toastMessages.filter((message) => message.kind === "error"));
   messages.push(...sources.filter((message) => !message.acknowledged && message.kind === "error"));
@@ -84,22 +90,52 @@ function useInformationMessages({ error, settingsError, busy, onRepairData, onRe
   return { ...queue, messages };
 }
 
+function InformationPanel({ id, messages, onClose }: {
+  id: string;
+  messages: readonly InformationMessage[];
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const focusClose = () => closeRef.current?.focus({ preventScroll: true });
+  const dismissible = messages.filter((message) => message.onDismiss);
+  return <Dialog id={id} className="asb-information-dialog" aria-label={t("shell.information.aria")}>
+    <div className="asb-information-heading">
+      <h2 className="asb-section-title">{t("shell.information.aria")}</h2>
+      <div className="asb-information-heading-actions">
+        <Button variant="secondary" size="compact" disabled={!dismissible.length}
+          onClick={() => {
+            focusClose();
+            dismissible.forEach((message) => message.onDismiss?.());
+          }}>
+          {t("shell.information.clear")}
+        </Button>
+        <Button ref={closeRef} variant="icon" aria-label={t("shell.information.close")} onClick={onClose}>
+          <CloseIcon />
+        </Button>
+      </div>
+    </div>
+    <ScrollArea className="asb-information-list" aria-label={t("shell.information.aria")}>
+      {messages.length ? messages.map((message) =>
+        <InformationRow key={message.id} message={message} onBeforeDismiss={focusClose} />)
+        : <p className="asb-information-empty" role="status">{t("shell.information.empty")}</p>}
+    </ScrollArea>
+  </Dialog>;
+}
+
 /** The titlebar owns the only global feedback surface; source state stays with its owners. */
 export function GlobalInformation(props: Props) {
   const { t } = useI18n();
-  const { messages, toasts, dismiss, pause, resume } = useInformationMessages(props);
+  const { messages, toasts, pause, resume } = useInformationMessages(props);
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
-  const primary: InformationMessage | undefined = messages.find((message) => !message.acknowledged)
-    ?? (messages.length ? { id: "acknowledged", kind: "info", title: t("notice.review", { count: messages.length }) } : undefined);
-  const visibleToastId = primary?.toastId;
-
-  useEffect(() => {
-    if (messages.length === 0) setOpen(false);
-  }, [messages.length]);
+  const primary: InformationMessage = messages.find((message) => !message.acknowledged)
+    ?? { id: messages.length ? "acknowledged" : "empty", kind: "info",
+      title: messages.length ? t("notice.review", { count: messages.length }) : t("shell.information.empty") };
+  const visibleToastId = primary.toastId;
 
   useEffect(() => {
     const syncTimers = () => {
@@ -120,36 +156,22 @@ export function GlobalInformation(props: Props) {
       onFocus={() => setFocused(true)} onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
       }}>
-      {primary && (
-        <>
-          <Button variant="unstyled" ref={triggerRef} className="asb-information-trigger"
-            aria-label={t("shell.information.show", { count: messages.length })}
-            aria-describedby={`${panelId}-summary`}
-            aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined}
-            onClick={() => setOpen(!open)}>
-            <ToastStatusIcon kind={primary.kind} />
-            <div id={`${panelId}-summary`} className="asb-information-summary" role={primary.kind === "error" ? "alert" : "status"}
-              aria-atomic="true" key={primary.id}>
-              <ToastText content={primary.title} />
-            </div>
-            <span className="asb-information-count">{messages.length}</span>
-          </Button>
-          <Popover triggerRef={triggerRef} isOpen={open} onOpenChange={setOpen} placement="bottom start"
-            className="asb-information-popover" offset={8}>
-            <Dialog id={panelId} className="asb-information-dialog" aria-label={t("shell.information.aria")}>
-              <div className="asb-information-heading">
-                <h2 className="asb-section-title">{t("shell.information.aria")}</h2>
-                <Button variant="icon" aria-label={t("shell.information.close")} onClick={() => setOpen(false)}>
-                  <CloseIcon />
-                </Button>
-              </div>
-              <ScrollArea className="asb-information-list" aria-label={t("shell.information.aria")}>
-                {messages.map((message) => <InformationRow key={message.id} message={message} onDismiss={dismiss} />)}
-              </ScrollArea>
-            </Dialog>
-          </Popover>
-        </>
-      )}
+      <Button variant="unstyled" ref={triggerRef} className="asb-information-trigger"
+        aria-label={t("shell.information.show", { count: messages.length })}
+        aria-describedby={`${panelId}-summary`}
+        aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen(!open)}>
+        <ToastStatusIcon kind={primary.kind} />
+        <div id={`${panelId}-summary`} className="asb-information-summary" role={primary.kind === "error" ? "alert" : "status"}
+          aria-atomic="true" key={primary.id}>
+          <ToastText content={primary.title} />
+        </div>
+        <span className="asb-information-count">{messages.length}</span>
+      </Button>
+      <Popover triggerRef={triggerRef} isOpen={open} onOpenChange={setOpen} placement="bottom start"
+        className="asb-information-popover" offset={8}>
+        <InformationPanel id={panelId} messages={messages} onClose={() => setOpen(false)} />
+      </Popover>
     </div>
   );
 }

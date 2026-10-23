@@ -9,6 +9,7 @@ pub(crate) mod codex_paths;
 mod paths;
 mod settings;
 mod settings_upgrade;
+mod sidebar;
 mod workspace;
 
 

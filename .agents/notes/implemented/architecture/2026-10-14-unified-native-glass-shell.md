@@ -20,7 +20,7 @@ AppShell 使用两行两列 grid：导航跨两行，顶栏占右上，工作区
 
 ## Related decisions
 
-- 活跃笔记检索中的[桌面工作区](../../implemented/architecture/2026-10-13-desktop-workspace-uiux.md)部分重叠，保留导航尺寸、窗口内收起状态和页面交互所有权，并互链本方案。
+- 活跃笔记检索中的[桌面工作区](../../implemented/architecture/2026-10-13-desktop-workspace-uiux.md)部分重叠，保留导航尺寸和页面交互所有权，并互链本方案；展开状态的持久化与启动恢复由[侧栏状态持久化](../feature/2026-10-23-sidebar-state-persistence.md)拥有。
 - [旧网页毛玻璃方案](../../archived/feature/2026-10-13-frosted-glass-chrome.md)的独立模糊表面、满铺内容与系统材质取舍被本方案完全取代并归档，保留原理由作为不可变历史。本篇吸收其受限滚动、固定底栏、内容/通知所有权、启动画面及原生验收缺口。
 - [标题栏信息](../../implemented/feature/2026-10-12-titlebar-information.md)和[图标状态](../../implemented/feature/2026-10-12-sidebar-icon-states.md)继续拥有各自内容；其他命中笔记不涉及外框材质或几何。
 

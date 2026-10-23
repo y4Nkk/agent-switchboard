@@ -14,9 +14,9 @@ Status: implemented
 - `CollapsibleSection`：自带摘要行的折叠区块，取代一切 `<details>`。受控 API（`open` + `onOpenChange`，初始状态由调用方 `useState` 携带，如"已有模型映射默认展开"）；`label` + 可选 `value`（尾随弱化值）+ 唯一旋转箭头。摘要行是无按钮外观的纯文本行——`unstyled` 是零样式标记，行自带完整外观重置（漏掉 `border:0; background:transparent` 会让浏览器 UA 按钮底 chrome 漏出来，渲染成假输入框）。两种几何对应两种既有版式：标准色调为整行折叠行、箭头钉行尾（编辑器折叠模块、扩展能力盒）；quiet 色调为次要证据的紧凑文本行、行宽贴合并箭头紧随标签（代码证据、更新日志、资源事实）。箭头缩进归摘要行上下文所有（`.asb-collapsible-summary >`），不写在箭头本体上——否则横幅等外部触发器里的文字会被 auto 边距推离原位。
 - `CollapsibleChevron`：唯一箭头语法（单个 ChevronDown 旋转 180°），取代上/下箭头互换与 CSS 伪元素箭头。
 
-触发器契约：按钮声明 `aria-expanded`，仅在内容存在（展开中）时声明 `aria-controls`；工具栏驱动的四区块经 `ariaLabel` prop 升级为带标签的 `role="region"`。
+触发器契约：按钮声明 `aria-expanded`，仅在请求展开时声明 `aria-controls`，不引用已卸载的目标。`Collapsible` 从请求收起起立即设置 `inert`，保留挂载的退出动画不再使内容留在键盘导航和辅助技术中；显隐、卸载与可交互状态统一由原语拥有，页面不补第二套禁用逻辑。工具栏驱动的四区块经 `ariaLabel` prop 升级为带标签的 `role="region"`。
 
-已接入：供应商行测试/用量面板（Claude 与 Codex）、两行官方面板（重登录、订阅额度，此前为瞬切条件渲染）、供应商编辑器模型映射（Claude/Codex）与连接测试、客户端配置四区块与逐项代码证据、扩展能力表/安装目标/资源事实、MCP 元数据、发现警告列表、更新日志、候选文件预览、Codex 每日数据表、上游请求体、会话批量标签面板、会话长消息"展开完整内容"（截断预览与分页阅读器经 `onClosed` 互斥换位：展开时预览立即让位、阅读器展开动画；收起时预览在动画结束、阅读器卸载后才回归，两形态绝不并存；展开集合仍由 `useSessionDetail` 持有，收藏页恒展开与目录跳转展开走同一条路）。已删除：`RowPanelDisclosure.tsx` 与 7 个 CSS 文件中的全部专属折叠块（行面板、编辑器 details、连接测试、客户端配置、扩展、MCP、更新日志、代码证据）；provider-editor 折叠引用与 `provider-editor-disclosures.css` 只保留非折叠布局。`DESIGN.md` 组件所有权节新增 Collapsible 条目。
+已接入：供应商行测试/用量面板（Claude 与 Codex）、两行官方面板（重登录、订阅额度，此前为瞬切条件渲染）、供应商编辑器模型映射（Claude/Codex）与连接测试、客户端配置四区块与逐项代码证据、扩展能力表/安装目标/资源事实、MCP 元数据、发现警告列表、更新日志、候选文件预览、Codex 每日数据表、上游请求体、会话批量标签面板、[会话详情信息](../bug-fix/2026-09-24-session-operations-layout.md)、会话长消息"展开完整内容"（截断预览与分页阅读器经 `onClosed` 互斥换位：展开时预览立即让位、阅读器展开动画；收起时预览在动画结束、阅读器卸载后才回归，两形态绝不并存；展开集合仍由 `useSessionDetail` 持有，收藏页恒展开与目录跳转展开走同一条路）。已删除：`RowPanelDisclosure.tsx` 与 7 个 CSS 文件中的全部专属折叠块（行面板、编辑器 details、连接测试、客户端配置、扩展、MCP、更新日志、代码证据）；provider-editor 折叠引用与 `provider-editor-disclosures.css` 只保留非折叠布局。`DESIGN.md` 组件所有权节新增 Collapsible 条目。
 
 **范围外（非容器折叠，不接入）**：侧栏展开收起（外框 grid 几何，`shell.css` 拥有）、气泡弹层与下拉（GlobalInformation、FontPicker、ModelPicker、Select、Tooltip）、模态弹窗、页内视图/路由切换（运行参数页、发现面板、仓库管理等）、代码预览的高度档位切换（同一滚动元素 16rem↔65dvh 的上限调整，元素从不卸载，不是显隐折叠）——这些是与容器折叠不同的交互家族，强套折叠原语会破坏其交互契约。
 

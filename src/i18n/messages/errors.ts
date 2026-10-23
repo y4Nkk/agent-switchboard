@@ -148,6 +148,8 @@ export const messages = {
   "validate.subagentBadValue": ["子 agent 的{field}必须是{allowed}，当前值为 {value}", "The subagent {field} must be {allowed}; the current value is {value}"],
 
   "errors.settings.unavailable": ["应用设置读取失败：{detail}", "Failed to read app settings: {detail}"],
+  "errors.sidebar.unavailable": ["无法恢复导航状态，请点击导航顶部的重新读取按钮重试：{detail}", "Could not restore navigation state. Use the reload button at the top of navigation to retry: {detail}"],
+  "errors.sidebar.saveFailed": ["导航状态保存失败，已保留原状态：{detail}", "Failed to save navigation state; the previous state is retained: {detail}"],
   "errors.settings.saveFailed": ["无法保存应用设置：{detail}", "Failed to save app settings: {detail}"],
   "errors.settings.repairFailed": ["无法修复应用设置：{detail}", "Failed to repair app settings: {detail}"],
   "errors.settings.rollbackFailed": ["{message}；恢复原桌面偏好失败，请重启应用：{detail}", "{message}; restoring the previous desktop preferences failed, please restart the app: {detail}"],

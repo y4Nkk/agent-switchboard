@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { CommandError } from "../api/client";
 import { useI18n } from "../i18n";
 import type { Page } from "./navigation";
@@ -13,6 +13,7 @@ import appIcon from "../assets/app-icon.svg";
 interface AppShellProps {
   page: Page;
   onPageChange: (page: Page) => void;
+  sidebar: { collapsed: boolean | null; pending: boolean; onToggle: () => void };
   /** Persistent decision errors, displayed alongside transient global feedback. */
   error: CommandError | null;
   busy: boolean;
@@ -36,6 +37,7 @@ interface AppShellProps {
 export function AppShell({
   page,
   onPageChange,
+  sidebar,
   error,
   busy,
   settingsError,
@@ -46,11 +48,10 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const { t } = useI18n();
-  const [collapsed, setCollapsed] = useState(false);
   return (
-    <InformationSources><div className={`asb-shell${collapsed ? " is-collapsed" : ""}`}>
-      <SideNav page={page} onPageChange={onPageChange} collapsed={collapsed}
-        onToggle={() => setCollapsed((value) => !value)} update={update} />
+    <InformationSources><div className={`asb-shell${sidebar.collapsed ? " is-collapsed" : ""}`}>
+      <SideNav page={page} onPageChange={onPageChange} collapsed={sidebar.collapsed}
+        onToggle={sidebar.onToggle} pending={sidebar.pending} update={update} />
       <header className="asb-titlebar" data-tauri-drag-region>
         <span className="asb-titlebar-brand" data-tauri-drag-region>
           <img className="asb-titlebar-icon" src={appIcon} alt="" data-tauri-drag-region />

@@ -25,6 +25,10 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "remember_workspace_page" => as_json(workspace::remember_workspace_page(
             app.clone(), argument(&request.args, "page")?,
         ).await),
+        "get_sidebar_collapsed" => as_json(workspace::get_sidebar_collapsed(app.clone()).await),
+        "set_sidebar_collapsed" => as_json(workspace::set_sidebar_collapsed(
+            app.clone(), argument(&request.args, "collapsed")?,
+        ).await),
         "set_shortcut_recording" => {
             workspace::set_shortcut_recording(app.clone(), argument(&request.args, "recording")?);
             as_json(Ok(()))

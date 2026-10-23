@@ -16,6 +16,7 @@ import { latestOverall, useSwitchOperations } from "./useSwitchOperations";
 import { useProviderSwitchFlow } from "./useProviderSwitchFlow";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+import { useSidebarState } from "./useSidebarState";
 import { useCodexProbe } from "./useCodexProbe";
 
 function useTrayEvents(reportError: (error: CommandError) => void) {
@@ -39,6 +40,7 @@ export function useSwitchboardModel() {
   useTrayEvents(reportError);
   const operationContext = { busy, onError: reportError, clearError, setBusy };
   const appSettingsState = useAppSettings(operationContext);
+  const sidebar = useSidebarState(reportError);
   const navigation = useWorkspaceNavigation(
     appSettingsState.appSettings !== null || appSettingsState.loadError !== null,
     appSettingsState.loadError, reportError,
@@ -96,7 +98,7 @@ export function useSwitchboardModel() {
     () => openBackupDir().catch((caught) => reportError(caught as CommandError)), [reportError],
   );
 
-  return { ...navigation, appFilter, ...frame, snapshot, activeProfileId, providerSwitch,
+  return { ...navigation, sidebar, appFilter, ...frame, snapshot, activeProfileId, providerSwitch,
     clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
     ccImport, sqlImport, targetProfile, operations, providers, dataRepair, lastSwitchOverall, openBackupFolder, probe };
 }

@@ -77,7 +77,8 @@ pub(crate) fn scan_records_observed(
     scan_reader(&path.display().to_string(), offset, ordinal, BufReader::new(file), checkpoint, visitor)
 }
 
-pub(crate) fn visit_reader(
+#[cfg(test)]
+fn visit_reader(
     label: &str,
     offset: u64,
     reader: impl BufRead,

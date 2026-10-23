@@ -140,7 +140,9 @@ fn toggle_main(app: &AppHandle) -> Result<(), CommandError> {
     let error = |cause: tauri::Error| CommandError::new("shortcut-window-failed", cause.to_string());
     if window.is_visible().map_err(error)? && !window.is_minimized().map_err(error)?
         && window.is_focused().map_err(error)? && crate::tray::is_ready() {
-        window.hide().map_err(error)
+        window.hide().map_err(error)?;
+        crate::workspace_visibility::publish(app);
+        Ok(())
     } else {
         crate::tray::tray_open_main(app.clone())
             .map_err(|cause| CommandError::new("shortcut-window-failed", cause.to_string()))

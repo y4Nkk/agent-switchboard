@@ -19,6 +19,10 @@ pub(super) async fn windows(app: &AppHandle, request: &InvokeRequest) -> Result<
         )),
         "config_status" => command!(commands::status::config_status(app.clone())),
         "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
+        "workspace_visible" => as_json(crate::workspace_visibility::workspace_visible(app.clone())),
+        "read_resource_usage" => command!(commands::resource_usage::read_resource_usage(
+            app.clone(), argument(&request.args, "request")?,
+        )),
         "open_config_file_location" => command!(commands::status::open_config_file_location(
             app.clone(),
             argument::<AppKind>(&request.args, "target")?,

@@ -27,6 +27,31 @@ pub async fn remember_workspace_page(app: tauri::AppHandle, page: WorkspacePage)
 }
 
 #[tauri::command]
+pub async fn get_sidebar_collapsed(app: tauri::AppHandle) -> Result<bool, CommandError> {
+    let desktop = app.state::<DesktopSettingsState>();
+    let _guard = desktop.gate.lock().await;
+    let local = state(&app)?;
+    blocking(move || local.sidebar_collapsed().map_err(|error| CommandError::localized(
+        "sidebar-state-unavailable", "errors.sidebar.unavailable", error.clone(),
+        serde_json::json!({ "detail": error }),
+    ))).await
+}
+
+#[tauri::command]
+pub async fn set_sidebar_collapsed(app: tauri::AppHandle, collapsed: bool) -> Result<bool, CommandError> {
+    let desktop = app.state::<DesktopSettingsState>();
+    let _guard = desktop.gate.lock().await;
+    let local = state(&app)?;
+    blocking(move || {
+        local.set_sidebar_collapsed(collapsed).map_err(|error| CommandError::localized(
+            "sidebar-state-save-failed", "errors.sidebar.saveFailed", error.clone(),
+            serde_json::json!({ "detail": error }),
+        ))?;
+        Ok(collapsed)
+    }).await
+}
+
+#[tauri::command]
 pub fn set_shortcut_recording(app: tauri::AppHandle, recording: bool) {
     app.state::<DesktopSettingsState>().set_recording(recording);
 }

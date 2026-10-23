@@ -4,7 +4,7 @@
  * This stylesheet is the ONLY place where palette, surface, radius, spacing and
  * motion values may be defined. Components consume the semantic variables and
  * must never introduce local color, surface or duration constants
- * (DESIGN.md §5; enforced by src/styles/tokens.test.ts).
+ * See DESIGN.md for the shared visual contract.
  */
 
 :root {
@@ -28,7 +28,22 @@
   --asb-content: hsl(0 0% 98%);
   --asb-content-muted: hsl(240 16% 96%);
   --asb-surface-rail: var(--asb-content-muted);
-  --asb-sidebar-selected: var(--asb-row-selected);
+  /* Fixed variants also supply the settings previews, independently of the
+     current theme. Theme selectors only choose these values. */
+  --asb-sidebar-light-start: rgb(50 121 246 / 0.14);
+  --asb-sidebar-light-end: rgb(128 85 237 / 0.09);
+  --asb-sidebar-light-icon: #3279f6;
+  --asb-sidebar-dark-start: rgb(50 121 246 / 0.24);
+  --asb-sidebar-dark-end: rgb(128 85 237 / 0.18);
+  --asb-sidebar-dark-icon: #8db4ff;
+  --asb-sidebar-selected-start: var(--asb-sidebar-light-start);
+  --asb-sidebar-selected-end: var(--asb-sidebar-light-end);
+  --asb-sidebar-selected-icon: var(--asb-sidebar-light-icon);
+  --asb-sidebar-selected: linear-gradient(
+    105deg,
+    var(--asb-sidebar-selected-start),
+    var(--asb-sidebar-selected-end)
+  );
   --asb-surface-menu: var(--asb-content);
   --asb-surface-sheet: var(--asb-content);
   --asb-overlay-backdrop: rgba(20, 22, 27, 0.32);
@@ -241,6 +256,9 @@
      --asb-content: #0d2133;
      --asb-content-muted: #10293f;
     --asb-chrome-bg: rgb(17 30 43 / 0.6);
+    --asb-sidebar-selected-start: var(--asb-sidebar-dark-start);
+    --asb-sidebar-selected-end: var(--asb-sidebar-dark-end);
+    --asb-sidebar-selected-icon: var(--asb-sidebar-dark-icon);
      --asb-surface-rail: var(--asb-content-muted);
      --asb-surface-menu: var(--asb-content);
      --asb-surface-sheet: var(--asb-content);
@@ -283,6 +301,9 @@
     --asb-content: #0d2133;
     --asb-content-muted: #10293f;
     --asb-chrome-bg: rgb(17 30 43 / 0.6);
+    --asb-sidebar-selected-start: var(--asb-sidebar-dark-start);
+    --asb-sidebar-selected-end: var(--asb-sidebar-dark-end);
+    --asb-sidebar-selected-icon: var(--asb-sidebar-dark-icon);
     --asb-surface-rail: var(--asb-content-muted);
     --asb-surface-menu: var(--asb-content);
     --asb-surface-sheet: var(--asb-content);

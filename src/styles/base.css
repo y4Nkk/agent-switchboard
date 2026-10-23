@@ -29,6 +29,7 @@
 @import "./base/forms.css";
 @import "./base/tooltip-feedback.css";
 @import "./base/usage-workspace.css";
+@import "./base/resource-usage.css";
 @import "./base/tables-backups.css";
 @import "./base/logs-and-usage.css";
 @import "./base/sessions.css";

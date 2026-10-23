@@ -368,6 +368,14 @@ export function rememberWorkspacePage(page: WorkspacePage): Promise<void> {
   return invoke("remember_workspace_page", { page });
 }
 
+export function getSidebarCollapsed(): Promise<boolean> {
+  return invoke<boolean>("get_sidebar_collapsed");
+}
+
+export function setSidebarCollapsed(collapsed: boolean): Promise<boolean> {
+  return invoke<boolean>("set_sidebar_collapsed", { collapsed });
+}
+
 export function setShortcutRecording(recording: boolean): Promise<void> {
   return invoke("set_shortcut_recording", { recording });
 }

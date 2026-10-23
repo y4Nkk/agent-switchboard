@@ -4,6 +4,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 interface Props {
   label: ReactNode;
   side?: "top" | "bottom" | "left" | "right";
+  className?: string;
   children: ReactNode;
 }
 
@@ -18,7 +19,7 @@ interface Props {
  * counts as neither, so it stays suppressed. Window deactivation dispatches
  * none of these events, so the blur listener closes the label too.
  */
-export function Tooltip({ label, side = "top", children }: Props) {
+export function Tooltip({ label, side = "top", className, children }: Props) {
   const [open, setOpen] = useState(false);
   const dismissedAfterAction = useRef(false);
 
@@ -56,7 +57,7 @@ export function Tooltip({ label, side = "top", children }: Props) {
           <span className="asb-tooltip-anchor">{children}</span>
         </TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content side={side} sideOffset={6} className="asb-tooltip">
+          <TooltipPrimitive.Content side={side} sideOffset={6} className={["asb-tooltip", className].filter(Boolean).join(" ")}>
             {label}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>

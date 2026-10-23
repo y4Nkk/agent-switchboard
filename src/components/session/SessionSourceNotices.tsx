@@ -14,12 +14,12 @@ export function SessionSourceNotices({ issues, conversion, disabled }: {
   const { t } = useI18n();
   const { error, outcome, busy, attempt, convert } = conversion;
   const messages = useMemo(() => {
-    const ids = [...new Set(issues.flatMap((issue) => issue.conversionId ? [issue.conversionId] : []))];
+    const ids = [...new Set(issues.flatMap((issue) => issue.conversionId ? [issue.conversionId] : []))].sort();
     const items: InformationNotice[] = issues.map((issue) => ({
       id: JSON.stringify([issue.app, issue.conversionId, issue.message]), kind: "warning",
       title: t("sessions.issues.item", { client: clientFullName(issue.app), message: issue.message }),
     }));
-    if (ids.length) items.push({ id: "session-conversion", kind: "warning",
+    if (ids.length) items.push({ id: `session-conversion:${JSON.stringify(ids)}`, kind: "warning",
       title: t("sessions.convert.action", { count: ids.length }), description: t("sessions.convert.note"),
       action: <Button variant="primary" disabled={disabled} onClick={() => void convert(ids)}>
         {busy ? t("sessions.convert.busy") : t("sessions.convert.action", { count: ids.length })}</Button>,
@@ -32,8 +32,8 @@ export function SessionSourceNotices({ issues, conversion, disabled }: {
     for (const failure of outcome?.failures ?? []) items.push({
       id: `conversion-failure:${attempt}:${failure.app}:${failure.conversionId}:${failure.message}`, kind: "error", title: failure.message,
     });
-    return [...new Map(items.map((item) => [item.id, item])).values()];
+    return items;
   }, [issues, error, outcome, busy, attempt, convert, disabled, t]);
-  useInformationSource(messages);
+  useInformationSource("sessions", messages);
   return null;
 }

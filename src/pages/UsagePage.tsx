@@ -75,11 +75,11 @@ export function UsagePage({ usage }: { usage: ReturnType<typeof useModelUsageRep
   const { read, loading, error } = usage;
   const report = read?.report ?? null;
   const hasData = report !== null && report.groups.length > 0;
-  const notices = useMemo<InformationNotice[]>(() => (report?.issues ?? []).map((issue) => ({
+  const notices = useMemo<InformationNotice[] | null>(() => report ? report.issues.map((issue) => ({
     id: JSON.stringify([issue.app, issue.message]),
     kind: "warning", title: t("usage.issues.entry", { client: clientName(issue.app), message: issue.message }),
-  })), [report, t]);
-  useInformationSource(notices);
+  })) : null, [report, t]);
+  useInformationSource("usage", notices);
   return <section className="asb-panel asb-model-usage" aria-label={t("usage.consumption")}>
     <ModuleHeader title={t("usage.consumption")} />
     {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}

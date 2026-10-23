@@ -158,6 +158,10 @@
   gap: var(--asb-space-3);
 }
 
+.asb-session-detail > .asb-scroll-viewport > :not(.asb-session-body) {
+  flex: none;
+}
+
 .asb-session-empty-detail > .asb-scroll-viewport {
   align-items: center;
   justify-content: center;
@@ -220,6 +224,12 @@
 }
 
 .asb-session-resume-fact .asb-btn-icon { flex: none; }
+
+.asb-session-information-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
 
 /* Conversation column plus the user-message outline; the outline is a
    resident detail column at one fixed width for the whole window range

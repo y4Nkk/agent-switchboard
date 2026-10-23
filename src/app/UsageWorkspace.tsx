@@ -10,6 +10,8 @@ import type { useCodexProbe } from "./useCodexProbe";
 import { useI18n } from "../i18n";
 import { useWorkspaceVisible } from "../hooks/use-workspace-visible";
 import { UsagePage } from "../pages/UsagePage";
+import { ResourceUsagePage } from "../pages/ResourceUsagePage";
+import { useResourceUsage } from "../pages/use-resource-usage";
 import { useModelUsageReport } from "../pages/use-model-usage-report";
 import { UsageWorkspaceHeader } from "./UsageWorkspaceHeader";
 import type { UsageSection } from "./navigation";
@@ -56,6 +58,8 @@ export function UsageWorkspace({ active, section, onSectionChange, probe }: {
   useEffect(() => { if (section === "radar") setRadarOpened(true); }, [section]);
   const consumptionActive = visible && section === "consumption";
   const usage = useModelUsageReport(consumptionActive, range);
+  const resourcesActive = visible && section === "resources";
+  const resources = useResourceUsage(resourcesActive);
   const radarActive = visible && section === "radar";
   const { form, runCount, setRunCount, setQuestionId, reuseQuestion } = useProbeForm(probe, () => setHistoryOpen(false));
   const quotaActive = visible && section === "quota";
@@ -67,6 +71,7 @@ export function UsageWorkspace({ active, section, onSectionChange, probe }: {
       <div hidden={showHistory}>
         <UsageWorkspaceHeader id={id} section={section} onSectionChange={onSectionChange}
           consumption={{ active: consumptionActive, range, onRangeChange: setRange, usage }}
+          resources={{ ...resources, active: resourcesActive }}
           officialReset={officialReset} resetSignal={resetSignal}
           radar={{ active: radarActive, probe, form, onQuestionChange: setQuestionId,
             runCount, onRunCountChange: setRunCount,
@@ -82,6 +87,9 @@ export function UsageWorkspace({ active, section, onSectionChange, probe }: {
         </div>
         <div id={`${id}-radar-panel`} role="tabpanel" aria-labelledby={`${id}-radar-tab`} hidden={section !== "radar"}>
           {radarOpened && <CodexProbePanel probe={probe} form={form} />}
+        </div>
+        <div id={`${id}-resources-panel`} role="tabpanel" aria-labelledby={`${id}-resources-tab`} hidden={section !== "resources"}>
+          {resourcesActive && <ResourceUsagePage resources={resources} />}
         </div>
       </div>
       {historyOpened && (

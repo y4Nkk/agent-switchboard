@@ -8,12 +8,18 @@ export const LIGHT = {
   surface: "#fafafa", rail: "#eceef1", stroke: "rgba(20,22,27,0.18)",
   text: "#14161b", muted: "rgba(20,22,27,0.56)", faint: "rgba(20,22,27,0.24)",
   accent: "#0a84ff", danger: "#d70015", warning: "#b25000",
+  sidebarStart: "var(--asb-sidebar-light-start)",
+  sidebarEnd: "var(--asb-sidebar-light-end)",
+  sidebarIcon: "var(--asb-sidebar-light-icon)",
 };
 
 export const DARK: typeof LIGHT = {
   surface: "#0d2133", rail: "#111e2b", stroke: "rgba(237,240,247,0.24)",
   text: "#edf0f7", muted: "rgba(237,240,247,0.6)", faint: "rgba(237,240,247,0.28)",
   accent: "#0a84ff", danger: "#ff453a", warning: "#ff9f0a",
+  sidebarStart: "var(--asb-sidebar-dark-start)",
+  sidebarEnd: "var(--asb-sidebar-dark-end)",
+  sidebarIcon: "var(--asb-sidebar-dark-icon)",
 };
 
 export function PreviewCanvas({ children }: { children: ReactNode }) {
@@ -28,8 +34,15 @@ export function WindowFrame({ palette, zoom = 1, active = 0, children }: {
   active?: number | null;
   children: ReactNode;
 }) {
+  const selectedGradient = useId();
   return (
     <>
+      <defs>
+        <linearGradient id={selectedGradient} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop stopColor={palette.sidebarStart} />
+          <stop offset="1" stopColor={palette.sidebarEnd} />
+        </linearGradient>
+      </defs>
       <rect x="4" y="4" width="152" height="96" rx="10" fill={palette.rail} stroke={palette.stroke} />
       <rect x="12" y="10" width="6" height="6" rx="2" fill={palette.accent} />
       <rect x="24" y="12" width="32" height="3" rx="1.5" fill={palette.muted} />
@@ -39,8 +52,8 @@ export function WindowFrame({ palette, zoom = 1, active = 0, children }: {
       {[32, 48, 64].map((cy, index) => (
         <g key={cy}>
           {index === active && <rect x="8" y={cy - 7} width="14" height="14" rx="5"
-            fill={palette.accent} fillOpacity="0.14" />}
-          <circle cx="15" cy={cy} r={2.5 * zoom} fill={index === active ? palette.accent : palette.muted} />
+            fill={`url(#${selectedGradient})`} />}
+          <circle cx="15" cy={cy} r={2.5 * zoom} fill={index === active ? palette.sidebarIcon : palette.muted} />
         </g>
       ))}
       <circle cx="15" cy="86" r="2.5" fill="none" stroke={palette.muted} />

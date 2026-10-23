@@ -13,6 +13,7 @@ import {
   UsageNavigationIcon,
   CollapseNavigationIcon,
   ExpandNavigationIcon,
+  ReloadIcon,
 } from "../components/icons";
 
 /** Icon per top-level page; the mapping sits beside the rail, its single
@@ -32,21 +33,23 @@ const WORKSPACE_PAGES = PAGES.filter((page) => page !== "settings");
 interface SideNavProps {
   page: Page;
   onPageChange: (page: Page) => void;
-  collapsed: boolean;
+  collapsed: boolean | null;
+  pending: boolean;
   onToggle: () => void;
   /** Sidebar update entry above the settings item; App owns the check state. */
   update: { checking: boolean; latestVersion: string | null; onCheck: () => void; onOpen: () => void };
 }
 
 /** Navigation stays mounted across width changes; its group scrolls independently. */
-export function SideNav({ page, onPageChange, collapsed, onToggle, update }: SideNavProps) {
+export function SideNav({ page, onPageChange, collapsed, pending, onToggle, update }: SideNavProps) {
   const { t } = useI18n();
   return (
     <aside className="asb-sidebar">
       <div className="asb-sidebar-top" data-tauri-drag-region>
-        <Button variant="icon" aria-label={t(collapsed ? "shell.nav.expand" : "shell.nav.collapse")}
-          aria-expanded={!collapsed} aria-controls="asb-primary-navigation" onClick={onToggle}>
-          {collapsed ? <ExpandNavigationIcon /> : <CollapseNavigationIcon />}
+        <Button variant="icon" aria-label={t(collapsed === null ? "shell.nav.retry" : collapsed ? "shell.nav.expand" : "shell.nav.collapse")}
+          aria-expanded={collapsed === null ? undefined : !collapsed}
+          aria-controls="asb-primary-navigation" disabled={pending} aria-busy={pending} onClick={onToggle}>
+          {collapsed === null ? <ReloadIcon /> : collapsed ? <ExpandNavigationIcon /> : <CollapseNavigationIcon />}
         </Button>
       </div>
       <nav id="asb-primary-navigation" className="asb-sidenav" aria-label={t("shell.nav.aria")}>

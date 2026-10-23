@@ -1,0 +1,48 @@
+.asb-resource-usage,
+.asb-resource-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-resource-table { min-width: 660px; }
+.asb-resource-process-table { min-width: 760px; }
+.asb-resource-table > tbody > .asb-table-expansion-row > td { padding: 0; }
+
+.asb-resource-software {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--asb-space-1);
+  max-width: 340px;
+}
+
+.asb-resource-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  color: var(--asb-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+}
+
+.asb-resource-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.asb-resource-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--asb-space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-resource-details { padding-block: var(--asb-space-3); }
+.asb-resource-loading .asb-skeleton { min-height: 160px; }

@@ -34,6 +34,7 @@ mod process_control;
 mod provider_diagnostics;
 mod provider_request;
 mod provider_transfer;
+mod resource_monitor;
 mod runtime_log;
 mod session_manager;
 mod storage;
@@ -44,6 +45,7 @@ mod upstream_overrides;
 mod usage_cache;
 mod usage_history;
 mod usage_query;
+mod workspace_visibility;
 mod xai_auth;
 
 pub use commands::local_config_paths;
@@ -116,6 +118,7 @@ fn reveal_main_window(app: &tauri::AppHandle) {
     use tauri::Manager;
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
+        workspace_visibility::publish(app);
     }
 }
 
@@ -212,6 +215,7 @@ fn initialize_local_services(
     app.manage(provider_request::ProviderRequests::default());
     app.manage(commands::provider_diagnostics::ProviderRepairPreparations::default());
     app.manage(codex_probe::ProbeRegistry::new());
+    app.manage(resource_monitor::ResourceMonitor::default());
     // A batch left running by an abrupt exit is closed as interrupted before
     // any command can read it; finished results and saved session usage stay.
     if let Err(error) = codex_probe::recover_interrupted(&local) {
@@ -299,6 +303,7 @@ fn start_background_services(app: &mut tauri::App, local: &local_state::LocalSta
             // Tauri restarts this process for every backend hot reload.
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
+                workspace_visibility::publish(app.handle());
             }
         }
     }
@@ -311,6 +316,7 @@ fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     if window.label() != "main" {
         return;
     }
+    workspace_visibility::publish(window.app_handle());
     if let tauri::WindowEvent::Focused(false) = event {
         window.app_handle().state::<desktop_shortcut::DesktopSettingsState>().set_recording(false);
     }
@@ -320,6 +326,7 @@ fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             // A tray has already been built successfully, so hide is
             // recoverable. Do not let a hide failure destroy the app.
             let _ = window.hide();
+            workspace_visibility::publish(window.app_handle());
         } else {
             // The persistent hidden tray WebView is still a window;
             // closing only main would otherwise leave the process alive.
@@ -357,6 +364,7 @@ fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
             api.prevent_exit();
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
+                workspace_visibility::publish(app);
             }
         } else {
             // Terminate any probe subprocess first so no detection call

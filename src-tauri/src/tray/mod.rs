@@ -140,6 +140,7 @@ pub fn tray_open_main(app: AppHandle) -> Result<(), CommandError> {
         window.unminimize().map_err(|error| op(error.to_string()))?;
     }
     window.set_focus().map_err(|error| op(error.to_string()))?;
+    crate::workspace_visibility::publish(&app);
     popup::hide(&app).map_err(op)
 }
 

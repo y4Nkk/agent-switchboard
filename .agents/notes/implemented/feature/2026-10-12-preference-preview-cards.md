@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-`src/components/AppPreviewCards.tsx` 拥有预览单选卡及行为图示，`preference-preview/WindowScene.tsx` 唯一拥有 160×104 SVG 画布、明暗图示色板、窗口骨架及主题/缩放图示。每张卡片包含图形、名称、说明和选中勾号；原生 radio 仍唯一拥有选中、禁用和焦点状态，说明通过 aria-describedby 关联，不增加状态副本。图示使用独立的字面色值，以便浅色、深色和系统主题图始终描绘各自对象；卡片外观继续消费全局主题令牌。
+`src/components/AppPreviewCards.tsx` 拥有预览单选卡及行为图示，`preference-preview/WindowScene.tsx` 唯一拥有 160×104 SVG 画布、明暗图示色板、窗口骨架及主题/缩放图示。每张卡片包含图形、名称、说明和选中勾号；原生 radio 仍唯一拥有选中、禁用和焦点状态，说明通过 aria-describedby 关联，不增加状态副本。图示使用独立的字面色值，以便浅色、深色和系统主题图始终描绘各自对象；其中侧栏选中底色与图标色直接引用 tokens.css 的固定明暗色板，唯一来源由[侧栏图标状态](2026-10-12-sidebar-icon-states.md)拥有，不再在图示内复制行动蓝及透明度。卡片外观继续消费全局主题令牌。
 
 卡组通过 `renderPreview(option.value)` 生成图形，选项只声明值、名称和说明，不再保存一份可能与选项值错配的 JSX 参数。图示直接使用 `api/settings.ts` 的 ThemePreference、MotionPreference、InterfaceScale 等当前契约；WindowScene 从 InterfaceScale 百分值计算缩放系数，表单不维护第二份 90 → 0.9 等对应关系。移除仅做转发的 ThemeModePreview、InterfaceScalePreview，不保留别名、重导出或旧 options.preview 入口。
 

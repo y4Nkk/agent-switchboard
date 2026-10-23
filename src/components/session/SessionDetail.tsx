@@ -8,6 +8,7 @@ import { useMessageState } from "../../i18n/use-message-state";
 import { clientFullName } from "../../lib/client-name";
 import { Button } from "../Button";
 import { ClientLogo } from "../ClientLogo";
+import { CollapsibleSection } from "../Collapsible";
 import { FactList } from "../FactList";
 import { Time } from "../Time";
 import { ScrollArea } from "../ScrollArea";
@@ -99,6 +100,7 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
   const { t } = useI18n();
   const actions = useDetailActions(session);
   const [organizing, setOrganizing] = useState(false);
+  const [informationOpen, setInformationOpen] = useState(false);
   return <ScrollArea as="section" className="asb-session-detail" aria-label={t("sessions.detail.aria")}>
     <header className="asb-session-detail-head">
       <div className="asb-session-detail-title">
@@ -113,11 +115,16 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
           onDelete={() => onDelete(session)} />
       </div>
     </header>
-    <SessionFacts session={session} copy={actions.copy} />
-    {session.preservation && <p className="asb-scope-note">{t("sessions.preservation.resume")}</p>}
+    <CollapsibleSection quiet open={informationOpen}
+      onOpenChange={setInformationOpen} label={t("sessions.detail.information")}>
+      <div className="asb-session-information-content">
+        <SessionFacts session={session} copy={actions.copy} />
+        {session.preservation && <p className="asb-scope-note">{t("sessions.preservation.resume")}</p>}
+        {session.preservation && !session.preservation.sourceAvailable && <p className="asb-scope-note">{t("sessions.preservation.sourceMissing")}</p>}
+        {!session.canDelete && <p className="asb-scope-note">{t("sessions.nativeHistoryManaged")}</p>}
+      </div>
+    </CollapsibleSection>
     {session.preservation?.needsAttention && <p className="asb-warn-text" role="status">{t("sessions.preservation.attention")}</p>}
-    {session.preservation && !session.preservation.sourceAvailable && <p className="asb-scope-note">{t("sessions.preservation.sourceMissing")}</p>}
-    {!session.canDelete && <p className="asb-scope-note">{t("sessions.nativeHistoryManaged")}</p>}
     {organizing && <SessionOrganizationEditor session={session} organization={organization}
       disabled={deleting || detail.busy} onClose={() => setOrganizing(false)} />}
     {actions.status && <p className="asb-scope-note" role="status">{actions.status}</p>}

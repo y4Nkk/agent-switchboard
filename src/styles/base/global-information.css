@@ -79,6 +79,28 @@
   overscroll-behavior: contain;
 }
 
+.asb-information-heading-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-information-row > .asb-tooltip-anchor {
+  flex: none;
+}
+
+.asb-information-tooltip {
+  z-index: 71;
+}
+
+.asb-information-empty {
+  margin: 0;
+  padding: var(--asb-space-3);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
 .asb-information-row {
   display: flex;
   align-items: flex-start;

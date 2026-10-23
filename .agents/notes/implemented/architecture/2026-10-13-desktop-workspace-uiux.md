@@ -10,7 +10,7 @@ Status: implemented
 
 AppDialog 是全部应用模态的唯一所有者；ConfirmSheet 仅组合确认语义，业务模块明确提供处理中状态。端口流程同步防重入，持有一次性准备记录并在卸载后释放迟到的准备结果，已提交结果不得被呈现成取消。端口弹窗随网关上下文存续：设置分区或工作区切换使 GatewayPage 失去 active 时立即关闭弹窗，AppDialog 的 portal 不得悬浮在无关页面上；关闭触发的卸载释放路径与迟到响应失效路径不变。
 
-tokens.css 拥有框架、内容与信息组三层中性色、完整圆角尺度及导航 400ms 动画。AppShell/SideNav 拥有 224px/56px 导航与连续框架，标题栏高度独立于侧栏宽度；面板统一拥有宽桌面 32px 内边距及 24px 主间隔。导航展开状态只在当前窗口保存，不改变磁盘设置契约。
+tokens.css 拥有框架、内容与信息组三层中性色、完整圆角尺度及导航 400ms 动画。AppShell/SideNav 拥有 224px/56px 导航与连续框架，标题栏高度独立于侧栏宽度；面板统一拥有宽桌面 32px 内边距及 24px 主间隔。导航展开状态原先只在当前窗口保存的边界由[侧栏状态持久化](../feature/2026-10-23-sidebar-state-persistence.md)取代，本篇不再拥有其状态寿命与落盘契约。
 
 业务组件继续拥有本会话内草稿、筛选与阅读状态；临时切页保留挂载，隐藏的副作用按工作区、当前页签及窗口的实际可见性停止，具体读取边界由[完整本地会话与用量契约](2026-10-16-complete-local-session-usage.md)拥有，真正结束编辑前明确处理修改。会话与收藏的正文及结果列表按[本地资源边界](2026-10-14-bounded-local-resources.md)在隐藏时释放，选择、页码、阅读位置和编辑状态仍由原所有者保留。复杂扩展编辑复用 EditorFrame，短确认复用 AppDialog。EditorFrame 拥有默认入场与返回焦点，尊重已有字段自动聚焦；提供标题引用的业务路由继续拥有其下级焦点。不存在第二套全局持久化草稿。
 
@@ -26,8 +26,8 @@ Skill 与 MCP 编辑使用完整工作区和固定提交区；版本恢复展示
 
 ## Related decisions
 
-- [连续原生玻璃外框](2026-10-14-unified-native-glass-shell.md)拥有外框材质、grid 占位、固定圆角裁切区与滚动边界；本篇继续拥有导航尺寸、窗口内收起状态与其他页面交互规则。
-- [旧导航](../../archived/feature/2026-10-12-sidebar-navigation.md) 的固定 64px、无收起态和中性选中决定被本方案取代并归档。启动升级链的 SidebarEraSettings 仍只丢弃历史 sidebarCollapsed 字段；本窗口的收起状态不落盘，不重新添加旧持久化字段。
+- [连续原生玻璃外框](2026-10-14-unified-native-glass-shell.md)拥有外框材质、grid 占位、固定圆角裁切区与滚动边界；本篇继续拥有导航尺寸与其他页面交互规则。
+- [旧导航](../../archived/feature/2026-10-12-sidebar-navigation.md) 的固定 64px、无收起态和中性选中决定被本方案取代并归档。历史侧栏字段升级分支与窗口内状态路径由[侧栏状态持久化](../feature/2026-10-23-sidebar-state-persistence.md)删除，不再自动丢弃或转换旧 sidebarCollapsed 字段。
 - [图标状态](../../implemented/feature/2026-10-12-sidebar-icon-states.md) 的库图标和实心当前态继续保留；尺寸与选中颜色随共享布局更新。
 - [扩展可见性与焦点](../../implemented/bug-fix/2026-09-24-extension-visibility-and-focus.md) 继续拥有批量操作范围及焦点可见性，本方案仅替换其中依赖内部装饰线的视觉组织。
 - [扩展部署检测](../../implemented/bug-fix/2026-10-13-extension-deployment-diagnostics.md) 继续拥有部署与检测事实，不恢复旧估算步骤。
