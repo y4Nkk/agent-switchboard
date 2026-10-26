@@ -36,7 +36,7 @@ fn command(executable: &Path, directory: &Path, branch: &str, role: &str) -> Com
 fn executable(source: &Path, destination: &Path) -> PathBuf {
     let destination = destination.with_extension(if cfg!(windows) { "exe" } else { "" });
     fs::create_dir_all(destination.parent().unwrap()).unwrap();
-    fs::hard_link(source, &destination).unwrap();
+    fs::copy(source, &destination).unwrap();
     destination
 }
 
@@ -56,8 +56,7 @@ fn wait_pid(directory: &Path, branch: &str, role: &str) -> u32 {
 fn native_editor_engines_and_their_real_task_processes_have_one_owner() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    let payload = root.join("fixture-payload");
-    fs::copy(std::env::current_exe().unwrap(), &payload).unwrap();
+    let payload = std::env::current_exe().unwrap();
     let mut children = Children { stop: root.join("stop"), processes: Vec::new() };
     let mut expected = Vec::new();
     for (branch, group, entry, package, helper) in [
@@ -82,7 +81,9 @@ fn native_editor_engines_and_their_real_task_processes_have_one_owner() {
         coverage: InterfaceCoverage::Partial, issues: Vec::new() }, &HashMap::new()).unwrap();
     for (pid, group) in expected {
         let matches: Vec<_> = collection.processes.iter().filter(|process| process.observation.key.pid == pid).collect();
-        assert_eq!(matches.len(), 1, "expected one owner for fixture pid {pid}");
+        assert_eq!(matches.len(), 1, "expected one owner for fixture pid {pid}; observed {:?}; issues {:?}",
+            collection.processes.iter().map(|process| (&process.observation.name, &process.observation.executable, process.owner.group)).collect::<Vec<_>>(),
+            collection.group_issues);
         assert_eq!(matches[0].owner.group, group, "fixture pid {pid}");
         assert!(matches[0].observation.key.birth > 0);
         assert!(matches[0].observation.resident_bytes.unwrap() > 0);
