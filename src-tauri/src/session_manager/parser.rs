@@ -2,7 +2,7 @@ use super::{content, SessionMessage, SessionMeta, TITLE_LIMIT};
 use asb_core::contracts::AppKind;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::io;
+use std::{fs::File, io::{self, BufRead, BufReader, Read}};
 use std::ops::ControlFlow;
 use std::path::Path;
 
@@ -13,6 +13,14 @@ pub(super) fn parse_session(app: AppKind, path: &Path) -> Result<(SessionMeta, V
 }
 
 pub(super) fn parse_session_observed(app: AppKind, path: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(SessionMeta, Vec<String>), io::Error> {
+    checkpoint().map_err(io::Error::other)?;
+    let file = File::open(path)?;
+    let length = file.metadata()?.len();
+    parse_session_reader(app, path, BufReader::new(file.take(length)), checkpoint)
+}
+
+pub(super) fn parse_session_reader(app: AppKind, path: &Path, reader: impl BufRead,
+    checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(SessionMeta, Vec<String>), io::Error> {
     let mut session_id = None;
     let mut project_dir = None;
     let mut created_at = None;
@@ -21,7 +29,7 @@ pub(super) fn parse_session_observed(app: AppKind, path: &Path, checkpoint: &dyn
     let mut last_active_at = None;
     let mut custom_title = None;
     let mut first_prompt = None;
-    let scan = super::records::scan_records_observed(path, 0, 0, checkpoint, |_, _, value| {
+    let scan = super::records::scan_reader(&path.display().to_string(), 0, 0, reader, checkpoint, |_, _, value| {
         session_id = session_id.take().or_else(|| session_id_from(&value).filter(|id| valid_session_id(id)));
         if value.get("type").and_then(Value::as_str) == Some("session_meta") {
             native_created_at = native_created_at.take().or_else(|| timestamp_from(&value));
@@ -67,8 +75,16 @@ pub(crate) fn session_identity(path: &Path) -> io::Result<Option<SessionIdentity
 }
 
 pub(super) fn session_identity_observed(path: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> io::Result<Option<SessionIdentity>> {
+    checkpoint().map_err(io::Error::other)?;
+    let file = File::open(path)?;
+    let length = file.metadata()?.len();
+    session_identity_reader(path, BufReader::new(file.take(length)), checkpoint)
+}
+
+pub(super) fn session_identity_reader(path: &Path, reader: impl BufRead,
+    checkpoint: &dyn Fn() -> Result<(), String>) -> io::Result<Option<SessionIdentity>> {
     let mut found = None;
-    super::records::scan_records_observed(path, 0, 0, checkpoint, |_, _, value| {
+    super::records::scan_reader(&path.display().to_string(), 0, 0, reader, checkpoint, |_, _, value| {
         found = session_id_from(&value).filter(|id| valid_session_id(id)).map(|id| SessionIdentity {
             id, parent: parent_from(value.get("payload").unwrap_or(&value)), created_at: timestamp_from(&value) });
         Ok(if found.is_some() { ControlFlow::Break(()) } else { ControlFlow::Continue(()) })

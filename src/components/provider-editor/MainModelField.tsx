@@ -12,7 +12,8 @@ import { Input } from "../Input";
 import { ModelPicker } from "../ModelPicker";
 import { Tooltip } from "../Tooltip";
 import { UpdateIcon } from "../icons";
-import { claudeOptions, type ProviderEditorDraft } from "./draft";
+import type { ProviderEditorDraft } from "./draft";
+import { claudeOptions } from "../../lib/provider-drafts";
 
 interface Props {
   draft: ProviderEditorDraft;

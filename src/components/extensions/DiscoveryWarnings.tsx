@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import type { ExtensionDiagnostic } from "../../api/client";
 import { Button } from "../Button";
-import { Collapsible, CollapsibleChevron } from "../Collapsible";
+import { Collapsible, CollapsibleTrigger } from "../Collapsible";
 import { clientName } from "../../lib/client-name";
 import { useI18n, type TFunction } from "../../i18n";
 import { catalogText } from "../../i18n/errors";
@@ -57,27 +57,35 @@ function remediationText(diagnostic: ExtensionDiagnostic, t: TFunction): string 
   }
 }
 
+function DiagnosticList({ diagnostics, observationNames, bindingInfo, focusDiagnosticId }: Pick<Props,
+  "diagnostics" | "observationNames" | "bindingInfo" | "focusDiagnosticId">) {
+  const { t } = useI18n();
+  return <ul className="asb-discovery-diagnostic-list">
+    {diagnostics.map((diagnostic) => (
+      <li key={diagnostic.id} className={focusDiagnosticId === diagnostic.id
+        ? "asb-discovery-diagnostic is-focused" : "asb-discovery-diagnostic"}>
+        <p className="asb-discovery-diagnostic-head">
+          <span className="asb-pill-status">
+            {catalogText(DIAGNOSTIC_CODE_LABELS[diagnostic.code] ?? diagnostic.code, t)}
+          </span>
+          <strong>{subjectLabel(diagnostic, observationNames, bindingInfo, t)}</strong>
+          <span className="asb-scope-note">{clientName(diagnostic.client)}</span>
+        </p>
+        <p>{diagnostic.message}</p>
+        <p className="asb-scope-note">{remediationText(diagnostic, t)}</p>
+      </li>
+    ))}
+  </ul>;
+}
+
 /** The single collapsible surface for discovery diagnostics. Collapsed it is
  * exactly one line — the counted summary row is itself the only expand and
  * collapse control, with the repair action beside it; expanded it lists every
  * diagnostic with its own identity, reason, and remediation class. */
-export function DiscoveryWarnings({
-  diagnostics,
-  scanId,
-  scannedAt,
-  stale,
-  busy,
-  repairPreparing,
-  observationNames,
-  bindingInfo,
-  focusDiagnosticId,
-  open,
-  onOpenChange,
-  onRepair,
-}: Props) {
+export function DiscoveryWarnings(props: Props) {
+  const { diagnostics, scanId, scannedAt, stale, busy, repairPreparing, open, onOpenChange, onRepair } = props;
   const { t } = useI18n();
   const detailsId = useId();
-  const summaryTextId = useId();
   const lastScanIdRef = useRef(scanId);
 
   // Every new scan starts collapsed again: the counted summary is the
@@ -105,21 +113,9 @@ export function DiscoveryWarnings({
   return (
     <section className="asb-discovery-warnings" aria-label={t("importDiscovery.warn.aria")}>
       <div className="asb-banner asb-banner-warning asb-discovery-summary">
-        <Button
-          variant="unstyled"
-          className="asb-banner-toggle asb-discovery-summary-toggle"
-          aria-expanded={open}
-          aria-controls={detailsId}
-          aria-describedby={summaryTextId}
-          aria-label={open ? t("importDiscovery.warn.collapseAria") : t("importDiscovery.warn.expandAria", { summary })}
-          onClick={() => onOpenChange(!open)}
-        >
-          <CollapsibleChevron open={open} />
-          <span id={summaryTextId} className="asb-discovery-summary-text">
-            {summary}
-            {stale && t("importDiscovery.warn.staleSuffix")}
-          </span>
-        </Button>
+        <CollapsibleTrigger open={open} onOpenChange={onOpenChange} contentId={detailsId}
+          className="asb-discovery-summary-toggle"
+          label={summary + (stale ? t("importDiscovery.warn.staleSuffix") : "")} />
         <div className="asb-discovery-summary-actions">
           {repairable > 0 ? (
             <Button
@@ -141,32 +137,8 @@ export function DiscoveryWarnings({
         </p>
       )}
       <Collapsible open={open} id={detailsId}>
-        <ul className="asb-discovery-diagnostic-list">
-          {diagnostics.map((diagnostic) => {
-            const focused =
-              focusDiagnosticId !== null && focusDiagnosticId === diagnostic.id;
-            return (
-              <li
-                key={diagnostic.id}
-                className={
-                  focused
-                    ? "asb-discovery-diagnostic is-focused"
-                    : "asb-discovery-diagnostic"
-                }
-              >
-                <p className="asb-discovery-diagnostic-head">
-                  <span className="asb-pill-status">
-                    {catalogText(DIAGNOSTIC_CODE_LABELS[diagnostic.code] ?? diagnostic.code, t)}
-                  </span>
-                  <strong>{subjectLabel(diagnostic, observationNames, bindingInfo, t)}</strong>
-                  <span className="asb-scope-note">{clientName(diagnostic.client)}</span>
-                </p>
-                <p>{diagnostic.message}</p>
-                <p className="asb-scope-note">{remediationText(diagnostic, t)}</p>
-              </li>
-            );
-          })}
-        </ul>
+        <DiagnosticList diagnostics={diagnostics} observationNames={props.observationNames}
+          bindingInfo={props.bindingInfo} focusDiagnosticId={props.focusDiagnosticId} />
       </Collapsible>
     </section>
   );

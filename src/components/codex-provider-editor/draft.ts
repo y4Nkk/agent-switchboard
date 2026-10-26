@@ -143,37 +143,6 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
   };
 }
 
-/** Builds a metadata-only save draft without applying editor defaults. The
- * persisted catalog is copied exactly; only the usage query may change. */
-export function codexUsageDraftFrom(
-  record: CodexProviderRecord,
-  usageQuery: UsageQuery | null,
-): CodexProviderDraft {
-  return {
-    name: record.profile.name,
-    endpoint: record.profile.endpoint,
-    apiKey: record.profile.apiKey,
-    authentication: record.profile.authentication ?? null,
-    connection: record.profile.connection,
-    upstream: record.profile.upstream,
-    requestMode: record.profile.requestMode,
-    defaultModel: record.profile.defaultModel,
-    catalog: record.profile.catalog.map((entry) => ({
-      ...entry,
-      supportedReasoningLevels: [...entry.supportedReasoningLevels],
-    })),
-    modelRoutes: record.profile.modelRoutes.map((route) => ({ ...route })),
-    subagentRoute: record.profile.subagentRoute
-      ? { ...record.profile.subagentRoute }
-      : null,
-    capabilities: { ...record.profile.capabilities },
-    parameters: record.parameters,
-    notes: record.notes ?? null,
-    websiteUrl: record.websiteUrl ?? null,
-    usageQuery,
-  };
-}
-
 export function prepareCodexDraft(draft: CodexEditorDraft): CodexProviderDraft | null {
   if (!draft.parameters) return null;
   return {

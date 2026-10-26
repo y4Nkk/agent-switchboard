@@ -8,6 +8,17 @@ pub(crate) struct GatewayActivationSnapshot {
     pub(crate) route: Option<PersistedRoute>,
 }
 
+impl GatewayProjection {
+    pub(crate) fn candidate_revision(&self) -> String {
+        let revisions = self.candidate_routes.iter().map(|route| {
+            (&route.profile_id, &route.fingerprint, &route.upstream_base_url)
+        }).collect::<Vec<_>>();
+        asb_switch::sha256_hex(
+            &serde_json::to_string(&revisions).expect("route identity serializes"),
+        )
+    }
+}
+
 impl GatewayController {
     pub(crate) fn snapshot_activation(
         &self,
@@ -76,7 +87,7 @@ impl GatewayController {
                         }
                         let route = self.route_for_profile(&profile)?;
                         candidate_routes = self
-                            .claude_candidate_routes(local, &route.profile_id)
+                            .claude_candidate_routes(local, &route.profile_id, None)
                             .unwrap_or_else(|_| vec![route.clone()]);
                         route
                     }

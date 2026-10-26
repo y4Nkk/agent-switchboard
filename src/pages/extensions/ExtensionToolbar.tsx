@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
-import { Button as MenuButton, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
 import type { AppKind } from "../../api/client";
 import { EXTENSION_SECTIONS } from "../../app/navigation";
 import { clientDeployState } from "../../app/extensions/deployment-state";
 import { useI18n, type TFunction } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { Button } from "../../components/Button";
+import { ActionMenu, type ActionMenuItem } from "../../components/ActionMenu";
 import { ClientLogo } from "../../components/ClientLogo";
-import { Input } from "../../components/Input";
+import { SearchInput } from "../../components/SearchInput";
 import { Tabs } from "../../components/Tabs";
 import { WorkspaceHeader } from "../../components/WorkspaceHeader";
-import { CloseIcon, McpKindIcon, PlusIcon, SearchIcon, SkillKindIcon, UpdateIcon } from "../../components/icons";
+import { McpKindIcon, PlusIcon, SearchIcon, SkillKindIcon, UpdateIcon } from "../../components/icons";
 import { Download } from "lucide-react";
 import { Tooltip } from "../../components/Tooltip";
 import { MANAGEMENT_CLIENTS } from "../../components/extensions/client-presentation";
@@ -49,33 +49,13 @@ export function ExtensionSearch({ kind, search, onSearch, summary }: {
   const { t } = useI18n();
   return (
     <div className="asb-ext-toolbar">
-      <div className="asb-ext-search" role="search">
-        <span className="asb-ext-search-icon" aria-hidden="true">
-          <SearchIcon />
-        </span>
-        <Input
-          type="search"
+      <div className="asb-ext-search">
+        <SearchInput
           placeholder={kind === "skill" ? t("extensions.toolbar.searchSkills") : t("extensions.toolbar.searchMcp")}
-          aria-label={t("extensions.toolbar.searchAria")}
+          ariaLabel={t("extensions.toolbar.searchAria")}
           value={search}
-          onChange={(event) => onSearch(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && search) {
-              event.stopPropagation();
-              onSearch("");
-            }
-          }}
+          onChange={onSearch}
         />
-        {search && (
-          <Button
-            variant="unstyled"
-            className="asb-ext-search-clear"
-            aria-label={t("extensions.library.clearSearch")}
-            onClick={() => onSearch("")}
-          >
-            <CloseIcon />
-          </Button>
-        )}
       </div>
       {summary && <div className="asb-ext-toolbar-summary">{summary}</div>}
     </div>
@@ -103,9 +83,7 @@ function ExtensionClientSummary({ workspace }: { workspace: ExtensionWorkspace }
               : action}
           >
             <Button
-              variant="unstyled"
-              className="asb-ext-client-summary-item"
-              data-state={state.all ? "all" : state.partial ? "partial" : "none"}
+              variant="secondary"
               aria-busy={kindItems.some((item) => pendingDeployment(workspace.applies.pendingOperations, item, client))}
               aria-label={t("extensions.toolbar.actionAria", { action, count: state.enabled })}
               disabled={writeBlocked || state.applicable === 0}
@@ -127,61 +105,23 @@ function ExtensionClientSummary({ workspace }: { workspace: ExtensionWorkspace }
 function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
   const { t } = useI18n();
   const { nav, writeBlocked, kindItems, updates, busy } = workspace;
-  return (
-    <MenuTrigger>
-      <MenuButton className="asb-btn asb-btn-secondary" aria-label={t("extensions.toolbar.moreAria")}>
-        {t("extensions.toolbar.more")}
-      </MenuButton>
-      <Popover placement="bottom end" className="asb-ext-menu">
-        <Menu aria-label={t("extensions.toolbar.moreAria")} className="asb-ext-menu-items">
-          {nav.kind === "skill" && (
-            <MenuItem
-              id="new"
-              className="asb-ext-menu-item"
-              isDisabled={writeBlocked}
-              onAction={() => nav.setDialog({ type: "newSkill" })}
-            >
-              {t("extensions.toolbar.newSkill")}
-            </MenuItem>
-          )}
-          {nav.kind === "skill" && (
-            <MenuItem
-              id="check-updates"
-              className="asb-ext-menu-item"
-              isDisabled={writeBlocked || kindItems.length === 0}
-              onAction={() => void updates.check(kindItems.map((item) => item.id))}
-            >
-              {t("extensions.management.checkUpdates")}
-            </MenuItem>
-          )}
-          <MenuItem
-            id="history"
-            className="asb-ext-menu-item"
-            isDisabled={busy}
-            onAction={() => nav.setDialog({ type: "history" })}
-          >
-            {t("extensions.toolbar.history")}
-          </MenuItem>
-          <MenuItem
-            id="portable"
-            className="asb-ext-menu-item"
-            isDisabled={writeBlocked}
-            onAction={() => nav.setDialog({ type: "portableImport" })}
-          >
-            {t("extensions.toolbar.importPortable")}
-          </MenuItem>
-          <MenuItem
-            id="project"
-            className="asb-ext-menu-item"
-            isDisabled={writeBlocked}
-            onAction={() => nav.setDialog({ type: "project" })}
-          >
-            {t("extensions.toolbar.registerProject")}
-          </MenuItem>
-        </Menu>
-      </Popover>
-    </MenuTrigger>
+  const items: ActionMenuItem[] = [];
+  if (nav.kind === "skill") items.push(
+    { id: "new", label: t("extensions.toolbar.newSkill"), disabled: writeBlocked,
+      onAction: () => nav.setDialog({ type: "newSkill" }) },
+    { id: "check-updates", label: t("extensions.management.checkUpdates"),
+      disabled: writeBlocked || kindItems.length === 0,
+      onAction: () => void updates.check(kindItems.map((item) => item.id)) },
   );
+  items.push(
+    { id: "history", label: t("extensions.toolbar.history"), disabled: busy,
+      onAction: () => nav.setDialog({ type: "history" }) },
+    { id: "portable", label: t("extensions.toolbar.importPortable"), disabled: writeBlocked,
+      onAction: () => nav.setDialog({ type: "portableImport" }) },
+    { id: "project", label: t("extensions.toolbar.registerProject"), disabled: writeBlocked,
+      onAction: () => nav.setDialog({ type: "project" }) },
+  );
+  return <ActionMenu label={t("extensions.toolbar.more")} ariaLabel={t("extensions.toolbar.moreAria")} items={items} />;
 }
 
 /** The action cluster mirrors the client configuration toolbar: uniform

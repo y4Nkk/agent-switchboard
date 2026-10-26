@@ -1,10 +1,9 @@
-import { commandErrorText } from "../i18n/errors";
+import { commandErrorText, errorText } from "../i18n/errors";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { DiffView } from "../components/DiffView";
 import { PreviewInspector } from "../components/PreviewInspector";
 import { Time } from "../components/Time";
 import { useI18n } from "../i18n";
-import { localizedMessageText } from "../i18n/errors";
 import { clientName } from "../lib/client-name";
 import type { useProviders } from "./useProviders";
 import type { useSwitchOperations } from "./useSwitchOperations";
@@ -13,6 +12,18 @@ interface OperationConfirmSheetsProps {
   busy: boolean;
   operations: ReturnType<typeof useSwitchOperations>;
   providers: ReturnType<typeof useProviders>;
+}
+
+function ProviderSaveConfirmation({ providers, busy }: Pick<OperationConfirmSheetsProps, "providers" | "busy">) {
+  const { t } = useI18n();
+  const pending = providers.pendingSave;
+  if (!pending) return null;
+  return <ConfirmSheet title={t("operations.save.title")} busy={busy} confirmLabel={t("operations.save.title")}
+    onConfirm={() => void providers.runPendingSave()} onCancel={() => void providers.cancelPendingSave()}>
+    {providers.pendingSaveError != null && <p role="alert" className="asb-fail-text">{errorText(providers.pendingSaveError, t)}</p>}
+    <p>{t("operations.save.writesTarget", { target: pending.preview.preview.target })}</p>
+    <PreviewInspector filePreview={pending.preview} userConfigModel={null} userConfigWarnings={[]} />
+  </ConfirmSheet>;
 }
 
 /** Every destructive or writing operation gets one explicit confirmation
@@ -27,25 +38,7 @@ export function OperationConfirmSheets({
   const { undoPending, recoverLockPending } = operations;
   return (
     <>
-      {providers.pendingSave && (
-        <ConfirmSheet
-          title={t("operations.save.title")}
-          busy={busy}
-          confirmLabel={t("operations.save.title")}
-          onConfirm={() => void providers.runPendingSave()}
-          onCancel={() => providers.setPendingSave(null)}
-        >
-          <ul className="asb-dialog-details">
-            <li>{t("operations.save.writesTarget", { target: providers.pendingSave.preview.preview.target })}</li>
-            <li>{t("operations.save.changeCount", { count: providers.pendingSave.preview.preview.changes.length })}</li>
-            {providers.pendingSave.preview.preview.warnings.map((warning) => (
-              <li key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</li>
-            ))}
-            <li><PreviewInspector filePreview={providers.pendingSave.preview} userConfigModel={null} userConfigWarnings={[]} /></li>
-            <li>{t("operations.save.backupDir", { dir: providers.pendingSave.preview.preview.backupDir })}</li>
-          </ul>
-        </ConfirmSheet>
-      )}
+      <ProviderSaveConfirmation providers={providers} busy={busy} />
       {providers.deletePending && (
         <ConfirmSheet
           title={t("operations.delete.title")}

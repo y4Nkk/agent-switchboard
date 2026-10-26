@@ -16,8 +16,8 @@ export function ResourceProcessDetails({ details, loading, onPageChange }: Props
     { key: "name", header: t("resources.column.process"), render: (row) => <span className="asb-code">{row.name}</span> },
     { key: "role", header: t("resources.column.role"), render: (row) => t(`resources.role.${row.role}`) },
     { key: "evidence", header: t("resources.column.evidence"), render: (row) => t(`resources.evidence.${row.evidence}`) },
-    { key: "cpu", header: "CPU", align: "end", render: (row) => <ResourceMetric metric={row.cpu} kind="cpu" /> },
-    { key: "memory", header: t("resources.column.memory"), align: "end",
+    { key: "cpu", header: "CPU", render: (row) => <ResourceMetric metric={row.cpu} kind="cpu" /> },
+    { key: "memory", header: t("resources.column.memory"),
       render: (row) => <ResourceMetric metric={row.residentBytes} kind="memory" /> },
   ];
   return <div className="asb-resource-details" aria-busy={loading}>

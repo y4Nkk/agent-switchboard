@@ -29,7 +29,7 @@ function compactValueFormatter(): Intl.NumberFormat {
 }
 
 /** Official windows are percentages; generic balances keep their source unit. */
-export function officialQuotaReadings(quota: CodexOfficialQuota): UsageReading[] {
+export function officialQuotaReadings(quota: Pick<CodexOfficialQuota, "windows">): UsageReading[] {
   return quota.windows.map<UsageReading>((window) => ({
     planName: officialQuotaWindowName(window.label),
     remaining: 100 - window.usedPercent,

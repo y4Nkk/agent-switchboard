@@ -52,7 +52,7 @@ pub enum ValidationError {
     },
     #[error("键 {key} 不属于当前 {app:?} 设置作用域；供应商参数与客户端设置必须分别保存")]
     UnknownSettingKey { app: AppKind, key: String },
-    #[error("子代理模型参数 agents.default_subagent_model 已由跨档案路由引用 subagentRoute 取代；请在供应商运行参数中重新配置子代理模型并移除旧参数")]
+    #[error("子代理模型参数 agents.default_subagent_model 已由跨档案路由引用 subagentRoute 取代；请在「模型路由与网关」中重新配置子代理模型并移除旧参数")]
     RetiredSubagentModelParameter,
     #[error("设置缺少参数 {key:?} 的值；请重新加载后再保存")]
     MissingSettingKey { key: String },

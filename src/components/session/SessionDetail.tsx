@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Copy } from "lucide-react";
-import { Button as MenuButton, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
+import { ActionMenu } from "../ActionMenu";
 import { exportSessionMarkdown, resumeSession, type SessionMeta } from "../../api/client";
 import { useI18n, type MessageKey } from "../../i18n";
 import { uiMessage } from "../../i18n/errors";
@@ -72,24 +72,15 @@ function SessionMoreActions({ session, organization, disabled, onExport, onOrgan
   onExport: () => void; onOrganize: () => void; onDelete: () => void;
 }) {
   const { t } = useI18n();
-  return <MenuTrigger>
-    <MenuButton className="asb-btn asb-btn-secondary" isDisabled={disabled}
-      aria-label={t("sessions.actions.moreAria")}>{t("sessions.actions.more")}</MenuButton>
-    <Popover placement="bottom end" className="asb-session-more-menu">
-      <Menu aria-label={t("sessions.actions.moreAria")} className="asb-session-more-items">
-        <MenuItem id="export" className="asb-session-more-item" isDisabled={disabled}
-          onAction={onExport}>{t("sessions.export.action")}</MenuItem>
-        <MenuItem id="organize" className="asb-session-more-item" isDisabled={disabled}
-          onAction={onOrganize}>{t("sessions.organize.heading")}</MenuItem>
-        <MenuItem id="pin" className="asb-session-more-item" isDisabled={disabled}
-          onAction={() => void organization.save([session], { kind: "pin", pinned: !session.pinned })}>
-          {t(session.pinned ? "sessions.organize.unpin" : "sessions.organize.pin")}
-        </MenuItem>
-        <MenuItem id="delete" className="asb-session-more-item is-danger" isDisabled={disabled || !session.canDelete}
-          onAction={onDelete}>{t("sessions.delete.title")}</MenuItem>
-      </Menu>
-    </Popover>
-  </MenuTrigger>;
+  return <ActionMenu label={t("sessions.actions.more")} ariaLabel={t("sessions.actions.moreAria")}
+    disabled={disabled} items={[
+      { id: "export", label: t("sessions.export.action"), onAction: onExport },
+      { id: "organize", label: t("sessions.organize.heading"), onAction: onOrganize },
+      { id: "pin", label: t(session.pinned ? "sessions.organize.unpin" : "sessions.organize.pin"),
+        onAction: () => void organization.save([session], { kind: "pin", pinned: !session.pinned }) },
+      { id: "delete", label: t("sessions.delete.title"), danger: true,
+        disabled: !session.canDelete, onAction: onDelete },
+    ]} />;
 }
 
 export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, organization }: {

@@ -1,6 +1,9 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { CUSTOM_PROBE_QUESTION_ID, type CodexProbeGradingVersion, type CodexProbeQuestionSnapshot,
-  type ModelUsageRange } from "../api/client";
+  type ModelUsageRange, type ProviderRecord, type CodexProviderRecord } from "../api/client";
+import { ProviderQuotaOverview } from "../components/ProviderQuotaOverview";
+import { quotaProviders } from "../lib/quota-profiles";
+import { useProviderQuotaRefresh } from "../pages/use-provider-quota-refresh";
 import { CodexOfficialResetPanel } from "../components/CodexOfficialResetPanel";
 import { CodexProbeHistory } from "../components/CodexProbeHistory";
 import { CodexProbePanel, type CodexProbeFormState } from "../components/CodexProbePanel";
@@ -42,11 +45,13 @@ function useProbeForm(probe: ReturnType<typeof useCodexProbe>, closeHistory: () 
   return { form, runCount, setRunCount, setQuestionId, reuseQuestion };
 }
 
-export function UsageWorkspace({ active, section, onSectionChange, probe }: {
+export function UsageWorkspace({ active, section, onSectionChange, probe, claudeRecords, codexRecords }: {
   active: boolean;
   section: UsageSection;
   onSectionChange: (section: UsageSection) => void;
   probe: ReturnType<typeof useCodexProbe>;
+  claudeRecords: ProviderRecord[];
+  codexRecords: CodexProviderRecord[];
 }) {
   const { t } = useI18n();
   const id = useId();
@@ -63,6 +68,8 @@ export function UsageWorkspace({ active, section, onSectionChange, probe }: {
   const radarActive = visible && section === "radar";
   const { form, runCount, setRunCount, setQuestionId, reuseQuestion } = useProbeForm(probe, () => setHistoryOpen(false));
   const quotaActive = visible && section === "quota";
+  const quotaProfiles = useMemo(() => quotaProviders(claudeRecords, codexRecords), [claudeRecords, codexRecords]);
+  const providerQuota = useProviderQuotaRefresh(quotaActive, quotaProfiles);
   const showHistory = section === "radar" && historyOpen;
   const officialReset = useCodexOfficialReset(quotaActive);
   const resetSignal = useCodexResetSignal(quotaActive);
@@ -72,7 +79,7 @@ export function UsageWorkspace({ active, section, onSectionChange, probe }: {
         <UsageWorkspaceHeader id={id} section={section} onSectionChange={onSectionChange}
           consumption={{ active: consumptionActive, range, onRangeChange: setRange, usage }}
           resources={{ ...resources, active: resourcesActive }}
-          officialReset={officialReset} resetSignal={resetSignal}
+          officialReset={officialReset} resetSignal={resetSignal} providerQuota={providerQuota}
           radar={{ active: radarActive, probe, form, onQuestionChange: setQuestionId,
             runCount, onRunCountChange: setRunCount,
             onOpenHistory: () => { setHistoryOpened(true); setHistoryOpen(true); } }} />
@@ -81,6 +88,7 @@ export function UsageWorkspace({ active, section, onSectionChange, probe }: {
         </div>
         <div id={`${id}-quota-panel`} role="tabpanel" aria-labelledby={`${id}-quota-tab`} hidden={section !== "quota"}>
           {quotaActive && <div className="asb-page-stack">
+            <ProviderQuotaOverview profiles={quotaProfiles} />
             <CodexOfficialResetPanel read={officialReset} />
             <CodexResetPanel read={resetSignal} />
           </div>}

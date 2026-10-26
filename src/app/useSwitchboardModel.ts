@@ -17,6 +17,7 @@ import { useProviderSwitchFlow } from "./useProviderSwitchFlow";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 import { useSidebarState } from "./useSidebarState";
+import { useModelRouteNavigation } from "./useModelRouteNavigation";
 import { useCodexProbe } from "./useCodexProbe";
 
 function useTrayEvents(reportError: (error: CommandError) => void) {
@@ -46,6 +47,7 @@ export function useSwitchboardModel() {
     appSettingsState.loadError, reportError,
   );
   const { page, setPage } = navigation;
+  const modelRoutes = useModelRouteNavigation(navigation.openSettings);
   const snapshot = useConfigSnapshot({ onError: reportError });
   const { targetProfileId, setTargetProfileId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
   const refresh = useCallback(async () => { await refreshSnapshot(); }, [refreshSnapshot]);
@@ -86,7 +88,7 @@ export function useSwitchboardModel() {
     refreshDiscoveryOrAppend: discoveryState.refreshDiscoveryOrAppend,
   });
   const providers = useProviders({
-    ...operationContext, appFilter, setAppFilter, records,
+    ...operationContext, active: page === "providers", appFilter, setAppFilter, records,
     codexOfficialRecords: snapshot.codexOfficialRecords, targetProfileId,
     invalidateCandidates, clearCandidates: providerSwitch.clearCandidates, refresh, setTargetProfile,
     setTargetProfileId,
@@ -98,7 +100,7 @@ export function useSwitchboardModel() {
     () => openBackupDir().catch((caught) => reportError(caught as CommandError)), [reportError],
   );
 
-  return { ...navigation, sidebar, appFilter, ...frame, snapshot, activeProfileId, providerSwitch,
+  return { ...navigation, sidebar, appFilter, ...frame, snapshot, activeProfileId, providerSwitch, modelRoutes,
     clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
     ccImport, sqlImport, targetProfile, operations, providers, dataRepair, lastSwitchOverall, openBackupFolder, probe };
 }

@@ -9,7 +9,10 @@ impl ProcessKey {
 }
 
 #[derive(Clone, Debug)]
-pub struct Entry { pub pid: u32, pub parent_pid: u32, pub name: String }
+pub struct Entry { pub pid: u32, pub parent_pid: u32, pub name: String, pub user: ProcessUser }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProcessUser { Current, Other, Unverified }
 
 #[derive(Clone, Debug)]
 pub struct Observation {

@@ -42,44 +42,41 @@
   overflow: hidden;
 }
 
-/* Self-contained section: one summary row above the shared animated body.
-   `unstyled` is a zero-style marker — the row owns every visual property,
-   including the UA button chrome reset (border, background, radius). */
+.asb-collapsible-trigger {
+  justify-content: flex-start;
+  gap: var(--asb-space-2);
+  max-width: 100%;
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+}
+
+.asb-collapsible-trigger-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.asb-collapsible-trigger-value {
+  color: var(--asb-text-muted);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+/* Sections share the trigger; only label hierarchy and placement differ. */
 .asb-collapsible-section {
   min-width: 0;
 }
 
 .asb-collapsible-summary {
   display: flex;
-  align-items: center;
-  gap: var(--asb-space-2);
   width: 100%;
-  min-height: var(--asb-touch-target);
-  padding: var(--asb-space-3) 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
   font: var(--asb-text-label);
   font-weight: 600;
-  color: var(--asb-text);
-  text-align: left;
-  cursor: pointer;
 }
 
-/* The summary owns chevron placement: standard folds pin it to the row end;
-   quiet rows and caller-built triggers keep it adjacent to the label. */
 .asb-collapsible-summary > .asb-collapsible-chevron {
+  order: 1;
   margin-inline-start: auto;
-}
-
-.asb-collapsible-summary-label {
-  min-width: 0;
-}
-
-.asb-collapsible-summary-value {
-  color: var(--asb-text-muted);
-  font-weight: 400;
-  overflow-wrap: anywhere;
 }
 
 .asb-collapsible-chevron {
@@ -107,8 +104,6 @@
    its label and the chevron follows it, never spanning the full column. */
 .asb-collapsible-section.is-quiet .asb-collapsible-summary {
   width: fit-content;
-  min-height: var(--asb-control-height-compact);
-  padding: var(--asb-space-2) 0;
   color: var(--asb-text-muted);
   font-weight: 400;
 }

@@ -1,0 +1,73 @@
+.asb-gateway-workspace,
+.asb-model-route-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--asb-space-4);
+}
+
+.asb-model-route-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-4);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  margin: 0;
+}
+
+.asb-model-route-state > span { color: var(--asb-action); }
+.asb-model-routing .asb-tab { display: inline-flex; align-items: center; gap: var(--asb-space-2); }
+.asb-model-route-logo { width: var(--asb-icon-size-md); height: var(--asb-icon-size-md); flex: none; }
+.asb-model-route-graph { container-type: inline-size; min-width: 0; }
+.asb-model-route-scene {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(7rem, 1fr) minmax(12rem, 1.8fr);
+  align-items: center;
+  gap: var(--asb-space-4) var(--asb-space-6);
+  padding: var(--asb-space-4) 0;
+}
+
+.asb-model-route-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; overflow: visible; }
+.asb-model-route-wires > path { fill: none; stroke: var(--asb-hairline-strong); stroke-width: 2; }
+.asb-model-route-wires > path.is-selected { stroke: var(--asb-action); }
+.asb-model-route-client { grid-column: 1; justify-self: center; display: grid; justify-items: center; gap: var(--asb-space-2); min-width: 0; }
+.asb-model-route-client > svg { width: clamp(5rem, 10vw, 8rem); height: auto; }
+.asb-model-route-client > strong { display: flex; align-items: center; gap: var(--asb-space-2); }
+.asb-model-route-client > span { font: var(--asb-text-caption); color: var(--asb-text-muted); }
+.asb-model-route-purpose { grid-column: 2; justify-self: center; min-width: 0; padding: var(--asb-space-2); background: var(--asb-canvas); text-align: center; font: var(--asb-text-label); }
+.asb-model-route-destination { grid-column: 3; min-width: 0; }
+.asb-model-route-target { width: 100%; text-align: start; }
+.asb-model-route-target-content {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: var(--asb-space-1);
+  padding: var(--asb-space-3);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+.asb-model-route-target-content[data-selected] { background: var(--asb-row-selected); }
+.asb-model-route-target:hover:not(:disabled) .asb-model-route-target-content:not([data-selected]) { background: var(--asb-row-hover); }
+.asb-model-route-provider { color: var(--asb-text); font: var(--asb-text-label); font-weight: 600; overflow-wrap: anywhere; }
+.asb-model-route-model { color: var(--asb-text-muted); font: var(--asb-text-caption); overflow-wrap: anywhere; }
+.asb-model-route-edit { color: var(--asb-action); font: var(--asb-text-caption); }
+.asb-model-route-inspector { display: grid; gap: var(--asb-space-3); min-width: 0; }
+.asb-model-route-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--asb-space-3); align-items: start; }
+.asb-model-route-fields > .asb-segments,
+.asb-model-route-fields > .asb-field-help { grid-column: 1 / -1; }
+.asb-model-route-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--asb-space-2); }
+.asb-model-route-empty { display: grid; gap: var(--asb-space-3); max-width: 28rem; }
+
+@container (max-width: 40rem) {
+  .asb-model-route-scene { grid-template-columns: minmax(5rem, 1fr) minmax(0, 2fr); column-gap: var(--asb-space-3); }
+  .asb-model-route-client { grid-column: 1 / -1; grid-row: auto !important; }
+  .asb-model-route-purpose { grid-column: 1; grid-row: auto !important; }
+  .asb-model-route-destination { grid-column: 2; grid-row: auto !important; }
+  .asb-model-route-wires { display: none; }
+}
+
+@media (max-width: 700px) {
+  .asb-model-route-fields { grid-template-columns: minmax(0, 1fr); }
+}

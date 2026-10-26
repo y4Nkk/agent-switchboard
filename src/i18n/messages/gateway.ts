@@ -18,7 +18,7 @@ export const messages = {
   "gateway.clientDisconnected": ["未使用本网关", "Not using this gateway"],
   "gateway.trafficCount": ["近 1 小时 {count} 次", "{count} in the last hour"],
   "gateway.emptyRoutesTitle": ["还没有应用使用本网关", "No apps are using this gateway yet"],
-  "gateway.emptyRoutesCopy": ["到「供应商」页面选择服务；这里仅统计经过本网关的连接和请求。", "Choose a service on the Providers page; only connections and requests through this gateway are counted here."],
+  "gateway.emptyRoutesCopy": ["在上方配置并应用模型路由；这里仅统计经过本网关的连接和请求。", "Configure and apply routing above; only connections and requests through this gateway are counted here."],
   "gateway.recoveryBlockedTitle": ["上次更换端口（{from} → {to}）尚未完成", "The last port change ({from} → {to}) is unfinished"],
   "gateway.recoveryBlockedCopy": ["当前设置和备份已保留。处理完成前，暂时不能更换端口或切换使用网关的供应商。也可选择保留当前设置，结束这次恢复。", "Your current settings and backups are kept. Port changes and provider switches that use the gateway are paused until this is resolved. You can also keep the current settings and end this recovery."],
   "gateway.client": ["应用", "App"],

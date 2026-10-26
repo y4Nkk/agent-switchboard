@@ -61,7 +61,7 @@ macro_rules! handler {
             crate::commands::switching::commit_profile_save,
             crate::commands::switching::prepare_codex_profile_save,
             crate::commands::switching::commit_codex_profile_save,
-            crate::commands::switching::cancel_codex_profile_save,
+            crate::commands::switching::cancel_profile_save,
             crate::commands::delete_profile,
             crate::commands::reorder_claude_profiles,
             crate::commands::import_discovered_claude_profile,

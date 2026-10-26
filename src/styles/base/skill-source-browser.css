@@ -37,6 +37,7 @@
 }
 
 .asb-skill-source-input-row > .asb-input,
+.asb-skill-source-query,
 .asb-skill-source-search {
   flex: 1 1 18rem;
   min-width: 0;
@@ -78,24 +79,6 @@
 
 .asb-skill-repository-manager {
   min-width: 0;
-}
-
-.asb-skill-source-search {
-  position: relative;
-}
-
-.asb-skill-source-search > svg {
-  position: absolute;
-  left: var(--asb-space-2);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--asb-text-muted);
-  pointer-events: none;
-}
-
-.asb-skill-source-search > .asb-input {
-  width: 100%;
-  padding-left: var(--asb-space-5);
 }
 
 .asb-skill-source-toolbar > .asb-select-trigger {
@@ -194,10 +177,6 @@
   gap: var(--asb-space-unit);
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
-}
-
-.asb-skill-source-card-footer > .asb-btn {
-  min-width: 6rem;
 }
 
 .asb-skill-source-diagnostics {
@@ -322,5 +301,6 @@
 
 @media (max-width: 640px) {
   .asb-skill-source-options { grid-template-columns: 1fr; }
-  .asb-skill-source-input-row > .asb-input { flex-basis: 100%; }
+  .asb-skill-source-input-row > .asb-input,
+  .asb-skill-source-query { flex-basis: 100%; }
 }

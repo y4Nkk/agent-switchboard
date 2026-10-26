@@ -104,3 +104,5 @@ async fn wait(mut receiver: Flight) -> SampleResult {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod process_tree_tests;

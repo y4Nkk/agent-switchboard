@@ -149,23 +149,6 @@ impl crate::gateway::GatewayProjection {
             route,
         }
     }
-    pub(crate) fn codex_candidate_revision(&self) -> String {
-        let mut revisions = self
-            .candidate_routes
-            .iter()
-            .map(|route| {
-                (
-                    &route.profile_id,
-                    &route.fingerprint,
-                    &route.upstream_base_url,
-                )
-            })
-            .collect::<Vec<_>>();
-        revisions.sort();
-        asb_switch::sha256_hex(
-            &serde_json::to_string(&revisions).expect("route identity serializes"),
-        )
-    }
 }
 
 impl GatewayController {

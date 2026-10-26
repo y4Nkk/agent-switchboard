@@ -44,9 +44,9 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
         onDelete={(record) => providers.setDeletePending({ kind: "codexThirdParty", record })}
         onDeleteOfficial={(record) => providers.setDeletePending({ kind: "generic", profile: record.profile })}
-        editorSession={codexEditorSession} onNew={providers.newEditor} onEdit={providers.openCodexEditor}
+        editorSession={codexEditorSession} onNew={providers.newEditor} onEdit={providers.openCodexEditor} onRoutes={(id) => { if (!busy) model.modelRoutes.open("codex", id); }}
         onEditOfficial={providers.openCodexOfficialEditor} onCloseEditor={providers.closeEditor}
-        onSave={providers.saveCodexProfile} onSaveOfficial={providers.saveCodexOfficialProfile}
+        onSave={providers.saveCodexProfile} onSaveOfficial={providers.saveGenericProfile}
         onSwitchAccessMode={providers.switchCodexAccessMode} onSwitchClient={providers.newEditorFor}
         onSaveOfficialQuotaInterval={providers.saveOfficialQuotaInterval}
         expandedUsageIds={appSettingsState.appSettings?.expandedUsageIds ?? []}
@@ -63,7 +63,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       busy={busy} expandedUsageIds={appSettingsState.appSettings?.expandedUsageIds ?? []}
       activationCandidate={providerSwitch.activationCandidate}
       onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
-      onCloseEditor={providers.closeEditor} onSave={providers.saveProfile}
+      onCloseEditor={providers.closeEditor} onSave={providers.saveGenericProfile}
       onSwitchClient={providers.newEditorFor}
       onSaveUsageQuery={async (profile, query) => {
         const saved = await providers.saveProfileUsageQuery(profile, query);
@@ -79,6 +79,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       onConfirmSwitch={() => void operations.runSwitch()}
       onCancelActivation={providerSwitch.clearCandidates}
       onEdit={providers.openEditor}
+      onRoutes={(profile) => { if (!busy) model.modelRoutes.open("claude", profile.id); }}
       onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })}
       onRefresh={async () => { await snapshot.refresh(); }} />
     </div>

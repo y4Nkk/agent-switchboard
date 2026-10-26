@@ -34,7 +34,7 @@ impl GatewayController {
                 .remove(&AppKind::Claude);
             return Ok(());
         };
-        let candidates = self.claude_candidate_routes(local, &active.profile_id)?;
+        let candidates = self.claude_candidate_routes(local, &active.profile_id, None)?;
         self.inner
             .candidate_routes
             .write()
@@ -141,7 +141,7 @@ impl GatewayController {
             let mut candidates = BTreeMap::new();
             for (app, route) in routes.iter() {
                 let snapshot = if *app == AppKind::Claude {
-                    self.claude_candidate_routes(local, &route.profile_id)
+                    self.claude_candidate_routes(local, &route.profile_id, None)
                         .unwrap_or_else(|_| vec![route.clone()])
                 } else {
                     self.rehydrate_codex_candidates(&route.profile_id)

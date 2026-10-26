@@ -45,6 +45,7 @@ interface Props {
   editorSession: { source: CodexEditorSource | null } | null;
   onNew: () => void;
   onEdit: (record: CodexProviderRecord) => void;
+  onRoutes: (profileId: string) => void;
   /** Opens the official-login editor arm; null record creates the entry. */
   onEditOfficial: (record: ProviderRecord | null) => void;
   onCloseEditor: () => void;
@@ -156,6 +157,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
             return (
               <CodexOfficialRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)} quotaOpen={state.quotaOpen}
                 onEdit={() => { state.clearCandidates(); props.onEditOfficial(row.record); }}
+                onRoutes={() => props.onRoutes(row.record.profile.id)}
                 onDelete={() => props.onDeleteOfficial(row.record)}
                 onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
                 onToggleQuota={() => state.setQuotaOpen((open) => !open)}
@@ -171,6 +173,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
               onToggleUsage={() => props.onToggleUsage(row.record.profile.id)}
               onConfigureUsage={() => state.setUsageRecord(row.record)}
               onEdit={() => { state.clearCandidates(); props.onEdit(row.record); }}
+              onRoutes={() => props.onRoutes(row.record.profile.id)}
               onDelete={() => props.onDelete(row.record)}>
               {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
             </Row>

@@ -39,10 +39,11 @@
 .asb-discovery-summary-toggle {
   flex: 1 1 auto;
   min-width: 0;
+  color: inherit;
+  font-weight: inherit;
 }
 
-.asb-discovery-summary-text {
-  min-width: 0;
+.asb-discovery-summary-toggle > .asb-collapsible-trigger-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -89,19 +90,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--asb-space-2);
-}
-
-.asb-discovery-count {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.asb-discovery-count:hover:not(:disabled) {
-  text-decoration: underline;
 }
 
 .asb-discovery-basis {

@@ -3,12 +3,11 @@ import { useI18n } from "../../../i18n";
 import type { AppKind } from "../../../api/client";
 import { clientName } from "../../../lib/client-name";
 import { Button } from "../../Button";
-import { ClientLogo } from "../../ClientLogo";
+import { Checkbox } from "../../Checkbox";
 import { Input } from "../../Input";
 import { Select } from "../../Select";
 import { Textarea } from "../../Textarea";
 import { Tooltip } from "../../Tooltip";
-import { CheckIcon } from "../../icons";
 import { MANAGEMENT_CLIENTS } from "../client-presentation";
 import { mcpPresetOptions } from "./presets";
 
@@ -55,13 +54,9 @@ export function McpClientFields({ clients, busy, onToggle }: ClientProps) {
           return (
             <Tooltip key={client} label={t("mcp.client.tooltip", { client: clientName(client),
               state: selected ? t("mcp.client.stateOn") : t("mcp.client.stateOff") })}>
-              <Button variant="unstyled" className="asb-mcp-client" role="checkbox"
-                aria-label={t("mcp.client.enableAria", { client: clientName(client) })} aria-checked={selected}
-                data-selected={selected} data-client={client} disabled={busy} onClick={() => onToggle(client)}>
-                <ClientLogo app={client} className="asb-mcp-client-logo" />
-                <span>{clientName(client)}</span>
-                <span className="asb-mcp-client-check" aria-hidden="true">{selected && <CheckIcon />}</span>
-              </Button>
+              <Checkbox label={clientName(client)} checked={selected} disabled={busy}
+                ariaLabel={t("mcp.client.enableAria", { client: clientName(client) })}
+                onChange={() => onToggle(client)} />
             </Tooltip>
           );
         })}

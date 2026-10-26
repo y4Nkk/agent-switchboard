@@ -112,67 +112,6 @@ pub(super) fn restore_response_namespaces(value: &mut Value) -> bool {
     restore_value(value)
 }
 
-/// Rewrites complete SSE events inside a buffered chunk; an incomplete tail is
-/// left for the next call. `normalize_arguments` additionally repairs upstream
-/// argument quirks on the same events.
-pub(super) fn restore_sse_bytes(chunk: &mut Vec<u8>, normalize_arguments: fn(&mut Value) -> bool) {
-    let text = match std::str::from_utf8(chunk) {
-        Ok(text) => text.to_owned(),
-        Err(_) => return,
-    };
-    let mut parts: Vec<String> = Vec::new();
-    let mut changed = false;
-    let mut remainder = text.as_str();
-    while let Some(position) = remainder.find("\n\n") {
-        let (event, rest) = remainder.split_at(position + 2);
-        remainder = rest;
-        match restore_sse_event(event, normalize_arguments) {
-            Some(rewritten) => {
-                changed = true;
-                parts.push(rewritten);
-            }
-            None => parts.push(event.to_string()),
-        }
-    }
-    // The trailing bytes after the last blank line are an incomplete event.
-    parts.push(remainder.to_string());
-    if !changed {
-        return;
-    }
-    *chunk = parts.concat().into_bytes();
-}
-
-fn restore_sse_event(event: &str, normalize_arguments: fn(&mut Value) -> bool) -> Option<String> {
-    let mut prefix_lines: Vec<&str> = Vec::new();
-    let mut data_lines: Vec<&str> = Vec::new();
-    for line in event.split('\n') {
-        if let Some(encoded) = line.strip_prefix("data:") {
-            data_lines.push(encoded.strip_prefix(' ').unwrap_or(encoded));
-        } else {
-            prefix_lines.push(line);
-        }
-    }
-    if data_lines.is_empty() {
-        return None;
-    }
-    let mut parsed: Value = serde_json::from_str(&data_lines.join("\n")).ok()?;
-    let mut changed = restore_value(&mut parsed);
-    changed |= normalize_arguments(&mut parsed);
-    if !changed {
-        return None;
-    }
-    let encoded = serde_json::to_string(&parsed).ok()?;
-    let mut rebuilt = String::new();
-    for line in prefix_lines {
-        rebuilt.push_str(line);
-        rebuilt.push('\n');
-    }
-    rebuilt.push_str("data: ");
-    rebuilt.push_str(&encoded);
-    rebuilt.push_str("\n\n");
-    Some(rebuilt)
-}
-
 fn restore_value(value: &mut Value) -> bool {
     let mut changed = false;
     match value {
@@ -338,20 +277,4 @@ mod tests {
         assert_eq!(response["output"][1]["name"], json!("unrelated"));
     }
 
-    #[test]
-    fn sse_restore_rewrites_complete_events_and_keeps_partial_tails() {
-        let mut body = request();
-        flatten_request_namespaces(&mut body).unwrap();
-        let flat = body["input"][0]["name"].as_str().unwrap().to_string();
-        let event = format!(
-            "event: response.output_item.done\ndata: {{\"type\":\"response.output_item.done\",\"item\":{{\"type\":\"function_call\",\"name\":\"{flat}\",\"call_id\":\"c1\"}}}}\n\n"
-        );
-        let tail = "event: response.output_item.added\ndata: {\"item\":{\"type\":\"func";
-        let mut chunk = format!("{event}{tail}").into_bytes();
-        restore_sse_bytes(&mut chunk, |_| false);
-        let text = String::from_utf8(chunk).unwrap();
-        assert!(text.contains("\"name\":\"read\""));
-        assert!(text.contains("\"namespace\":\"mcp__files__\""));
-        assert!(text.ends_with(tail));
-    }
 }

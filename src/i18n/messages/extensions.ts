@@ -189,7 +189,6 @@ export const messages = {
   "extensions.install.selected": ["安装所选", "Install selected"],
 
   "extensions.library.aria": ["扩展库", "Extension library"],
-  "extensions.library.clearSearch": ["清除搜索", "Clear search"],
   "extensions.library.emptySkills": ["还没有 Skills", "No skills yet"],
   "extensions.library.emptyMcp": ["还没有 MCP 服务", "No MCP servers yet"],
   "extensions.library.noFilterMatches": ["没有符合过滤条件的扩展", "No extensions match the filters"],

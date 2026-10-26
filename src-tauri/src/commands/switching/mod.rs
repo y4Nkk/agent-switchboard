@@ -23,7 +23,7 @@ pub(crate) use codex_policy::CodexPolicyPreparations;
 pub(crate) use codex_profile_save::CodexProfileSavePreparations;
 pub(crate) use codex_profile_save::validate_subagent_route_reference;
 pub(crate) use internal::switch_provider_internal;
-pub use profile_save::ProfileSavePreparation;
+pub use profile_save::{ProfileSaveIntent, ProfileSavePreparation, ProfileSaveSource};
 pub(crate) use profile_save::ProfileSavePreparations;
 pub(crate) use recovery::{ensure_profile_save_recovered, recover_pending_profile_save};
 
@@ -51,12 +51,19 @@ use std::time::Instant;
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
-pub async fn cancel_codex_profile_save(
+pub async fn cancel_profile_save(
     app: AppHandle,
+    source: ProfileSaveSource,
     preparation_id: String,
 ) -> Result<(), CommandError> {
-    app.state::<CodexProfileSavePreparations>()
-        .cancel(&preparation_id)
+    let missing = || CommandError::keyed("profile-save-unavailable",
+        "errors.sw.preparationStateUninitialized", "供应商保存准备状态尚未初始化");
+    match source {
+        ProfileSaveSource::Profile => app.try_state::<ProfileSavePreparations>()
+            .ok_or_else(missing)?.cancel(&preparation_id),
+        ProfileSaveSource::Codex => app.try_state::<CodexProfileSavePreparations>()
+            .ok_or_else(missing)?.cancel(&preparation_id),
+    }
 }
 
 /// Validates a draft and binds it to one one-shot server-side preparation. No
@@ -67,6 +74,7 @@ pub async fn prepare_profile_save(
     profile_id: Option<String>,
     draft: ProviderDraft,
     expected_file_hash: Option<String>,
+    intent: ProfileSaveIntent,
 ) -> Result<ProfileSavePreparation, CommandError> {
     let state = state(&app)?;
     let gateway = app
@@ -85,20 +93,24 @@ pub async fn prepare_profile_save(
         .inner()
         .clone();
     blocking(move || {
-        let (kind, preview) = prepare_profile_save_data(
+        let (kind, preview, projection_profile, candidate_revision) = prepare_profile_save_data(
             &state,
             &gateway,
             profile_id.as_deref(),
             &draft,
             expected_file_hash.as_deref(),
+            intent,
         )?;
         let preparation_id = preparations.issue(PreparedProfileSave {
+            intent,
             created_at: Instant::now(),
             profile_id,
             expected_file_hash,
             draft,
             kind,
             preview: preview.clone(),
+            projection_profile,
+            candidate_revision,
         })?;
         Ok(ProfileSavePreparation {
             preparation_id,
@@ -186,6 +198,7 @@ pub async fn prepare_codex_profile_save(
     profile_id: String,
     draft: asb_core::contracts::CodexProviderDraft,
     expected_file_hash: String,
+    intent: ProfileSaveIntent,
 ) -> Result<ProfileSavePreparation, CommandError> {
     let state = state(&app)?;
     let gateway = app
@@ -204,14 +217,16 @@ pub async fn prepare_codex_profile_save(
         .inner()
         .clone();
     blocking(move || {
-        let (kind, preview, projection_profile) = prepare_codex_profile_save_data(
+        let (kind, preview, projection_profile, candidate_revision) = prepare_codex_profile_save_data(
             &state,
             &gateway,
             &profile_id,
             &draft,
             &expected_file_hash,
+            intent,
         )?;
         let preparation_id = preparations.issue(PreparedCodexProfileSave {
+            intent,
             created_at: Instant::now(),
             profile_id,
             expected_file_hash,
@@ -219,6 +234,7 @@ pub async fn prepare_codex_profile_save(
             kind,
             preview: preview.clone(),
             projection_profile,
+            candidate_revision,
         })?;
         Ok(ProfileSavePreparation {
             preparation_id,

@@ -9,7 +9,8 @@
    to ancestors, so a disabled child would swallow the leave that closes the
    label and the press that dismisses it. Remove the child from hit testing;
    the anchor sees every pointer event instead. */
-.asb-tooltip-anchor > :disabled {
+.asb-tooltip-anchor > :disabled,
+.asb-tooltip-anchor > [data-disabled="true"] {
   pointer-events: none;
 }
 

@@ -9,7 +9,7 @@ export interface SiteActionLink {
   icon?: "github" | "star";
 }
 
-/** One application screenshot from the isolated local 0.3.3 production frontend. */
+/** Application screenshots from isolated local frontends; see docs/screenshots. */
 export interface SiteScreenshot {
   src: string;
   alt: string;
@@ -170,22 +170,22 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         ],
       },
       subagent: {
-        title: "跨档案子代理模型。",
+        title: "图形化模型路由。",
         description:
-          "Codex 档案可把默认子 agent 模型指向另一个供应商档案的模型；高级开关默认收起，展开后才露出跨档案选择器。Claude Code 侧保持不变。",
+          "点击「客户端 → 用途 → 供应商与模型」的目标节点，配置 Codex 主模型、默认子 agent 或 Claude 模型档位，预览后确认应用。",
         bullets: [
           "写入 config.toml 的永远是路由引用 asb:<档案>/<模型>",
-          "跨供应商请求必须经本机网关；Direct 直连档案直接拒绝",
+          "跨供应商子 agent 请求使用本机网关与目标档案的连接",
           "目标档案凭据按请求替换，计量按实际目标归因",
           "不参与跨供应商故障转移：目标档案失败即失败",
         ],
         shot: {
-          src: "/media/screenshots/subagent-route.png",
-          alt: "Agent Switchboard 当前 Codex 运行参数：默认子 agent 模型指向另一个模拟 OpenAI 档案的 gpt-6-luna（2026-10-14 隔离截图）",
+          src: "/media/screenshots/model-routing.png",
+          alt: "Agent Switchboard 图形化模型路由：默认子 agent 指向模拟供应商的 claude-sonnet-fixture（2026-10-26 隔离组件截图）",
           badge: "隔离沙箱 · 演示数据",
-          caption: "子 agent 模型路由：请求由本机网关转发，失败不回退主模型。",
-        width: 1440,
-        height: 1080,
+          caption: "点击节点配置模型，预览并确认应用；实际连接与请求记录独立查看。",
+        width: 1392,
+        height: 909,
         },
       },
     },
@@ -297,22 +297,22 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         ],
       },
       subagent: {
-        title: "Cross-profile sub-agent models.",
+        title: "Graphical model routing.",
         description:
-          "A Codex profile can point its default sub-agent model at another provider profile's model; an advanced toggle — collapsed by default — reveals the cross-profile picker. The Claude Code side stays unchanged.",
+          "Select a destination in client → purpose → provider and model to configure the Codex main model, default sub-agent or Claude tier, then preview and confirm.",
         bullets: [
           "config.toml always receives the route reference asb:<profile>/<model>",
-          "Cross-provider requests go through the local gateway; Direct profiles are rejected",
+          "Cross-provider sub-agent requests use the local gateway and target profile's connection",
           "Target-profile credentials swapped per request; usage metered to the actual target",
           "No cross-provider failover: target-profile failure is failure",
         ],
         shot: {
-          src: "/media/screenshots/subagent-route.png",
-          alt: "Current Agent Switchboard Codex runtime parameters: the default sub-agent model targets gpt-6-luna in another simulated OpenAI profile, captured in isolation on 2026-10-14",
+          src: "/media/screenshots/model-routing.png",
+          alt: "Agent Switchboard graphical model routing: the default sub-agent targets a simulated provider's claude-sonnet-fixture, captured from the isolated component on 2026-10-26",
           badge: "Isolated sandbox · demo data",
-          caption: "Sub-agent model route: forwarded by the local gateway, never falling back to the main model.",
-        width: 1440,
-        height: 1080,
+          caption: "Select a model node, preview and confirm; inspect actual connections and requests separately.",
+        width: 1392,
+        height: 909,
         },
       },
     },

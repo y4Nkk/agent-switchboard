@@ -33,21 +33,6 @@
   color: var(--asb-text-muted);
 }
 
-/* Collapsible banner header: one clickable summary row; the details unfold
-   below inside the same banner. */
-.asb-banner-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--asb-space-1);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
 /* ---------------------------------------------------------------------------
  * The one modal skeleton (DESIGN.md §8).
  *

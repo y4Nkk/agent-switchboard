@@ -123,7 +123,7 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
                 let mut paths = Vec::new();
                 if roots.iter().any(|(app, root)| *app == AppKind::Codex && thread.rollout.starts_with(root))
                     && thread.rollout.is_file() && !thread.rollout.is_symlink() {
-                    match index.file("identity", &thread.rollout, || parser::session_identity_observed(&thread.rollout, checkpoint).map_err(|error| error.to_string())) {
+                    match index.file_prefix("identity", &thread.rollout, checkpoint, |reader| parser::session_identity_reader(&thread.rollout, reader, checkpoint).map_err(|error| error.to_string())) {
                         Ok(Some(identity)) if identity.id == thread.meta.session_id => paths.push(thread.rollout),
                         _ => issues.push(SessionIssue::new(AppKind::Codex, format!("会话 {} 的原生记录身份与登记信息不一致", thread.meta.session_id))),
                     }
@@ -215,7 +215,7 @@ fn scan_roots_indexed(
 
 fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(AppKind, String), SessionSource>, index: &ReadIndex, session: Option<&str>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<String>, String> {
     let mut issues = Vec::new();
-    let identity = index.file("identity", &path, || parser::session_identity_observed(&path, checkpoint).map_err(|error| error.to_string()))?;
+    let identity = index.file_prefix("identity", &path, checkpoint, |reader| parser::session_identity_reader(&path, reader, checkpoint).map_err(|error| error.to_string()))?;
     let Some(identity) = identity else {
         return Err(format!("{} 不含可识别的会话身份", path.display()));
     };
@@ -231,7 +231,8 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
         }
         if source.paths.contains(&path) { return Ok(issues); }
         if source.meta.can_delete {
-            let (next, warnings) = index.file(&format!("metadata-{}", app.label()), &path, || parser::parse_session_observed(app, &path, checkpoint).map_err(|error| error.to_string()))?;
+            let (next, warnings) = index.file_prefix(&format!("metadata-{}", app.label()), &path, checkpoint, |reader| parser::parse_session_reader(app, &path, reader, checkpoint).map_err(|error| error.to_string()))?;
+            if next.session_id != id { return Err("会话身份在发现期间被替换，已跳过本次来源".into()); }
             issues.extend(warnings);
             if next.last_active_at > source.meta.last_active_at {
                 source.meta.last_active_at = next.last_active_at;
@@ -245,9 +246,13 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
         source.paths.push(path);
         return Ok(issues);
     }
-    let (mut meta, warnings) = index.file(&format!("metadata-{}", app.label()), &path, || parser::parse_session_observed(app, &path, checkpoint).map_err(|error| error.to_string()))?;
+    let (mut meta, warnings) = index.file_prefix(&format!("metadata-{}", app.label()), &path, checkpoint, |reader| parser::parse_session_reader(app, &path, reader, checkpoint).map_err(|error| error.to_string()))?;
+    if meta.session_id != id { return Err("会话身份在发现期间被替换，已跳过本次来源".into()); }
     issues.extend(warnings);
     if child { meta.parent_session_id = Some(id); meta.session_id = key_id.clone(); }
     indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_history: None, converted: None, retained: Vec::new(), index_root: root.into() });
     Ok(issues)
 }
+
+#[cfg(test)]
+mod live_tests;

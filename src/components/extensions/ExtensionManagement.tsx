@@ -23,8 +23,9 @@ function ManagementAction({ label, disabled, danger = false, onClick, children }
   return (
     <Tooltip label={label}>
       <Button
-        variant="icon"
-        className={`asb-ext-management-action${danger ? " is-danger" : ""}`}
+        variant={danger ? "dangerIcon" : "icon"}
+        size="compact"
+        className={danger ? "asb-ext-danger-action" : undefined}
         disabled={disabled}
         aria-label={label}
         onClick={onClick}

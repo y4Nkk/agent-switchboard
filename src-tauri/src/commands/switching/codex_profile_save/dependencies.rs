@@ -41,11 +41,18 @@ pub(super) fn affected_active_profile(
         .and_then(|status| status.active_profile_id);
     let Some(active_id) = active_id else { return Ok(None) };
     if active_id == candidate.profile.id { return Ok(Some(candidate.clone())); }
-    let referenced = state.configuration().list_codex_providers().map_err(store_error)?
+    let active = state.configuration().list_codex_providers().map_err(store_error)?
         .into_iter().find(|record| record.profile.id == active_id)
-        .and_then(|record| record.profile.subagent_route)
+        .map(|record| record.profile);
+    let Some(active) = active else { return Ok(None) };
+    let referenced = active.subagent_route.as_ref()
         .is_some_and(|route| route.profile_id == candidate.profile.id);
-    if !referenced {
+    let (policy, _) = crate::gateway::codex::policy::load(state.root())
+        .map_err(|error| CommandError::new("codex-policy-invalid", error))?;
+    let queued = policy.enabled
+        && policy.provider_ids.contains(&candidate.profile.id)
+        && gateway.active_profile_id_for(asb_core::AppKind::Codex).as_deref() == Some(active_id.as_str());
+    if !referenced && !queued {
         return Ok(None);
     }
     state.configuration().find_codex_provider_file(&active_id).map(Some).map_err(store_error)

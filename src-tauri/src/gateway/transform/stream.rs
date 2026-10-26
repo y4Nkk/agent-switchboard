@@ -47,6 +47,7 @@ pub(crate) struct SseTranscoder<R> {
     usage: TokenUsage,
     failed: bool,
     has_token: bool,
+    native_responses_dialect: super::NativeResponsesDialect,
 }
 
 enum StreamMode {
@@ -154,7 +155,16 @@ where
             usage: TokenUsage::default(),
             failed: false,
             has_token: false,
+            native_responses_dialect: Default::default(),
         })
+    }
+
+    pub(crate) fn with_native_responses_dialect(
+        mut self,
+        dialect: super::NativeResponsesDialect,
+    ) -> Self {
+        self.native_responses_dialect = dialect;
+        self
     }
 
     pub(crate) fn model(&self) -> Option<String> {
@@ -264,7 +274,7 @@ where
             self.direct_completed = true;
             return self.redact_direct_frame(bytes);
         }
-        let value = json_data(&frame, "上游 SSE data")?;
+        let mut value = json_data(&frame, "上游 SSE data")?;
         let kind = value
             .get("type")
             .and_then(Value::as_str)
@@ -280,7 +290,30 @@ where
                 | "error"
                 | "message_stop"
         );
+        if self.source_protocol == UpstreamProtocol::Responses
+            && self.native_responses_dialect.restore(&mut value)
+        {
+            return self.restore_direct_frame(bytes, &value);
+        }
         self.redact_direct_frame(bytes)
+    }
+
+    fn restore_direct_frame(&self, bytes: &[u8], value: &Value) -> Result<Vec<u8>, TransformError> {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| TransformError("上游 SSE 不是 UTF-8 文本".to_string()))?;
+        let data = format!("data: {value}");
+        let mut inserted = false;
+        let lines = text.lines().filter_map(|line| {
+            if !line.starts_with("data:") {
+                return Some(line);
+            }
+            if std::mem::replace(&mut inserted, true) {
+                None
+            } else {
+                Some(data.as_str())
+            }
+        }).collect::<Vec<_>>();
+        self.redact_direct_frame(lines.join("\n").as_bytes())
     }
 
     fn redact_direct_frame(&self, bytes: &[u8]) -> Result<Vec<u8>, TransformError> {

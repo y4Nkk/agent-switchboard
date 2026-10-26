@@ -25,6 +25,8 @@
 @import "./base/setting-input.css";
 @import "./base/client-management.css";
 @import "./base/field-controls.css";
+@import "./base/search-input.css";
+@import "./base/action-menu.css";
 @import "./base/date-picker.css";
 @import "./base/forms.css";
 @import "./base/tooltip-feedback.css";
@@ -36,6 +38,7 @@
 @import "./base/session-message.css";
 @import "./base/session-library.css";
 @import "./base/gateway.css";
+@import "./base/model-routing.css";
 @import "./base/gateway-topology.css";
 @import "./base/gateway-telemetry.css";
 @import "./base/gateway-responsive.css";
@@ -160,6 +163,11 @@
 .asb-checkbox[data-disabled="true"] {
   cursor: default;
   opacity: 0.45;
+}
+
+.asb-checkbox:has(.asb-checkbox-input[aria-busy="true"]) {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 .asb-checkbox-input {

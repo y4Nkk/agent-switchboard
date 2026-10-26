@@ -5,8 +5,8 @@ import { useUnsavedChanges } from "./useUnsavedChanges";
 import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderDiagnosticsEntry } from "./provider-diagnostics/ProviderDiagnosticsEntry";
-import { ClaudeModelMapping } from "./provider-editor/ClaudeModelMapping";
 import { MainModelField } from "./provider-editor/MainModelField";
+import { AvailableModelsField } from "./provider-editor/AvailableModelsField";
 import { ProviderAdvancedSettings } from "./provider-editor/ProviderAdvancedSettings";
 import { ProviderConnectionFields } from "./provider-editor/ProviderConnectionFields";
 import { ProviderConnectionTest } from "./provider-editor/ProviderConnectionTest";
@@ -36,8 +36,8 @@ interface Props {
   onCancel: () => void;
 }
 
-function ModelSection({ editor, busy, userConfigModel, userConfigWarnings, profile }:
-  Pick<Props, "busy" | "userConfigModel" | "userConfigWarnings" | "profile"> & { editor: ProviderEditorState }) {
+function ModelSection({ editor, busy, userConfigModel, userConfigWarnings }:
+  Pick<Props, "busy" | "userConfigModel" | "userConfigWarnings"> & { editor: ProviderEditorState }) {
   const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
   const claudeSettings = draft.modelOptions?.kind === "claude" ? draft.modelOptions : null;
@@ -51,8 +51,7 @@ function ModelSection({ editor, busy, userConfigModel, userConfigWarnings, profi
           modelsEndpointError={connection.modelsEndpointError}
           userConfigModel={userConfigModel} userConfigWarnings={userConfigWarnings}
           fetchModels={connection.fetchModels} setDraft={setDraft} />
-        <ClaudeModelMapping key={profile?.id ?? draft.app} busy={busy}
-          models={connection.models} claudeSettings={claudeSettings} setDraft={setDraft} />
+        <AvailableModelsField draft={draft} busy={busy} setDraft={setDraft} />
       </div>
     </section>
   );
@@ -95,7 +94,7 @@ function ProviderForm({ editor, formId, ...props }: Props & { editor: ProviderEd
           baseUrl={draft.baseUrl} apiKey={draft.apiKey} upstreamProtocol={draft.upstreamProtocol}
           connection={draft.connection} authentication={draft.authentication}
           responsesOptions={draft.responsesOptions} defaultModel={draft.model} />
-        <ModelSection editor={editor} busy={busy} profile={profile}
+        <ModelSection editor={editor} busy={busy}
           userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
       </>}
       {official && <section className="asb-editor-section" aria-label={t("providers.label.officialLogin")}>

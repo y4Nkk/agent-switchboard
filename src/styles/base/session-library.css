@@ -255,13 +255,6 @@
 .asb-session-labels > span { overflow-wrap: anywhere; }
 .asb-session-original-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--asb-text-muted); font: var(--asb-text-label); }
 .asb-session-organization-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--asb-space-2); align-items: end; }
-.asb-session-more-menu { z-index: 60; min-width: var(--asb-menu-min-width); padding: var(--asb-space-1); border: 1px solid var(--asb-hairline); border-radius: var(--asb-radius); background: var(--asb-surface-menu); box-shadow: var(--asb-shadow-modal); }
-.asb-session-more-items { outline: none; }
-.asb-session-more-item { padding: var(--asb-space-2); border-radius: var(--asb-radius); color: var(--asb-text); font: var(--asb-text-label); cursor: pointer; }
-.asb-session-more-item[data-focused] { background: var(--asb-row-selected); }
-.asb-session-more-item[data-disabled] { opacity: 0.45; cursor: default; }
-.asb-session-more-item.is-danger { color: var(--asb-danger); }
-
 @media (max-width: 760px) {
   .asb-session-organization-fields { grid-template-columns: 1fr; }
 }

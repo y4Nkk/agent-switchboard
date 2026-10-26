@@ -42,7 +42,7 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
       </section>}
       {visited("usage") && <div hidden={page !== "usage"} className="asb-page-stack">
         <UsageWorkspace active={page === "usage"} section={model.usageSection} onSectionChange={model.setUsageSection}
-          probe={model.probe} />
+          probe={model.probe} claudeRecords={model.snapshot.records} codexRecords={model.snapshot.codexRecords} />
       </div>}
       {visited("settings") && <div hidden={page !== "settings"} className="asb-page-stack">
         <SettingsWorkspace model={model} active={page === "settings"} />

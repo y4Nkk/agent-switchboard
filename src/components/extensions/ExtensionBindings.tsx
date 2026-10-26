@@ -18,14 +18,14 @@ function BindingActions({ binding, props }: { binding: BindingStatus; props: Ext
   return <div className="asb-ext-binding-actions">
     {props.item.kind === "skill" && (
       <Tooltip label={t(binding.lockedDigest ? "extensions.bindings.unpin" : "extensions.bindings.pin")}>
-        <Button variant="icon" className="asb-ext-binding-action"
+        <Button variant="icon" size="compact"
           disabled={props.busy || (!binding.lockedDigest && binding.fileState !== "inSync")}
           aria-label={`${t(binding.lockedDigest ? "extensions.bindings.unpinAction" : "extensions.bindings.pinAction")} ${target}`}
           onClick={() => props.onToggleLock(binding, binding.lockedDigest == null)}><PinIcon /></Button>
       </Tooltip>
     )}
     <Tooltip label={t("extensions.bindings.remove")}>
-      <Button variant="icon" className="asb-ext-binding-action is-danger" disabled={props.busy}
+      <Button variant="dangerIcon" size="compact" className="asb-ext-danger-action" disabled={props.busy}
         aria-label={`${t("extensions.bindings.remove")} ${target}`}
         onClick={() => props.onRemoveBinding(binding)}><TrashIcon /></Button>
     </Tooltip>

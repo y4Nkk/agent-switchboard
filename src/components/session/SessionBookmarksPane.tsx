@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button as MenuButton, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
+import { ActionMenu } from "../ActionMenu";
 import { getSessionBookmarkContent, getSessionCopyText, getSessionMetadata, type SessionBookmarkSummary, type SessionMeta } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { useMessageState } from "../../i18n/use-message-state";
@@ -43,13 +43,8 @@ function BookmarkDetail({ item, offset, scrollTop, onOffsetChange, busy, onRemov
       </div>
       <div className="asb-session-actions">
         <Button variant="primary" disabled={opening} onClick={() => void open()}>{t("sessions.bookmarks.openSource")}</Button>
-        <MenuTrigger><MenuButton className="asb-btn asb-btn-secondary" isDisabled={busy}
-          aria-label={t("sessions.actions.moreAria")}>{t("sessions.actions.more")}</MenuButton>
-          <Popover placement="bottom end" className="asb-session-more-menu">
-            <Menu aria-label={t("sessions.actions.moreAria")} className="asb-session-more-items">
-              <MenuItem id="remove" className="asb-session-more-item is-danger" isDisabled={busy}
-                onAction={onRemove}>{t("sessions.bookmarks.remove")}</MenuItem>
-            </Menu></Popover></MenuTrigger>
+        <ActionMenu label={t("sessions.actions.more")} ariaLabel={t("sessions.actions.moreAria")}
+          disabled={busy} items={[{ id: "remove", label: t("sessions.bookmarks.remove"), danger: true, onAction: onRemove }]} />
       </div>
     </header>
     <p className="asb-scope-note">{t("sessions.bookmarks.snapshot")}</p>

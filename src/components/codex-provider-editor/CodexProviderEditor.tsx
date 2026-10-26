@@ -110,9 +110,7 @@ function CodexProviderEditorSession(props: Props) {
         name={props.source.record.profile.name} active={props.active && !parametersOpen} disabled={props.busy} />}
     </div>
     {parametersOpen && <CodexParametersPage editor={editor} busy={props.busy}
-      baselineValues={props.source?.kind === "record" ? props.source.record.parameters.settings : undefined}
-      baselineRoute={props.source?.kind === "record" ? props.source.record.profile.subagentRoute ?? null : null}
-      selfId={props.source?.kind === "record" ? props.source.record.profile.id : undefined} />}
+      baselineValues={props.source?.kind === "record" ? props.source.record.parameters.settings : undefined} />}
     {leave.confirmation}
   </ProviderEditorFrame>;
 }

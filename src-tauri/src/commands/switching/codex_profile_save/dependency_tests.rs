@@ -2,7 +2,7 @@ use super::*;
 use crate::{gateway::GatewayController, local_state::LocalState};
 use asb_core::{contracts::CodexSubagentRoute, AppKind};
 
-fn activate(state: &LocalState, gateway: &GatewayController, file: CodexProviderFile) {
+pub(super) fn activate(state: &LocalState, gateway: &GatewayController, file: CodexProviderFile) {
     let target = state.target(AppKind::Codex).unwrap();
     std::fs::write(&target, "model_provider = 'openai'\n").unwrap();
     std::fs::write(target.with_file_name("auth.json"),
@@ -27,11 +27,11 @@ fn providers(state: &LocalState) -> (CodexProviderRecord, CodexProviderFile) {
 fn prepare(state: &LocalState, gateway: &GatewayController, target: &CodexProviderRecord) -> PreparedCodexProfileSave {
     let mut draft = crate::codex_common::test_draft();
     draft.catalog[0].context_window *= 2;
-    let (kind, preview, projection_profile) = prepare_data(
-        state, gateway, &target.profile.id, &draft, &target.file_hash,
+    let (kind, preview, projection_profile, candidate_revision) = prepare_data(
+        state, gateway, &target.profile.id, &draft, &target.file_hash, ProfileSaveIntent::Save,
     ).unwrap();
-    PreparedCodexProfileSave { created_at: Instant::now(), profile_id: target.profile.id.clone(),
-        expected_file_hash: target.file_hash.clone(), draft, kind, preview, projection_profile }
+    PreparedCodexProfileSave { intent: ProfileSaveIntent::Save, created_at: Instant::now(), profile_id: target.profile.id.clone(),
+        expected_file_hash: target.file_hash.clone(), draft, kind, preview, projection_profile, candidate_revision }
 }
 
 #[test]

@@ -186,8 +186,8 @@ export const messages = {
   ],
   "ownership.directory.agents.title": ["子 agent 全局运行策略", "Subagent global runtime policy"],
   "ownership.directory.agents.detail": [
-    "在偏好设置页的“子 agent 运行”模块中以独立事务直接读写用户级 config.toml；自动表示不写入该键，由 Codex 自行解析。默认模型是跨档案路由引用，经本机网关按档案解析；推理强度由供应商运行参数拥有。不支持任何旧别名。",
-    "Read and written directly to the user-level config.toml through a separate transaction in the \"Subagent runtime\" module on the preferences page; Automatic means the key is not written and Codex resolves it on its own. The default model is a cross-profile routing reference resolved per profile through the local gateway; reasoning effort is owned by provider runtime parameters. No legacy aliases are supported.",
+    "在“客户端配置”的“子 agent 运行”模块中与通用设置合并预览和写入用户级 config.toml；自动表示不写入该键，由 Codex 自行解析。默认模型在“模型路由与网关”中配置，由本机网关按档案解析；推理强度由供应商运行参数拥有。不支持任何旧别名。",
+    "Subagent runtime on Client configuration previews and writes the user-level config.toml together with general settings; Automatic leaves the key unset for Codex to resolve. Configure the default model in Model routing & gateway, resolved by profile through the local gateway; reasoning effort belongs to provider runtime parameters. No legacy aliases are supported.",
   ],
   "ownership.directory.agentsRole.title": ["子 agent 角色", "Subagent roles"],
   "ownership.directory.agentsRole.detail": [

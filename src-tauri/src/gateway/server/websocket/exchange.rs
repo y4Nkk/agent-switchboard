@@ -1,6 +1,6 @@
 //! Response rendering after a Codex attempt selected an upstream.
 use super::super::diagnostics::{embedded_error, response_diagnostic};
-use super::super::respond::redact_native_body;
+use super::super::respond::convert_safe_json;
 use super::*;
 use crate::provider_diagnostics::redact_text;
 
@@ -75,23 +75,11 @@ fn read_response(
             return Err(error);
         }
     }
-    let body = if native {
-        match redact_native_body(&body, &[&route.api_key, &route.client_token]) {
-            Ok(body) => body,
-            Err(message) => {
-                diagnostic.message = message;
-                return Err(diagnostic);
-            }
-        }
-    } else {
-        body
-    };
-    let reasoning_transport = ReasoningTransport::from_continuation_key(route.continuation_key);
-    let body = match convert_response(
-        route.upstream_protocol,
+    let body = match convert_safe_json(
+        body,
+        native,
         UpstreamProtocol::Responses,
-        &body,
-        Some(&reasoning_transport),
+        route,
     ) {
         Ok(body) => body,
         Err(error) => {
@@ -155,7 +143,9 @@ pub(super) fn relay_stream<S: Read + Write>(
         Some(&reasoning_transport),
     ) {
         Ok(stream) => {
-            stream.with_diagnostics(diagnostic.clone(), &[&route.api_key, &route.client_token])
+            stream.with_native_responses_dialect(
+                crate::gateway::transform::NativeResponsesDialect::for_route(route),
+            ).with_diagnostics(diagnostic.clone(), &[&route.api_key, &route.client_token])
         }
         Err(error) => {
             diagnostic.message = format!("无法转换上游 SSE 流：{error}");
@@ -164,3 +154,6 @@ pub(super) fn relay_stream<S: Read + Write>(
     };
     super::stream::send_stream(socket, stream, route, context, request, diagnostic, span)
 }
+
+#[cfg(test)]
+mod tests;

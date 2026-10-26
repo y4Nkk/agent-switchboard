@@ -48,7 +48,7 @@ function RowActions({
         <Tooltip label={t("extensions.list.updateAria", { name: item.name })}>
           <Button
             variant="icon"
-            className="asb-ext-table-action"
+            size="compact"
             disabled={workspace.writeBlocked}
             aria-label={t("extensions.list.updateAria", { name: item.name })}
             onClick={() => void workspace.updates.update([report])}
@@ -60,7 +60,7 @@ function RowActions({
       <Tooltip label={t("extensions.management.aria", { name: item.name })}>
         <Button
           variant="secondary"
-          className="asb-ext-table-manage"
+          size="compact"
           disabled={workspace.writeBlocked}
           aria-label={t("extensions.list.openManagementAria", { name: item.name })}
           onClick={() => workspace.nav.openManagement(item.id, item.kind)}
@@ -70,8 +70,8 @@ function RowActions({
       </Tooltip>
       <Tooltip label={t("extensions.list.deleteAria", { name: item.name })}>
         <Button
-          variant="icon"
-          className="asb-ext-table-action asb-ext-table-action-danger"
+          variant="dangerIcon"
+          size="compact"
           disabled={workspace.writeBlocked}
           aria-label={t("extensions.list.deleteAria", { name: item.name })}
           onClick={() => workspace.nav.setDialog({ type: "remove", item })}
@@ -93,7 +93,7 @@ function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; works
     : item.source?.resolvedCommit ? "GitHub" : t("extensions.list.sourceLocal");
   return (
     <Button
-      variant="unstyled"
+      variant="ghost"
       className="asb-ext-table-definition"
       aria-label={item.kind === "mcp"
         ? t("extensions.list.editMcpAria", { name: item.name })

@@ -36,45 +36,6 @@
   font: var(--asb-text-label);
 }
 
-.asb-mcp-client {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--asb-space-1);
-  height: var(--asb-control-height);
-  padding-inline: var(--asb-space-2);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  color: var(--asb-text-muted);
-  background: var(--asb-content);
-  font: var(--asb-text-label);
-}
-
-.asb-mcp-client[data-selected="true"] {
-  border-color: var(--asb-action);
-  background: var(--asb-row-selected);
-  color: var(--asb-text);
-}
-
-.asb-mcp-client:hover:not(:disabled) {
-  border-color: var(--asb-hairline-strong);
-}
-
-.asb-mcp-client-logo {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-}
-
-.asb-mcp-client-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--asb-space-3);
-  height: var(--asb-space-3);
-  color: var(--asb-action);
-}
-
 .asb-mcp-json-field,
 .asb-mcp-wizard-section {
   display: flex;
@@ -143,18 +104,6 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   grid-template-areas: "kind value";
   gap: var(--asb-space-1);
-}
-
-.asb-mcp-actions {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: var(--asb-space-2);
-  padding-top: var(--asb-space-3);
-  border-top: 1px solid var(--asb-hairline);
-  background: var(--asb-content);
 }
 
 .asb-mcp-error {

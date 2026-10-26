@@ -3,8 +3,10 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 const VARIANT_CLASS = {
   primary: "asb-btn-primary",
   secondary: "asb-btn-secondary",
+  ghost: "asb-btn-ghost",
   danger: "asb-btn-danger",
   icon: "asb-btn-icon",
+  dangerIcon: "asb-btn-icon asb-btn-icon-danger",
   plus: "asb-btn-plus",
   back: "asb-btn-back",
   unstyled: "asb-btn-unstyled",
@@ -19,7 +21,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /**
  * Global action control. Owns the geometry contract: every instance emits
- * .asb-btn plus one variant class and an optional compact size class;
+ * .asb-btn plus its variant classes and an optional compact size class;
  * styles/base/buttons.css owns their geometry and surfaces.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

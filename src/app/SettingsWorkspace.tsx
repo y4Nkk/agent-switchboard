@@ -5,6 +5,7 @@ import { GatewayPage } from "../pages/GatewayPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { OutboundProxySettings } from "../components/OutboundProxySettings";
 import { StorageSettings } from "../components/StorageSettings";
+import { ModelRoutingWorkspace } from "../components/model-routing/ModelRoutingWorkspace";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
@@ -22,7 +23,13 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         active={active && model.settingsSection === "backups"}
         cloudBackup={model.cloudBackup} onRestore={operations.runRestore} onUndo={operations.requestUndo}
         onOpenDir={model.openBackupFolder} />}
-      gateway={<GatewayPage active={active && model.settingsSection === "gateway"} profiles={snapshot.profiles} />}
+      gateway={<GatewayPage busy={busy} active={active && model.settingsSection === "gateway"} profiles={snapshot.relayProfiles}
+        routing={(summary, refreshRuntime, runtimeBusy) => <ModelRoutingWorkspace runtimeSummary={summary} active={active && model.settingsSection === "gateway"}
+          initialApp={model.appFilter} request={model.modelRoutes.request} busy={busy || runtimeBusy} onBusy={model.setBusy}
+          inventory={{ codex: snapshot.codexRecords, profiles: [...snapshot.records, ...snapshot.codexOfficialRecords],
+            activeIds: { codex: model.activeProfileId("codex"), claude: model.activeProfileId("claude") } }}
+          onApplied={async () => { model.providerSwitch.invalidateCandidates(); await Promise.all([snapshot.refresh(), refreshRuntime()]); }}
+          onProviders={(app) => { model.providers.selectApp(app); model.setPage("providers"); }} />} />}
       clientManagement={<ClientManagementPage onChanged={() => void snapshot.refresh()} />}
       diagnostics={<DiagnosticsPage active={active && model.settingsSection === "diagnostics"}
         section={model.diagnosticSection} onSectionChange={model.setDiagnosticSection}

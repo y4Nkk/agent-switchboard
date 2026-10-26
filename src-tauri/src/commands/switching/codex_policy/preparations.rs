@@ -121,8 +121,8 @@ pub(super) fn validate(
     )?;
     if current.profile_revision != prepared.profile_revision
         || current.policy_revision != prepared.policy_revision
-        || current.projection.codex_candidate_revision()
-            != prepared.projection.codex_candidate_revision()
+        || current.projection.candidate_revision()
+            != prepared.projection.candidate_revision()
         || current.preview.preview.target != prepared.preview.preview.target
         || current.preview.content_hash != prepared.preview.content_hash
         || current.preview.rendered_hash != prepared.preview.rendered_hash

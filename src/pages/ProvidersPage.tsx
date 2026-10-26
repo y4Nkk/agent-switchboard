@@ -63,6 +63,7 @@ interface ProvidersPageProps {
   /** Discards the pending switch candidate without writing. */
   onCancelActivation: () => void;
   onEdit: (profile: ProviderProfile) => void;
+  onRoutes: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
   /** Refreshes the provider snapshot after a management-dialog change. */
   onRefresh?: () => Promise<void>;
@@ -136,6 +137,7 @@ function ProviderListView({
         onConfirmSwitch={props.onConfirmSwitch}
         onCancelActivation={props.onCancelActivation}
         onEdit={props.onEdit}
+        onRoutes={props.onRoutes}
         onConfigureUsage={onConfigureUsage}
         onDelete={props.onDelete}
       />

@@ -1,5 +1,4 @@
-import { SubagentModelRow } from "./SubagentModelRow";
-import type { CodexSubagentRoute, SettingSpec, SettingValue } from "../../api/client";
+import type { SettingSpec, SettingValue } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { SettingsFields, SettingsRow } from "../SettingsFields";
@@ -10,19 +9,13 @@ interface Props {
   editor: CodexEditorState;
   busy: boolean;
   baselineValues?: Record<string, SettingValue>;
-  /** The saved subagent route of the record being edited, if any. */
-  baselineRoute?: CodexSubagentRoute | null;
-  /** The record's profile id; absent while creating a new profile. */
-  selfId?: string;
 }
 
 const automatic: SettingValue = { mode: "automatic" };
 
-function SubagentSettingsGroup({ specs, baselineValues, baselineRoute, selfId, editor, busy, onChange }: {
+function SubagentSettingsGroup({ specs, baselineValues, editor, busy, onChange }: {
   specs: SettingSpec[];
   baselineValues: Record<string, SettingValue>;
-  baselineRoute?: CodexSubagentRoute | null;
-  selfId?: string;
   editor: CodexEditorState;
   busy: boolean;
   onChange: (key: string, value: SettingValue) => void;
@@ -36,7 +29,6 @@ function SubagentSettingsGroup({ specs, baselineValues, baselineRoute, selfId, e
         <h3 className="asb-section-title">{t("codex.params.subagent")}</h3>
       </div>
       <p className="asb-field-help">{t("codex.params.subagentNote")}</p>
-      <SubagentModelRow baselineRoute={baselineRoute} selfId={selfId} editor={editor} busy={busy} />
       {specs.map((spec) => (
         <SettingsRow key={spec.key} spec={spec} value={settings[spec.key]}
           baselineValue={baselineValues[spec.key] ?? automatic} showActual={false} busy={busy}
@@ -46,7 +38,7 @@ function SubagentSettingsGroup({ specs, baselineValues, baselineRoute, selfId, e
   );
 }
 
-export function CodexParametersPage({ editor, busy, baselineValues, baselineRoute, selfId }: Props) {
+export function CodexParametersPage({ editor, busy, baselineValues }: Props) {
   const { t } = useI18n();
   const { draft, setDraft, parameters } = editor;
   const catalog = parameters.catalog;
@@ -68,7 +60,6 @@ export function CodexParametersPage({ editor, busy, baselineValues, baselineRout
       <SettingsFields specs={parameterSpecs} groups={parameterGroups} values={draft.parameters.settings}
         baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />
       <SubagentSettingsGroup specs={subagentSpecs} baselineValues={baseline}
-        baselineRoute={baselineRoute} selfId={selfId}
         editor={editor} busy={busy} onChange={change} />
       <div className="asb-settings-actions">
         <Button variant="secondary" disabled={busy} onClick={resetAll}>{t("codex.params.reset")}</Button>

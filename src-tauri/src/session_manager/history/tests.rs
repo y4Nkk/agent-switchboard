@@ -8,6 +8,32 @@ use std::ops::ControlFlow;
 const ID: &str = "c1a11111-2222-4333-8444-555555555555";
 const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGN8AAAAASUVORK5CYII=";
 
+#[test]
+fn continuous_append_preserves_a_verified_prefix_and_catches_up_without_warnings() {
+    use std::io::Write;
+    let mut fixture = Fixture::new();
+    fixture.write(&[user("active session"), assistant("receipt", 3, 5)]);
+    let path = fixture.path();
+    let checkpoint = || {
+        writeln!(fs::OpenOptions::new().append(true).open(&path).unwrap(),
+            "{}", json!({"type":"progress","sessionId":ID,"data":{"type":"test"}})).unwrap();
+        Ok(())
+    };
+    let issues = capture::synchronize_observed(&mut fixture.connection, &fixture.root, &[], &checkpoint).unwrap();
+    assert!(issues.is_empty(), "{issues:?}");
+    let sources = reading::sources(&fixture.connection, &store::path(&fixture.root)).unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].retained.len(), 1);
+    let report = crate::model_usage::report(asb_core::contracts::ModelUsageRange::All, sources, issues, chrono::Local::now());
+    assert_eq!(report.groups[0].total_tokens, 8);
+    let (sources, issues) = fixture.sync();
+    assert!(issues.is_empty(), "{issues:?}");
+    let report = crate::model_usage::report(asb_core::contracts::ModelUsageRange::All, sources, issues, chrono::Local::now());
+    assert_eq!(report.groups[0].total_tokens, 8);
+    let length: u64 = fixture.connection.query_row("SELECT byte_length FROM transcripts", [], |row| row.get(0)).unwrap();
+    assert_eq!(length, fs::metadata(path).unwrap().len());
+}
+
 struct Fixture {
     _temporary: tempfile::TempDir,
     root: PathBuf,

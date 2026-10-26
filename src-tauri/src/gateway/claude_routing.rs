@@ -11,6 +11,7 @@ impl GatewayController {
         &self,
         local: &LocalState,
         plan: &SwitchPlan,
+        replacement: Option<&ProviderProfile>,
     ) -> Result<GatewayProjection, String> {
         let force_claude_gateway =
             plan.app() == AppKind::Claude && plan.profile.route_mode == RouteMode::Custom && {
@@ -32,7 +33,9 @@ impl GatewayController {
                 GatewayActivation::Routed(route) => route,
                 GatewayActivation::Direct { .. } => unreachable!(),
             };
-            projection.candidate_routes = self.claude_candidate_routes(local, &route.profile_id)?;
+            projection.candidate_routes = self.claude_candidate_routes(
+                local, &route.profile_id, replacement.or(Some(&plan.profile)),
+            )?;
         }
         Ok(projection)
     }
@@ -73,6 +76,7 @@ impl GatewayController {
         &self,
         local: &LocalState,
         selected_profile_id: &str,
+        replacement: Option<&ProviderProfile>,
     ) -> Result<Vec<ActiveRoute>, String> {
         let policy = failover::load(local.root())?;
         let profiles = local
@@ -81,7 +85,8 @@ impl GatewayController {
             .map_err(|_| "无法读取 Claude 供应商配置，已取消本次切换".to_string())?
             .into_iter()
             .filter_map(|record| {
-                let profile = record.profile;
+                let profile = replacement.filter(|profile| profile.id == record.profile.id)
+                    .cloned().unwrap_or(record.profile);
                 (profile.app == AppKind::Claude
                     && profile.route_mode == RouteMode::Custom
                     && profile.connection.claude_native.is_none()

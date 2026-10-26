@@ -14,6 +14,7 @@ import type { useCodexOfficialReset, useCodexResetSignal } from "../components/q
 import type { useCodexProbe } from "./useCodexProbe";
 import type { useModelUsageReport } from "../pages/use-model-usage-report";
 import type { useResourceUsage } from "../pages/use-resource-usage";
+import type { useProviderQuotaRefresh } from "../pages/use-provider-quota-refresh";
 import { USAGE_SECTIONS, type UsageSection } from "./navigation";
 
 const RANGES: ReadonlyArray<{ value: ModelUsageRange; labelKey: MessageKey }> = [
@@ -92,6 +93,7 @@ interface HeaderProps {
   resetSignal: ReturnType<typeof useCodexResetSignal>;
   radar: RadarControlsProps;
   resources: ReturnType<typeof useResourceUsage> & { active: boolean };
+  providerQuota: ReturnType<typeof useProviderQuotaRefresh>;
 }
 
 function ConsumptionControls({ active, range, onRangeChange, usage }: HeaderProps["consumption"]) {
@@ -115,7 +117,7 @@ function freshnessLabel(freshness: "cached" | "live", t: TFunction) {
 }
 
 export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption,
-  officialReset, resetSignal, radar, resources }: HeaderProps) {
+  officialReset, resetSignal, radar, resources, providerQuota }: HeaderProps) {
   const { t } = useI18n();
   const { usage } = consumption;
   const report = usage.read?.report;
@@ -130,6 +132,9 @@ export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption
     </> : t("usage.status.noSummary");
   } else if (section === "quota") {
     actions = <>
+      <Button variant="secondary" disabled={providerQuota.loading || !providerQuota.enabled} onClick={() => void providerQuota.refresh()}>
+        {t(providerQuota.loading ? "usage.action.refreshing" : "usage.quota.refreshProviders")}
+      </Button>
       <Button variant="secondary" disabled={officialReset.loading} onClick={() => void officialReset.readStatus()}>
         {officialReset.loading ? t("usage.quota.reading") : t("usage.quota.refreshOfficial")}
       </Button>

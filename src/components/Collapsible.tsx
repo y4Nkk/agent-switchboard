@@ -115,6 +115,35 @@ export function CollapsibleChevron({ open }: { open: boolean }) {
   );
 }
 
+interface CollapsibleTriggerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  contentId: string;
+  label: ReactNode;
+  value?: ReactNode;
+  size?: "standard" | "compact";
+  className?: string;
+}
+
+export function CollapsibleTrigger({
+  open, onOpenChange, contentId, label, value, size = "compact", className,
+}: CollapsibleTriggerProps) {
+  return (
+    <Button
+      variant="ghost"
+      size={size}
+      className={["asb-collapsible-trigger", className].filter(Boolean).join(" ")}
+      aria-expanded={open}
+      aria-controls={open ? contentId : undefined}
+      onClick={() => onOpenChange(!open)}
+    >
+      <CollapsibleChevron open={open} />
+      <span className="asb-collapsible-trigger-label">{label}</span>
+      {value != null && <span className="asb-collapsible-trigger-value">{value}</span>}
+    </Button>
+  );
+}
+
 interface CollapsibleSectionProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -146,17 +175,15 @@ export function CollapsibleSection({
     <div className={["asb-collapsible-section", quiet ? "is-quiet" : "", className]
       .filter(Boolean)
       .join(" ")}>
-      <Button
-        variant="unstyled"
+      <CollapsibleTrigger
         className="asb-collapsible-summary"
-        aria-expanded={open}
-        aria-controls={open ? contentId : undefined}
-        onClick={() => onOpenChange(!open)}
-      >
-        <span className="asb-collapsible-summary-label">{label}</span>
-        {value != null && <span className="asb-collapsible-summary-value">{value}</span>}
-        <CollapsibleChevron open={open} />
-      </Button>
+        open={open}
+        onOpenChange={onOpenChange}
+        contentId={contentId}
+        label={label}
+        value={value}
+        size={quiet ? "compact" : "standard"}
+      />
       <Collapsible open={open} id={contentId}>
         <div className="asb-collapsible-body">{children}</div>
       </Collapsible>

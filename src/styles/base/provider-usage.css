@@ -64,6 +64,10 @@
 }
 
 /* Numeric hierarchy is shared by script balances and official windows. */
+.asb-provider-quota-table { min-width: 34rem; }
+.asb-provider-quota-table td:first-child { white-space: nowrap; }
+.asb-provider-quota-table .asb-usage-freshness { margin-inline-start: 0; }
+
 .asb-usage-summary {
   display: flex;
   flex-wrap: wrap;

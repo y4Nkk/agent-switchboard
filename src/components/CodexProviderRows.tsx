@@ -15,6 +15,7 @@ import { OfficialQuotaSummary } from "./OfficialQuotaSummary";
 import { useCachedQuery } from "./use-cached-query";
 
 interface RowProps {
+  onRoutes?: () => void;
   active: boolean;
   confirmationOpen: boolean;
   onActivate: () => void;
@@ -47,7 +48,7 @@ export function CodexProviderRow({ record, usageOpen, onToggleUsage, onConfigure
     endpoint={<ProviderEndpoint url={record.websiteUrl || record.profile.endpoint} link={Boolean(record.websiteUrl)} />}
     summary={usage ? <ProviderUsageSummary name={name} usage={usage} /> : undefined}
     primaryAction={!props.active ? <ProviderActivateButton name={name} onActivate={props.onActivate} /> : undefined}
-    actions={<ProviderRowActions name={name} onEdit={props.onEdit} onDelete={props.onDelete}
+    actions={<ProviderRowActions name={name} onRoutes={props.onRoutes} onEdit={props.onEdit} onDelete={props.onDelete}
       test={{ id: testId, open: testOpen, trigger: testTriggerRef, onToggle: () => setTestOpen((open) => !open) }}
       usage={{ id: usageId, configured: hasUsageQuery, open: usageOpen,
         onOpen: () => { if (hasUsageQuery) onToggleUsage(); else onConfigureUsage(); } }} />}>
@@ -91,7 +92,7 @@ export function CodexOfficialRow(props: OfficialRowProps) {
       primaryAction={!props.active ? <ProviderActivateButton name={profile.name} onActivate={props.onActivate} /> : undefined}
       secondaryAction={<ProviderLoginButton name={profile.name} open={reloginOpen} controlsId={`codex-official-relogin-${profile.id}`}
         onToggle={() => setReloginOpen((open) => !open)} />}
-      actions={<ProviderRowActions name={profile.name} onEdit={props.onEdit} onDelete={props.onDelete}
+      actions={<ProviderRowActions name={profile.name} onRoutes={props.onRoutes} onEdit={props.onEdit} onDelete={props.onDelete}
         usage={{ id: `codex-official-quota-${profile.id}`, configured: true, open: props.quotaOpen, onOpen: props.onToggleQuota }} />}>
       <Collapsible open={reloginOpen} id={`codex-official-relogin-${profile.id}`}>
         <OfficialLoginPanel app="codex" onFinished={(completed) => {

@@ -191,6 +191,8 @@
   --asb-chart-tooltip-bg: var(--asb-content);
   --asb-chart-ratio-track-width: 56px;
   --asb-chart-ratio-track-height: 4px;
+  --asb-chart-resource-ring-size: 64px;
+  --asb-chart-resource-ring-stroke: 5px;
 
   /* Layout — control heights, a closed set of three tiers (DESIGN.md §10).
      Standard 40px is the minimum interactive target; compact 32px is for

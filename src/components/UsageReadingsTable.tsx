@@ -17,19 +17,16 @@ function usageColumns(t: TFunction): Array<TableColumn<UsageRow>> {
     { key: "plan", header: t("usage.readings.column.plan"), render: (row) => row.name },
     {
       key: "remaining",
-      align: "end",
       header: t("usage.readings.column.remaining"),
       render: (row) => formatUsageValue(row.reading.remaining, row.reading.unit),
     },
     {
       key: "used",
-      align: "end",
       header: t("usage.column.used"),
       render: (row) => formatUsageValue(row.reading.used, row.reading.unit),
     },
     {
       key: "total",
-      align: "end",
       header: t("usage.column.total"),
       render: (row) => formatUsageValue(row.reading.total, row.reading.unit),
     },

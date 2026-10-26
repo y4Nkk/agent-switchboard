@@ -3,6 +3,14 @@ import type { MessageEntry } from "../types";
 /** Domain dictionary for usage (zh-CN / en-US pairs). Keys are prefixed with
  * "usage." and must never collide with another domain file. */
 export const messages = {
+  "usage.quota.providers": ["供应商额度", "Provider quotas"],
+  "usage.quota.client": ["客户端", "Client"],
+  "usage.quota.provider": ["供应商", "Provider"],
+  "usage.quota.readings": ["剩余额度与状态", "Remaining quota and status"],
+  "usage.quota.refreshProviders": ["刷新供应商额度", "Refresh provider quotas"],
+  "usage.quota.notConfigured": ["没有可用的额度查询，剩余额度未知。", "No quota query is available; remaining quota is unknown."],
+  "usage.quota.separateUnits": ["按客户端和来源分别展示余额、已用、总量及重置时间；不同单位不合并。", "Balances, usage, totals, and reset times are shown per client and source; different units are kept separate."],
+  "usage.quota.noProviders": ["尚无供应商配置；添加供应商并配置额度查询后可在此查看。", "No providers are configured. Add a provider and configure its quota query to show readings here."],
   "usage.history.sampled": ["图表显示 {shown} 个原始采样点，完整保留 {total} 条记录", "Chart shows {shown} original samples; all {total} records are retained"],
   "usage.coverage": ["发现 {sessions} 条会话，扫描 {files} 个记录文件；仅汇总可核实的调用用量。", "Found {sessions} sessions and scanned {files} record files; totals include verifiable call usage only."],
   "usage.coverage.missing": ["{count} 条会话没有可核实的调用用量，可能尚未完成调用或原记录已缺失，未计入消费总数。", "{count} sessions have no verifiable call usage. Calls may not have completed or original records may be missing; these sessions are excluded from consumption totals."],

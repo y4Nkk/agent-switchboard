@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+[图形化模型路由](2026-10-26-graphical-model-routing.md)拥有网关设置中的配置图、节点检查器与保存应用流程；本篇的全局控件、临时草稿与模态生命周期约束继续适用。实际连接仍由原运行拓扑快照拥有。
+
 AppDialog 是全部应用模态的唯一所有者；ConfirmSheet 仅组合确认语义，业务模块明确提供处理中状态。端口流程同步防重入，持有一次性准备记录并在卸载后释放迟到的准备结果，已提交结果不得被呈现成取消。端口弹窗随网关上下文存续：设置分区或工作区切换使 GatewayPage 失去 active 时立即关闭弹窗，AppDialog 的 portal 不得悬浮在无关页面上；关闭触发的卸载释放路径与迟到响应失效路径不变。
 
 tokens.css 拥有框架、内容与信息组三层中性色、完整圆角尺度及导航 400ms 动画。AppShell/SideNav 拥有 224px/56px 导航与连续框架，标题栏高度独立于侧栏宽度；面板统一拥有宽桌面 32px 内边距及 24px 主间隔。导航展开状态原先只在当前窗口保存的边界由[侧栏状态持久化](../feature/2026-10-23-sidebar-state-persistence.md)取代，本篇不再拥有其状态寿命与落盘契约。
@@ -31,6 +33,8 @@ Skill 与 MCP 编辑使用完整工作区和固定提交区；版本恢复展示
 - [图标状态](../../implemented/feature/2026-10-12-sidebar-icon-states.md) 的库图标和实心当前态继续保留；尺寸与选中颜色随共享布局更新。
 - [扩展可见性与焦点](../../implemented/bug-fix/2026-09-24-extension-visibility-and-focus.md) 继续拥有批量操作范围及焦点可见性，本方案仅替换其中依赖内部装饰线的视觉组织。
 - [扩展部署检测](../../implemented/bug-fix/2026-10-13-extension-deployment-diagnostics.md) 继续拥有部署与检测事实，不恢复旧估算步骤。
+
+额度总览复用供应商清单及现有查询、缓存和刷新事件，分别展示 Codex 与 Claude Code 的可查询读数；不把 Token 消耗、不同货币或百分比合并成同一个余额。全局刷新只查询已配置的来源，未配置或不可读的来源明确显示未知，失败保留带时间的旧读数。沿用官方额度与公开重置信号的独立事实所有者，不从本地 Token 总量推算剩余额度。
 
 ## Alternatives considered
 

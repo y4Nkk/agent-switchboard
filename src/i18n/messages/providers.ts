@@ -238,21 +238,13 @@ export const messages = {
   "providers.editor.test.open": ["测试供应商", "Test provider"],
   "providers.editor.test.needFields": ["请先完成连接字段", "Complete the connection fields first"],
 
-  // Editor: main model and Claude mapping.
+  // Editor: main model and model catalog.
   "providers.editor.mainModel": ["主模型", "Main model"],
   "providers.editor.pickModel": ["选择模型", "Pick a model"],
   "providers.editor.primaryOneMAria": ["主模型启用 1M 上下文", "Enable 1M context for the main model"],
   "providers.editor.fetchingModels": ["正在获取模型", "Fetching models"],
   "providers.editor.userConfigModel": ["当前用户级配置模型：{model}", "Current user-level configuration model: {model}"],
-  "providers.editor.tier.haiku": ["Haiku 档", "Haiku tier"],
-  "providers.editor.tier.sonnet": ["Sonnet 档", "Sonnet tier"],
-  "providers.editor.tier.opus": ["Opus 档", "Opus tier"],
-  "providers.editor.tier.pickAria": ["选择 {tier}模型", "Pick {tier} model"],
-  "providers.editor.tier.oneMAria": ["{tier}启用 1M 上下文", "Enable 1M context for {tier}"],
   "providers.editor.availableModels": ["可选模型列表（每行一个）", "Available models (one per line)"],
-  "providers.editor.mapping": ["模型映射", "Model mapping"],
-  "providers.editor.mapping.configured": ["已配置", "Configured"],
-  "providers.editor.mapping.byTier": ["按档位覆盖", "Tier overrides"],
 
   // Editor: Responses capabilities.
   "providers.editor.responses.title": ["Responses 能力", "Responses capabilities"],

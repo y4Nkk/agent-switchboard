@@ -5,9 +5,8 @@ import {
 } from "../../app/extensions/deployment-state";
 import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
-import { Button } from "../Button";
+import { Checkbox } from "../Checkbox";
 import { Tooltip } from "../Tooltip";
-import { CheckIcon, DashIcon } from "../icons";
 import { clientSummary } from "./labels";
 import { MANAGEMENT_CLIENTS } from "./client-presentation";
 
@@ -33,24 +32,15 @@ export function ClientToggleGroup({ item, busy, pendingClients = [], onToggle }:
           : t("extensions.clientToggle.unsupported", { client: clientName(client) });
         return (
           <Tooltip key={client} label={label} side="bottom">
-            <Button
-              variant="unstyled"
-              className="asb-ext-clienttoggle"
-              data-state={state.all ? "all" : state.partial ? "partial" : "none"}
-              aria-pressed={state.partial ? "mixed" : state.all}
-              aria-busy={pendingClients.includes(client)}
-              aria-label={label}
+            <Checkbox
+              label={clientName(client)}
+              ariaLabel={label}
+              checked={state.all}
+              indeterminate={state.partial}
+              ariaBusy={pendingClients.includes(client)}
               disabled={busy || !supported}
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggle(client);
-              }}
-            >
-              <span className="asb-ext-clienttoggle-mark" aria-hidden="true">
-                {state.all ? <CheckIcon /> : state.partial ? <DashIcon /> : <span className="asb-ext-clienttoggle-empty" />}
-              </span>
-              <span>{clientName(client)}</span>
-            </Button>
+              onChange={() => onToggle(client)}
+            />
           </Tooltip>
         );
       })}

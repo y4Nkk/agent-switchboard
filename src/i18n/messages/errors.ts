@@ -36,7 +36,7 @@ export const messages = {
   "warnings.codex.managedAuth": ["将使用绑定的 Codex 托管账号；认证文件独立备份、校验并可恢复，令牌不会显示在预览中", "The bound Codex managed account will be used; the credential file is backed up, verified, and recoverable separately, and tokens never appear in the preview"],
   "warnings.codex.catalogCreated": ["将生成并写入 ASB 管理的 Codex 模型目录 {fileName}，并由 model_catalog_json 指向该文件。", "An ASB-managed Codex model catalog {fileName} will be generated and written, and model_catalog_json will point to it."],
   "warnings.codex.catalogCleanup": ["将清理当前 model_catalog_json 指向的 ASB 管理模型目录；用户自己的目录文件不会被删除。", "The ASB-managed model catalog currently referenced by model_catalog_json will be cleaned up; your own catalog files are never deleted."],
-  "warnings.codex.subagentModelSynced": ["当前主供应商「{owner}」引用了「{candidate}」的子代理模型；本次保存同步更新其模型目录，主供应商保持不变。", "The current primary provider \"{owner}\" references the subagent model of \"{candidate}\"; this save updates its model catalog in sync and keeps the primary provider unchanged."],
+  "warnings.provider.dependentRoutesSynced": ["当前主供应商「{owner}」引用了「{candidate}」；本次保存同步更新调用配置与模型目录，主供应商保持不变。", "The current primary provider \"{owner}\" references \"{candidate}\"; this save updates its request settings and model catalog together while keeping the primary provider unchanged."],
   "warnings.claude.pluginMarkerUnsynced": ["Claude 插件集成标记未同步：{detail}", "The Claude plugin integration marker could not be synced: {detail}"],
   "warnings.gateway.freeform": ["{detail}", "{detail}"],
 
@@ -124,7 +124,7 @@ export const messages = {
   "validate.officialRouteHasCustomFields": ["官方登录不得携带服务地址、API 密钥、上游协议或模型覆盖；请先移除这些自定义路由字段", "Official sign-in cannot carry a base URL, API key, upstream protocol, or model overrides; remove those custom routing fields first"],
   "validate.modelOptionsMismatch": ["模型参数类型 {optionsKind} 与供应商所属客户端 {app} 不一致", "The model options kind {optionsKind} does not match the provider's client {app}"],
   "validate.unknownSettingKey": ["键 {key} 不属于当前 {app} 设置作用域；供应商参数与客户端设置必须分别保存", "The key {key} does not belong to the current {app} settings scope; provider parameters and client settings must be saved separately"],
-  "validate.retiredSubagentModelParameter": ["子代理模型参数 agents.default_subagent_model 已由跨档案路由引用 subagentRoute 取代；请在供应商运行参数中重新配置子代理模型并移除旧参数", "The subagent model parameter agents.default_subagent_model was replaced by the cross-profile subagentRoute reference; reconfigure the subagent model in the provider's run parameters and remove the old parameter"],
+  "validate.retiredSubagentModelParameter": ["子代理模型参数 agents.default_subagent_model 已由跨档案路由引用 subagentRoute 取代；请在「模型路由与网关」中重新配置子代理模型并移除旧参数", "The subagent model parameter agents.default_subagent_model was replaced by the cross-profile subagentRoute reference; reconfigure it in Model routing & gateway and remove the old parameter"],
   "validate.missingSettingKey": ["设置缺少参数 {key} 的值；请重新加载后再保存", "A value for the parameter {key} is missing; reload before saving"],
   "validate.badSettingValue": ["键 {key} 的值必须是 {allowed} 之一，当前值为 {value}", "The value of {key} must be one of {allowed}; the current value is {value}"],
   "validate.badContextWindow": ["上下文窗口必须是正整数（token 数）", "The context window must be a positive integer (token count)"],

@@ -239,6 +239,7 @@ export interface ProbeResult {
 }
 
 export type ProfileSaveKind = "create" | "noChange" | "saveOnly" | "saveAndApply";
+export type ProfileSaveIntent = "save" | "activate";
 
 /** Backend-owned classification of an edit against the stored profile and
  * the current client configuration. A candidate exists only for an edit that
@@ -267,11 +268,13 @@ export function prepareCodexProfileSave(
   profileId: string,
   draft: CodexProviderDraft,
   expectedFileHash: string,
+  intent: ProfileSaveIntent,
 ): Promise<ProfileSavePreparation> {
   return invoke<ProfileSavePreparation>("prepare_codex_profile_save", {
     profileId,
     draft,
     expectedFileHash,
+    intent,
   });
 }
 
@@ -303,8 +306,9 @@ export function prepareProfileSave(
   profileId: string | null,
   draft: ProviderDraft,
   expectedFileHash: string | null,
+  intent: ProfileSaveIntent,
 ): Promise<ProfileSavePreparation> {
-  return invoke<ProfileSavePreparation>("prepare_profile_save", { profileId, draft, expectedFileHash });
+  return invoke<ProfileSavePreparation>("prepare_profile_save", { profileId, draft, expectedFileHash, intent });
 }
 
 export function commitProfileSave(
@@ -312,6 +316,12 @@ export function commitProfileSave(
   confirmWrite: boolean,
 ): Promise<ProviderRecord> {
   return invoke<ProviderRecord>("commit_profile_save", { preparationId, confirmWrite });
+}
+
+export type ProfileSaveSource = "profile" | "codex";
+
+export function cancelProfileSave(source: ProfileSaveSource, preparationId: string): Promise<void> {
+  return invoke<void>("cancel_profile_save", { source, preparationId });
 }
 
 export function deleteProfile(profileId: string, expectedFileHash: string): Promise<void> {

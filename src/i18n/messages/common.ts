@@ -18,7 +18,7 @@ export const messages = {
 
   "nav.section.application": ["偏好设置", "Preferences"],
   "nav.section.clientManagement": ["客户端工具", "Client Tools"],
-  "nav.section.gateway": ["本机网关", "Local Gateway"],
+  "nav.section.gateway": ["模型路由与网关", "Model routing & gateway"],
   "nav.section.backups": ["备份恢复", "Backup & Restore"],
   "nav.section.diagnostics": ["诊断", "Diagnostics"],
   "nav.section.about": ["关于", "About"],
@@ -82,6 +82,7 @@ export const messages = {
   "common.discardAndContinue": ["放弃修改并继续", "Discard and continue"],
   "common.keepEditing": ["继续编辑", "Keep editing"],
   "common.clearFilters": ["清除筛选", "Clear filters"],
+  "common.clearSearch": ["清除搜索", "Clear search"],
   "common.backToTop": ["返回顶部", "Back to top"],
 
   "pagination.aria": ["分页", "Pagination"],

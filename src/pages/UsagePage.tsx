@@ -38,12 +38,14 @@ function composition(report: ModelUsageReport, t: TFunction) {
 
 function UsageTotals({ report }: { report: ModelUsageReport }) {
   const { t } = useI18n();
+  const verifiable = report.coverage.sourceSessions === 0 || report.coverage.sessionsWithoutUsage < report.coverage.sourceSessions;
+  const value = (selector: (group: ModelUsageGroup) => number) => verifiable ? formatCompactTokenCount(total(report, selector)) : "—";
   return <div className="asb-model-usage-summary">
     <div role="group" aria-label={t("usage.summary.groupAria")}><StatCards stats={[
-      { label: t("usage.label.total"), value: formatCompactTokenCount(total(report, (g) => g.totalTokens)), unit: TOKEN_UNIT },
-      { label: t("usage.label.freshInput"), value: formatCompactTokenCount(total(report, (g) => g.inputTokens)), unit: TOKEN_UNIT },
-      { label: t("usage.label.cache"), value: formatCompactTokenCount(total(report, cachedTokenCount)), unit: TOKEN_UNIT },
-      { label: t("usage.label.output"), value: formatCompactTokenCount(total(report, (g) => g.outputTokens)), unit: TOKEN_UNIT },
+      { label: t("usage.label.total"), value: value((g) => g.totalTokens), unit: TOKEN_UNIT },
+      { label: t("usage.label.freshInput"), value: value((g) => g.inputTokens), unit: TOKEN_UNIT },
+      { label: t("usage.label.cache"), value: value(cachedTokenCount), unit: TOKEN_UNIT },
+      { label: t("usage.label.output"), value: value((g) => g.outputTokens), unit: TOKEN_UNIT },
     ]} /></div>
     <p className="asb-scope-note">{t("usage.coverage", {
       sessions: report.coverage.sourceSessions, files: report.coverage.scannedFiles })}</p>

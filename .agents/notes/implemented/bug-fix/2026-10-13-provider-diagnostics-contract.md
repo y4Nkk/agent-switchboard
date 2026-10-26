@@ -20,6 +20,8 @@ SwitchPlan 显式拥有写入范围。供应商修复只投影 Provider 所有�
 
 [当前客户端配置契约](../feature/2026-10-12-current-client-configuration-contract.md)部分重叠：目录与片段所有权继续有效，本篇补充供应商修复的范围限制。其他命中的[供应商存储修复](../feature/2026-09-23-provider-store-repair.md)面向应用存储损坏，目标无关，保持原决策；没有需要取代或归档的同主题笔记。
 
+[跨供应商路由一致性](2026-10-23-cross-provider-route-consistency.md)补充活动故障转移候选的保存与恢复、会话工具历史隔离及 HTTP/WebSocket 共享响应还原；本篇的诊断与真实配置写入边界保持有效。
+
 ## Alternatives considered
 
 - 前端把已保存 Codex 档案转换成草稿请求，可以复用现有接口；但失去文件修订约束并扩大凭据流转，拒绝。

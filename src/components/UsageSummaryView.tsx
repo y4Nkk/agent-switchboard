@@ -6,7 +6,7 @@ import { Button } from "./Button";
 import { Time } from "./Time";
 import { Tooltip } from "./Tooltip";
 
-function ReadingSummary({ reading }: { reading: UsageReading }) {
+function ReadingSummary({ reading, showAllMeasures }: { reading: UsageReading; showAllMeasures: boolean }) {
   const { t } = useI18n();
   const primary = usagePrimary(reading);
   return (
@@ -16,7 +16,7 @@ function ReadingSummary({ reading }: { reading: UsageReading }) {
         <span>{primary.label}</span><strong>{formatUsageValue(primary.value, reading.unit)}</strong>
       </span>}
       {usageTone(reading) === "danger" && <span className="asb-usage-invalid">{usageStatusLabel(reading)}</span>}
-      {reading.unit !== "%" && <span className="asb-usage-secondary">
+      {(showAllMeasures || reading.unit !== "%") && <span className="asb-usage-secondary">
         {/* The primary chip already shows the used/total measure when it won
             the primary slot; these guards restate that structurally instead of
             comparing display labels. */}
@@ -37,18 +37,19 @@ interface Props {
   error: string | null;
   stale?: boolean;
   empty: string;
+  showAllMeasures?: boolean;
   run: () => Promise<void>;
 }
 
 /** Complete decision facts stay visible; detailed tables are a separate disclosure. */
-export function UsageSummaryView({ name, readings, at, querying, error, stale, empty, run }: Props) {
+export function UsageSummaryView({ name, readings, at, querying, error, stale, empty, run, showAllMeasures = false }: Props) {
   const { t } = useI18n();
   const hasReadings = readings.length > 0;
   const previous = hasReadings && (stale || Boolean(error));
   return (
     <section className="asb-usage-summary" aria-label={t("usage.summary.nameAria", { name })} aria-busy={querying}>
       <div className="asb-usage-readings">
-        {hasReadings ? readings.map((reading, index) => <ReadingSummary key={index} reading={reading} />)
+        {hasReadings ? readings.map((reading, index) => <ReadingSummary key={index} reading={reading} showAllMeasures={showAllMeasures} />)
           : <span role="status">{error ? t("usage.summary.readFailed") : querying ? t("usage.summary.reading") : empty}</span>}
       </div>
       <div className="asb-usage-freshness">

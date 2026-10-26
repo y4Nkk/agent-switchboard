@@ -68,12 +68,11 @@ pub(crate) struct CodexToolHistory {
 
 #[derive(Default)]
 struct HistoryInner {
-    entries: HashMap<String, Entry>,
-    order: VecDeque<String>,
+    entries: HashMap<(String, String), Entry>,
+    order: VecDeque<(String, String)>,
 }
 
 struct Entry {
-    binding: HistoryBinding,
     calls: Vec<(String, Value)>,
 }
 
@@ -81,6 +80,9 @@ impl CodexToolHistory {
     /// Indexes a gateway-rendered Responses object. Best effort: unparseable
     /// bodies or responses without call items record nothing.
     pub(crate) fn record_response(&self, binding: &HistoryBinding, rendered: &[u8]) {
+        let Some(session) = &binding.session else {
+            return;
+        };
         let Ok(value) = serde_json::from_slice::<Value>(rendered) else {
             return;
         };
@@ -115,16 +117,11 @@ impl CodexToolHistory {
         let Ok(mut inner) = self.inner.write() else {
             return;
         };
-        if !inner.entries.contains_key(&id) {
-            inner.order.push_back(id.clone());
+        let key = (session.clone(), id);
+        if !inner.entries.contains_key(&key) {
+            inner.order.push_back(key.clone());
         }
-        inner.entries.insert(
-            id,
-            Entry {
-                binding: binding.clone(),
-                calls,
-            },
-        );
+        inner.entries.insert(key, Entry { calls });
         while inner.order.len() > MAX_ENTRIES {
             let Some(oldest) = inner.order.pop_front() else {
                 break;
@@ -253,17 +250,18 @@ impl Entry {
 
 impl HistoryInner {
     fn entry(&self, id: &str, binding: &HistoryBinding) -> Option<&Entry> {
-        self.entries
-            .get(id)
-            .filter(|entry| &entry.binding == binding)
+        self.entries.get(&(binding.session.as_ref()?.clone(), id.to_string()))
     }
 
     /// Same-session entries that cache a requested `call_id` under exactly
     /// one response, in cache order.
     fn unique_calls(&self, binding: &HistoryBinding, requested: &HashSet<String>) -> Vec<&Entry> {
+        let Some(session) = &binding.session else {
+            return Vec::new();
+        };
         let mut owners: HashMap<&str, usize> = HashMap::new();
-        for (_id, entry) in &self.entries {
-            if &entry.binding != binding {
+        for ((owner, _), entry) in &self.entries {
+            if owner != session {
                 continue;
             }
             for (call_id, _) in &entry.calls {
@@ -278,8 +276,11 @@ impl HistoryInner {
             .map(|(call_id, _)| call_id)
             .collect();
         let mut selected = Vec::new();
-        for id in &self.order {
-            let Some(entry) = self.entries.get(id) else {
+        for key in &self.order {
+            if &key.0 != session {
+                continue;
+            }
+            let Some(entry) = self.entries.get(key) else {
                 continue;
             };
             if entry
@@ -412,25 +413,4 @@ fn find_block_end(buffer: &[u8]) -> Option<usize> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn incomplete_tool_calls_never_enter_continuation_history() {
-        let history = CodexToolHistory::default();
-        let binding = HistoryBinding::for_request(br#"{"model":"test"}"#, None);
-        let mut response = serde_json::json!({
-            "id": "response-1", "status": "incomplete",
-            "output": [{"type":"function_call", "call_id":"call-1",
-                "name":"read_file", "arguments":"{", "status":"incomplete"}],
-        });
-        history.record_response(&binding, response.to_string().as_bytes());
-        assert!(history.inner.read().unwrap().entries.is_empty());
-
-        response["status"] = serde_json::json!("completed");
-        response["output"][0]["arguments"] = serde_json::json!("{}");
-        response["output"][0]["status"] = serde_json::json!("completed");
-        history.record_response(&binding, response.to_string().as_bytes());
-        assert!(history.inner.read().unwrap().entries.contains_key("response-1"));
-    }
-}
+mod tests;

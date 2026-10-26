@@ -74,6 +74,10 @@
   text-align: left;
 }
 
+.asb-table-row-click {
+  cursor: pointer;
+}
+
 .asb-table-cell.is-numeric { text-align: right; white-space: nowrap; }
 
 .asb-table tbody tr:hover {

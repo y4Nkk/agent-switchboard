@@ -221,7 +221,7 @@ impl GatewayController {
         }
         let candidate_routes = match routes.as_slice() {
             [route] if app == AppKind::Claude => self
-                .claude_candidate_routes(local, &route.profile_id)
+                .claude_candidate_routes(local, &route.profile_id, None)
                 .unwrap_or_else(|_| vec![route.clone()]),
             [route] => self.rehydrate_codex_candidates(&route.profile_id)?,
             _ => Vec::new(),

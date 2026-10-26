@@ -1,12 +1,12 @@
 use super::parse::{self, ClaudeCandidate};
 use crate::codex_metering::TokenUsageState;
 use crate::session_manager::{read_index::{key, FileRevision, ReadIndex}, records};
+use crate::session_manager::read_index::prefix::{self, DigestReader, extend_hash};
 use asb_core::contracts::AppKind;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::BufReader;
 use std::ops::ControlFlow;
 use std::path::Path;
 mod saved;
@@ -64,54 +64,52 @@ pub(super) fn read(index: &ReadIndex, path: &Path, app: AppKind, session: &str) 
     let encoded = revision.encoded()?;
     if let Some(cached) = index.get("usage-file", &cache_key, &encoded)? { return Ok(cached); }
     let previous = index.previous::<FileUsage>("usage-file", &cache_key)?;
+    let (next, cacheable) = capture(path, app, session, revision, previous)?;
+    verify(path, &next)?;
+    if cacheable { index.put("usage-file", &cache_key, &encoded, &next)?; }
+    Ok(next)
+}
+
+fn capture(path: &Path, app: AppKind, session: &str, revision: FileRevision,
+    previous: Option<FileUsage>) -> Result<(FileUsage, bool), String> {
     let (mut next, mut hash) = resume(path, app, revision.clone(), previous)?;
     let start = next.offset;
-    let scan = records::scan_records(path, start, next.ordinal, |ordinal, _, value| {
+    let mut reader = DigestReader::open(path, start, revision.bytes.saturating_sub(start), &mut hash)?;
+    let scan = records::scan_reader(&path.display().to_string(), start, next.ordinal, BufReader::new(&mut reader), &|| Ok(()), |ordinal, _, value| {
         if let Some(issue) = next.state.observe(&value, session)? {
             next.issues.push(format!("{} 第 {ordinal} 条: {issue}", path.display()));
         }
         Ok(ControlFlow::Continue(()))
     });
-    if FileRevision::read(path)? != revision { return Err(format!("用量来源在读取期间发生变化，请重试：{}", path.display())); }
+    let consumed = reader.bytes;
+    let cacheable = scan.is_ok();
     match scan {
         Ok(scan) => {
             next.issues.extend(scan.issues);
             next.offset = scan.next_offset;
             next.ordinal = scan.ordinal;
             next.appendable = scan.appendable;
-            extend_hash(path, start, next.offset.saturating_sub(start), &mut hash)?;
-            next.prefix = format!("{:x}", hash.finalize());
-            next.revision = revision.clone();
-            if FileRevision::read(path)? != revision { return Err(format!("用量来源在读取期间发生变化，请重试：{}", path.display())); }
-            index.put("usage-file", &cache_key, &encoded, &next)?;
         }
-        Err(error) => { next.issues.push(error); next.appendable = false; }
+        Err(error) => { next.issues.push(error); next.appendable = false; next.offset = start + consumed; }
     }
-    Ok(next)
+    next.prefix = format!("{:x}", hash.finalize());
+    next.revision = revision;
+    Ok((next, cacheable))
+}
+
+fn verify(path: &Path, snapshot: &FileUsage) -> Result<(), String> {
+    prefix::verify(path, &snapshot.revision, snapshot.offset, &snapshot.prefix, &|| Ok(()))
 }
 
 fn resume(path: &Path, app: AppKind, revision: FileRevision, previous: Option<FileUsage>) -> Result<(FileUsage, Sha256), String> {
     if let Some(previous) = previous.filter(|previous| previous.appendable
         && previous.revision.created == revision.created && previous.offset <= revision.bytes) {
         let mut hash = Sha256::new();
-        extend_hash(path, 0, previous.offset, &mut hash)?;
+        extend_hash(path, 0, previous.offset, &mut hash, &|| Ok(()))?;
         if format!("{:x}", hash.clone().finalize()) == previous.prefix { return Ok((previous, hash)); }
     }
     Ok((FileUsage { revision, offset: 0, ordinal: 0, prefix: String::new(), appendable: false,
         state: UsageState::new(app), issues: Vec::new() }, Sha256::new()))
-}
-
-fn extend_hash(path: &Path, start: u64, mut length: u64, hash: &mut Sha256) -> Result<(), String> {
-    let mut file = File::open(path).map_err(|error| error.to_string())?;
-    file.seek(SeekFrom::Start(start)).map_err(|error| error.to_string())?;
-    let mut buffer = [0; 64 * 1024];
-    while length > 0 {
-        let size = length.min(buffer.len() as u64) as usize;
-        file.read_exact(&mut buffer[..size]).map_err(|error| error.to_string())?;
-        hash.update(&buffer[..size]);
-        length -= size as u64;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

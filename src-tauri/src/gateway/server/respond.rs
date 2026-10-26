@@ -210,7 +210,7 @@ fn respond_json(
     }
 }
 
-fn convert_safe_json(
+pub(in crate::gateway::server) fn convert_safe_json(
     body: Vec<u8>,
     native: bool,
     client_protocol: UpstreamProtocol,
@@ -222,7 +222,7 @@ fn convert_safe_json(
         body
     };
     if native {
-        super::super::transform::restore_native_json(route, &mut body);
+        super::super::transform::NativeResponsesDialect::for_route(route).restore_json(&mut body);
     }
     let transport = ReasoningTransport::from_continuation_key(route.continuation_key);
     convert_response(
@@ -266,7 +266,7 @@ fn respond_sse(
         }
     };
     match SseTranscoder::new(
-        super::super::transform::wrap_native_sse_reader(route, source),
+        source,
         route.upstream_protocol,
         client_protocol,
         MAX_RESPONSE_BYTES,
@@ -275,7 +275,9 @@ fn respond_sse(
         Ok(stream) => respond_stream(
             request,
             span,
-            stream.with_diagnostics(diagnostic, &[&route.api_key, &route.client_token]),
+            stream.with_native_responses_dialect(
+                super::super::transform::NativeResponsesDialect::for_route(route),
+            ).with_diagnostics(diagnostic, &[&route.api_key, &route.client_token]),
             status,
             // The stream remains under validation after the HTTP response
             // begins. Its later diagnostic cannot retract upstream headers,
@@ -391,90 +393,4 @@ pub(in crate::gateway::server) fn read_decoded(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use bytes::Bytes;
-    use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
-    use tokio::sync::{mpsc, watch};
-
-    fn codex_route(upstream_protocol: UpstreamProtocol) -> ActiveRoute {
-        ActiveRoute {
-            app: asb_core::contracts::AppKind::Codex,
-            profile_id: "test".into(),
-            fingerprint: "test".into(),
-            client_token: "client-token".into(),
-            continuation_key: [0; 32],
-            upstream_base_url: "https://vendor.example/v1".into(),
-            connection: Default::default(),
-            upstream_protocol,
-            responses_options: None,
-            max_output_tokens: None,
-            api_key: "provider-key".into(),
-            authentication: asb_core::AuthenticationScheme::Bearer,
-            claude_primary_model: None,
-            claude_model_options: None,
-            claude_account: None,
-            codex_account: None,
-            claude_fragment: Default::default(),
-            codex: None,
-        }
-    }
-
-    fn json_response(body: &'static [u8]) -> UpstreamResponse {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        let (sender, receiver) = mpsc::channel(1);
-        sender
-            .try_send(Ok(Bytes::from_static(body)))
-            .unwrap();
-        drop(sender);
-        let (cancellation, _) = watch::channel(false);
-        UpstreamResponse::new(
-            reqwest::StatusCode::OK,
-            headers,
-            reqwest::Url::parse("https://vendor.example/v1/chat/completions").unwrap(),
-            true,
-            receiver,
-            cancellation,
-        )
-    }
-
-    #[test]
-    fn codex_cross_protocol_response_is_preflighted() {
-        assert!(requires_non_stream_preflight(
-            asb_core::contracts::AppKind::Codex,
-            UpstreamProtocol::ChatCompletions,
-        ));
-        assert!(requires_non_stream_preflight(
-            asb_core::contracts::AppKind::Codex,
-            UpstreamProtocol::AnthropicMessages,
-        ));
-    }
-
-    #[test]
-    fn malformed_codex_chat_response_fails_before_candidate_delivery() {
-        let result = prepare_non_stream_response(
-            json_response(br#"{"id":"chat-1","model":"relay"}"#),
-            &codex_route(UpstreamProtocol::ChatCompletions),
-        );
-        assert!(matches!(
-            result,
-            Err(ProviderDiagnostic {
-                kind: ProviderFailureKind::ResponseParse,
-                ..
-            })
-        ));
-    }
-
-    #[test]
-    fn codex_native_response_waits_for_final_restoration() {
-        assert!(!requires_non_stream_preflight(
-            asb_core::contracts::AppKind::Codex,
-            UpstreamProtocol::Responses,
-        ));
-        assert!(requires_non_stream_preflight(
-            asb_core::contracts::AppKind::Claude,
-            UpstreamProtocol::AnthropicMessages,
-        ));
-    }
-}
+mod tests;

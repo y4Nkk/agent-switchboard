@@ -33,10 +33,20 @@ pub(crate) fn get_or_refresh(state: &LocalState, request: ModelUsageRequest) -> 
         }
     }
     let reports = crate::model_usage::reports(state.root(), sources.clone(), issues.clone(), Local::now())?;
-    if source_revision(state.root(), &sources, &issues)? != revision { return Err("会话来源在汇总期间发生变化，请刷新重试".into()); }
+    let current_revision = source_revision(state.root(), &sources, &issues)?;
     let snapshot = Snapshot { cached_at: Utc::now().to_rfc3339(), reports };
-    index.put("usage-reports", &cache_key, &revision, &snapshot)?;
-    read(snapshot, request, ModelUsageFreshness::Fresh)
+    finish_refresh(&index, &cache_key, &revision, &current_revision, snapshot, request)
+}
+
+fn finish_refresh(index: &ReadIndex, cache_key: &str, revision: &str, current_revision: &str,
+    snapshot: Snapshot, request: ModelUsageRequest) -> Result<ModelUsageRead, String> {
+    let stable = current_revision == revision;
+    if stable { index.put("usage-reports", cache_key, revision, &snapshot)?; }
+    let next_refresh = refresh_deadline(&snapshot.cached_at,
+        if stable { MODEL_USAGE_REFRESH_INTERVAL } else { Duration::seconds(10) })?;
+    let mut reading = read(snapshot, request, ModelUsageFreshness::Fresh)?;
+    reading.refresh_after = next_refresh;
+    Ok(reading)
 }
 
 fn source_revision(root: &std::path::Path, sources: &[SessionSource], issues: &[SessionIssue]) -> Result<String, String> {
@@ -62,8 +72,12 @@ fn read(snapshot: Snapshot, request: ModelUsageRequest, freshness: ModelUsageFre
 }
 
 fn refresh_after(cached_at: &str) -> Result<String, String> {
+    refresh_deadline(cached_at, MODEL_USAGE_REFRESH_INTERVAL)
+}
+
+fn refresh_deadline(cached_at: &str, interval: Duration) -> Result<String, String> {
     let cached_at = DateTime::parse_from_rfc3339(cached_at).map_err(|error| error.to_string())?.with_timezone(&Utc);
-    let expires = cached_at.checked_add_signed(MODEL_USAGE_REFRESH_INTERVAL).ok_or("用量索引刷新时间无效")?;
+    let expires = cached_at.checked_add_signed(interval).ok_or("用量索引刷新时间无效")?;
     let midnight = cached_at.with_timezone(&Local).date_naive().succ_opt()
         .and_then(|date| date.and_hms_opt(0, 0, 0)).and_then(|date| date.and_local_timezone(Local).earliest())
         .ok_or("无法确定本机日期边界")?.with_timezone(&Utc);

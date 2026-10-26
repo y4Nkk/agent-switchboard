@@ -26,7 +26,7 @@ function EmptyLibrary({ workspace }: { workspace: ExtensionWorkspace }) {
       </h3>
       {!empty && (
         <Button variant="secondary" onClick={nav.clearFilters}>
-          {t("extensions.library.clearSearch")}
+          {t("common.clearSearch")}
         </Button>
       )}
     </div>

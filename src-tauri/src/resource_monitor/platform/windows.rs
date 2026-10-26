@@ -1,4 +1,6 @@
-use crate::resource_monitor::{observation::{Entry, Observation, ProcessKey}, types::Issue};
+mod users;
+
+use crate::resource_monitor::{observation::{Entry, Observation, ProcessKey, ProcessUser}, types::Issue};
 use std::{mem::size_of, os::windows::ffi::OsStringExt, path::PathBuf, ptr, time::Instant};
 use windows_sys::Win32::{
     Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER,
@@ -26,6 +28,7 @@ impl Reader {
     }
 
     pub fn entries(&self) -> Result<(Vec<Entry>, Vec<Issue>), String> {
+        let users = users::enumerate(&self.user_sid)?;
         let handle = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if handle == INVALID_HANDLE_VALUE { return Err(format!("无法枚举进程：{}", std::io::Error::last_os_error())); }
         let snapshot = Handle(handle);
@@ -34,8 +37,10 @@ impl Reader {
         let mut entries = Vec::new();
         while available != 0 {
             let end = entry.szExeFile.iter().position(|character| *character == 0).unwrap_or(entry.szExeFile.len());
-            entries.push(Entry { pid: entry.th32ProcessID, parent_pid: entry.th32ParentProcessID,
-                name: String::from_utf16_lossy(&entry.szExeFile[..end]) });
+            let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
+            let user = users.get(&entry.th32ProcessID).filter(|(observed_name, _)|
+                observed_name.eq_ignore_ascii_case(&name)).map(|(_, user)| *user).unwrap_or(ProcessUser::Unverified);
+            entries.push(Entry { pid: entry.th32ProcessID, parent_pid: entry.th32ParentProcessID, name, user });
             available = unsafe { Process32NextW(snapshot.0, &mut entry) };
         }
         if unsafe { GetLastError() } != ERROR_NO_MORE_FILES {
@@ -45,6 +50,11 @@ impl Reader {
     }
 
     pub fn read(&self, entry: &Entry) -> Result<Option<Observation>, Issue> {
+        match entry.user {
+            ProcessUser::Other => return Ok(None),
+            ProcessUser::Unverified => return Err(Issue::EnumerationRestricted),
+            ProcessUser::Current => {}
+        }
         let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, entry.pid) };
         if raw.is_null() { return Err(last_issue()); }
         let handle = Handle(raw);

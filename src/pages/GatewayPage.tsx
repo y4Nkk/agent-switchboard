@@ -1,5 +1,5 @@
 import { useMessageState } from "../i18n/use-message-state";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "../components/Button";
 import { ClientFilter, type ClientFilterValue } from "../components/ClientFilter";
 import { GatewayGuidance, GatewayTopology } from "../components/GatewayTopology";
@@ -8,6 +8,7 @@ import { GatewayPortChangeSheet, type PortSheetState } from "../components/Gatew
 import { GatewayTelemetry } from "../components/GatewayTelemetry";
 import { GatewayPanel } from "../components/GatewayPagePrimitives";
 import { GatewayIcon } from "../components/icons";
+import { CollapsibleSection } from "../components/Collapsible";
 import { useI18n } from "../i18n";
 import {
   discardGatewayPortChange,
@@ -27,16 +28,20 @@ const FAILURE_STATES: ReadonlySet<GatewayStatusKind> = new Set([
 ]);
 
 interface Props {
+  busy: boolean;
   /** False while another page is shown; polling runs only when visible. */
   active: boolean;
-  profiles: ProviderProfile[];
+  profiles: readonly Pick<ProviderProfile, "id" | "name">[];
 }
 
 /** Runtime snapshots and transient focus share one page owner. */
-export function GatewayPage({ active, profiles }: Props) {
+export function GatewayPage({ active, busy, profiles, routing }: Props & {
+  routing: (summary: ReactNode, refresh: () => Promise<void>, mutating: boolean) => ReactNode;
+}) {
   const { t } = useI18n();
   const [focus, setFocus] = useState<ClientFilterValue>("all");
   const [portSheet, setPortSheet] = useState<PortSheetState | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   // The sheet is portaled over the whole window; leaving the gateway context
   // (settings section or workspace) must close it so it never floats over an
   // unrelated page. The flow hook releases any held preparation on unmount.
@@ -50,16 +55,19 @@ export function GatewayPage({ active, profiles }: Props) {
     return names;
   }, [profiles]);
 
-  if (error && !status) return <GatewayUnavailable error={error} onRetry={refresh} />;
-  if (!status) return <GatewayLoading />;
-
-  const failed = FAILURE_STATES.has(status.status);
+  const failed = status ? FAILURE_STATES.has(status.status) : false;
+  const summary = status ? <>
+    {error && <p className="asb-fail-text" role="alert">{error}</p>}
+    <GatewayHub status={status} failed={failed} refreshedAt={refreshedAt} retrying={retrying || busy} active={active}
+      onRetry={retryBind} onChangePort={() => setPortSheet({ stage: "input" })} />
+    <GatewayGuidance status={status} busy={retrying || busy} onDiscardRecovery={discardRecovery} />
+  </> : error ? <GatewayUnavailable error={error} onRetry={refresh} /> : <GatewayLoading />;
   return (
-    <GatewayPanel controls={<ClientFilter value={focus} onChange={setFocus} label={t("gateway.focusAriaLabel")} showLogos />}>
-      {error && <p className="asb-fail-text" role="alert">{error}</p>}
-      <GatewayHub status={status} failed={failed} refreshedAt={refreshedAt} retrying={retrying} active={active}
-        onRetry={retryBind} onChangePort={() => setPortSheet({ stage: "input" })} />
-      <GatewayGuidance status={status} busy={retrying} onDiscardRecovery={discardRecovery} />
+    <div className="asb-gateway-workspace">
+      {routing(summary, refresh, retrying)}
+      {status && <CollapsibleSection className="asb-panel asb-gateway-panel" open={detailsOpen}
+        onOpenChange={setDetailsOpen} label={t("modelRoutes.runtime")}>
+      <ClientFilter value={focus} onChange={setFocus} label={t("gateway.focusAriaLabel")} showLogos />
       <GatewayTopology
         status={status}
         failed={failed}
@@ -68,7 +76,8 @@ export function GatewayPage({ active, profiles }: Props) {
         onFocus={(app) => setFocus((current) => current === app ? "all" : app)}
       />
       <GatewayTelemetry metrics={status.metrics} profileNames={profileNames} focus={focus} />
-      {portSheet && (
+      </CollapsibleSection>}
+      {portSheet && status && (
         <GatewayPortChangeSheet
           state={portSheet}
           configuredPort={status.configuredPort}
@@ -76,7 +85,7 @@ export function GatewayPage({ active, profiles }: Props) {
           onRefreshed={() => void refresh()}
         />
       )}
-    </GatewayPanel>
+    </div>
   );
 }
 

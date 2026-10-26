@@ -45,6 +45,7 @@ pub(super) fn recover_saved_profile(
         build_plan(state, gateway, &pending.projection_profile_id).map_err(|error| error.message)?;
     let preview = preview_projection(state, &projection).map_err(|error| error.message)?;
     if already_committed(state, &pending.projection_profile_id, pending.app, &preview)? {
+        gateway.commit(&projection, || Ok(()))?;
         state.configuration().clear_profile_save()?;
         super::profile_rollback::clear(state)?;
         return Ok(Some(pending.profile_id));

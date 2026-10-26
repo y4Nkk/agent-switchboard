@@ -101,6 +101,7 @@ fn native_reader_measures_the_current_process_with_a_stable_identity() {
     assert!(reader.online_cpus().unwrap() > 0);
     let (entries, _) = reader.entries().unwrap();
     let entry = entries.iter().find(|entry| entry.pid == std::process::id()).unwrap();
+    assert_eq!(entry.user, ProcessUser::Current);
     let first = reader.read(entry).unwrap().unwrap();
     let second = reader.read(entry).unwrap().unwrap();
     assert_eq!(first.key.pid, std::process::id());

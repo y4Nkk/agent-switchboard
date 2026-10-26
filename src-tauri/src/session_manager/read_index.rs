@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, UNIX_EPOCH};
+pub(crate) mod prefix;
 
 static SCHEMA_GATE: Mutex<()> = Mutex::new(());
 const SCHEMA: &str = "CREATE TABLE entries (
@@ -98,6 +99,23 @@ impl ReadIndex {
         if let Some(value) = self.get(kind, &cache_key, &encoded)? { return Ok(value); }
         let value = build()?;
         if FileRevision::read(path)? != revision { return Err(format!("来源在读取期间发生变化，请重试：{}", path.display())); }
+        self.put(kind, &cache_key, &encoded, &value)?;
+        Ok(value)
+    }
+
+    pub(crate) fn file_prefix<T: Serialize + DeserializeOwned>(&self, kind: &str, path: &Path, checkpoint: &dyn Fn() -> Result<(), String>,
+        build: impl FnOnce(&mut dyn std::io::BufRead) -> Result<T, String>) -> Result<T, String> {
+        use sha2::{Digest, Sha256};
+        let revision = FileRevision::read(path)?;
+        let encoded = revision.encoded()?;
+        let cache_key = key(&path)?;
+        if let Some(value) = self.get(kind, &cache_key, &encoded)? { return Ok(value); }
+        let mut hash = Sha256::new();
+        let mut reader = prefix::DigestReader::open(path, 0, revision.bytes, &mut hash)?;
+        let value = build(&mut std::io::BufReader::new(&mut reader))?;
+        let length = reader.bytes;
+        drop(reader);
+        prefix::verify(path, &revision, length, &format!("{:x}", hash.finalize()), checkpoint)?;
         self.put(kind, &cache_key, &encoded, &value)?;
         Ok(value)
     }

@@ -37,12 +37,14 @@ interface Props {
   /** Discards the pending candidate without writing. */
   onCancelActivation: () => void;
   onEdit?: (profile: ProviderProfile) => void;
+  onRoutes?: (profile: ProviderProfile) => void;
   /** Opens the dedicated usage-query workspace for this profile. */
   onConfigureUsage?: (profile: ProviderProfile) => void;
   onDelete?: (profile: ProviderProfile) => void;
 }
 
 interface RowProps {
+  onRoutes?: (profile: ProviderProfile) => void;
   profile: ProviderProfile;
   active: boolean;
   userConfigModel: string | null;
@@ -77,7 +79,7 @@ function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
   const hasUsageQuery = Boolean(profile.usageQuery);
   const testId = `provider-test-${profile.id}`;
   const usageId = `provider-usage-${profile.id}`;
-  const hasActions = Boolean(props.onEdit || props.onDelete || (!official && (profile.baseUrl || hasUsageQuery || props.onConfigureUsage)));
+  const hasActions = Boolean(props.onRoutes || props.onEdit || props.onDelete || (!official && (profile.baseUrl || hasUsageQuery || props.onConfigureUsage)));
   return <ProviderRowShell id={profile.id} name={profile.name} active={active}
     confirmationOpen={confirmation !== undefined} sortable={sortable}
     model={<span title={modelTitle}>{modelText}</span>}
@@ -87,6 +89,7 @@ function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
     secondaryAction={official ? <ProviderLoginButton name={profile.name} open={reloginOpen}
       controlsId={`provider-relogin-${profile.id}`} onToggle={() => setReloginOpen((open) => !open)} /> : undefined}
     actions={hasActions ? <ProviderRowActions name={profile.name}
+      onRoutes={props.onRoutes ? () => props.onRoutes?.(profile) : undefined}
       onEdit={props.onEdit ? () => props.onEdit?.(profile) : undefined}
       onDelete={props.onDelete ? () => props.onDelete?.(profile) : undefined}
       test={!official && profile.baseUrl ? { id: testId, open: testOpen, trigger: testTriggerRef, onToggle: () => setTestOpen((open) => !open) } : undefined}
@@ -124,6 +127,7 @@ export function ProviderList({
   onConfirmSwitch,
   onCancelActivation,
   onEdit,
+  onRoutes,
   onConfigureUsage,
   onDelete,
 }: Props) {
@@ -149,6 +153,7 @@ export function ProviderList({
           onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
           onActivate={onActivate}
           onEdit={onEdit}
+          onRoutes={onRoutes}
           onConfigureUsage={onConfigureUsage}
           onDelete={onDelete}
         />;

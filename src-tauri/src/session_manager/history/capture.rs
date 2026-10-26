@@ -1,5 +1,6 @@
 use super::{attachments, db_error, deleted, issues, reading, Connection};
 use crate::session_manager::{conversion, images, parser, records, sources, SessionIssue};
+use crate::session_manager::read_index::{prefix, FileRevision};
 use asb_core::AppKind;
 use rusqlite::{params, OptionalExtension, TransactionBehavior};
 use sha2::{Digest, Sha256};
@@ -101,12 +102,13 @@ fn capture(connection: &mut Connection, root: &str, path: &Path, checkpoint: &dy
     let previous = previous(connection, origin)?;
     let id = previous.as_ref().map(|old| old.id.clone()).unwrap_or_else(|| asb_switch::sha256_hex(&format!("{origin}:0")));
     let before = stamp(&path.metadata().map_err(db_error_path)?)?;
+    let source_revision = FileRevision::read(path)?;
     let inventory = attachments::inventory(connection, &id, path, checkpoint)?;
     if previous.as_ref().is_some_and(|old| old.stamp == before && old.asset_stamp == inventory.stamp && !old.retry) {
         connection.execute("UPDATE transcripts SET available=1 WHERE id=?1", [&id]).map_err(db_error)?;
         return Ok(previous.and_then(|old| old.issue).into_iter().collect());
     }
-    let (mut meta, warnings) = parser::parse_session_observed(AppKind::Claude, path, checkpoint).map_err(db_error_path)?;
+    let (mut meta, warnings, metadata_revision) = capture_metadata(path, &source_revision, checkpoint)?;
     if !warnings.is_empty() { return Err(warnings.join("；")); }
     let native_id = meta.session_id.clone();
     let relative = path.strip_prefix(Path::new(root).join("projects")).map_err(db_error_path)?;
@@ -131,12 +133,11 @@ fn capture(connection: &mut Connection, root: &str, path: &Path, checkpoint: &dy
         transaction.execute("INSERT INTO attachments SELECT ?1,reference,relative_path,stamp,asset FROM attachments WHERE source=?2", params![id,old.id]).map_err(db_error)?;
         transaction.execute("INSERT INTO image_references SELECT ?1,reference,relative_path FROM image_references WHERE source=?2", params![id,old.id]).map_err(db_error)?;
     }
-    let (revision, length, references) = save_records(&transaction, &id, path, previous.as_ref().filter(|old| old.id == id), checkpoint)?;
+    let (revision, length, references) = save_records(&transaction, &id, path, source_revision.bytes, previous.as_ref().filter(|old| old.id == id), checkpoint)?;
     transaction.execute("UPDATE transcripts SET meta=?1 WHERE id=?2", params![metadata,id]).map_err(db_error)?;
     let (warnings, asset_stamp) = attachments::save(&transaction, &id, path, &inventory, &references, checkpoint)?;
-    if before != stamp(&path.metadata().map_err(db_error_path)?)? || digest_observed(path, None, checkpoint)? != revision {
-        return Err("会话在保存期间发生变化；保留上次完整记录，稍后重试".into());
-    }
+    if metadata_revision != revision { return Err("会话元信息与保存记录不一致，未发布本次快照".into()); }
+    prefix::verify(path, &source_revision, length, &revision, checkpoint)?;
     let inventory = attachments::inventory(&transaction, &id, path, checkpoint)?;
     if inventory.stamp != asset_stamp { return Err("会话附件集合在保存期间变化，稍后重试".into()); }
     let issue = (!warnings.is_empty()).then(|| warnings.join("；"));
@@ -150,19 +151,27 @@ fn capture(connection: &mut Connection, root: &str, path: &Path, checkpoint: &dy
     Ok(warnings)
 }
 
+fn capture_metadata(path: &Path, revision: &FileRevision, checkpoint: &dyn Fn() -> Result<(), String>)
+    -> Result<(crate::session_manager::SessionMeta, Vec<String>, String), String> {
+    let mut hash = Sha256::new();
+    let reader = prefix::DigestReader::open(path, 0, revision.bytes, &mut hash)?;
+    let (meta, warnings) = parser::parse_session_reader(AppKind::Claude, path, BufReader::new(reader), checkpoint).map_err(db_error_path)?;
+    Ok((meta, warnings, format!("{:x}", hash.finalize())))
+}
+
 fn generation(path: &Path, previous: Option<&Previous>, rewritten_assets: bool, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<u64, String> {
     let Some(old) = previous else { return Ok(0); };
     if !rewritten_assets && digest_observed(path, Some(old.length), checkpoint)? == old.revision { return Ok(old.generation); }
     old.generation.checked_add(1).ok_or("会话版本超出保存范围".into())
 }
 
-fn save_records(connection: &Connection, id: &str, path: &Path, previous: Option<&Previous>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(String, u64, BTreeSet<String>), String> {
+fn save_records(connection: &Connection, id: &str, path: &Path, length: u64, previous: Option<&Previous>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(String, u64, BTreeSet<String>), String> {
     let append_at = match previous {
         Some(old) if digest_observed(path, Some(old.length), checkpoint)? == old.revision => old.length,
         Some(_) => return Err("原记录在版本确认后再次改写，已保留旧版本，稍后重试".into()),
         None => 0,
     };
-    let mut reader = BufReader::new(File::open(path).map_err(db_error_path)?);
+    let mut reader = BufReader::new(File::open(path).map_err(db_error_path)?.take(length));
     let mut line = Vec::new();
     let mut hash = Sha256::new();
     let mut position = 0u64;

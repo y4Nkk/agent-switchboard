@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use std::fs;
+use std::fs::{self, File};
 use std::io::Write;
 
 fn message(id: &str, input: u64) -> String {
@@ -14,6 +14,37 @@ fn total(value: FileUsage) -> u64 {
         UsageState::Claude(values) => values.values().map(|candidate| candidate.event.tokens.total).sum(),
         _ => panic!("expected Claude usage"),
     }
+}
+
+#[test]
+fn a_growing_file_returns_only_its_captured_prefix_then_catches_up_once() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("session.jsonl");
+    let index = ReadIndex::open(&temp.path().join("state")).unwrap();
+    fs::write(&path, message("first", 10)).unwrap();
+    let revision = FileRevision::read(&path).unwrap();
+    write!(File::options().append(true).open(&path).unwrap(), "{}", message("second", 20)).unwrap();
+    let (snapshot, cacheable) = capture(&path, AppKind::Claude, "session", revision, None).unwrap();
+    verify(&path, &snapshot).unwrap();
+    assert!(cacheable);
+    assert_eq!(total(snapshot), 12);
+    assert_eq!(total(read(&index, &path, AppKind::Claude, "session").unwrap()), 34);
+    assert_eq!(total(read(&index, &path, AppKind::Claude, "session").unwrap()), 34);
+}
+
+#[test]
+fn rewriting_a_captured_prefix_is_rejected_and_the_next_read_rebuilds_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("session.jsonl");
+    let index = ReadIndex::open(&temp.path().join("state")).unwrap();
+    fs::write(&path, message("first", 10)).unwrap();
+    let previous = read(&index, &path, AppKind::Claude, "session").unwrap();
+    let (snapshot, _) = capture(&path, AppKind::Claude, "session", FileRevision::read(&path).unwrap(), Some(previous)).unwrap();
+    fs::write(&path, message("first", 90)).unwrap();
+    assert!(verify(&path, &snapshot).is_err());
+    assert_eq!(total(read(&index, &path, AppKind::Claude, "session").unwrap()), 92);
+    fs::write(&path, b"").unwrap();
+    assert!(verify(&path, &snapshot).is_err());
 }
 
 #[test]

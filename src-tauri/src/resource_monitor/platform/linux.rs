@@ -1,5 +1,5 @@
-use crate::resource_monitor::{observation::{Entry, Observation, ProcessKey}, types::{push_issue, Issue}};
-use std::{fs, os::unix::fs::MetadataExt, path::PathBuf, time::Instant};
+use crate::resource_monitor::{observation::{Entry, Observation, ProcessKey, ProcessUser}, types::{push_issue, Issue}};
+use std::{fs, io::Read, path::PathBuf, time::Instant};
 
 pub struct Reader { uid: u32, ticks: u64, page_size: u64 }
 
@@ -24,8 +24,14 @@ impl Reader {
         for directory in directories {
             let directory = directory.map_err(|error| format!("进程目录读取失败：{error}"))?;
             let Some(pid) = directory.file_name().to_str().and_then(|name| name.parse::<u32>().ok()) else { continue; };
+            match effective_uid(pid) {
+                Ok(uid) if uid != self.uid => continue,
+                Ok(_) => {}
+                Err(Issue::ProcessExited) => continue,
+                Err(_) => { push_issue(&mut issues, Issue::EnumerationRestricted); continue; }
+            }
             match read_stat(pid) {
-                Ok(stat) => entries.push(Entry { pid, parent_pid: stat.parent, name: stat.name }),
+                Ok(stat) => entries.push(Entry { pid, parent_pid: stat.parent, name: stat.name, user: ProcessUser::Current }),
                 Err(Issue::ProcessExited) => {}
                 Err(_) => push_issue(&mut issues, Issue::EnumerationRestricted),
             }
@@ -35,11 +41,12 @@ impl Reader {
 
     pub fn read(&self, entry: &Entry) -> Result<Option<Observation>, Issue> {
         let root = PathBuf::from(format!("/proc/{}", entry.pid));
-        if fs::metadata(&root).map_err(|error| io_issue(&error))?.uid() != self.uid { return Ok(None); }
+        if effective_uid(entry.pid)? != self.uid { return Ok(None); }
         let stat = read_stat(entry.pid)?;
         let at = Instant::now();
         let executable = fs::read_link(root.join("exe")).ok();
         let verified = read_stat(entry.pid)?;
+        if effective_uid(entry.pid)? != self.uid { return Ok(None); }
         if stat.birth != verified.birth { return Err(Issue::IdentityChanged); }
         let cpu_ns = stat.user.checked_add(stat.system)
             .and_then(|ticks| u64::try_from(u128::from(ticks) * 1_000_000_000 / u128::from(self.ticks)).ok())
@@ -64,8 +71,22 @@ fn io_issue(error: &std::io::Error) -> Issue {
 }
 
 fn read_stat(pid: u32) -> Result<Stat, Issue> {
-    let text = fs::read_to_string(format!("/proc/{pid}/stat")).map_err(|error| io_issue(&error))?;
-    parse_stat(&text).ok_or(Issue::IdentityUnavailable)
+    let bytes = fs::read(format!("/proc/{pid}/stat")).map_err(|error| io_issue(&error))?;
+    parse_stat(&String::from_utf8_lossy(&bytes)).ok_or(Issue::IdentityUnavailable)
+}
+
+fn effective_uid(pid: u32) -> Result<u32, Issue> {
+    let file = fs::File::open(format!("/proc/{pid}/status")).map_err(|error| io_issue(&error))?;
+    let mut status = Vec::new();
+    // Uid precedes variable-size groups and memory details in the kernel's status header.
+    file.take(4096).read_to_end(&mut status).map_err(|error| io_issue(&error))?;
+    parse_uid(&status).ok_or(Issue::IdentityUnavailable)
+}
+
+fn parse_uid(status: &[u8]) -> Option<u32> {
+    let line = status.split(|byte| *byte == b'\n').find(|line| line.starts_with(b"Uid:"))?;
+    let effective = line[4..].split(|byte| byte.is_ascii_whitespace()).filter(|field| !field.is_empty()).nth(1)?;
+    std::str::from_utf8(effective).ok()?.parse().ok()
 }
 
 fn parse_stat(text: &str) -> Option<Stat> {
@@ -86,12 +107,19 @@ fn namespace_issues() -> Vec<Issue> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_stat;
+    use super::{parse_stat, parse_uid};
 
     #[test]
     fn stat_names_may_contain_spaces_and_parentheses() {
         let text = "42 (test (child)) S 7 0 0 0 0 0 0 0 0 0 11 12 0 0 0 0 0 0 33 0 44";
         let stat = parse_stat(text).unwrap();
         assert_eq!((stat.parent, stat.user, stat.system, stat.birth, stat.rss), (7, 11, 12, 33, 44));
+    }
+
+    #[test]
+    fn effective_user_is_independent_of_real_user_and_non_utf8_process_names() {
+        assert_eq!(parse_uid(b"Name:\t\xff\nUid:\t0\t1001\t1002\t1003\n"), Some(1001));
+        assert_eq!(parse_uid(b"Uid:\t1001\t0\t1001\t1001\n"), Some(0));
+        assert_eq!(parse_uid(b"Uid:\t1001\n"), None);
     }
 }

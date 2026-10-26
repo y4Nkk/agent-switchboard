@@ -1,10 +1,10 @@
 import { useId } from "react";
 import type { ResourceGroup, ResourceGroupReading } from "../api/client";
-import { Button } from "../components/Button";
-import { Collapsible, CollapsibleChevron } from "../components/Collapsible";
+import { Collapsible, CollapsibleTrigger } from "../components/Collapsible";
 import { Table, type TableColumn } from "../components/Table";
-import { ResourceMetric, resourceIssueText } from "../components/resource-usage/ResourceMetric";
+import { ResourceMetric, formatResourceValue, resourceIssueText } from "../components/resource-usage/ResourceMetric";
 import { ResourceProcessDetails } from "../components/resource-usage/ResourceProcessDetails";
+import { ResourceUsageRing } from "../components/resource-usage/ResourceUsageRing";
 import { useI18n, type TFunction } from "../i18n";
 import type { useResourceUsage } from "./use-resource-usage";
 
@@ -13,16 +13,18 @@ type Resources = ReturnType<typeof useResourceUsage>;
 function groupName(group: ResourceGroup, t: TFunction) { return t(`resources.group.${group}`); }
 const INTERFACE_ISSUES = new Set(["webviewPartial", "webviewUnavailable", "browserExcluded"]);
 
-function columns(resources: Resources, id: string, t: TFunction): TableColumn<ResourceGroupReading>[] {
+function columns(resources: Resources, id: string, t: TFunction, language: string): TableColumn<ResourceGroupReading>[] {
+  const memory = (resources.read?.groups ?? []).flatMap((row) => row.residentBytes.value === null ? [] : [row.residentBytes.value]);
+  const memoryMaximum = memory.length ? 2 ** Math.ceil(Math.log2(Math.max(1024 ** 2, ...memory))) : null;
   return [
     { key: "software", header: t("resources.column.software"), render: (row) => {
       const open = resources.selection?.group === row.group;
-      return <div className="asb-resource-software">
-        <Button variant="unstyled" size="compact" className="asb-resource-name"
-          aria-expanded={open} aria-controls={open ? `${id}-${row.group}` : undefined}
-          onClick={() => resources.toggle(row.group)}>
-          <CollapsibleChevron open={open} />{groupName(row.group, t)}
-        </Button>
+      return <div className="asb-resource-software" data-resource-group={row.group}>
+        <CollapsibleTrigger open={open} contentId={`${id}-${row.group}`}
+          label={<span className="asb-resource-name-label">
+            <span className="asb-resource-series-dot" aria-hidden="true" />{groupName(row.group, t)}
+          </span>} onOpenChange={() => resources.toggle(row.group)} />
+        <p className="asb-resource-note">{t(`resources.presence.${row.presence}`)}</p>
         {row.issues.length > 0 && <p className="asb-resource-note">
           {t("resources.identified")}
           {row.issues.filter((issue) => !INTERFACE_ISSUES.has(issue))
@@ -30,20 +32,21 @@ function columns(resources: Resources, id: string, t: TFunction): TableColumn<Re
         </p>}
       </div>;
     } },
-    { key: "presence", header: t("resources.column.status"), render: (row) => t(`resources.presence.${row.presence}`) },
-    { key: "cpu", header: "CPU", align: "end", render: (row) => <ResourceMetric metric={row.cpu} kind="cpu" /> },
-    { key: "memory", header: t("resources.column.memory"), align: "end",
-      render: (row) => <ResourceMetric metric={row.residentBytes} kind="memory" /> },
-    { key: "processes", header: t("resources.column.count"), align: "end",
+    { key: "cpu", header: t("resources.chart.cpu"), cellClassName: "asb-resource-chart-cpu",
+      render: (row) => <ResourceUsageRing group={row.group} metric={row.cpu} kind="cpu" maximum={100} /> },
+    { key: "memory", header: memoryMaximum === null ? t("resources.column.memory")
+      : t("resources.chart.memory", { maximum: formatResourceValue(memoryMaximum, "memory", language) }),
+      cellClassName: "asb-resource-chart-memory",
+      render: (row) => <ResourceUsageRing group={row.group} metric={row.residentBytes} kind="memory" maximum={memoryMaximum} /> },
+    { key: "processes", header: t("resources.column.count"),
       render: (row) => <ResourceMetric metric={row.processCount} kind="count" /> },
   ];
 }
 
 export function ResourceUsagePage({ resources }: { resources: Resources }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const id = useId();
   return <div className="asb-resource-usage" aria-busy={resources.loading}>
-    <p className="asb-field-help">{t("resources.scope")}</p>
     {resources.read && <p className="asb-field-help">
       {t("resources.platform", { name: ({ windows: "Windows", macos: "macOS", linux: "Linux" } as Record<string, string>)[resources.read.scope.platform] ?? resources.read.scope.platform })}
       {resources.read.scope.interfaceCoverage === "browserExcluded" && <> · {t("resources.issue.browserExcluded")}</>}
@@ -52,7 +55,7 @@ export function ResourceUsagePage({ resources }: { resources: Resources }) {
     {resources.error && <p className="asb-warn-text" role="alert">
       {resources.error}{resources.read && <> {t("resources.previousReading")}</>}
     </p>}
-    {resources.read ? <Table columns={columns(resources, id, t)} rows={resources.read.groups}
+    {resources.read ? <Table columns={columns(resources, id, t, language)} rows={resources.read.groups}
       rowKey={(row) => row.group} ariaLabel={t("resources.table.aria")} className="asb-resource-table"
       renderExpansion={(row) => <Collapsible open={resources.selection?.group === row.group}
         id={`${id}-${row.group}`} ariaLabel={t("resources.details.for", { name: groupName(row.group, t) })}>
@@ -63,9 +66,13 @@ export function ResourceUsagePage({ resources }: { resources: Resources }) {
         <p className="asb-field-help">{t(resources.loading ? "resources.loading" : "resources.noReadings")}</p>
         {resources.loading && <div className="asb-skeleton" />}
       </div>}
-    <p className="asb-field-help">{t("resources.memoryNote")}</p>
-    {resources.read && resources.read.scope.issues.length > 0 && <p className="asb-field-help">
-      {resources.read.scope.issues.map((issue) => resourceIssueText(issue, t)).join(" · ")}
-    </p>}
+    <div className="asb-resource-footnotes">
+      <p className="asb-field-help">{t("resources.chart.memoryNote")}</p>
+      <p className="asb-field-help">{t("resources.memoryNote")}</p>
+      <p className="asb-field-help">{t("resources.scope")}</p>
+      {resources.read && resources.read.scope.issues.length > 0 && <p className="asb-field-help">
+        {resources.read.scope.issues.map((issue) => resourceIssueText(issue, t)).join(" · ")}
+      </p>}
+    </div>
   </div>;
 }

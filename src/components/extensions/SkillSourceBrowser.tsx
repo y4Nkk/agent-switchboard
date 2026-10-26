@@ -4,7 +4,7 @@ import type { ExtensionListItem } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { EditorFrame } from "../EditorFrame";
-import { Input } from "../Input";
+import { SearchInput } from "../SearchInput";
 import { Select } from "../Select";
 import { SearchIcon } from "../icons";
 import { ExtensionLoading } from "./ExtensionLoading";
@@ -28,9 +28,8 @@ function SourceFilters({ state }: { state: SkillSourceState }) {
   const { t } = useI18n();
   return <div className="asb-skill-source-toolbar">
     <div className="asb-skill-source-search">
-      <SearchIcon />
-      <Input type="search" placeholder={t("extensions.sources.searchPlaceholder")} aria-label={t("extensions.sources.filterAria")}
-        value={state.query} onChange={(event) => state.setQuery(event.target.value)} />
+      <SearchInput placeholder={t("extensions.sources.searchPlaceholder")} ariaLabel={t("extensions.sources.filterAria")}
+        value={state.query} onChange={state.setQuery} />
     </div>
     {state.source === "catalog" && <Select value={state.repository} onChange={state.setRepository}
       ariaLabel={t("extensions.sources.repoFilterAria")} options={[

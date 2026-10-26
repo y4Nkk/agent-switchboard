@@ -115,8 +115,6 @@ export const messages = {
 	"importDiscovery.warn.remediationLine": ["{label}：{reason}", "{label}: {reason}"],
 	"importDiscovery.warn.summary": ["当前结果有 {warnings} 条警告，{repairable} 条可修复", "The current results have {warnings} warnings, {repairable} of them fixable"],
 	"importDiscovery.warn.summaryInfo": ["，{count} 条提示", ", {count} informational"],
-	"importDiscovery.warn.collapseAria": ["收起警告详情", "Collapse warning details"],
-	"importDiscovery.warn.expandAria": ["展开警告详情：{summary}", "Expand warning details: {summary}"],
 	"importDiscovery.warn.staleSuffix": ["（上次扫描未更新）", " (last scan not refreshed)"],
 	"importDiscovery.warn.repairAria": ["修复这 {count} 项可修复警告", "Fix these {count} fixable warnings"],
 	"importDiscovery.warn.repair": ["修复这 {count} 项", "Fix these {count}"],

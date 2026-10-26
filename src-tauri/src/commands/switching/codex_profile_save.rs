@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
+use super::profile_save::ProfileSaveIntent;
 
 const PREPARATION_TTL: Duration = Duration::from_secs(10 * 60);
 const MAX_PREPARATIONS: usize = 32;
@@ -30,6 +31,7 @@ struct PreparationInner {
 }
 
 pub(super) struct PreparedCodexProfileSave {
+    pub(super) intent: ProfileSaveIntent,
     pub(super) created_at: Instant,
     pub(super) profile_id: String,
     pub(super) expected_file_hash: String,
@@ -37,6 +39,7 @@ pub(super) struct PreparedCodexProfileSave {
     pub(super) kind: ProfileSaveKind,
     pub(super) preview: Option<asb_switch::FilePreview>,
     pub(super) projection_profile: Option<CodexProviderFile>,
+    pub(super) candidate_revision: Option<String>,
 }
 
 impl CodexProfileSavePreparations {
@@ -88,22 +91,23 @@ pub(super) fn prepare_data(
     profile_id: &str,
     draft: &CodexProviderDraft,
     expected_file_hash: &str,
+    intent: ProfileSaveIntent,
 ) -> Result<
-    (ProfileSaveKind, Option<asb_switch::FilePreview>, Option<CodexProviderFile>),
+    (ProfileSaveKind, Option<asb_switch::FilePreview>, Option<CodexProviderFile>, Option<String>),
     CommandError,
 > {
-    let (_, candidate, kind, owner) = classify(state, gateway, profile_id, draft, expected_file_hash)?;
+    let (_, candidate, kind, owner) = classify(state, gateway, profile_id, draft, expected_file_hash, intent)?;
+    let mut candidate_revision = None;
     let preview = if let Some(owner) = &owner {
-        let mut preview = preview_projection(
-            state,
-            &dependencies::projection(state, gateway, owner, &candidate)?,
-        )?;
+        let projection = dependencies::projection(state, gateway, owner, &candidate)?;
+        candidate_revision = Some(projection.candidate_revision());
+        let mut preview = preview_projection(state, &projection)?;
         if owner.profile.id != candidate.profile.id {
             preview.preview.warnings.push(asb_core::contracts::LocalizedMessage::new(
-                "warnings.codex.subagentModelSynced",
+                "warnings.provider.dependentRoutesSynced",
                 serde_json::json!({ "owner": owner.profile.name, "candidate": candidate.profile.name }),
                 format!(
-                    "当前主供应商「{}」引用了「{}」的子代理模型；本次保存同步更新其模型目录，主供应商保持不变。",
+                    "当前主供应商「{}」引用了「{}」；本次保存同步更新调用配置与模型目录，主供应商保持不变。",
                     owner.profile.name, candidate.profile.name
                 ),
             ));
@@ -112,7 +116,7 @@ pub(super) fn prepare_data(
     } else {
         None
     };
-    Ok((kind, preview, owner))
+    Ok((kind, preview, owner, candidate_revision))
 }
 
 pub(super) fn commit(
@@ -127,6 +131,7 @@ pub(super) fn commit(
         &prepared.profile_id,
         &prepared.draft,
         &prepared.expected_file_hash,
+        prepared.intent,
     )?;
     if actual_kind != prepared.kind || owner != prepared.projection_profile {
         return Err(stale());
@@ -144,8 +149,14 @@ pub(super) fn commit(
         ProfileSaveKind::SaveAndApply => {
             require_write_confirmation(confirm_write, "保存并应用 Codex 供应商")?;
             let preview = prepared.preview.as_ref().ok_or_else(stale)?;
+            let projection = dependencies::projection(
+                state, gateway, owner.as_ref().ok_or_else(stale)?, &candidate,
+            )?;
+            if prepared.candidate_revision.as_deref() != Some(projection.candidate_revision().as_str()) {
+                return Err(stale());
+            }
             apply(
-                state, gateway, stored, candidate, owner.as_ref().ok_or_else(stale)?,
+                state, gateway, stored, candidate, &projection,
                 &prepared.draft, preview,
             )
         }
@@ -163,6 +174,7 @@ fn classify(
     profile_id: &str,
     draft: &CodexProviderDraft,
     expected_file_hash: &str,
+    intent: ProfileSaveIntent,
 ) -> Result<
     (CodexProviderRecord, CodexProviderFile, ProfileSaveKind, Option<CodexProviderFile>),
     CommandError,
@@ -198,6 +210,9 @@ fn classify(
         .validate()
         .map_err(|error| CommandError::new("codex-profile-save-invalid", error))?;
     dependencies::validate_references(state, &candidate)?;
+    if intent == ProfileSaveIntent::Activate {
+        return Ok((stored, candidate.clone(), ProfileSaveKind::SaveAndApply, Some(candidate)));
+    }
     if candidate == current {
         return Ok((stored, candidate, ProfileSaveKind::NoChange, None));
     }
@@ -250,7 +265,7 @@ fn apply(
     gateway: &crate::gateway::GatewayController,
     stored: CodexProviderRecord,
     candidate: CodexProviderFile,
-    owner: &CodexProviderFile,
+    projection: &crate::gateway::GatewayProjection,
     draft: &CodexProviderDraft,
     preview: &asb_switch::FilePreview,
 ) -> Result<CodexProviderRecord, CommandError> {
@@ -258,7 +273,6 @@ fn apply(
         .configuration()
         .find_codex_provider_file(&stored.profile.id)
         .map_err(store_error)?;
-    let projection = dependencies::projection(state, gateway, owner, &candidate)?;
     super::profile_rollback::save_codex(
         state,
         &current,
@@ -271,7 +285,7 @@ fn apply(
         .configuration()
         .begin_profile_save(&PendingProfileSave {
             profile_id: stored.profile.id.clone(),
-            projection_profile_id: owner.profile.id.clone(),
+            projection_profile_id: projection.plan.profile.id.clone(),
             app: asb_core::AppKind::Codex,
             previous_file_hash: stored.file_hash.clone(),
         })
@@ -287,7 +301,7 @@ fn apply(
     if let Err(error) = super::plan::execute_projection_with_auth(
         state,
         gateway,
-        &projection,
+        projection,
         &preview.content_hash,
         &preview.rendered_hash,
         preview.auth_hash.as_deref(),
@@ -388,3 +402,5 @@ fn recovery_required(message: impl Into<String>) -> CommandError {
 mod tests;
 #[cfg(test)]
 mod dependency_tests;
+#[cfg(test)]
+mod queue_tests;

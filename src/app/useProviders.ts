@@ -1,8 +1,9 @@
+import { useProviderSaves } from "./useProviderSaves";
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import {
+  cancelProfileSave,
   commitCodexProfileSave,
   commitProfileSave,
-  createCodexProfile,
   deleteCodexProfile,
   deleteProfile,
   prepareCodexProfileSave,
@@ -10,15 +11,13 @@ import {
   reorderClaudeProfiles,
   type AppKind,
   type CommandError,
-  type CodexProviderDraft,
   type CodexProviderRecord,
-  type FilePreview,
   type ProviderDraft,
   type ProviderProfile,
   type ProviderRecord,
   type UsageQuery,
 } from "../api/client";
-import { codexUsageDraftFrom } from "../components/codex-provider-editor/draft";
+import { codexProviderDraft } from "../lib/provider-drafts";
 
 /** What a Codex editor session edits: a stored third-party record or the
  * client's official-login record. The variants never convert into each other;
@@ -38,9 +37,10 @@ function codexSessionRecord(session: ProviderEditorSession | null): CodexProvide
   return session.source?.kind === "record" ? session.source.record : null;
 }
 
-type SetEditorSession = Dispatch<SetStateAction<ProviderEditorSession | null>>;
+export type SetEditorSession = Dispatch<SetStateAction<ProviderEditorSession | null>>;
 
-interface ProvidersDeps {
+export interface ProvidersDeps {
+  active: boolean;
   busy: boolean;
   appFilter: AppKind;
   setAppFilter: (app: AppKind) => void;
@@ -61,7 +61,6 @@ interface ProvidersDeps {
 function useProviderEditorSession(deps: ProvidersDeps) {
   const { appFilter, records, clearCandidates, setAppFilter, setTargetProfileId } = deps;
   const [editorSession, setEditorSession] = useState<ProviderEditorSession | null>(null);
-
   const openEditor = useCallback(
     (profile: ProviderProfile) => {
       const record = records.find((item) => item.profile.id === profile.id);
@@ -127,7 +126,6 @@ function useProviderEditorSession(deps: ProvidersDeps) {
     );
   }, [clearCandidates, setAppFilter, setTargetProfileId]);
   const closeEditor = useCallback(() => setEditorSession(null), []);
-
   /** Changing the list client clears the execution target and both preview states, not the editor session. */
   const selectApp = useCallback(
     (app: AppKind) => {
@@ -137,168 +135,49 @@ function useProviderEditorSession(deps: ProvidersDeps) {
     },
     [clearCandidates, setAppFilter, setTargetProfileId],
   );
-
   return { editorSession, setEditorSession, openEditor, openCodexEditor, openCodexOfficialEditor,
     switchCodexAccessMode, newEditor, newEditorFor, closeEditor, selectApp };
 }
-
-/** One save awaiting its explicit write confirmation. `store` selects the
- * transaction: the generic provider boundary (Claude or the Codex
- * official-login record) or the strict Codex third-party store. */
-interface PendingSave {
-  kind: "generic" | "codex";
-  app: AppKind;
-  preparationId: string;
-  preview: FilePreview;
-}
-
-function useProviderSaves(
-  deps: ProvidersDeps, editorSession: ProviderEditorSession | null, setEditorSession: SetEditorSession,
-) {
-  const { busy, clearError, invalidateCandidates, onError, refresh, setTargetProfile, setAppFilter, setBusy } = deps;
-  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
-  const saveProfile = useCallback(async (draft: ProviderDraft) => {
-    if (busy || !editorSession || editorSession.app !== "claude") return;
-    setBusy(true);
-    clearError();
-    try {
-      const record = editorSession.record;
-      const prepared = await prepareProfileSave(
-        record?.profile.id ?? null,
-        draft,
-        record?.fileHash ?? null,
-      );
-      if (prepared.kind === "saveAndApply") {
-        if (!prepared.preview) {
-          throw { code: "profile-preview-missing", message: "", messageKey: "operations.save.previewMissing" };
+function useCodexMetadata(deps: ProvidersDeps) {
+  const { busy, clearError, onError, refresh, setBusy } = deps;
+  /** Saves one Codex third-party profile's usage query through the strict
+   * Codex store. Usage metadata never re-applies the client route: a
+   * save-and-apply classification means the base record drifted and is
+   * rejected instead of silently applying. */
+  const saveCodexProfileUsageQuery = useCallback(
+    async (record: CodexProviderRecord, usageQuery: UsageQuery | null): Promise<boolean> => {
+      if (busy) return false;
+      setBusy(true);
+      clearError();
+      try {
+        const draft = { ...codexProviderDraft(record), usageQuery };
+        const prepared = await prepareCodexProfileSave(
+          record.profile.id,
+          draft,
+          record.fileHash,
+          "save",
+        );
+        if (prepared.kind === "saveAndApply") {
+          await cancelProfileSave("codex", prepared.preparationId);
+          throw {
+            code: "profile-save-invalid",
+            message: "", messageKey: "operations.save.patchNoApply",
+          };
         }
-        setPendingSave({ kind: "generic", app: "claude", preparationId: prepared.preparationId, preview: prepared.preview });
-        return;
-      }
-      const saved = await commitProfileSave(prepared.preparationId, false);
-      if (prepared.kind !== "noChange") {
-        invalidateCandidates();
-      }
-      setAppFilter(saved.profile.app);
-      setEditorSession(null);
-      await refresh();
-      await setTargetProfile(saved.profile.id);
-    } catch (caught) {
-      onError(caught as CommandError);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, clearError, editorSession, invalidateCandidates, onError, refresh,
-    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
-
-  /** Codex saves never migrate through the generic transaction: creation
-   * (blank or an import seed) writes the specialized store directly; an edit
-   * of the live profile prepares a preview that must be confirmed before it
-   * is applied. */
-  const saveCodexProfile = useCallback(async (draft: CodexProviderDraft) => {
-    if (busy || !editorSession || editorSession.app !== "codex") return;
-    setBusy(true);
-    clearError();
-    try {
-      const record = codexSessionRecord(editorSession);
-      if (!record) {
-        const created = await createCodexProfile(draft);
-        invalidateCandidates();
-        setAppFilter("codex");
-        setEditorSession(null);
+        await commitCodexProfileSave(prepared.preparationId, false);
         await refresh();
-        await setTargetProfile(created.profile.id);
-        return;
+        return true;
+      } catch (caught) {
+        onError(caught as CommandError);
+        return false;
+      } finally {
+        setBusy(false);
       }
-      const prepared = await prepareCodexProfileSave(
-        record.profile.id,
-        draft,
-        record.fileHash,
-      );
-      if (prepared.kind === "saveAndApply") {
-        if (!prepared.preview) {
-          throw { code: "codex-profile-save-stale", message: "", messageKey: "operations.save.codexPreviewMissing" };
-        }
-        setPendingSave({ kind: "codex", app: "codex", preparationId: prepared.preparationId, preview: prepared.preview });
-        return;
-      }
-      const saved = await commitCodexProfileSave(prepared.preparationId, false);
-      if (prepared.kind !== "noChange") {
-        invalidateCandidates();
-      }
-      setAppFilter("codex");
-      setEditorSession(null);
-      await refresh();
-      await setTargetProfile(saved.profile.id);
-    } catch (caught) {
-      onError(caught as CommandError);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, clearError, editorSession, invalidateCandidates, onError, refresh,
-    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
+    },
+    [busy, clearError, onError, refresh, setBusy],
+  );
 
-  /** The Codex official-login record is an ordinary generic-boundary record:
-   * it saves through the same prepare/commit transaction as a Claude profile,
-   * never through the strict third-party store. */
-  const saveCodexOfficialProfile = useCallback(async (draft: ProviderDraft) => {
-    if (busy || !editorSession || editorSession.app !== "codex"
-      || editorSession.source?.kind !== "official") return;
-    setBusy(true);
-    clearError();
-    try {
-      const record = editorSession.source.record;
-      const prepared = await prepareProfileSave(
-        record?.profile.id ?? null,
-        draft,
-        record?.fileHash ?? null,
-      );
-      if (prepared.kind === "saveAndApply") {
-        if (!prepared.preview) {
-          throw { code: "profile-preview-missing", message: "", messageKey: "operations.save.previewMissing" };
-        }
-        setPendingSave({ kind: "generic", app: "codex", preparationId: prepared.preparationId, preview: prepared.preview });
-        return;
-      }
-      const saved = await commitProfileSave(prepared.preparationId, false);
-      if (prepared.kind !== "noChange") {
-        invalidateCandidates();
-      }
-      setAppFilter("codex");
-      setEditorSession(null);
-      await refresh();
-      await setTargetProfile(saved.profile.id);
-    } catch (caught) {
-      onError(caught as CommandError);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, clearError, editorSession, invalidateCandidates, onError, refresh,
-    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
-
-  const runPendingSave = useCallback(async () => {
-    if (busy || !pendingSave) return;
-    const pending = pendingSave;
-    setBusy(true);
-    clearError();
-    try {
-      const saved = pending.kind === "codex"
-        ? await commitCodexProfileSave(pending.preparationId, true)
-        : await commitProfileSave(pending.preparationId, true);
-      invalidateCandidates();
-      setAppFilter(pending.app);
-      setEditorSession(null);
-      await refresh();
-      await setTargetProfile(saved.profile.id);
-    } catch (caught) {
-      onError(caught as CommandError);
-    } finally {
-      setPendingSave(null);
-      setBusy(false);
-    }
-  }, [busy, clearError, invalidateCandidates, onError, pendingSave, refresh,
-    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
-  return { pendingSave, setPendingSave, saveProfile, saveCodexProfile, saveCodexOfficialProfile, runPendingSave };
+  return { saveCodexProfileUsageQuery };
 }
 
 function useProviderMetadata(deps: ProvidersDeps) {
@@ -329,8 +208,9 @@ function useProviderMetadata(deps: ProvidersDeps) {
       clearError();
       try {
         const { id, ...draft } = profile;
-        const prepared = await prepareProfileSave(id, { ...draft, ...patch }, record.fileHash);
+        const prepared = await prepareProfileSave(id, { ...draft, ...patch }, record.fileHash, "save");
         if (prepared.kind === "saveAndApply") {
+          await cancelProfileSave("profile", prepared.preparationId);
           throw {
             code: "profile-save-invalid",
             message: "", messageKey: "operations.save.patchNoApply",
@@ -355,40 +235,7 @@ function useProviderMetadata(deps: ProvidersDeps) {
     [saveProfilePatch],
   );
 
-  /** Saves one Codex third-party profile's usage query through the strict
-   * Codex store. Usage metadata never re-applies the client route: a
-   * save-and-apply classification means the base record drifted and is
-   * rejected instead of silently applying. */
-  const saveCodexProfileUsageQuery = useCallback(
-    async (record: CodexProviderRecord, usageQuery: UsageQuery | null): Promise<boolean> => {
-      if (busy) return false;
-      setBusy(true);
-      clearError();
-      try {
-        const draft = codexUsageDraftFrom(record, usageQuery);
-        const prepared = await prepareCodexProfileSave(
-          record.profile.id,
-          draft,
-          record.fileHash,
-        );
-        if (prepared.kind === "saveAndApply") {
-          throw {
-            code: "profile-save-invalid",
-            message: "", messageKey: "operations.save.patchNoApply",
-          };
-        }
-        await commitCodexProfileSave(prepared.preparationId, false);
-        await refresh();
-        return true;
-      } catch (caught) {
-        onError(caught as CommandError);
-        return false;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [busy, clearError, onError, refresh, setBusy],
-  );
+  const { saveCodexProfileUsageQuery } = useCodexMetadata(deps);
 
   const saveOfficialQuotaInterval = useCallback(
     (profile: ProviderProfile, minutes: number) =>

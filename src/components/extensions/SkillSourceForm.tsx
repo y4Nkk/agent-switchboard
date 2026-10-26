@@ -4,6 +4,7 @@ import type { MessageKey } from "../../i18n";
 import { Button } from "../Button";
 import { Input } from "../Input";
 import { RadioOption } from "../RadioOption";
+import { SearchInput } from "../SearchInput";
 import { Tooltip } from "../Tooltip";
 import { FolderOpenIcon } from "../icons";
 import type { SkillSourceKind } from "./skill-source-model";
@@ -27,8 +28,10 @@ function SourceInput({ state, disabled, busy }: { state: SkillSourceState; disab
     </span>
   );
   if (state.source === "directory") return (
-    <Input type="search" aria-label={t("extensions.sources.searchSkillsSh")} placeholder={t("extensions.sources.searchSkillsSh")} value={state.directory.input}
-      disabled={disabled} onChange={(event) => state.directory.changeInput(event.target.value)} />
+    <div className="asb-skill-source-query">
+      <SearchInput ariaLabel={t("extensions.sources.searchSkillsSh")} placeholder={t("extensions.sources.searchSkillsSh")}
+        value={state.directory.input} disabled={disabled} onChange={state.directory.changeInput} />
+    </div>
   );
   const kind = state.source;
   return <>

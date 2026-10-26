@@ -13,7 +13,7 @@ Status: implemented
 
 `Tooltip` 组件自持 anchor：内部固定渲染 `<span class="asb-tooltip-anchor">` 作为 Radix Trigger 的 asChild 目标，children 是它的子节点。anchor 是 tooltip 触发边界的唯一 owner：
 
-- `tooltip-feedback.css` 的 `.asb-tooltip-anchor > :disabled { pointer-events: none }` 把任何 disabled 直接子控件移出命中测试，anchor 替它接收全部指针事件；选择器不再耦合 `.asb-btn`。
+- `tooltip-feedback.css` 把原生 `:disabled` 和共享复合控件的 `[data-disabled="true"]` 直接子节点移出命中测试，anchor 替它接收全部指针事件；选择器不耦合 `.asb-btn`。Checkbox / Switch 保留原生 input 的禁用语义，通过现有外层标识接入同一命中契约；[扩展共享控件](../architecture/2026-10-24-extension-shared-controls.md)使用这一路径。
 - 组件内监听 `window blur` 立即 `setOpen(false)`，补上失焦关闭。
 - 调用点不得再手工包裹 anchor span；`UpdateButton` 与 `PinTopButton` 的旧包裹已删除。`dismissedAfterAction` 的抑制语义不变（激活后到指针离开 anchor 前不重开）。
 - 侧栏是唯一的拉伸布局消费者：`shell.css` 把导航条目的轨道内边距宽度转移到 `.asb-sidenav-* > li > .asb-tooltip-anchor` 上，`.asb-sidenav-item` 改为填满 anchor。

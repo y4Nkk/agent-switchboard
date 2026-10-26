@@ -19,9 +19,7 @@ mod upstream_compat;
 mod usage;
 #[cfg(test)]
 mod tests;
-pub(crate) use upstream_compat::{
-    apply_request_compat, restore_native_json, wrap_native_sse_reader,
-};
+pub(crate) use upstream_compat::{apply_request_compat, NativeResponsesDialect};
 
 use serde_json::Value;
 

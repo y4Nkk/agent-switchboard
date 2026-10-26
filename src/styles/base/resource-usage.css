@@ -6,7 +6,9 @@
   min-width: 0;
 }
 
-.asb-resource-table { min-width: 660px; }
+.asb-resource-table { min-width: 720px; }
+.asb-resource-chart-cpu { width: 28%; }
+.asb-resource-chart-memory { width: 34%; }
 .asb-resource-process-table { min-width: 760px; }
 .asb-resource-table > tbody > .asb-table-expansion-row > td { padding: 0; }
 
@@ -16,16 +18,6 @@
   align-items: flex-start;
   gap: var(--asb-space-1);
   max-width: 340px;
-}
-
-.asb-resource-name {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--asb-space-2);
-  color: var(--asb-text);
-  font: inherit;
-  font-weight: 600;
-  text-align: start;
 }
 
 .asb-resource-note {
@@ -39,10 +31,68 @@
 .asb-resource-metric {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--asb-space-1);
   font-variant-numeric: tabular-nums;
 }
 
 .asb-resource-details { padding-block: var(--asb-space-3); }
 .asb-resource-loading .asb-skeleton { min-height: 160px; }
+
+.asb-resource-usage [data-resource-group="switchboard"] { --asb-resource-color: var(--asb-text-muted); }
+.asb-resource-usage [data-resource-group="codex"] { --asb-resource-color: var(--asb-action); }
+.asb-resource-usage [data-resource-group="claude"] { --asb-resource-color: var(--asb-claude); }
+
+.asb-resource-name-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+}
+
+.asb-resource-series-dot {
+  flex: none;
+  width: var(--asb-space-1);
+  height: var(--asb-space-1);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-resource-color);
+}
+
+.asb-resource-ring {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-width: 9rem;
+}
+
+.asb-resource-ring .asb-resource-metric {
+  flex: 1;
+  min-width: 0;
+}
+
+.asb-resource-ring-graphic {
+  display: block;
+  flex: none;
+  width: var(--asb-chart-resource-ring-size);
+  height: var(--asb-chart-resource-ring-size);
+  color: var(--asb-resource-color);
+}
+
+.asb-resource-ring-graphic circle {
+  fill: none;
+  stroke-width: var(--asb-chart-resource-ring-stroke);
+  stroke-linecap: butt;
+}
+
+.asb-resource-ring-track { stroke: var(--asb-hairline); }
+.asb-resource-ring[data-state="partial"] .asb-resource-ring-value { opacity: 0.35; }
+
+.asb-resource-ring[data-available="false"] .asb-resource-ring-track {
+  stroke: var(--asb-hairline-strong);
+  stroke-dasharray: 2 4;
+}
+
+.asb-resource-footnotes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+}

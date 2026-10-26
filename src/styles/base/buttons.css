@@ -1,5 +1,5 @@
 /* Buttons. The Button component owns the geometry contract: it always emits
-   .asb-btn plus exactly one variant surface class below; this file owns the
+   .asb-btn plus its variant classes below; this file owns the
    surfaces and the per-variant geometry deltas. */
 button {
   font: var(--asb-text-body);
@@ -44,6 +44,19 @@ button:disabled {
   background: var(--asb-content-muted);
 }
 
+.asb-btn-ghost {
+  appearance: none;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--asb-text);
+}
+
+.asb-btn-ghost:hover:not(:disabled) {
+  background: var(--asb-row-hover);
+}
+
 .asb-btn-danger {
   border: 1px solid var(--asb-danger);
   background: var(--asb-danger);
@@ -80,6 +93,20 @@ button:disabled {
 .asb-btn-icon:hover {
   background: var(--asb-surface-rail);
   color: var(--asb-text);
+}
+
+.asb-btn-icon-danger {
+  color: var(--asb-danger);
+}
+
+.asb-btn-icon-danger:hover:not(:disabled) {
+  background: var(--asb-diff-remove-bg);
+  color: var(--asb-danger);
+}
+
+.asb-btn[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 /* Expanded card actions use a quiet tint; their icon and aria-expanded carry

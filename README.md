@@ -88,11 +88,11 @@ Inspect the loopback address, protocol translation paths, request counts, failur
 
 ![Local gateway with simulated protocol translation topology and request metrics](docs/screenshots/gateway.png)
 
-**Sub-agent models: route to another provider profile**
+**Graphical model routing: client → purpose → provider and model**
 
-Choose a saved profile's model as the default sub-agent target. This example routes to `gpt-6-luna` in another simulated OpenAI profile.
+Select a destination node to configure the main model, Codex default sub-agent, or Claude model tier, then preview and confirm. This isolated demonstration uses simulated providers and models.
 
-![Sub-agent runtime parameters with a simulated cross-profile OpenAI model route](docs/screenshots/subagent-route.png)
+![Graphical model routing with a simulated cross-provider default sub-agent route](docs/screenshots/model-routing.png)
 
 ## Core features
 
@@ -105,7 +105,8 @@ Choose a saved profile's model as the default sub-agent target. This example rou
 | Usage | Inspect consumption, quotas, reset times, and local coding-process resources; run degradation radar and browse probe history |
 | Settings → Client tools | Save and restore Codex work scenarios; manage Claude client integration |
 | Settings → Preferences | Follow the system, Simplified Chinese, or English for the interface; select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, and choose the startup page |
-| Settings → Local gateway / Diagnostics | Inspect gateway status, configuration and environment issues, and runtime logs |
+| Settings → Model routing & gateway | Configure main models, default sub-agents and Claude tiers graphically; preview and apply, then inspect actual connections and recent requests |
+| Settings → Diagnostics | Inspect configuration or environment issues and runtime logs |
 
 **Interface language.** The whole desktop app — main window, tray panel, notifications, dialogs, and app-owned error explanations — ships in Simplified Chinese and English. The preference offers 跟随系统 / 简体中文 / English and is saved like every other application preference: switching applies to the main window and tray immediately, survives a restart, and never touches user content (provider names, session text, configuration originals, and third-party diagnostics stay verbatim). A fresh install follows the system locale — a Chinese desktop gets Simplified Chinese, everything else gets English — while an existing installation upgraded from an earlier release keeps Chinese. Dates, numbers, and quota window names follow the chosen language with identical precision and business meaning.
 
@@ -159,9 +160,15 @@ When provider storage or egress settings fail validation, **Repair application d
 
 ### Quota cache and degradation radar
 
+**Usage → Quota & resets** lists configured Codex and Claude Code providers and their queryable remaining, used, total, and reset readings. Refresh one provider or all configured queries; failed reads retain the last successful value and its timestamp. Unconfigured queries remain unknown. Each source keeps its own unit; local token consumption never implies a monetary or subscription balance. Codex official account quota remains a separate read.
+
+Active session logs are read through a bounded, verified byte prefix, including Claude's preserved transcripts. Normal appends do not abort consumption or discard a session; the next refresh catches up. Replacement, truncation, or rewritten records remain explicit. Sessions with no verifiable usage do not appear as measured zero consumption.
+
 Usage reads follow the visible Consumption, Quota, Resources, or Radar tab and stop when that tab or window is hidden. Token ranges follow actual call dates in the local calendar. Codex response receipts and Claude vendor message usage own consumption; copied receipts, continuation replays and compaction checkpoints count once. Context-window estimates and inherited cumulative counters never become consumption. Undated calls appear only in All; sessions without verifiable call usage have an explicit coverage notice. A failed foreground refresh retains the same-range result and retries. Runtime logs apply the selected severity before choosing the latest 500 matches and disclose the full match count and skipped records.
 
 **Usage → Resources** samples CPU, resident memory, and process counts for Agent Switchboard and attributable Codex/Claude Code coding engines and task children. Native Windows, macOS, and Linux collectors share one backend attribution and sampling contract; nested coding engines take ownership of their own tasks, so probes are not also counted under Switchboard. CPU is normalized to the machine's online logical processors and requires a valid interval; unreadable and warming metrics remain unknown. Resident-memory sums include shared pages, and Linux RSS is approximate. Windows associates WebView2 processes through the application's environment; other platforms explicitly disclose incomplete interface-process coverage. The view refreshes about every two seconds while visible, with process details paged in groups of 50 and no persistent resource history. Desktop/editor shells and whole WSL, container, or remote environments are excluded; browser development counts the native backend only.
+
+Engine discovery verifies the running image against native launchers, desktop download locations, Claude's version directory, or the owning npm/editor package manifest and entry layout. Editor extensions can live in custom directories, and desktop engines need not appear in Switchboard's PATH. Helpers inherit a verified engine's task ancestry; a `codex-` prefix or a generic version number alone never establishes ownership. Windows joins native WTS user identities with the process topology before reading candidates; macOS enumerates the current effective user, and Linux reads the effective UID from `/proc` status. Confirmed foreign users are excluded. Unverified-user candidates disclose an enumeration limit rather than a client-specific access error; unavailable metrics remain unknown.
 
 Provider rows keep the model on a fixed primary line and show every returned usage window below it. Balances, reset countdowns, validity, last-update time, and refresh are visible without opening the detailed table. The tray reads the same cache, shows up to two readings that fit, and marks additional readings with `+N`. Failed refreshes retain the last reading with an explicit stale label; opening either view does not trigger a network query.
 
@@ -184,9 +191,15 @@ In **Usage → Degradation radar**, batch-test the active Codex configuration wi
 
 ### Sub-agent models and protocol gateway
 
+Open the graphical workspace from a provider row's routing button or Settings → Model routing & gateway. Choose a client and primary provider, then select a destination node to edit its model. Changing the primary provider loads that profile's saved plan; addresses, credentials, protocols and catalogs remain on Providers. Preview and confirmation save the models and activate the provider in one recoverable transaction. Claude's main model and Haiku, Sonnet and Opus tiers share the selected provider's connection.
+
+Cancelling a preview or leaving its workspace revokes the unconfirmed plan. Cancellation failures remain visible and can be retried; confirmed transactions continue to completion. Applying a route refreshes the actual configuration and gateway status immediately.
+
 A Codex default sub-agent model can target a model in another saved profile that is not account-bound. Requests use that target's authentication, protocol, model mapping, and runtime parameters, and usage belongs to the target. Invalid references fail explicitly, with no fallback to the main model. Referenced profiles and models cannot be deleted. Editing a target also previews and updates any affected active model catalog.
 
 When protocol translation or sub-agent routing is needed, the app uses a gateway listening only on `127.0.0.1`. Keep the app running while using those routes.
+
+Codex and Claude Code are the supported clients. Names such as xAI (Grok) refer to upstream model services. Saving a provider used by an active failover route previews and applies its request settings together, while keeping the primary provider selected; failures roll back through the existing save transaction.
 
 | Client | Native upstream | Translated upstreams |
 | --- | --- | --- |
@@ -194,6 +207,8 @@ When protocol translation or sub-agent routing is needed, the app uses a gateway
 | Claude Code (Anthropic Messages) | Anthropic Messages | Chat Completions, Responses, Gemini |
 
 Translation has explicit limits: fields and tools that cannot be represented losslessly fail, while some metadata affecting only metering or caching is dropped after validation. Cross-protocol Codex requests require `store=false`, with continuation context filled from local history; switching profiles or keys invalidates old encrypted continuations. Codex WebSocket connections terminate at the gateway and use HTTP/SSE upstream. Sub-agent routes support `/responses/compact` and V2 Responses compaction according to the target's capabilities; other auxiliary operations reject cross-provider model references. Claude failover follows only the policy explicitly configured in the local `claude-failover.json`.
+
+HTTP tool-call history requires an explicit client session ID and keeps response IDs separate between sessions. Requests without a session ID must include the complete tool-call context. HTTP and WebSocket share native Responses tool-name and argument restoration.
 
 ## Data storage and scope
 

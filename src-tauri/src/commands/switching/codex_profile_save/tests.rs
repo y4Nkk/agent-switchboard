@@ -97,12 +97,13 @@ fn active_catalog_change_requires_a_projection_preview() {
 
     let mut changed = draft();
     changed.catalog[0].context_window = 256_000;
-    let (kind, preview, _) = prepare_data(
+    let (kind, preview, _, _) = prepare_data(
         &state,
         &gateway,
         &record.profile.id,
         &changed,
         &record.file_hash,
+        ProfileSaveIntent::Save,
     )
     .unwrap();
     assert_eq!(kind, ProfileSaveKind::SaveAndApply);

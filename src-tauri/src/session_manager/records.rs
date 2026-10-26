@@ -87,7 +87,7 @@ fn visit_reader(
     scan_reader(label, offset, 0, reader, &|| Ok(()), visitor).map(|scan| scan.issues)
 }
 
-fn scan_reader(
+pub(crate) fn scan_reader(
     label: &str, offset: u64, mut ordinal: usize, mut reader: impl BufRead,
     checkpoint: &dyn Fn() -> Result<(), String>,
     mut visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,

@@ -17,7 +17,7 @@ pub(in crate::commands) fn build_plan(
         .map_err(|error| operation_error("profile-not-found", error))?;
     match saved {
         crate::config_store::SavedProvider::Codex { file, .. } => build_codex_plan(state, gateway, file),
-        crate::config_store::SavedProvider::Client(record) => build_plan_for_profile(state, gateway, record.profile),
+        crate::config_store::SavedProvider::Client(record) => build_plan_for_profile(state, gateway, record.profile, None),
     }
 }
 
@@ -37,6 +37,7 @@ pub(super) fn build_plan_for_profile(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
     profile: ProviderProfile,
+    replacement: Option<&ProviderProfile>,
 ) -> Result<crate::gateway::GatewayProjection, CommandError> {
     let client_settings = if profile.app == AppKind::Codex {
         crate::codex_common::resolve(state, &profile.id)
@@ -71,7 +72,7 @@ pub(super) fn build_plan_for_profile(
     asb_core::validate_plan(&plan.profile, &plan.client_settings)
         .map_err(|error| CommandError::new("invalid-plan", error.to_string()))?;
     gateway
-        .project_with_candidates(state, &plan)
+        .project_with_candidates(state, &plan, replacement)
         .map_err(|error| CommandError::new("gateway-projection-invalid", error))
 }
 

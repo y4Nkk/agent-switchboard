@@ -9,7 +9,7 @@ mod request;
 
 use self::context::{ConversationContext, PendingRequest, PreparedResponse};
 use super::super::metrics::RequestSpan;
-use super::super::transform::{convert_response, ReasoningTransport, SseTranscoder};
+use super::super::transform::{ReasoningTransport, SseTranscoder};
 use super::*;
 use asb_core::contracts::ResponsesRequestMode;
 use base64::engine::general_purpose::STANDARD;

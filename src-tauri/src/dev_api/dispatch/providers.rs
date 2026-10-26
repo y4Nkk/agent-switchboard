@@ -6,6 +6,9 @@ macro_rules! command {
 
 pub(super) async fn profiles(app: &AppHandle, request: &InvokeRequest) -> Result<Option<Value>, CommandError> {
     let result = match request.command.as_str() {
+        "cancel_profile_save" => command!(commands::switching::cancel_profile_save(
+            app.clone(), argument(&request.args, "source")?, argument(&request.args, "preparationId")?,
+        )),
         "list_profiles" => command!(commands::list_profiles(app.clone())),
         "repair_application_data" => command!(commands::repair_application_data(app.clone())),
         "prepare_profile_save" => command!(commands::switching::prepare_profile_save(
@@ -13,6 +16,7 @@ pub(super) async fn profiles(app: &AppHandle, request: &InvokeRequest) -> Result
             argument::<Option<String>>(&request.args, "profileId")?,
             argument::<ProviderDraft>(&request.args, "draft")?,
             argument::<Option<String>>(&request.args, "expectedFileHash")?,
+            argument(&request.args, "intent")?,
         )),
         "commit_profile_save" => command!(commands::switching::commit_profile_save(
             app.clone(),

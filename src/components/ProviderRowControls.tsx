@@ -2,7 +2,7 @@ import type { Ref } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
-import { ConnectivityIcon, EditIcon, TrashIcon, UsageIcon } from "./icons";
+import { ConnectivityIcon, EditIcon, GatewayIcon, TrashIcon, UsageIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
 
 export function ProviderEndpoint({ url, link = false }: { url: string; link?: boolean }) {
@@ -36,6 +36,7 @@ export function ProviderLoginButton({ name, open, controlsId, onToggle }: {
 
 interface Props {
   name: string;
+  onRoutes?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   test?: { id: string; open: boolean; onToggle: () => void; trigger: Ref<HTMLButtonElement> };
@@ -43,7 +44,7 @@ interface Props {
 }
 
 /** Both clients use the same actions and disclosure semantics. */
-export function ProviderRowActions({ name, onEdit, onDelete, test, usage }: Props) {
+export function ProviderRowActions({ name, onRoutes, onEdit, onDelete, test, usage }: Props) {
   const { t } = useI18n();
   const testLabel = test?.open ? t("providers.row.testCollapse", { name }) : t("providers.row.test", { name });
   const usageLabel = !usage?.configured ? t("providers.row.usageConfigure", { name })
@@ -51,6 +52,9 @@ export function ProviderRowActions({ name, onEdit, onDelete, test, usage }: Prop
   const editLabel = t("providers.row.edit", { name });
   const deleteLabel = t("providers.row.delete", { name });
   return <>
+    {onRoutes && <Tooltip label={t("modelRoutes.open", { name })}>
+      <Button variant="icon" aria-label={t("modelRoutes.open", { name })} onClick={onRoutes}><GatewayIcon /></Button>
+    </Tooltip>}
     {onEdit && <Tooltip label={editLabel}>
       <Button variant="icon" aria-label={editLabel} onClick={onEdit}><EditIcon /></Button>
     </Tooltip>}

@@ -6,8 +6,6 @@ export const messages = {
   // Save-and-apply confirmation sheet.
   "operations.save.title": ["确认保存并应用", "Confirm save and apply"],
   "operations.save.writesTarget": ["将写入 {target}", "Writes to {target}"],
-  "operations.save.changeCount": ["变更 {count} 个键", "Changes {count} keys"],
-  "operations.save.backupDir": ["备份位置 {dir}", "Backup location {dir}"],
   "operations.save.previewMissing": ["无法生成供应商变更预览", "Cannot generate the provider change preview"],
   "operations.save.codexPreviewMissing": ["Codex 保存预览缺失，请重新保存", "The Codex save preview is missing; save again"],
   "operations.save.patchNoApply": ["此修改只允许保存供应商资料，不能应用客户端配置", "This change may only save provider details; it cannot apply the client configuration"],

@@ -36,3 +36,29 @@ fn the_source_revision_changes_with_file_append_or_deletion() {
     std::fs::remove_file(&path).unwrap();
     assert_ne!(second, source_revision(temp.path(), &[source], &[]).unwrap());
 }
+
+#[test]
+fn changing_sources_return_verified_totals_and_an_early_refresh_without_publishing_a_stale_cache() {
+    use asb_core::contracts::AppKind;
+    use std::io::Write;
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("session.jsonl");
+    let entry = serde_json::json!({"type":"assistant","timestamp":"2026-10-22T02:00:00Z",
+        "message":{"id":"first","model":"model","usage":{"input_tokens":10,"output_tokens":2}}});
+    std::fs::write(&path, format!("{entry}\n")).unwrap();
+    let source = crate::session_manager::fixture_source(&path, AppKind::Claude, "session");
+    let revision = source_revision(temp.path(), &[source.clone()], &[]).unwrap();
+    let reports = crate::model_usage::reports(temp.path(), vec![source.clone()], vec![], Local::now()).unwrap();
+    writeln!(std::fs::File::options().append(true).open(&path).unwrap(), "{{\"type\":\"user\"}}").unwrap();
+    let current_revision = source_revision(temp.path(), &[source], &[]).unwrap();
+    assert_ne!(revision, current_revision);
+    let index = ReadIndex::open(temp.path()).unwrap();
+    let snapshot = Snapshot { cached_at: Utc::now().to_rfc3339(), reports };
+    let reading = finish_refresh(&index, "fixture", &revision, &current_revision, snapshot,
+        ModelUsageRequest { range: ModelUsageRange::All, force_refresh: true }).unwrap();
+    assert_eq!(reading.report.groups[0].total_tokens, 12);
+    assert_eq!(reading.freshness, ModelUsageFreshness::Fresh);
+    let refresh = DateTime::parse_from_rfc3339(&reading.refresh_after).unwrap().with_timezone(&Utc);
+    assert!(refresh <= Utc::now() + Duration::seconds(10));
+    assert!(index.get::<Snapshot>("usage-reports", "fixture", &revision).unwrap().is_none());
+}

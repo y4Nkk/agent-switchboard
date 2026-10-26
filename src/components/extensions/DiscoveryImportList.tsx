@@ -41,7 +41,7 @@ function ImportRow({ item, props }: { item: ObservedExtension; props: Props }) {
           onChange={(checked) => props.onSelect(item.observationId, checked)} />
         {item.description && <p className="asb-ext-import-description">{item.description}</p>}
         <p className="asb-ext-import-origin">
-          <ClientLogo app={item.client} className="asb-ext-clienttoggle-logo" />
+          <ClientLogo app={item.client} className="asb-ext-import-client-logo" />
           {discoveryOrigin(item, props.projects, t)}
           {item.transport && <span>{item.transport}</span>}
         </p>
@@ -50,10 +50,10 @@ function ImportRow({ item, props }: { item: ObservedExtension; props: Props }) {
       <div className="asb-ext-import-status">
         {item.managed ? <span>{t("importDiscovery.row.managed")}</span> : mode === "copy" ? <span>{t("importDiscovery.row.copyOnly")}</span>
           : mode === "manage" ? <span>{t("importDiscovery.row.keepInstall")}</span> : item.actions.import.inLibrary ? <span>{t("importDiscovery.row.inLibrary")}</span> : null}
-        {warningCount > 0 && <Button variant="unstyled" className="asb-warn-text"
+        {warningCount > 0 && <Button variant="ghost" size="compact" className="asb-warn-text"
           aria-label={t("importDiscovery.row.warningsAria", { name: item.name, count: warningCount })}
           onClick={() => props.onWarning(item.observationId)}>{t("importDiscovery.row.warnings", { count: warningCount })}</Button>}
-        {item.actions.managedDefinitionId && <Button variant="icon" className="asb-ext-import-details"
+        {item.actions.managedDefinitionId && <Button variant="icon" size="compact"
           aria-label={t("importDiscovery.row.detailsAria", { name: item.name })} onClick={() => props.onViewDetails(item)}><Eye /></Button>}
       </div>
     </li>

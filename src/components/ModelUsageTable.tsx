@@ -10,12 +10,12 @@ export function ModelUsageTable({ report }: { report: ModelUsageReport }) {
     { key: "app", header: t("usage.column.client"), render: (row) => clientName(row.app) },
     { key: "model", header: t("usage.column.model"), cellClassName: "asb-code",
       render: (row) => row.model ?? t("usage.model.unrecorded") },
-    { key: "input", align: "end", header: t("usage.column.input"), render: (row) => formatTokenCount(row.inputTokens) },
-    { key: "cache", align: "end", header: t("usage.column.cache"),
+    { key: "input", header: t("usage.column.input"), render: (row) => formatTokenCount(row.inputTokens) },
+    { key: "cache", header: t("usage.column.cache"),
       render: (row) => formatTokenCount(row.cacheReadInputTokens + row.cacheCreationInputTokens) },
-    { key: "output", align: "end", header: t("usage.column.output"), render: (row) => formatTokenCount(row.outputTokens) },
-    { key: "total", align: "end", header: t("usage.column.totalTokens"), render: (row) => formatTokenCount(row.totalTokens) },
-    { key: "sessions", align: "end", header: t("usage.column.sessions"), render: (row) => formatTokenCount(row.sessionCount) },
+    { key: "output", header: t("usage.column.output"), render: (row) => formatTokenCount(row.outputTokens) },
+    { key: "total", header: t("usage.column.totalTokens"), render: (row) => formatTokenCount(row.totalTokens) },
+    { key: "sessions", header: t("usage.column.sessions"), render: (row) => formatTokenCount(row.sessionCount) },
   ];
   return <Table columns={columns} rows={report.groups} rowKey={(row) => JSON.stringify([row.app, row.model])}
     ariaLabel={t("usage.consumption")} className="asb-model-usage-table" />;
