@@ -125,7 +125,8 @@ export type CodexChatReasoning =
   | { kind: "unsupported" }
   | {
     kind: "configured";
-    thinkingParameter: "none" | "thinking" | "enableThinking" | "reasoningSplit";
+    thinkingParameter: "none" | "thinking" | "enableThinking";
+    separateOutput: boolean;
     effortParameter: "none" | "reasoningEffort" | "reasoningObject";
     effortMode: "passthrough" | "lowHigh" | "deepSeek" | "openRouter" | "catalog";
   };

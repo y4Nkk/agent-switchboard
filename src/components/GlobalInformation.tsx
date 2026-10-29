@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Dialog, Popover } from "react-aria-components";
 import type { CommandError } from "../api/client";
 import { canRepairApplicationData } from "../api/data-repair";
@@ -10,8 +10,7 @@ import { Tooltip } from "./Tooltip";
 import { ToastStatusIcon } from "./ToastStatusIcon";
 import { ToastText } from "./ToastContent";
 import { ScrollArea } from "./ScrollArea";
-import { useToast } from "./use-toast";
-import { useInformationSources, type InformationSourceMessage } from "./InformationSources";
+import { useToast, type ToastContent, type ToastKind } from "./use-toast";
 
 interface Props {
   error: CommandError | null;
@@ -21,7 +20,13 @@ interface Props {
   onRepairSettings: () => void;
 }
 
-interface InformationMessage extends InformationSourceMessage {
+interface InformationMessage {
+  id: string;
+  kind: ToastKind;
+  title: ToastContent;
+  description?: ToastContent;
+  action?: ReactNode;
+  onDismiss?: () => void;
   toastId?: string;
 }
 
@@ -39,12 +44,6 @@ function InformationRow({ message, onBeforeDismiss }: {
           <div className="asb-information-description"><ToastText content={message.description} /></div>
         )}
         {message.action && <div className="asb-information-actions">{message.action}</div>}
-        {message.onAcknowledge && <div className="asb-information-actions">
-          <Button variant="secondary" size="compact" aria-pressed={message.acknowledged ?? false}
-            onClick={message.onAcknowledge}>
-            {t(message.acknowledged ? "notice.acknowledged" : "notice.acknowledge")}
-          </Button>
-        </div>}
       </div>
       {message.onDismiss && (
         <Tooltip label={t("shell.information.delete")} className="asb-information-tooltip">
@@ -63,7 +62,6 @@ function InformationRow({ message, onBeforeDismiss }: {
 function useInformationMessages({ error, settingsError, busy, onRepairData, onRepairSettings }: Props) {
   const { t } = useI18n();
   const queue = useToast();
-  const sources = useInformationSources();
   const messages: InformationMessage[] = [];
 
   if (settingsError) messages.push({
@@ -82,11 +80,8 @@ function useInformationMessages({ error, settingsError, busy, onRepairData, onRe
     onDismiss: () => queue.dismiss(toast.id),
   }));
   messages.push(...toastMessages.filter((message) => message.kind === "error"));
-  messages.push(...sources.filter((message) => !message.acknowledged && message.kind === "error"));
-  messages.push(...sources.filter((message) => !message.acknowledged && message.kind === "warning"));
   if (busy) messages.push({ id: "busy", kind: "info", title: t("shell.busy") });
   messages.push(...toastMessages.filter((message) => message.kind !== "error"));
-  messages.push(...sources.filter((message) => message.acknowledged || message.kind !== "error" && message.kind !== "warning"));
   return { ...queue, messages };
 }
 
@@ -132,9 +127,8 @@ export function GlobalInformation(props: Props) {
   const [focused, setFocused] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
-  const primary: InformationMessage = messages.find((message) => !message.acknowledged)
-    ?? { id: messages.length ? "acknowledged" : "empty", kind: "info",
-      title: messages.length ? t("notice.review", { count: messages.length }) : t("shell.information.empty") };
+  const primary: InformationMessage = messages[0]
+    ?? { id: "empty", kind: "info", title: t("shell.information.empty") };
   const visibleToastId = primary.toastId;
 
   useEffect(() => {

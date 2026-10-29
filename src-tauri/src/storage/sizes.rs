@@ -28,9 +28,10 @@ pub(super) fn cache_bytes(identifier: &str) -> Result<u64, String> {
 
 pub(crate) fn usage(local: &LocalState, identifier: &str) -> Result<StorageUsage, String> {
     let root = local.root();
-    let history_bytes = [root.join("configuration/history"), root.join("codex/requests.sqlite3"), root.join("codex/probes.sqlite3"),
-        root.join("sessions")]
-        .iter().try_fold(0_u64, |total, path| size(path).map(|bytes| total.saturating_add(bytes)))?;
+    // Archivable history is exactly what the storage archive reclaims: the
+    // configuration write history. Request ledger, probe records, and the
+    // session preservation database belong to their own domains.
+    let history_bytes = size(&root.join("configuration/history"))?;
     Ok(StorageUsage { data_bytes: size(root)?, backup_bytes: size(&local.backup_dir())?, history_bytes,
         cache_bytes: cache_bytes(identifier)?, cache_budget_bytes: CACHE_BUDGET_BYTES,
         cache_maintenance: cfg!(windows), cache_clearing: super::cache::is_clearing() })
@@ -51,7 +52,7 @@ pub(super) fn size(path: &Path) -> Result<u64, String> {
     Ok(bytes)
 }
 
-fn is_link(metadata: &fs::Metadata) -> bool {
+pub(super) fn is_link(metadata: &fs::Metadata) -> bool {
     #[cfg(windows)]
     { use std::os::windows::fs::MetadataExt; metadata.file_attributes() & 0x400 != 0 }
     #[cfg(not(windows))]

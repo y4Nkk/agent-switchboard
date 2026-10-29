@@ -102,7 +102,7 @@ function CodexProviderEditorSession(props: Props) {
     : editing ? t("codex.editor.editTitle") : t("codex.editor.newTitle");
   const backLabel = parametersOpen ? t("codex.editor.backToEdit") : t("codex.editor.backToProviders");
   const goBack = () => parametersOpen ? editor.setParametersOpen(false) : close();
-  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel}
+  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} viewportRef={editor.viewportRef} backLabel={backLabel}
     busy={props.busy} onBack={goBack} onCancel={close} formId={formId} canSave={editor.canSave}>
     <div hidden={parametersOpen}>
       <CodexProviderForm {...safeProps} editor={editor} formId={formId} />
@@ -127,7 +127,7 @@ function CodexOfficialSession(props: OfficialProps) {
     : record ? t("codex.official.editTitle") : t("codex.official.newTitle");
   const backLabel = parametersOpen ? t("codex.editor.backToEdit") : t("codex.editor.backToProviders");
   const goBack = () => parametersOpen ? editor.setParametersOpen(false) : close();
-  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel} busy={props.busy}
+  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} viewportRef={editor.viewportRef} backLabel={backLabel} busy={props.busy}
     onBack={goBack} onCancel={close} formId={formId} canSave={editor.canSave}>
     <div hidden={parametersOpen}>
       <CodexOfficialProviderForm formId={formId} busy={props.busy} editing={Boolean(record)} editor={editor}

@@ -6,6 +6,8 @@ import { ScrollArea } from "./ScrollArea";
 interface Props {
   title: string;
   titleRef?: Ref<HTMLHeadingElement>;
+  /** Reading-position owners reference the actual scrolling element. */
+  viewportRef?: Ref<HTMLDivElement>;
   /** Destination name, carried as the back control's accessible label. */
   backLabel: string;
   busy?: boolean;
@@ -25,6 +27,7 @@ interface Props {
 export function EditorFrame({
   title,
   titleRef,
+  viewportRef,
   backLabel,
   busy = false,
   primary,
@@ -61,7 +64,7 @@ export function EditorFrame({
         }
         primary={primary}
       />
-      <ScrollArea className="asb-edit-panel" aria-label={title}>{children}</ScrollArea>
+      <ScrollArea className="asb-edit-panel" aria-label={title} viewportRef={viewportRef}>{children}</ScrollArea>
       {footer && <footer className="asb-editor-footer">{footer}</footer>}
     </div>
   );

@@ -6,6 +6,7 @@ impl ReasoningTransport {
     pub(crate) fn from_responses_item(&self, item: Value) -> Result<Reasoning, TransformError> {
         validate_item(&item)?;
         self.seal(Record {
+            protocol: UpstreamProtocol::Responses,
             text: visible_text(&item)?,
             signature: None,
             redacted: None,
@@ -129,7 +130,7 @@ mod tests {
             .is_err());
         assert!(transport
             .from_responses_item(
-                json!({"type":"reasoning","summary":[],"encrypted_content":"asb-reasoning-v3.fake"})
+                json!({"type":"reasoning","summary":[],"encrypted_content":"asb-reasoning-v4.fake"})
             )
             .is_err());
     }

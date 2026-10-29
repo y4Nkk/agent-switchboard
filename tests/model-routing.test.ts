@@ -60,7 +60,7 @@ test("client inventories and official routes expose only their supported roles",
   const inventory = { codex: [codex("codex")], profiles: [profile], activeIds: {} };
   assert.deepEqual(routeRecords(inventory, "codex").map(({ record }) => record.profile.id), ["codex"]);
   const document = routeDocument({ kind: "profile", record: profile });
-  assert.deepEqual(routeRoles(document), ["main", "haiku", "sonnet", "opus"]);
+  assert.deepEqual(routeRoles(document), ["main", "haiku", "sonnet", "opus", "fable"]);
   profile.profile.routeMode = "official";
   assert.deepEqual(routeRoles(routeDocument({ kind: "profile", record: profile })), ["main"]);
 });
@@ -71,6 +71,8 @@ test("Claude reset clears tier overrides and context flags, retaining the saved 
   assert.equal(document.draft.model, null);
   assert.equal(document.draft.modelOptions.sonnetModel, null);
   assert.equal(document.draft.modelOptions.sonnetOneM, false);
+  assert.equal(document.draft.modelOptions.fableModel, null);
+  assert.equal(document.draft.modelOptions.fableOneM, false);
   assert.equal(document.draft.modelOptions.primaryOneM, false);
   assert.deepEqual(document.draft.modelOptions.availableModels, ["tier-model"]);
 });

@@ -42,11 +42,14 @@ pub fn search_sessions(
 
 pub(super) fn search_observed(root: &Path, request: SessionSearchRequest, control: &SearchControl) -> Result<SessionSearchPage, String> {
     let filters = Filters::parse(request)?;
-    let (mut sources, issues) = super::sources::scan_observed(root, filters.request.app, None, &|| control.checkpoint())?;
+    let (mut sources, issues) = super::scan_filtered_sources_observed(root, filters.request.app, None, &|| control.checkpoint())?;
     control.checkpoint()?;
     let values = organization::load(root)?;
     for source in &mut sources { organization::apply(&mut source.meta, &values); }
-    search_sources_observed(sources, issues, &filters, control)
+    let page = search_sources_observed(sources, issues, &filters, control)?;
+    super::diagnostics::report(root, "会话搜索读取",
+        page.issues.iter().map(|issue| format!("{}: {}", issue.app.label(), issue.message)));
+    Ok(page)
 }
 
 #[cfg(test)]

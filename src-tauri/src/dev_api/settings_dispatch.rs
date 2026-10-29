@@ -15,6 +15,8 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "clear_webview_cache" => as_json(commands::storage::clear_webview_cache(app.clone()).await),
         "preview_history_archive" => as_json(commands::storage::preview_history_archive(app.clone(), argument(&request.args, "cutoff")?).await),
         "archive_history" => as_json(commands::storage::archive_history(app.clone(), argument(&request.args, "plan")?).await),
+        "preview_backup_cleanup" => as_json(commands::storage::preview_backup_cleanup(app.clone(), argument(&request.args, "cutoff")?).await),
+        "cleanup_backups" => as_json(commands::storage::cleanup_backups(app.clone(), argument(&request.args, "plan")?).await),
         "get_app_settings" => as_json(commands::get_app_settings(app.clone()).await),
         "set_app_settings" => as_json(commands::set_app_settings(
             app.clone(), argument::<AppSettings>(&request.args, "settings")?,

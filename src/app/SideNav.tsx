@@ -7,6 +7,7 @@ import { UpdateButton } from "../components/UpdateButton";
 import {
   ClientConfigurationIcon,
   ExtensionsIcon,
+  GatewayNavigationIcon,
   ProviderSwitchIcon,
   SessionsIcon,
   SettingsIcon,
@@ -20,6 +21,7 @@ import {
  * consumer, while the page list itself stays owned by navigation.ts. */
 const PAGE_ICONS: Record<Page, NavIcon> = {
   providers: ProviderSwitchIcon,
+  gateway: GatewayNavigationIcon,
   clientConfiguration: ClientConfigurationIcon,
   extensions: ExtensionsIcon,
   sessions: SessionsIcon,

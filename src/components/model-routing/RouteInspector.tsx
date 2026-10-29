@@ -89,8 +89,9 @@ function ClaudeInspector(props: Props & { document: Extract<RouteDocument, { kin
       : { ...draft, modelOptions: claudeOptions(draft.modelOptions, { [`${role}Model`]: model || null,
         ...(!model ? { [`${role}OneM`]: false } : {}) }) });
   };
-  const flag = role === "main" ? "primaryOneM" : role === "sonnet" ? "sonnetOneM" : role === "opus" ? "opusOneM" : null;
-  const models = [...new Set([draft.model, ...(options?.availableModels ?? []), options?.haikuModel, options?.sonnetModel, options?.opusModel])]
+  const flag = role === "main" ? "primaryOneM" : role === "sonnet" ? "sonnetOneM"
+    : role === "opus" ? "opusOneM" : role === "fable" ? "fableOneM" : null;
+  const models = [...new Set([draft.model, ...(options?.availableModels ?? []), options?.haikuModel, options?.sonnetModel, options?.opusModel, options?.fableModel])]
     .filter((id): id is string => !!id);
   return <>
     {role === "main" ? <SourceField {...props} /> : <p className="asb-field-help">{t("modelRoutes.sameProvider", { name: draft.name })}</p>}

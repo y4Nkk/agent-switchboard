@@ -63,10 +63,18 @@ fn render_anthropic_messages(messages: &[Message]) -> Result<Value, TransformErr
 
 fn render_anthropic_tools(tools: &[Tool]) -> Result<Value, TransformError> {
     if tools.iter().any(|tool| tool.strict) {
-        return error("Anthropic Messages 无法无损表达 strict 工具");
+        return error("当前 Anthropic 桥接未声明 strict 工具转换，不能丢弃严格约束");
     }
     let mut values = Vec::new();
     for tool in tools {
+        for keyword in ["anyOf", "oneOf", "allOf"] {
+            if tool.input_schema.get(keyword).is_some() {
+                return error(format!(
+                    "工具 {} 的 input_schema 根部包含 {keyword}，无法无损转换到 Anthropic Messages",
+                    tool.name,
+                ));
+            }
+        }
         let mut value = Map::new();
         value.insert(
             "name".to_string(),

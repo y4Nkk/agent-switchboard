@@ -93,15 +93,11 @@ pub(super) fn collect_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), 
                 Ok(_) => continue,
                 Err(error) => { result.issues.push(format!("读取 {} 的会话条目失败: {error}", directory.display())); continue; }
             };
-            if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("jsonl")) { result.paths.push(path); }
+            if super::record_file::transcript(&path) { result.paths.push(path); }
         }
     }
     result.paths.sort();
     Ok(result)
-}
-
-pub(super) fn scan(root: &Path, app: Option<AppKind>, session: Option<&str>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    scan_observed(root, app, session, &|| Ok(()))
 }
 
 pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&str>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
@@ -125,7 +121,12 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
                     && thread.rollout.is_file() && !thread.rollout.is_symlink() {
                     match index.file_prefix("identity", &thread.rollout, checkpoint, |reader| parser::session_identity_reader(&thread.rollout, reader, checkpoint).map_err(|error| error.to_string())) {
                         Ok(Some(identity)) if identity.id == thread.meta.session_id => paths.push(thread.rollout),
-                        _ => issues.push(SessionIssue::new(AppKind::Codex, format!("会话 {} 的原生记录身份与登记信息不一致", thread.meta.session_id))),
+                        Ok(Some(identity)) => issues.push(SessionIssue::new(AppKind::Codex,
+                            format!("会话 {} 的原生记录身份为 {}，与登记信息不一致", thread.meta.session_id, identity.id))),
+                        Ok(None) => issues.push(SessionIssue::new(AppKind::Codex,
+                            format!("会话 {} 的记录缺少可识别身份：{}", thread.meta.session_id, thread.rollout.display()))),
+                        Err(cause) => issues.push(SessionIssue::new(AppKind::Codex,
+                            format!("会话 {} 的记录暂不可读：{cause}", thread.meta.session_id))),
                     }
                 }
                 let history = match thread.history.try_exists() {
@@ -198,8 +199,14 @@ fn scan_roots_indexed(
         for path in files.paths {
             checkpoint()?;
             if *app == AppKind::Claude && conversion::is_workflow(&path) {
-                issues.push(index.file("workflow-issue", &path, || conversion::pending_issue(&path))
-                    .unwrap_or_else(|message| SessionIssue::new(*app, message)));
+                let pending = index.file("workflow-issue", &path, || {
+                    let issue = conversion::pending_issue(&path)?;
+                    Ok((issue.message, issue.conversion_id.ok_or("workflow 来源缺少修订身份")?))
+                });
+                issues.push(match pending {
+                    Ok((message, id)) => SessionIssue { app: *app, message, conversion_id: Some(id) },
+                    Err(message) => SessionIssue::new(*app, message),
+                });
                 continue;
             }
             let result = index_file(index_root, *app, path, indexed, index, session, checkpoint);

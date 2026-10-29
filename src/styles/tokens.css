@@ -1,10 +1,11 @@
 /*
  * Agent Switchboard runtime token owner.
  *
- * This stylesheet is the ONLY place where palette, surface, radius, spacing and
- * motion values may be defined. Components consume the semantic variables and
- * must never introduce local color, surface or duration constants
- * See DESIGN.md for the shared visual contract.
+ * This stylesheet is the ONLY place where palette, surface, the radius scale,
+ * spacing and motion values may be defined. Components consume the semantic
+ * variables and must never introduce local color, surface, duration or radius
+ * constants; sanctioned point-of-use shape literals are listed in the radius
+ * block below. See DESIGN.md for the shared visual contract.
  */
 
 :root {
@@ -110,13 +111,19 @@
      and proportional-agnostic spacing. Applied by .asb-num, never per value. */
   --asb-num-font-variant: tabular-nums;
 
-  /* Shape follows responsibility: controls, groups, navigation and panels. */
+  /* Shape follows responsibility — the ONLY radius owner (DESIGN.md owns the
+     role table). 12px controls · 16px medium faces · 20px navigation ·
+     24px groups and dialogs · 28px panels and workspace · pill reserved for
+     shape-semantic elements (status pills, switches, meters, dots, chip and
+     pill actions). Components never define a local radius; sanctioned
+     literals at the point of use are shape semantics only — 50% circles, 0
+     flush edges, inherit, and sub-scale proportional data-ink corners (chart
+     bars, heatmap cells, line skeletons). */
   --asb-radius: 12px;
   --asb-radius-medium: 16px;
   --asb-radius-navigation: 20px;
   --asb-radius-group: 24px;
   --asb-radius-panel: 28px;
-  --asb-radius-container: 32px;
   --asb-radius-pill: 999px;
 
   /* Scrollbar — ink-line bar (DESIGN.md §6): transparent track, slim ink

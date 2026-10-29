@@ -119,12 +119,158 @@ fn request_dialects_only_rewrite_their_selected_protocol_and_host() {
         (UpstreamProtocol::Responses, "https://other.example/v1", false),
     ] {
         let mut body = br#"{"model":"grok-4.6","prompt_cache_retention":"24h"}"#.to_vec();
-        apply_request(protocol, endpoint, &mut body).unwrap();
+        apply_request(AppKind::Codex, protocol, endpoint, &mut body).unwrap();
         let value: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(value.get("prompt_cache_retention").is_none(), stripped);
     }
     let mut body = br##"{"tools":[{"type":"function","function":{"name":"t","parameters":{"properties":{"p":{"$ref":"#/x","description":"d"}}}}}]}"##.to_vec();
-    apply_request(UpstreamProtocol::ChatCompletions, "https://api.kimi.com/coding/v1", &mut body).unwrap();
+    apply_request(AppKind::Codex, UpstreamProtocol::ChatCompletions, "https://api.kimi.com/coding/v1", &mut body).unwrap();
     let value: Value = serde_json::from_slice(&body).unwrap();
     assert!(value["tools"][0]["function"]["parameters"]["properties"]["p"].get("allOf").is_some());
+}
+
+#[test]
+fn moonshot_schema_rewrites_cover_both_clients_without_touching_other_upstreams() {
+    let source = br##"{"tools":[{"type":"function","function":{"name":"read","parameters":{"type":"object","properties":{"path":{"$ref":"#/$defs/path","description":"file"}},"$defs":{"path":{"type":"string"}}}}}]}"##;
+    for app in [AppKind::Codex, AppKind::Claude] {
+        let mut body = source.to_vec();
+        apply_request(app, UpstreamProtocol::ChatCompletions, "https://api.kimi.com/coding/v1", &mut body).unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        let path = &value["tools"][0]["function"]["parameters"]["properties"]["path"];
+        assert_eq!(path["allOf"][0]["$ref"], "#/$defs/path");
+        assert_eq!(path["description"], "file");
+        let normalized = body.clone();
+        apply_request(app, UpstreamProtocol::ChatCompletions, "https://api.kimi.com/coding/v1", &mut body).unwrap();
+        assert_eq!(body, normalized);
+        for (protocol, endpoint) in [
+            (UpstreamProtocol::Responses, "https://api.kimi.com/coding/v1"),
+            (UpstreamProtocol::ChatCompletions, "https://api.kimi.com.unrelated.example/v1"),
+        ] {
+            let mut untouched = source.to_vec();
+            apply_request(app, protocol, endpoint, &mut untouched).unwrap();
+            assert_eq!(untouched.as_slice(), source);
+        }
+    }
+}
+
+#[test]
+fn claude_does_not_inherit_codex_private_xai_rewrites() {
+    let source = br#"{"model":"grok-4.6","prompt_cache_retention":"24h"}"#;
+    let mut claude = source.to_vec();
+    apply_request(AppKind::Claude, UpstreamProtocol::Responses, "https://api.x.ai/v1", &mut claude).unwrap();
+    assert_eq!(claude.as_slice(), source);
+    let mut codex = source.to_vec();
+    apply_request(AppKind::Codex, UpstreamProtocol::Responses, "https://api.x.ai/v1", &mut codex).unwrap();
+    let value: Value = serde_json::from_slice(&codex).unwrap();
+    assert!(value.get("prompt_cache_retention").is_none());
+}
+
+#[test]
+fn native_chat_output_limits_keep_the_declared_budget_for_both_clients() {
+    for app in [AppKind::Codex, AppKind::Claude] {
+        for endpoint in [
+            "https://resource.openai.azure.com/openai/v1",
+            "https://resource.openai.azure.us/openai/v1",
+            "https://resource.openai.azure.cn/openai/v1",
+            "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+            "https://bedrock-runtime.cn-north-1.amazonaws.com.cn/openai/v1",
+        ] {
+            let mut body = json!({"model":"m", "max_tokens":123, "temperature":0.4}).to_string().into_bytes();
+            apply_request(app, UpstreamProtocol::ChatCompletions, endpoint, &mut body).unwrap();
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(value, json!({"model":"m", "max_completion_tokens":123, "temperature":0.4}));
+            let prepared = body.clone();
+            apply_request(app, UpstreamProtocol::ChatCompletions, endpoint, &mut body).unwrap();
+            assert_eq!(body, prepared);
+        }
+    }
+    for (protocol, endpoint) in [
+        (UpstreamProtocol::ChatCompletions, "https://openai.azure.com.example/v1"),
+        (UpstreamProtocol::ChatCompletions, "https://bedrock-runtime.us-east-1.amazonaws.com.example/v1"),
+        (UpstreamProtocol::Responses, "https://resource.openai.azure.com/openai/v1"),
+    ] {
+        let mut body = br#"{"max_tokens":123}"#.to_vec();
+        let original = body.clone();
+        apply_request(AppKind::Codex, protocol, endpoint, &mut body).unwrap();
+        assert_eq!(body, original);
+    }
+}
+
+#[test]
+fn invalid_limits_and_schema_constraints_fail_without_mutating_wire_bytes() {
+    for (endpoint, body) in [
+        ("https://resource.openai.azure.com/openai/v1", json!({"max_tokens":12,"max_completion_tokens":13})),
+        ("https://resource.openai.azure.com/openai/v1", json!({"max_tokens":1.5})),
+        ("https://api.kimi.com/v1", json!({"tools":[{"function":{"parameters":{"$ref":"#/x","allOf":{}}}}]})),
+    ] {
+        let mut wire = body.to_string().into_bytes();
+        let original = wire.clone();
+        assert!(apply_request(AppKind::Codex, UpstreamProtocol::ChatCompletions, endpoint, &mut wire).is_err());
+        assert_eq!(wire, original);
+    }
+}
+
+#[test]
+fn minimax_requests_structured_reasoning_and_rejects_tag_output() {
+    for app in [AppKind::Codex, AppKind::Claude] {
+        for endpoint in ["https://api.minimax.io/v1", "https://api.minimaxi.com/v1"] {
+            let mut body = br#"{"model":"m","thinking":{"type":"disabled"}}"#.to_vec();
+            apply_request(app, UpstreamProtocol::ChatCompletions, endpoint, &mut body).unwrap();
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(value["reasoning_split"], true);
+            assert_eq!(value["thinking"]["type"], "disabled");
+            let prepared = body.clone();
+            apply_request(app, UpstreamProtocol::ChatCompletions, endpoint, &mut body).unwrap();
+            assert_eq!(body, prepared);
+            let mut tags = br#"{"reasoning_split":false}"#.to_vec();
+            assert!(apply_request(app, UpstreamProtocol::ChatCompletions, endpoint, &mut tags).is_err());
+        }
+    }
+}
+
+#[test]
+fn deepseek_requires_original_reasoning_without_fabricating_empty_history() {
+    for app in [AppKind::Codex, AppKind::Claude] {
+        let mut value = json!({"tools":[{"type":"function","function":{"name":"t","parameters":{}}}],
+            "messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]});
+        let mut wire = value.to_string().into_bytes();
+        let original = wire.clone();
+        assert!(apply_request(app, UpstreamProtocol::ChatCompletions, "https://api.deepseek.com/v1", &mut wire).is_err());
+        assert_eq!(wire, original);
+        for reasoning in [json!(""), json!("original trace")] {
+            value["messages"][1]["reasoning_content"] = reasoning;
+            let mut wire = value.to_string().into_bytes();
+            let original = wire.clone();
+            apply_request(app, UpstreamProtocol::ChatCompletions, "https://api.deepseek.com/v1", &mut wire).unwrap();
+            assert_eq!(wire, original);
+        }
+        value["messages"][1]["reasoning_content"] = Value::Null;
+        let mut wire = value.to_string().into_bytes();
+        assert!(apply_request(app, UpstreamProtocol::ChatCompletions, "https://api.deepseek.com/v1", &mut wire).is_err());
+        value["thinking"] = json!({"type":"disabled"});
+        let mut wire = value.to_string().into_bytes();
+        apply_request(app, UpstreamProtocol::ChatCompletions, "https://api.deepseek.com/v1", &mut wire).unwrap();
+        value.as_object_mut().unwrap().remove("thinking");
+        value.as_object_mut().unwrap().remove("tools");
+        let mut wire = value.to_string().into_bytes();
+        apply_request(app, UpstreamProtocol::ChatCompletions, "https://api.deepseek.com/v1", &mut wire).unwrap();
+    }
+}
+
+#[test]
+fn deepseek_anthropic_preserves_thinking_and_rejects_unreadable_history() {
+    let mut value = json!({"messages":[
+        {"role":"assistant","content":[{"type":"thinking","thinking":"plan"},{"type":"tool_use","id":"c","name":"t","input":{}}]},
+        {"role":"user","content":[{"type":"tool_result","tool_use_id":"c","content":"ok"}]},
+        {"role":"assistant","content":[{"type":"thinking","thinking":"result"},{"type":"text","text":"done"}]},
+    ]});
+    let mut wire = value.to_string().into_bytes();
+    apply_request(AppKind::Claude, UpstreamProtocol::AnthropicMessages, "https://api.deepseek.com/anthropic", &mut wire).unwrap();
+    value["messages"][2]["content"] = json!([{"type":"text","text":"done"}]);
+    let mut wire = value.to_string().into_bytes();
+    assert!(apply_request(AppKind::Claude, UpstreamProtocol::AnthropicMessages, "https://api.deepseek.com/anthropic", &mut wire).is_err());
+    value["thinking"] = json!({"type":"disabled"});
+    value["messages"][0]["content"] = json!([{"type":"redacted_thinking","data":"opaque"}]);
+    let mut wire = value.to_string().into_bytes();
+    assert!(apply_request(AppKind::Claude, UpstreamProtocol::AnthropicMessages, "https://api.deepseek.com/anthropic", &mut wire).is_err());
 }

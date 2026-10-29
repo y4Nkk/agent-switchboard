@@ -1,5 +1,5 @@
 use super::{ArchiveOutcome, ArchiveScope};
-use crate::{codex_metering::CodexRequestLedger, codex_probe::ProbeLedger, local_state::LocalState};
+use crate::local_state::LocalState;
 use asb_core::contracts::AppKind;
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use flate2::{write::GzEncoder, Compression};
@@ -44,8 +44,6 @@ impl<'a> ArchiveWriter<'a> {
 pub(crate) struct HistoryArchivePlan {
     pub cutoff: String,
     pub configuration: BTreeMap<AppKind, ArchiveDigest>,
-    pub codex: ArchiveDigest,
-    pub probes: ArchiveDigest,
 }
 
 pub(crate) fn cutoff_date(value: &str) -> Result<DateTime<Utc>, String> {
@@ -64,9 +62,7 @@ pub(crate) fn plan(local: &LocalState, cutoff: &str, output: &mut dyn Write) -> 
     for app in [AppKind::Codex, AppKind::Claude] {
         configuration.insert(app, store.archive_history_digest(app, date, output)?);
     }
-    Ok(HistoryArchivePlan { cutoff: cutoff.into(), configuration,
-        codex: CodexRequestLedger::new(local.root()).archive_digest(date, output)?,
-        probes: ProbeLedger::new(local.root()).archive_digest(date, output)? })
+    Ok(HistoryArchivePlan { cutoff: cutoff.into(), configuration })
 }
 
 struct Temporary(PathBuf);
@@ -100,8 +96,6 @@ pub(crate) fn execute(local: &LocalState, expected: &HistoryArchivePlan, target:
     for app in [AppKind::Codex, AppKind::Claude] {
         result.add(ArchiveScope::Configuration(app), local.configuration().prune_archived_history(app, date, &expected.configuration[&app]));
     }
-    result.add(ArchiveScope::CodexRequests, CodexRequestLedger::new(local.root()).prune_archived(date, &expected.codex));
-    result.add(ArchiveScope::Probes, ProbeLedger::new(local.root()).prune_archived(date, &expected.probes));
     Ok(result)
 }
 

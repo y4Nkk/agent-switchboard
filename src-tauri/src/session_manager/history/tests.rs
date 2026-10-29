@@ -1,4 +1,5 @@
 use super::*;
+mod purge;
 use crate::session_manager::{SessionMessage, records};
 use base64::Engine;
 use serde_json::{json, Value};
@@ -308,4 +309,38 @@ fn unknown_or_corrupt_databases_are_preserved_in_place() {
     fs::write(&path, b"unreadable database bytes").unwrap();
     assert!(store::open(&root).is_err());
     assert_eq!(fs::read(path).unwrap(), b"unreadable database bytes");
+}
+
+#[test]
+fn bulk_purge_removes_stale_preserved_sessions_and_releases_file_space() {
+    let mut fixture = Fixture::new();
+    let mut record = user("stale session");
+    record["timestamp"] = json!("2020-01-01T00:00:00Z");
+    fixture.write(&[record]);
+    let (sources, issues) = fixture.sync();
+    assert!(issues.is_empty(), "{issues:?}");
+
+    let preview = crate::session_manager::preview_session_purge(&fixture.root, "2021-01-01").unwrap();
+    assert_eq!(preview.sessions, 1);
+    assert!(preview.bytes > 0);
+    assert_eq!(crate::session_manager::preview_session_purge(&fixture.root, "2019-01-01").unwrap().sessions, 0);
+
+    let outcome = crate::session_manager::purge_resolved(
+        &fixture.root, &sources, &issues, purge_cutoff("2021-01-01").unwrap(),
+    ).unwrap();
+    assert_eq!(outcome.removed, 1);
+    assert!(outcome.warnings.is_empty(), "{:?}", outcome.warnings);
+    assert!(!fixture.path().exists());
+    let count: i64 = fixture.connection.query_row("SELECT count(*) FROM transcripts", [], |row| row.get(0)).unwrap();
+    assert_eq!(count, 0);
+    let tombstones: i64 = fixture.connection.query_row("SELECT count(*) FROM deleted_sessions", [], |row| row.get(0)).unwrap();
+    assert_eq!(tombstones, 1);
+    assert_eq!(crate::session_manager::preview_session_purge(&fixture.root, "2021-01-01").unwrap().sessions, 0);
+}
+
+#[test]
+fn a_future_or_invalid_purge_cutoff_is_rejected() {
+    assert!(super::purge_cutoff("2099-01-01").is_err());
+    assert!(super::purge_cutoff("not-a-date").is_err());
+    assert!(super::purge_cutoff("2026-1-1").is_err());
 }

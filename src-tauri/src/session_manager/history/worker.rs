@@ -8,7 +8,8 @@ struct Worker(Arc<(Mutex<bool>, Condvar)>);
 pub(crate) fn flush_on_exit(app: &tauri::AppHandle) {
     let Some(local) = app.try_state::<crate::local_state::LocalState>() else { return; };
     match super::scan(local.root()) {
-        Ok((_, issues)) => {
+        Ok((mut sources, mut issues)) => {
+            crate::session_manager::conversion::include(local.root(), &mut sources, &mut issues);
             for issue in issues { log::warn!("退出时 Claude 会话保留需注意：{}", issue.message); }
         }
         Err(error) => log::error!("退出时未能完成 Claude 会话保留：{error}"),
@@ -34,7 +35,10 @@ fn run(root: PathBuf, stop: Arc<(Mutex<bool>, Condvar)>) {
     let mut previous = String::new();
     loop {
         let problem = match super::scan(&root) {
-            Ok((_, issues)) => issues.into_iter().map(|issue| issue.message).collect::<Vec<_>>().join("；"),
+            Ok((mut sources, mut issues)) => {
+                crate::session_manager::conversion::include(&root, &mut sources, &mut issues);
+                issues.into_iter().map(|issue| issue.message).collect::<Vec<_>>().join("；")
+            }
             Err(error) => error,
         };
         if problem != previous {

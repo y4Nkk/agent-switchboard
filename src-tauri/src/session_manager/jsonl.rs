@@ -4,6 +4,26 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::ops::ControlFlow;
 use std::path::Path;
+use std::path::PathBuf;
+use std::cell::RefCell;
+
+#[derive(Default)]
+pub(super) struct Readers(RefCell<HashMap<PathBuf, super::record_file::Cursor>>);
+
+impl Readers {
+    pub(super) fn value(&self, path: &Path, offset: u64, digest: &str, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<serde_json::Value, String> {
+        if !super::record_file::compressed(path) { return read_value(path, offset, digest, checkpoint); }
+        let mut readers = self.0.borrow_mut();
+        if !readers.contains_key(path) {
+            readers.insert(path.into(), super::record_file::Cursor::new(path, checkpoint)?);
+        }
+        let result = readers.get_mut(path).ok_or("缺少归档读取游标")?.value(offset, checkpoint);
+        if result.is_err() { readers.remove(path); }
+        let value = result?;
+        if parser::record_identity(&value) != digest { return Err("原会话记录已经改变，请重新打开".into()); }
+        Ok(value)
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -93,9 +113,9 @@ fn scan(path: &records::Source, checkpoint: &dyn Fn() -> Result<(), String>) -> 
     Ok(FilePositions { entries, issues })
 }
 
-pub(super) fn value(path: &Path, offset: u64, digest: &str) -> Result<serde_json::Value, String> {
+fn read_value(path: &Path, offset: u64, digest: &str, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<serde_json::Value, String> {
     let mut found = None;
-    records::visit_records(path, offset, |_, _, value| { found = Some(value); Ok(ControlFlow::Break(())) })?;
+    records::scan_records_observed(path, offset, 0, checkpoint, |_, _, value| { found = Some(value); Ok(ControlFlow::Break(())) })?;
     let value = found.ok_or("原会话记录已经改变，请重新打开会话")?;
     if parser::record_identity(&value) != digest { return Err("原会话记录已经改变，请重新打开会话".into()); }
     Ok(value)

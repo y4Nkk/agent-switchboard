@@ -1,9 +1,11 @@
 pub(crate) mod archive;
+pub(crate) mod backup_cleanup;
 pub(crate) mod publish;
 pub(crate) mod sqlite;
 mod cache;
 mod sizes;
 pub(crate) use archive::{ArchiveDigest, ArchiveWriter, HistoryArchivePlan};
+pub(crate) use backup_cleanup::{execute as execute_backup_cleanup, preview as preview_backup_cleanup_plan, BackupCleanupPlan};
 pub(crate) use cache::{clear_cache, spawn};
 pub(crate) use sizes::{usage, StorageUsage};
 use serde::Serialize;
@@ -15,7 +17,7 @@ pub(crate) struct ReclaimOutcome { pub removed: u64, pub warning: Option<String>
 #[derive(Debug)]
 pub(crate) enum ReclaimError { Changed, Failed(String) }
 impl From<String> for ReclaimError { fn from(error: String) -> Self { Self::Failed(error) } }
-pub(crate) enum ArchiveScope { Configuration(AppKind), CodexRequests, Probes }
+pub(crate) enum ArchiveScope { Configuration(AppKind), Backups }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,10 +39,8 @@ impl ArchiveOutcome {
         let (key, app) = match (scope, changed) {
             (ArchiveScope::Configuration(app), true) => ("storage.archive.configChanged", app.label()),
             (ArchiveScope::Configuration(app), false) => ("storage.archive.configFailed", app.label()),
-            (ArchiveScope::CodexRequests, true) => ("storage.archive.codexChanged", "Codex"),
-            (ArchiveScope::CodexRequests, false) => ("storage.archive.codexFailed", "Codex"),
-            (ArchiveScope::Probes, true) => ("storage.archive.probesChanged", ""),
-            (ArchiveScope::Probes, false) => ("storage.archive.probesFailed", ""),
+            (ArchiveScope::Backups, true) => ("backup.cleanup.changed", ""),
+            (ArchiveScope::Backups, false) => ("backup.cleanup.failed", ""),
         };
         let text = if changed { "已完整归档；历史变化，未清理变化后的记录".into() }
             else { format!("已完整归档；部分回收未完成：{detail}") };

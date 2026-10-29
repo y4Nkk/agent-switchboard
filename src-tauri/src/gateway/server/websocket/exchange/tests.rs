@@ -37,7 +37,7 @@ fn response(route: &ActiveRoute) -> Value {
     let mut request = json!({"tools":[{"type":"namespace","name":"mcp__files__","tools":[{
         "type":"function","name":"read","parameters":{},
     }]}]}).to_string().into_bytes();
-    crate::gateway::transform::apply_request_compat(route, &mut request).unwrap();
+    crate::gateway::transform::prepare_upstream_request(route, &mut request).unwrap();
     let request: Value = serde_json::from_slice(&request).unwrap();
     json!({"id":"response-one","object":"response","status":"completed","model":"m",
         "error":null,"vendor_metadata":{"kept":true},"output":[{

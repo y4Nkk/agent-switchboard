@@ -5,7 +5,6 @@ import type { Page } from "./navigation";
 import { SideNav } from "./SideNav";
 import { PinTopButton } from "../components/PinTopButton";
 import { GlobalInformation } from "../components/GlobalInformation";
-import { InformationSources } from "../components/InformationSources";
 import { WindowControls } from "../components/WindowControls";
 import { isBrowserDevelopment } from "../lib/runtime";
 import appIcon from "../assets/app-icon.svg";
@@ -49,7 +48,7 @@ export function AppShell({
 }: AppShellProps) {
   const { t } = useI18n();
   return (
-    <InformationSources><div className={`asb-shell${sidebar.collapsed ? " is-collapsed" : ""}`}>
+    <div className={`asb-shell${sidebar.collapsed ? " is-collapsed" : ""}`}>
       <SideNav page={page} onPageChange={onPageChange} collapsed={sidebar.collapsed}
         onToggle={sidebar.onToggle} pending={sidebar.pending} update={update} />
       <header className="asb-titlebar" data-tauri-drag-region>
@@ -70,6 +69,6 @@ export function AppShell({
       <div className="asb-workspace">
         {children}
       </div>
-    </div></InformationSources>
+    </div>
   );
 }

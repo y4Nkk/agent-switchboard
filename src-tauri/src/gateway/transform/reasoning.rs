@@ -4,17 +4,18 @@ use aes_gcm::aead::{
     Aead, KeyInit, Payload as AeadPayload,
 };
 use aes_gcm::{Aes256Gcm, Nonce};
+use asb_core::contracts::UpstreamProtocol;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 mod responses;
 
-const CONTINUATION_PREFIX: &str = "asb-reasoning-v3.";
+const CONTINUATION_PREFIX: &str = "asb-reasoning-v4.";
 /// Any version of this gateway's reasoning payload. Another version is a stale
 /// payload that must be rejected, never mistaken for an upstream block.
 const CONTINUATION_FAMILY: &str = "asb-reasoning-";
-const AAD: &[u8] = b"agent-switchboard/reasoning-continuation/v3";
+const AAD: &[u8] = b"agent-switchboard/reasoning-continuation/v4";
 const NONCE_BYTES: usize = 12;
 
 /// What one upstream reasoning trace contains once this gateway has read it.
@@ -24,9 +25,11 @@ const NONCE_BYTES: usize = 12;
 /// backend. Sealing the whole record keeps that replay possible across turns
 /// without ever handing a client the readable text.
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Record {
-    /// The readable trace. Empty when the upstream returned only an opaque
-    /// block that this gateway cannot read.
+    protocol: UpstreamProtocol,
+    /// Empty Chat traces remain distinct from a missing reasoning field;
+    /// opaque records carry their native data alongside an empty trace.
     text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     signature: Option<String>,
@@ -41,6 +44,7 @@ struct Record {
 impl Record {
     fn validate(&self) -> Result<(), TransformError> {
         if self.text.is_empty()
+            && self.protocol != UpstreamProtocol::ChatCompletions
             && self.redacted.is_none()
             && self.responses_item.is_none()
             && self.gemini_turn.is_none()
@@ -62,6 +66,7 @@ impl Record {
 /// continuation is the only form sent to Codex or Claude Code.
 #[derive(Clone)]
 pub(crate) struct Reasoning {
+    pub(crate) protocol: UpstreamProtocol,
     pub(crate) content: String,
     pub(crate) continuation: String,
     /// The upstream signature that authenticates `content` for its own backend.
@@ -95,10 +100,8 @@ impl ReasoningTransport {
     }
 
     pub(crate) fn from_chat_content(&self, content: String) -> Result<Reasoning, TransformError> {
-        if content.is_empty() {
-            return Err(TransformError("推理内容不能为空".to_string()));
-        }
         self.seal(Record {
+            protocol: UpstreamProtocol::ChatCompletions,
             text: content,
             signature: None,
             redacted: None,
@@ -115,6 +118,7 @@ impl ReasoningTransport {
         signature: Option<String>,
     ) -> Result<Reasoning, TransformError> {
         self.seal(Record {
+            protocol: UpstreamProtocol::AnthropicMessages,
             text,
             signature: signature.filter(|value| !value.is_empty()),
             redacted: None,
@@ -127,6 +131,7 @@ impl ReasoningTransport {
     /// on the next turn. No other backend can read it back.
     pub(crate) fn from_redacted(&self, data: String) -> Result<Reasoning, TransformError> {
         self.seal(Record {
+            protocol: UpstreamProtocol::AnthropicMessages,
             text: String::new(),
             signature: None,
             redacted: Some(data),
@@ -140,6 +145,7 @@ impl ReasoningTransport {
         turn: super::claude_gemini::replay::GeminiTurn,
     ) -> Result<Reasoning, TransformError> {
         self.seal(Record {
+            protocol: UpstreamProtocol::GeminiGenerateContent,
             text: String::new(),
             signature: None,
             redacted: None,
@@ -157,6 +163,7 @@ impl ReasoningTransport {
             .map_err(|_| TransformError("推理续接载荷格式无效".to_string()))?;
         record.validate()?;
         Ok(Reasoning {
+            protocol: record.protocol,
             content: record.text,
             continuation,
             signature: record.signature,
@@ -194,6 +201,7 @@ impl ReasoningTransport {
         payload.extend_from_slice(&nonce);
         payload.extend_from_slice(&encrypted);
         Ok(Reasoning {
+            protocol: record.protocol,
             content: record.text,
             continuation: format!("{CONTINUATION_PREFIX}{}", URL_SAFE_NO_PAD.encode(payload)),
             signature: record.signature,
@@ -206,7 +214,7 @@ impl ReasoningTransport {
     fn open(&self, continuation: &str) -> Result<Vec<u8>, TransformError> {
         let encoded = continuation
             .strip_prefix(CONTINUATION_PREFIX)
-            .ok_or_else(|| TransformError("推理续接载荷不属于当前本机网关".to_string()))?;
+            .ok_or_else(|| TransformError("推理续接版本无效，当前仅接受 v4；请重新开始会话".to_string()))?;
         let payload = URL_SAFE_NO_PAD.decode(encoded).map_err(|_| {
             TransformError("推理续接载荷格式无效；请从同一供应商路由继续会话".to_string())
         })?;
@@ -283,7 +291,19 @@ mod tests {
     }
 
     #[test]
+    fn original_empty_chat_reasoning_keeps_its_protocol_and_presence() {
+        let transport = ReasoningTransport::from_continuation_key([6; 32]);
+        let sealed = transport.from_chat_content(String::new()).unwrap();
+        assert!(sealed.continuation.starts_with("asb-reasoning-v4."));
+        let restored = transport.from_continuation(sealed.continuation).unwrap();
+        assert_eq!(restored.protocol, UpstreamProtocol::ChatCompletions);
+        assert!(restored.content.is_empty());
+        assert!(restored.redacted.is_none());
+    }
+
+    #[test]
     fn only_this_gateway_format_is_recognized_as_a_continuation() {
+        assert!(ReasoningTransport::is_continuation("asb-reasoning-v4.abc"));
         assert!(ReasoningTransport::is_continuation("asb-reasoning-v3.abc"));
         assert!(ReasoningTransport::is_continuation("asb-reasoning-v2.abc"));
         assert!(!ReasoningTransport::is_continuation("upstream-opaque-blob"));
@@ -292,11 +312,13 @@ mod tests {
     #[test]
     fn a_stale_gateway_payload_is_rejected_rather_than_reinterpreted() {
         let transport = ReasoningTransport::from_continuation_key([7; 32]);
-        let error = transport
-            .from_continuation("asb-reasoning-v2.stale-payload".to_string())
-            .err()
-            .expect("a stale payload must not be reopened");
-        assert!(error.0.contains("不属于当前本机网关"), "{}", error.0);
+        for version in ["v2", "v3"] {
+            let error = transport
+                .from_continuation(format!("asb-reasoning-{version}.stale-payload"))
+                .err()
+                .expect("a stale payload must not be reopened");
+            assert!(error.0.contains("当前仅接受 v4"), "{}", error.0);
+        }
     }
 
     #[test]

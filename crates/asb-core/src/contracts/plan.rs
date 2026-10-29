@@ -319,6 +319,7 @@ pub struct RouteState {
     pub haiku_model: Option<String>,
     pub sonnet_model: Option<String>,
     pub opus_model: Option<String>,
+    pub fable_model: Option<String>,
     /// Claude `availableModels` list, when set.
     pub available_models: Option<Vec<String>>,
     /// Scope-of-effect warnings: facts in this file that may be overridden by

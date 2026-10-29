@@ -5,6 +5,9 @@ mod reading;
 mod resume;
 mod worker;
 mod deletion;
+mod purge;
+pub use purge::PurgePlan;
+pub(crate) use purge::{preview_purge, purge_cutoff, reclaim_space, stale_session_ids};
 mod packages;
 pub(crate) use worker::{spawn, flush_on_exit};
 
@@ -65,14 +68,12 @@ pub(super) fn scan_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), Str
     Ok((reading::sources_observed(&connection, &store::path(root), checkpoint)?, issues))
 }
 
-pub(crate) fn preserve_before_switch(root: &Path) -> Result<Vec<asb_core::contracts::LocalizedMessage>, String> {
+pub(crate) fn preserve_before_switch(root: &Path) -> Result<(), String> {
     let _guard = GATE.lock().map_err(|_| "Claude 会话保留锁不可用")?;
     let mut connection = store::open(root)?;
     let issues = capture::synchronize(&mut connection, root, &capture::initial_roots()?)?;
-    Ok(issues.into_iter().filter(|issue| issue.conversion_id.is_none()).map(|issue| asb_core::contracts::LocalizedMessage::new(
-        "sessions.preservation.issue", serde_json::json!({"detail":issue.message}),
-        format!("部分 Claude 会话尚未完整保留：{}", issue.message),
-    )).collect())
+    super::diagnostics::report(root, "Claude 切换前会话保留", issues.into_iter().map(|issue| issue.message));
+    Ok(())
 }
 
 pub(crate) fn roots(root: &Path) -> Result<Vec<HistoryRoot>, String> {
@@ -125,9 +126,35 @@ pub(crate) fn add_root(root: &Path, directory: &Path) -> Result<Vec<HistoryRoot>
     reading::roots(&connection)
 }
 
-pub(super) fn delete(root: &Path, ids: &[String]) -> Result<(), String> {
+pub(super) fn delete(
+    root: &Path, ids: &[String], cutoff: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<(), String> {
     let _guard = GATE.lock().map_err(|_| "Claude 会话保留锁不可用")?;
-    deletion::delete(root, ids)
+    let mut connection = store::open(root)?;
+    if let Some(cutoff) = cutoff { purge::validate_deletion(&connection, ids, cutoff)?; }
+    deletion::delete(&mut connection, root, ids)
+}
+
+pub(super) fn deleted_ids(root: &Path) -> Result<std::collections::HashSet<String>, String> {
+    let _guard = GATE.lock().map_err(|_| "Claude 会话保留锁不可用")?;
+    let connection = store::open(root)?;
+    let mut statement = connection.prepare("SELECT id FROM deleted_sessions").map_err(db_error)?;
+    let result = statement.query_map([], |row| row.get(0)).map_err(db_error)?
+        .collect::<Result<_, _>>().map_err(db_error);
+    result
+}
+
+pub(super) fn delete_converted(root: &Path, id: &str, path: &Path) -> Result<(), String> {
+    let _guard = GATE.lock().map_err(|_| "Claude 会话保留锁不可用")?;
+    let mut connection = store::open(root)?;
+    let transaction = connection.transaction().map_err(db_error)?;
+    transaction.execute("INSERT OR IGNORE INTO deleted_sessions(id) VALUES(?1)", [id]).map_err(db_error)?;
+    match std::fs::remove_file(path) {
+        Ok(()) => {},
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+        Err(error) => return Err(format!("无法删除转换记录 {}: {error}", path.display())),
+    }
+    transaction.commit().map_err(db_error)
 }
 
 pub(super) fn prepare_resume(root: &Path, source: &SessionSource) -> Result<PathBuf, String> {

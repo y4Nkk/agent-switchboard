@@ -67,6 +67,7 @@ pub enum StartupPage {
 #[serde(rename_all = "camelCase")]
 pub enum WorkspacePage {
     Providers,
+    Gateway,
     ClientConfiguration,
     Extensions,
     Sessions,

@@ -20,6 +20,8 @@ Codex 工具调用历史在按会话统计调用 ID 后，从全局顺序列表�
 
 [供应商诊断与写入边界](../../implemented/bug-fix/2026-10-13-provider-diagnostics-contract.md)部分重叠：保留其档案、认证和执行器所有权，本篇补充运行中候选快照和响应还原边界。按工具历史、xAI、跨供应商与故障转移检索的其他笔记没有同主题决策，无需取代或归档。
 
+[协议转换边界补强](2026-10-28-protocol-boundary-reinforcement.md)拥有 Chat 推理参数语义、空历史和 schema 预检，以及两个客户端共享的 Moonshot 请求修补；本篇继续拥有会话隔离与 Codex 原生 Responses 响应还原，不将 Codex 私有载体适配推广到 Claude。
+
 ## Alternatives considered
 
 - 修补额外 SSE reader 并在 WebSocket 再套一层，改动更小；但留下重复分帧、重复缓冲及两条响应还原路径，故直接复用已有完整事件解析。

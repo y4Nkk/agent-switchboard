@@ -28,17 +28,6 @@ pub async fn forget_claude_session_source(app: AppHandle, path: String) -> Resul
 fn history_error(message: String) -> CommandError {
     CommandError::localized("claude-session-sources-failed", "sessions.sources.failed", message.clone(), serde_json::json!({"detail":message}))
 }
-#[tauri::command]
-pub async fn convert_session_sources(
-    app_handle: AppHandle,
-    ids: Vec<String>,
-) -> Result<session_manager::SessionConversionOutcome, CommandError> {
-    let local = state(&app_handle)?;
-    blocking(move || session_manager::convert_session_sources(local.root(), &ids)
-        .map_err(|message| CommandError::localized("session-conversion-failed", "errors.sessions.conversionFailed",
-            message.clone(), serde_json::json!({ "detail": message })))).await
-}
-
 /// Resolves one exact session identity independently of search pagination.
 #[tauri::command]
 pub async fn get_session_metadata(
@@ -297,4 +286,31 @@ pub async fn update_session_organization(
                 serde_json::json!({ "detail": message }),
             ))
     }).await
+}
+
+#[tauri::command]
+pub async fn preview_session_cleanup(app: AppHandle, cutoff: String) -> Result<session_manager::PurgePlan, CommandError> {
+    let local = state(&app)?;
+    blocking(move || session_manager::preview_session_purge(local.root(), &cutoff)
+        .map_err(purge_error)).await
+}
+
+#[tauri::command]
+pub async fn cleanup_sessions(app: AppHandle, cutoff: String) -> Result<session_manager::SessionPurgeOutcome, CommandError> {
+    let local = state(&app)?;
+    blocking(move || {
+        let result = session_manager::purge_claude_sessions(local.root(), &cutoff);
+        let action = crate::runtime_log::RuntimeLogAction::StorageSessionsCleaned;
+        match &result {
+            Ok(outcome) if outcome.warnings.is_empty() => crate::runtime_log::record_success(action),
+            Ok(_) => crate::runtime_log::record_failure(action, "storage-session-reclamation-incomplete"),
+            Err(_) => crate::runtime_log::record_failure(action, "storage-session-cleanup-failed"),
+        }
+        result.map_err(purge_error)
+    }).await
+}
+
+fn purge_error(message: String) -> CommandError {
+    CommandError::localized("sessions-purge-failed", "sessions.purge.failed",
+        message.clone(), serde_json::json!({ "detail": message }))
 }

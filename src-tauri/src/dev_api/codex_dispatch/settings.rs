@@ -38,6 +38,10 @@ pub(super) async fn dispatch(
             command!(commands::get_cached_codex_reset_status(app.clone()))
         }
         "check_codex_reset_status" => command!(commands::check_codex_reset_status(app.clone())),
+        "get_cached_codex_reset_hub_status" => {
+            command!(commands::get_cached_codex_reset_hub_status(app.clone()))
+        }
+        "check_codex_reset_hub_status" => command!(commands::check_codex_reset_hub_status(app.clone())),
         "codex_login_blocker" => {
             command!(commands::official_login::codex_login_blocker(app.clone()))
         }

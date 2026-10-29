@@ -345,3 +345,6 @@
     flex-direction: column;
   }
 }
+
+/* 存储与缓存分区：面板内自上而下的操作流。 */
+.asb-storage-settings { display: flex; flex-direction: column; gap: var(--asb-space-2); }

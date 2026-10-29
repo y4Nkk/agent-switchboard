@@ -10,7 +10,6 @@ pub(in crate::gateway::transform::stream) struct ChatToAnthropic {
     text: Option<TextOutput>,
     calls: BTreeMap<u64, AnthropicCall>,
     reasoning_transport: Option<ReasoningTransport>,
-    pending_reasoning: String,
     next_content_index: u64,
     completed: bool,
 }
@@ -25,7 +24,6 @@ impl ChatToAnthropic {
             text: None,
             calls: BTreeMap::new(),
             reasoning_transport,
-            pending_reasoning: String::new(),
             next_content_index: 0,
             completed: false,
         }
@@ -39,9 +37,6 @@ impl ChatToAnthropic {
         self.source.apply(&update)?;
         let mut output = Vec::new();
         self.start(&mut output)?;
-        for reasoning in update.reasoning {
-            self.pending_reasoning.push_str(&reasoning);
-        }
         for text in update.text {
             if !text.is_empty() {
                 self.flush_reasoning(&mut output)?;
@@ -135,9 +130,9 @@ impl ChatToAnthropic {
     }
 
     fn flush_reasoning(&mut self, output: &mut Vec<u8>) -> Result<(), TransformError> {
-        if self.pending_reasoning.is_empty() {
+        let Some(content) = self.source.pending_reasoning.take() else {
             return Ok(());
-        }
+        };
         self.start(output)?;
         if !self.started {
             return Err(TransformError(
@@ -148,7 +143,7 @@ impl ChatToAnthropic {
             .reasoning_transport
             .as_ref()
             .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
-        let reasoning = transport.from_chat_content(std::mem::take(&mut self.pending_reasoning))?;
+        let reasoning = transport.from_chat_content(content)?;
         let index = self.next_content_index;
         self.next_content_index += 1;
         append_event(

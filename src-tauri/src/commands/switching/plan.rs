@@ -223,7 +223,7 @@ pub(in crate::commands) fn execute_projection_with_auth(
         expected_auth_existed,
         expected_auth_rendered_hash,
     )?;
-    let preservation = super::projection_transaction::begin(
+    super::projection_transaction::begin(
         state,
         gateway,
         projection,
@@ -255,7 +255,6 @@ pub(in crate::commands) fn execute_projection_with_auth(
         asb_switch::execute(&FsIo, &request, commit)
     };
     let mut outcome = super::transaction::finish(state, gateway, execution)?;
-    outcome.warnings.extend(preservation);
     outcome.preview.target = target.to_string_lossy().into_owned();
     Ok(outcome)
 }

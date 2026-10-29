@@ -1,6 +1,7 @@
 //! Chat history keeps parallel tool results adjacent before extracted media.
 
 use super::*;
+use std::borrow::Cow;
 
 pub(super) fn render_chat(request: &CanonicalRequest) -> Result<Value, TransformError> {
     let mut messages = Vec::new();
@@ -9,7 +10,8 @@ pub(super) fn render_chat(request: &CanonicalRequest) -> Result<Value, Transform
             "role": "system", "content": render_chat_content(&request.system)?,
         }));
     }
-    let mut source = request.messages.iter().peekable();
+    let history = normalized_history(&request.messages);
+    let mut source = history.iter().peekable();
     while let Some(message) = source.next() {
         if message.role == Role::User {
             let mut turn = vec![message];
@@ -21,6 +23,9 @@ pub(super) fn render_chat(request: &CanonicalRequest) -> Result<Value, Transform
             messages.push(render_message(message)?);
         }
     }
+    if messages.is_empty() {
+        return error("Chat Completions 请求不包含可转换的消息");
+    }
     let mut root = Map::new();
     root.insert("model".to_string(), Value::String(request.model.clone()));
     root.insert("messages".to_string(), Value::Array(messages));
@@ -30,6 +35,42 @@ pub(super) fn render_chat(request: &CanonicalRequest) -> Result<Value, Transform
     insert_openai_reasoning(&mut root, request, UpstreamProtocol::ChatCompletions);
     insert_common_chat(&mut root, request)?;
     Ok(Value::Object(root))
+}
+
+fn normalized_history(messages: &[Message]) -> Cow<'_, [Message]> {
+    if !messages.iter().any(empty_assistant) {
+        return Cow::Borrowed(messages);
+    }
+    let mut output: Vec<Message> = Vec::with_capacity(messages.len());
+    let mut crossed_empty = false;
+    for message in messages {
+        if empty_assistant(message) {
+            crossed_empty = true;
+            continue;
+        }
+        if crossed_empty && message.role == Role::User {
+            if let Some(previous) = output.last_mut().filter(|m| m.role == Role::User) {
+                if matches!(previous.parts.last(), Some(Part::Text(_)))
+                    && matches!(message.parts.first(), Some(Part::Text(_)))
+                {
+                    previous.parts.push(Part::Text("\n\n".into()));
+                }
+                previous.parts.extend(message.parts.clone());
+                crossed_empty = false;
+                continue;
+            }
+        }
+        crossed_empty = false;
+        output.push(message.clone());
+    }
+    Cow::Owned(output)
+}
+
+fn empty_assistant(message: &Message) -> bool {
+    message.role == Role::Assistant
+        && message.parts.iter().all(|part| {
+            matches!(part, Part::Text(text) if text.trim().is_empty())
+        })
 }
 
 fn render_user_turn(messages: &mut Vec<Value>, turn: &[&Message]) -> Result<(), TransformError> {
@@ -85,14 +126,16 @@ fn render_assistant(parts: &[Part]) -> Result<Value, TransformError> {
     let mut text = Vec::new();
     let mut calls = Vec::new();
     let mut reasoning = String::new();
+    let mut reasoning_present = false;
     for part in parts {
         match part {
             Part::Text(_) | Part::Image(_) => text.push(part.clone()),
             Part::Reasoning(value) => {
-                if value.content.is_empty() {
+                if value.content.is_empty() && value.protocol != UpstreamProtocol::ChatCompletions {
                     return error("该推理是不透明上游块，无法用于 Chat Completions 历史");
                 }
                 reasoning.push_str(&value.content);
+                reasoning_present = true;
             }
             Part::ToolCall {
                 id,
@@ -115,6 +158,13 @@ fn render_assistant(parts: &[Part]) -> Result<Value, TransformError> {
             }
         }
     }
+    if calls.is_empty()
+        && text.iter().all(|part| {
+            matches!(part, Part::Text(value) if value.trim().is_empty())
+        })
+    {
+        return error("Chat Completions 无法无损转换仅含推理、没有正文或工具调用的 assistant 历史");
+    }
     let mut output = json!({
         "role": "assistant",
         "content": if text.is_empty() { Value::Null } else { render_chat_content(&text)? },
@@ -122,7 +172,7 @@ fn render_assistant(parts: &[Part]) -> Result<Value, TransformError> {
     if !calls.is_empty() {
         output["tool_calls"] = Value::Array(calls);
     }
-    if !reasoning.is_empty() {
+    if reasoning_present {
         output["reasoning_content"] = Value::String(reasoning);
     }
     Ok(output)

@@ -43,7 +43,7 @@ function ChatReasoningControls({ editor, busy }: Props) {
             { ...current.capabilities, chatReasoning: { kind: "unsupported" } }))} />
         <RadioOption name="chat-reasoning" checked={configured} disabled={busy} label={t("codex.chatReasoning.configure")}
           onChange={() => setDraft((current) => ({ ...current, capabilities: { ...current.capabilities,
-            chatReasoning: { kind: "configured", thinkingParameter: "none", effortParameter: "none", effortMode: "passthrough" } } }))} />
+            chatReasoning: { kind: "configured", thinkingParameter: "none", separateOutput: false, effortParameter: "none", effortMode: "passthrough" } } }))} />
       </div>
       {chatReasoning.kind === "configured" && (
         <div className="asb-provider-field-grid asb-provider-chat-reasoning">
@@ -54,10 +54,12 @@ function ChatReasoningControls({ editor, busy }: Props) {
                 { value: "none", label: t("codex.chatReasoning.noMapping") },
                 { value: "thinking", label: "thinking" },
                 { value: "enableThinking", label: "enable_thinking" },
-                { value: "reasoningSplit", label: t("codex.chatReasoning.reasoningSplit") },
               ]}
               onChange={(value) => patch({ thinkingParameter: value as ConfiguredChatReasoning["thinkingParameter"] })} />
           </label>
+          <Checkbox checked={chatReasoning.separateOutput} disabled={busy}
+            label={t("codex.chatReasoning.separateOutput")}
+            onChange={(separateOutput) => patch({ separateOutput })} />
           <label className="asb-field">
             <span>{t("codex.chatReasoning.effortParam")}</span>
             <Select ariaLabel={t("codex.chatReasoning.effortParam")} value={chatReasoning.effortParameter} disabled={busy}

@@ -8,6 +8,8 @@ Claude workflow 的 journal.jsonl 保存执行事件而非带 sessionId 的会�
 
 ## Decision
 
+手动触发及全局提示的决定已由[静默来源恢复](../bug-fix/2026-10-29-silent-session-source-recovery.md)取代。本篇继续拥有下面的完整副本格式、来源修订验证及原件只读边界。
+
 来源发现明确识别 Claude 项目下的主会话/subagents/workflows/workflow/journal.jsonl。会话页面将其报告为可转换的事件来源，转换标识绑定后端解析的文件身份和完整内容摘要；前端只提交这些标识，不能提交路径。用量汇总只消费真实会话来源及调用收据，workflow 事件与转换记录不进入会话覆盖数量或 token 计量。
 
 来源键只哈希按本机 Path 组件重新组成的路径，使 Windows 的正反斜线及冗余分隔符不会给同一来源生成不同身份；发现、转换请求与副本重读共用这一入口。不使用依赖原件仍然存在的文件系统 canonicalize，也不双读旧路径哈希。原始来源位置仍按原样保存。
@@ -16,7 +18,7 @@ Claude workflow 的 journal.jsonl 保存执行事件而非带 sessionId 的会�
 
 转换快照是显式保存的可读记录，搜索、正文、复制、收藏、导出与整理共用 SessionSource 和 SessionMessage。相同来源的新快照原子替换旧快照，不维护第二份拼接正文、迁移格式或双读回退。来源内容改变后重新出现可转换提示。删除转换记录只删除应用副本，原始 journal 仍由 Claude 管理。
 
-会话及用量的来源提示通过 `useInformationSource` 接入标题栏 GlobalInformation，确认按当前提示身份生效；新问题仍可见，已确认提示在同一全局入口复查。确认和删除状态由[应用级来源生命周期](2026-10-23-information-source-lifecycle.md)拥有，不写浏览器或用户配置；转换入口的提示身份包含排序去重后的 conversionId 集合，新集合不继承旧集合的删除状态。提示正文与转换操作在全局面板的共享 ScrollArea 内完整阅读，警示不再挤占结果区。缓存重建提示继续保留其现有确认入口，确认均不改变统计事实或后端错误结果。[搜索生命周期与全局警示](../bug-fix/2026-10-23-session-search-lifecycle.md)拥有展示迁移和真实进度。
+本篇的手动转换入口、全局来源提示与确认决定由[静默来源恢复](../bug-fix/2026-10-29-silent-session-source-recovery.md)取代；该篇拥有后台自动整理、删除保护、日志诊断及原前端命令的移除。本篇继续拥有完整副本格式、原件只读、真实时间、逐来源原子发布及 workflow 用量排除规则。
 
 ## Related decisions
 

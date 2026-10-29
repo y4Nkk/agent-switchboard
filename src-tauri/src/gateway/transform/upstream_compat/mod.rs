@@ -1,47 +1,76 @@
-//! Targeted compatibility rewrites for strict third-party Codex upstreams.
+//! Native request dialects owned by the selected upstream protocol.
 //!
 //! Generic cross-protocol conversion must stay provider-agnostic; these
-//! modules only fire for upstreams that verifiably reject otherwise-valid
-//! Codex traffic. Gates and wiring live here so no other layer knows about a
-//! specific vendor.
+//! modules prepare fields and validate history required by known services.
+//! Gates and wiring live here so client entry points do not repeat them.
 
+mod chat;
+mod deepseek;
 mod moonshot;
 mod namespaces;
 mod xai;
 
 use crate::gateway::ActiveRoute;
-use asb_core::contracts::UpstreamProtocol;
+use asb_core::contracts::{AppKind, UpstreamProtocol};
 use serde_json::Value;
 
 /// True when the resolved upstream is xAI's strict native Responses endpoint.
-/// ASB admission already guarantees catalog models, so the API-key form is the
-/// complete gate until managed xAI accounts exist.
+/// Credential delivery does not change the provider's native wire spelling.
 fn is_xai_native_responses(protocol: UpstreamProtocol, base_url: &str) -> bool {
     protocol == UpstreamProtocol::Responses && host_is(base_url, &["api.x.ai"])
 }
 
 /// Applies every request-side rewrite the selected upstream requires. Called
 /// after model resolution and protocol conversion, on the final body.
-pub(crate) fn apply_request_compat(route: &ActiveRoute, body: &mut Vec<u8>) -> Result<(), String> {
-    apply_request(route.upstream_protocol, &route.upstream_base_url, body)
+pub(crate) fn prepare_upstream_request(route: &ActiveRoute, body: &mut Vec<u8>) -> Result<(), String> {
+    apply_request(
+        route.app,
+        route.upstream_protocol,
+        &route.upstream_base_url,
+        body,
+    )
 }
 
 fn apply_request(
+    app: AppKind,
     protocol: UpstreamProtocol,
     base_url: &str,
     body: &mut Vec<u8>,
 ) -> Result<(), String> {
-    if protocol == UpstreamProtocol::ChatCompletions
-        && moonshot::upstream_requires_ref_sibling_all_of(base_url)
-    {
-        moonshot::wrap_ref_siblings_in_chat_tools(body)?;
+    let moonshot = protocol == UpstreamProtocol::ChatCompletions
+        && moonshot::upstream_requires_ref_sibling_all_of(base_url);
+    let xai = app == AppKind::Codex && is_xai_native_responses(protocol, base_url);
+    let endpoint = reqwest::Url::parse(base_url).ok();
+    let host = endpoint.as_ref().and_then(|url| url.host_str()).unwrap_or("");
+    let chat = protocol == UpstreamProtocol::ChatCompletions && chat::applies(host);
+    let deepseek = host == "api.deepseek.com"
+        && matches!(
+            protocol,
+            UpstreamProtocol::ChatCompletions | UpstreamProtocol::AnthropicMessages
+        );
+    if !moonshot && !xai && !chat && !deepseek {
+        return Ok(());
     }
-    if is_xai_native_responses(protocol, base_url) {
-        let mut value: serde_json::Value =
-            serde_json::from_slice(body).map_err(|_| "Codex 请求体不是有效 JSON".to_string())?;
+    let mut value: Value = serde_json::from_slice(body)
+        .map_err(|_| "上游请求体不是有效 JSON".to_string())?;
+    let mut changed = false;
+    if moonshot {
+        changed |= moonshot::rewrite_chat_tools(&mut value)?;
+    }
+    if chat {
+        changed |= chat::prepare(host, &mut value)?;
+    }
+    if deepseek {
+        deepseek::validate(protocol, &value)?;
+    }
+    // These carriers and their response restoration belong to Codex alone.
+    if xai {
         namespaces::flatten_request_namespaces(&mut value)?;
         xai::sanitize(&mut value);
-        *body = serde_json::to_vec(&value).map_err(|_| "Codex 请求序列化失败".to_string())?;
+        changed = true;
+    }
+    if changed {
+        *body = serde_json::to_vec(&value).map_err(|_| "上游请求序列化失败".to_string())?;
     }
     Ok(())
 }

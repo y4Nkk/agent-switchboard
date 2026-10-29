@@ -219,9 +219,10 @@ export interface CodexResetStatus {
 
 export type CodexResetFreshness = "cached" | "live";
 
-/** The normalized public signal plus how the overview obtained it. */
-export interface CodexResetRead {
-  status: CodexResetStatus;
+/** One source's normalized public signal plus how the overview obtained it.
+ * Generic over the per-source status so both monitors share one envelope. */
+export interface CodexResetRead<S = CodexResetStatus> {
+  status: S;
   freshness: CodexResetFreshness;
   cacheWarning: string | null;
 }
@@ -233,6 +234,141 @@ export function getCachedCodexResetStatus(): Promise<CodexResetRead | null> {
 
 export function checkCodexResetStatus(): Promise<CodexResetRead> {
   return invoke<CodexResetRead>("check_codex_reset_status");
+}
+
+/** Public, global reset signals from codex-reset.com, the second independent
+ * monitor. These do not describe the signed-in account's quota or entitlement. */
+export type HubConfidence = "low" | "medium" | "high";
+export type HubEventKind = "reset" | "credits";
+export type HubSurfaceStatus = "operational" | "degraded" | "outage" | "maintenance";
+
+export interface HubChance {
+  percent: number;
+  rangeLower: number;
+  rangeUpper: number;
+}
+
+export interface HubWindow {
+  startHour: number;
+  endHour: number;
+  timezone: string;
+}
+
+export interface HubCadence {
+  medianDays: number;
+  sample: number;
+  meanDays: number;
+  accelerating: boolean;
+}
+
+export interface HubWait {
+  days: number;
+  sample: number;
+  shorterShare: number;
+  medianDays: number;
+}
+
+export interface HubForecast {
+  updatedAt: string;
+  confidence: HubConfidence;
+  chance24h: HubChance;
+  chance48h: HubChance;
+  lastResetAt: string;
+  ageDays: number;
+  window: HubWindow | null;
+  cadence: HubCadence | null;
+  wait: HubWait | null;
+  /** The site's own Simplified Chinese explanation of the current context. */
+  contextNote: string | null;
+}
+
+export interface HubEvent {
+  id: string;
+  date: string;
+  kind: HubEventKind;
+  summary: string;
+  url: string | null;
+  announcedAt: string;
+  confirmed: boolean;
+}
+
+export interface HubTimeline {
+  updatedAt: string;
+  resets: number;
+  credits: number;
+  events: HubEvent[];
+}
+
+export interface HubSurface {
+  id: string;
+  label: string;
+  status: HubSurfaceStatus;
+}
+
+export interface HubPlatformStats {
+  days: number;
+  incidents: number;
+  resolved: number;
+  open: number;
+  medianRecoveryMinutes: number | null;
+}
+
+export interface HubIncident {
+  name: string;
+  impact: string;
+  resolved: boolean;
+  startedAt: string;
+  resolvedAt: string | null;
+  url: string | null;
+}
+
+export interface HubPlatform {
+  checkedAt: string;
+  stale: boolean;
+  surfaces: HubSurface[];
+  stats: HubPlatformStats;
+  incidents: HubIncident[];
+}
+
+export interface HubSignalPost {
+  summary: string;
+  at: string;
+  url: string;
+  active: boolean;
+}
+
+export interface HubBankedNote {
+  at: string;
+  text: string;
+}
+
+export interface HubFeed {
+  fetchedAt: string;
+  stale: boolean;
+  signal: HubSignalPost | null;
+  banked: HubBankedNote[];
+}
+
+export interface CodexResetHubStatus {
+  sourceUrl: string;
+  generatedAt: string;
+  checkedAt: string;
+  sourceWarning: string | null;
+  forecast: HubForecast;
+  timeline: HubTimeline;
+  platform: HubPlatform;
+  feed: HubFeed;
+}
+
+export type CodexResetHubRead = CodexResetRead<CodexResetHubStatus>;
+
+/** Reads only the last successful local aggregate; it never contacts the source. */
+export function getCachedCodexResetHubStatus(): Promise<CodexResetHubRead | null> {
+  return invoke<CodexResetHubRead | null>("get_cached_codex_reset_hub_status");
+}
+
+export function checkCodexResetHubStatus(): Promise<CodexResetHubRead> {
+  return invoke<CodexResetHubRead>("check_codex_reset_hub_status");
 }
 
 /** Reads the app-owned, credential-free history ledger. It never triggers a

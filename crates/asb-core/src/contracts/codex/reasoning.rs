@@ -14,6 +14,7 @@ pub enum CodexChatReasoning {
     Unsupported,
     Configured {
         thinking_parameter: CodexChatThinkingParameter,
+        separate_output: bool,
         effort_parameter: CodexChatEffortParameter,
         effort_mode: CodexChatEffortMode,
     },
@@ -25,7 +26,6 @@ pub enum CodexChatThinkingParameter {
     None,
     Thinking,
     EnableThinking,
-    ReasoningSplit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,5 +75,35 @@ impl CodexReasoningLevel {
             Self::Max => "Max Thinking",
             Self::Ultra => "Ultra Thinking",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn configuration() -> serde_json::Value {
+        json!({
+            "kind":"configured", "thinkingParameter":"thinking", "separateOutput":true,
+            "effortParameter":"reasoningEffort", "effortMode":"deepSeek",
+        })
+    }
+
+    #[test]
+    fn current_configuration_round_trips_with_independent_output() {
+        let value = configuration();
+        let parsed: CodexChatReasoning = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), value);
+    }
+
+    #[test]
+    fn old_thinking_enum_and_missing_output_field_are_rejected() {
+        let mut old_enum = configuration();
+        old_enum["thinkingParameter"] = json!("reasoningSplit");
+        assert!(serde_json::from_value::<CodexChatReasoning>(old_enum).is_err());
+        let mut missing_field = configuration();
+        missing_field.as_object_mut().unwrap().remove("separateOutput");
+        assert!(serde_json::from_value::<CodexChatReasoning>(missing_field).is_err());
     }
 }

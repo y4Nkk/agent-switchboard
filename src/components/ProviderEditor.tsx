@@ -121,7 +121,7 @@ function ProviderEditorSession(props: Props) {
     : props.profile ? t("providers.editor.title.edit") : t("providers.workspace.newProvider");
   const backLabel = parametersOpen ? t("providers.editor.backToEditor") : t("providers.editor.backToProviders");
   const goBack = () => parametersOpen ? editor.setParametersOpen(false) : close();
-  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel}
+  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} viewportRef={editor.viewportRef} backLabel={backLabel}
     busy={props.busy} onBack={goBack} onCancel={close} formId={formId} canSave={editor.canSave}>
     <div hidden={parametersOpen}>
       <ProviderForm {...safeProps} editor={editor} formId={formId} />

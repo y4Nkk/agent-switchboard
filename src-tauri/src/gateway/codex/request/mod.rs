@@ -1,6 +1,5 @@
 //! Codex-specific request compatibility, applied after conversion and before transport.
 mod anthropic;
-mod moonshot;
 use crate::gateway::ActiveRoute;
 use asb_core::contracts::{
     AppKind, CodexPromptCacheRouting, CodexRequestOptions, UpstreamProtocol,
@@ -17,6 +16,7 @@ pub(crate) fn prepare(
 ) -> Result<Option<String>, String> {
     crate::upstream_overrides::apply_body_override(wire, &route.connection)?;
     if route.app != AppKind::Codex || route.upstream_protocol == UpstreamProtocol::Responses {
+        crate::gateway::transform::prepare_upstream_request(route, wire)?;
         return Ok(None);
     }
     let options = route.connection.codex.clone().unwrap_or_default();
@@ -44,6 +44,7 @@ pub(crate) fn prepare(
     if changed {
         *wire = serde_json::to_vec(&body).map_err(|_| "Codex 请求无法序列化")?;
     }
+    crate::gateway::transform::prepare_upstream_request(route, wire)?;
     Ok(beta)
 }
 fn apply(
@@ -60,16 +61,13 @@ fn apply(
     match protocol {
         UpstreamProtocol::GeminiGenerateContent => Err("Gemini Native 是 Claude 专用上游".into()),
         UpstreamProtocol::ChatCompletions => {
-            let mut changed = cache_key(
+            let changed = cache_key(
                 endpoint,
                 options.prompt_cache_routing,
                 source,
                 body,
                 session,
             );
-            if moonshot::required(endpoint) {
-                changed |= moonshot::rewrite(body)?;
-            }
             Ok((changed, None))
         }
         UpstreamProtocol::AnthropicMessages => Ok(anthropic::rewrite(body, options)),

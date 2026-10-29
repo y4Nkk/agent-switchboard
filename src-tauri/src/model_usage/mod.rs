@@ -106,6 +106,8 @@ pub(crate) fn reports(
         .map(|issue| ModelUsageIssue { app: issue.app, message: issue.message }).collect();
     let index = crate::session_manager::read_index::ReadIndex::open(root)?;
     let (events, scanned_files) = collect_events(&index, &sources, &mut issues);
+    crate::session_manager::diagnostics::report(root, "模型用量来源",
+        issues.iter().map(|issue| format!("{}: {}", issue.app.label(), issue.message)));
     let mut results = Vec::new();
     for range in [ModelUsageRange::Today, ModelUsageRange::Last7Days, ModelUsageRange::Last30Days, ModelUsageRange::All] {
         let mut aggregate = Accumulator::new(CalendarRange::new(range, now));

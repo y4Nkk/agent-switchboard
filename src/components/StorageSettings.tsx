@@ -4,10 +4,12 @@ import { archiveHistory, clearWebviewCache, getStorageUsage, previewHistoryArchi
 import { useI18n } from "../i18n";
 import { useMessageState } from "../i18n/use-message-state";
 import { localizedMessageText } from "../i18n/errors";
+import type { LocalizedMessage } from "../api/switching";
 import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { DatePicker } from "./DatePicker";
 import { FactList } from "./FactList";
+import { ModuleHeader } from "./WorkspaceHeader";
 import { Time } from "./Time";
 
 function defaultCutoff() {
@@ -16,8 +18,10 @@ function defaultCutoff() {
 }
 
 function archiveCount(plan: HistoryArchivePlan) {
-  return plan.configuration.codex.records + plan.configuration.claude.records + plan.codex.records + plan.probes.records;
+  return plan.configuration.codex.records + plan.configuration.claude.records;
 }
+
+type StorageOperation = "cache" | "preview" | "archive";
 
 function useStorage(active: boolean, onArchived: () => void) {
   const [usage, setUsage] = useState<StorageUsage | null>(null);
@@ -35,7 +39,7 @@ function useStorage(active: boolean, onArchived: () => void) {
     catch (caught) { if (mounted.current && generation.current === version) setError(caught); }
   }, [setError]);
   useEffect(() => { if (active) void refresh(); return () => { generation.current += 1; }; }, [active, refresh]);
-  const run = async (operation: "cache" | "preview" | "archive", cutoff: string) => {
+  const run = async (operation: StorageOperation, cutoff: string) => {
     if (locked.current) return;
     locked.current = true; setWorking(true); setError(null);
     try {
@@ -61,8 +65,10 @@ export function StorageSettings({ active, busy, onArchived }: { active: boolean;
   const state = useStorage(active, onArchived);
   const disabled = busy || state.working;
   const bytes = (value: number) => `${(value / 1024 / 1024).toLocaleString(language, { maximumFractionDigits: 1 })} MiB`;
-  return <section className="asb-storage-settings" aria-labelledby="storage-settings-heading">
-    <h3 className="asb-section-title" id="storage-settings-heading">{t("storage.title")}</h3>
+  const warnings = (list: LocalizedMessage[]) =>
+    list.map((warning, index) => <p className="asb-warn-text" key={index}>{localizedMessageText(warning, t)}</p>);
+  return <section className="asb-panel asb-storage-settings" aria-labelledby="storage-settings-heading">
+    <ModuleHeader id="storage-settings-heading" title={t("storage.title")} />
     <p className="asb-field-help">{t("storage.description")}</p>
     {state.usage && <FactList rows={[
       { label: t("storage.data"), value: bytes(state.usage.dataBytes) },
@@ -76,7 +82,7 @@ export function StorageSettings({ active, busy, onArchived }: { active: boolean;
         onClick={() => void state.run("cache", cutoff)}>{t("storage.clearCache")}</Button>}
     </div>
     {state.usage?.cacheMaintenance && <p className="asb-field-help">{t("storage.cachePolicy", { budget: bytes(state.usage.cacheBudgetBytes) })}</p>}
-    <label className="asb-storage-cutoff">{t("storage.cutoff")}
+    <label className="asb-cutoff-field">{t("storage.cutoff")}
       <DatePicker value={cutoff} disabled={disabled} ariaLabel={t("storage.cutoff")}
         onChange={(value) => { setCutoff(value); state.setPlan(null); }} />
     </label>
@@ -84,7 +90,7 @@ export function StorageSettings({ active, busy, onArchived }: { active: boolean;
     <Button variant="secondary" disabled={disabled || !cutoff} onClick={() => void state.run("preview", cutoff)}>{t("storage.previewArchive")}</Button>
     {state.error && <p className="asb-warn-text" role="alert">{state.error}</p>}
     {state.outcome && <div role="status"><p>{t("storage.archived", { count: state.outcome.removed, path: state.outcome.path })}</p>
-      {state.outcome.warnings.map((warning, index) => <p className="asb-warn-text" key={index}>{localizedMessageText(warning, t)}</p>)}</div>}
+      {warnings(state.outcome.warnings)}</div>}
     {state.plan && <ConfirmSheet title={t("storage.archiveTitle")} confirmLabel={t("storage.archiveConfirm")}
       busy={state.working} confirmDisabled={disabled || archiveCount(state.plan) === 0}
       destructive onCancel={() => state.setPlan(null)} onConfirm={() => { void state.run("archive", cutoff); }}>

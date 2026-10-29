@@ -15,7 +15,6 @@ interface SettingsPageProps {
   onSectionChange: (section: SettingsSection) => void;
   onReturnToProviders?: () => void;
   backups: ReactNode;
-  gateway: ReactNode;
   clientManagement: ReactNode;
   diagnostics: ReactNode;
   egress: ReactNode;
@@ -78,7 +77,6 @@ function ApplicationSettings(props: SettingsPageProps) {
         <div className="asb-skeleton" />
       </div>}
       {props.egress}
-      {props.storage}
     </div>
   );
 }
@@ -140,12 +138,12 @@ export function SettingsPage(props: SettingsPageProps) {
         <div id={`${id}-client-management-panel`} role="tabpanel" aria-labelledby={`${id}-client-management-tab`} hidden={section !== "client-management"}>
           {props.clientManagement}
         </div>
-      <div id={`${id}-gateway-panel`} role="tabpanel" aria-labelledby={`${id}-gateway-tab`} hidden={section !== "gateway"}>
-        {props.gateway}
-      </div>
-        <div id={`${id}-backups-panel`} role="tabpanel" aria-labelledby={`${id}-backups-tab`} hidden={section !== "backups"}>
+      <div id={`${id}-backups-panel`} role="tabpanel" aria-labelledby={`${id}-backups-tab`} hidden={section !== "backups"}>
           {props.backups}
         </div>
+      <div id={`${id}-storage-panel`} role="tabpanel" aria-labelledby={`${id}-storage-tab`} hidden={section !== "storage"}>
+        {props.storage}
+      </div>
       <div id={`${id}-diagnostics-panel`} role="tabpanel" aria-labelledby={`${id}-diagnostics-tab`} hidden={section !== "diagnostics"}>
         {props.diagnostics}
       </div>

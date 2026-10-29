@@ -36,6 +36,8 @@ export const messages = {
 
 	"usage.quota.officialLabel": ["官方额度：", "Official quota: "],
 	"usage.quota.resetLabel": ["重置信号：", "Reset signal: "],
+	"usage.quota.resetSource1": ["源1", "Source 1"],
+	"usage.quota.resetSource2": ["源2", "Source 2"],
 	"usage.quota.noReadings": ["尚无读取记录", "No readings yet"],
 	"usage.quota.noCache": ["尚无缓存", "Nothing cached yet"],
 	"usage.quota.reading": ["读取中…", "Reading…"],
@@ -67,7 +69,6 @@ export const messages = {
 	"usage.label.output": ["输出", "Output"],
 
 	"usage.summary.groupAria": ["模型消耗汇总", "Model consumption summary"],
-	"usage.issues.entry": ["{client}：{message}", "{client}: {message}"],
 
 	"usage.column.client": ["客户端", "Client"],
 	"usage.column.model": ["模型", "Model"],
@@ -175,4 +176,5 @@ export const messages = {
   "usage.history.unreadable": ["无法读取用量历史", "Could not read the usage history"],
   "usage.history.invalidResponse": ["用量历史响应格式无效", "The usage history response has an invalid format"],
   "usage.readFailed": ["用量读取失败", "The usage query failed"],
+  "usage.radar.reclaimWarning": ["检测记录已删除，数据库空间回收未完成：{detail}", "Probe records deleted; database space could not be reclaimed: {detail}"],
 } as const satisfies Record<string, MessageEntry>;

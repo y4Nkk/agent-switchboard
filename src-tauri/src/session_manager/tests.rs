@@ -314,6 +314,7 @@ fn batch_deletion_reports_each_request_and_removes_only_resolved_records() {
             request(AppKind::Claude, "codex-two"),
             request(AppKind::Codex, "bad id;"),
         ],
+        None,
     );
 
     assert_eq!(outcomes.len(), 4, "重复请求只回答一次");

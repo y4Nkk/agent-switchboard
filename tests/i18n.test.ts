@@ -5,6 +5,20 @@ import { commandErrorText, errorText, uiMessage } from "../src/i18n/errors.ts";
 import { messages } from "../src/i18n/messages.ts";
 import { resolveLanguage } from "../src/i18n/resolve.ts";
 import { officialQuotaReadings, officialQuotaWindowName } from "../src/lib/usage-format.ts";
+import { timeLabel } from "../src/lib/time.ts";
+
+test("sample timestamps show seconds while ordinary timestamps keep minute precision", () => {
+  const previous = currentLanguage();
+  const iso = new Date(2026, 9, 26, 17, 50, 3).toISOString();
+  try {
+    applyLanguagePreference("zh-CN");
+    assert.ok(timeLabel(iso).endsWith("17：50"));
+    assert.ok(timeLabel(iso, "second").endsWith("17：50：03"));
+    applyLanguagePreference("en-US");
+    assert.ok(timeLabel(iso).endsWith("17:50"));
+    assert.ok(timeLabel(iso, "second").endsWith("17:50:03"));
+  } finally { applyLanguagePreference(previous); }
+});
 
 test("committed preference and system events publish one synchronous language snapshot", () => {
   const names = ["window", "document", "navigator"] as const;

@@ -192,6 +192,7 @@ pub fn route_state(text: &str) -> RouteState {
         haiku_model: None,
         sonnet_model: None,
         opus_model: None,
+        fable_model: None,
         available_models: None,
         scope_warnings: scope_warnings(&doc),
     }

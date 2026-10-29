@@ -13,6 +13,7 @@ import { messages as cmdExtops } from "./messages/cmd-extops.ts";
 import { messages as cmdMisc } from "./messages/cmd-misc.ts";
 import { messages as cmdSwitch } from "./messages/cmd-switch.ts";
 import { messages as codex } from "./messages/codex.ts";
+import { messages as codexConnection } from "./messages/codex-connection.ts";
 import { messages as common } from "./messages/common.ts";
 import { messages as errors } from "./messages/errors.ts";
 import { messages as extcap } from "./messages/extcap.ts";
@@ -48,6 +49,7 @@ export const messages = Object.freeze({
   ...cmdMisc,
   ...cmdSwitch,
   ...codex,
+  ...codexConnection,
   ...common,
   ...errors,
   ...extcap,

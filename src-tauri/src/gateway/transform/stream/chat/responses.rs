@@ -14,7 +14,6 @@ pub(in crate::gateway::transform::stream) struct ChatToResponses {
     text: Option<TextOutput>,
     calls: BTreeMap<u64, ResponseCall>,
     reasoning_transport: Option<ReasoningTransport>,
-    pending_reasoning: String,
     reasoning_parts: BTreeMap<u64, Value>,
     next_output_index: u64,
     completed: bool,
@@ -30,7 +29,6 @@ impl ChatToResponses {
             text: None,
             calls: BTreeMap::new(),
             reasoning_transport,
-            pending_reasoning: String::new(),
             reasoning_parts: BTreeMap::new(),
             next_output_index: 0,
             completed: false,
@@ -45,9 +43,6 @@ impl ChatToResponses {
         self.source.apply(&update)?;
         let mut output = Vec::new();
         self.start(&mut output)?;
-        for reasoning in update.reasoning {
-            self.pending_reasoning.push_str(&reasoning);
-        }
         for text in update.text {
             if !text.is_empty() {
                 self.flush_reasoning(&mut output)?;
@@ -156,9 +151,9 @@ impl ChatToResponses {
     }
 
     fn flush_reasoning(&mut self, output: &mut Vec<u8>) -> Result<(), TransformError> {
-        if self.pending_reasoning.is_empty() {
+        let Some(content) = self.source.pending_reasoning.take() else {
             return Ok(());
-        }
+        };
         self.start(output)?;
         if !self.started {
             return Err(TransformError(
@@ -169,7 +164,7 @@ impl ChatToResponses {
             .reasoning_transport
             .as_ref()
             .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
-        let reasoning = transport.from_chat_content(std::mem::take(&mut self.pending_reasoning))?;
+        let reasoning = transport.from_chat_content(content)?;
         let (id, _) = self.source.identity()?;
         let output_index = self.next_output_index;
         self.next_output_index += 1;

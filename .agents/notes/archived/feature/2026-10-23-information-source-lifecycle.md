@@ -1,6 +1,7 @@
 # Agent Note: 全局来源消息的应用级删除生命周期
 
 Status: implemented
+Archived: 2026-10-29
 
 ## Problem
 

@@ -3,6 +3,9 @@ use asb_core::contracts::UpstreamProtocol;
 use serde_json::json;
 use std::io::{Cursor, Read};
 
+mod request_boundaries;
+mod chat_reasoning_roundtrip;
+
 fn converted_json(from: UpstreamProtocol, body: Value) -> Value {
     let bytes = convert_response(from, UpstreamProtocol::Responses, &body.to_string().into_bytes(), None)
         .expect("supported response");

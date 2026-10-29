@@ -1,5 +1,5 @@
 use super::error::{blocking, state, CommandError};
-use crate::codex_reset::CodexResetRead;
+use crate::codex_reset::{CodexResetHubRead, CodexResetRead, CodexResetStatus};
 use crate::local_state::LocalState;
 
 /// Refreshes the account-bound quota cache for one official Codex profile.
@@ -108,7 +108,7 @@ pub async fn refresh_codex_official_reset(
 #[tauri::command]
 pub async fn get_cached_codex_reset_status(
     app: tauri::AppHandle,
-) -> Result<Option<CodexResetRead>, CommandError> {
+) -> Result<Option<CodexResetRead<CodexResetStatus>>, CommandError> {
     let state = state(&app)?;
     blocking(move || {
         state
@@ -125,7 +125,7 @@ pub async fn get_cached_codex_reset_status(
 #[tauri::command]
 pub async fn check_codex_reset_status(
     app: tauri::AppHandle,
-) -> Result<CodexResetRead, CommandError> {
+) -> Result<CodexResetRead<CodexResetStatus>, CommandError> {
     let state = state(&app)?;
     blocking(move || {
         let status = crate::codex_reset::check()
@@ -134,6 +134,42 @@ pub async fn check_codex_reset_status(
             "最新公开信号已显示，但未能写入本地缓存；下次打开应用可能无法保留该结果。".to_string()
         });
         Ok(CodexResetRead::live(status, cache_warning))
+    })
+    .await
+}
+
+/// Reads the last successful aggregate snapshot from the second monitor
+/// without contacting the network. An empty cache is a normal first-run
+/// result.
+#[tauri::command]
+pub async fn get_cached_codex_reset_hub_status(
+    app: tauri::AppHandle,
+) -> Result<Option<CodexResetHubRead>, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        state
+            .load_codex_reset_hub_cache()
+            .map(|status| status.map(CodexResetHubRead::cached))
+            .map_err(|error| CommandError::new("codex-reset-hub-cache-unavailable", error))
+    })
+    .await
+}
+
+/// One explicit read of the second monitor's four endpoints. A successful
+/// read replaces the local snapshot; a cache-write failure does not hide the
+/// fresh informational result from the overview.
+#[tauri::command]
+pub async fn check_codex_reset_hub_status(
+    app: tauri::AppHandle,
+) -> Result<CodexResetHubRead, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let status = crate::codex_reset::check_hub()
+            .map_err(|error| CommandError::new("codex-reset-hub-status-unavailable", error))?;
+        let cache_warning = state.save_codex_reset_hub_cache(&status).err().map(|_| {
+            "最新公开信号已显示，但未能写入本地缓存；下次打开应用可能无法保留该结果。".to_string()
+        });
+        Ok(CodexResetHubRead::live(status, cache_warning))
     })
     .await
 }

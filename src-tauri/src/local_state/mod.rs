@@ -199,6 +199,21 @@ impl LocalState {
         self.root.join("backups")
     }
 
+    pub(crate) fn client_settings_backup_path(
+        &self,
+        backup: &asb_core::contracts::BackupRecord,
+    ) -> Result<PathBuf, String> {
+        let file = Path::new(&backup.backup_path);
+        if file.parent() != Some(self.backup_dir().as_path())
+            || Path::new(&backup.target_path) != self.target(backup.app)?
+            || backup.linked_backup_id.is_some()
+        {
+            return Err("客户端设置快照不属于当前配置备份".into());
+        }
+        Ok(self.backup_dir().join("client-settings")
+            .join(file.file_name().ok_or("配置备份文件名无效")?).with_extension("json"))
+    }
+
     /// Private state for the loopback protocol gateway. It contains its
     /// listener identity and the active profile fingerprints, never a copied
     /// upstream API key or a client configuration document.
@@ -223,6 +238,10 @@ impl LocalState {
 
     fn codex_reset_cache_path(&self) -> PathBuf {
         self.root.join("codex-reset-cache.json")
+    }
+
+    fn codex_reset_hub_cache_path(&self) -> PathBuf {
+        self.root.join("codex-reset-hub-cache.json")
     }
 
     fn codex_quota_baseline_path(&self) -> PathBuf {

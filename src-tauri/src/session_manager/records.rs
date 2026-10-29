@@ -1,6 +1,5 @@
 use serde_json::Value;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, Read};
 use std::ops::ControlFlow;
 use std::path::Path;
 
@@ -71,10 +70,8 @@ pub(crate) fn scan_records_observed(
     visitor: impl FnMut(usize, u64, Value) -> Result<ControlFlow<()>, String>,
 ) -> Result<RecordScan, String> {
     checkpoint()?;
-    let mut file = File::open(path)
-        .map_err(|error| format!("无法读取会话记录 {}: {error}", path.display()))?;
-    file.seek(SeekFrom::Start(offset)).map_err(|error| error.to_string())?;
-    scan_reader(&path.display().to_string(), offset, ordinal, BufReader::new(file), checkpoint, visitor)
+    let reader = super::record_file::open(path, offset, checkpoint)?;
+    scan_reader(&path.display().to_string(), offset, ordinal, reader, checkpoint, visitor)
 }
 
 #[cfg(test)]

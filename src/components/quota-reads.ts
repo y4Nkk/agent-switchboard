@@ -2,8 +2,10 @@ import { uiMessage } from "../i18n/errors";
 import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useRef, useState } from "react";
 import {
+  checkCodexResetHubStatus,
   checkCodexResetStatus,
   getCachedCodexOfficialReset,
+  getCachedCodexResetHubStatus,
   getCachedCodexResetStatus,
   refreshCodexOfficialReset,
   type CodexOfficialQuota,
@@ -106,15 +108,28 @@ export function useCodexOfficialReset(enabled: boolean) {
   };
 }
 
-/** An explicit, read-only read of public reset signals: cache first, explicit
- * refresh from the page header. */
-export function useCodexResetSignal(enabled: boolean) {
-  const [snapshot, setSnapshot] = useState<CodexResetRead | null>(null);
+/** One source's read state: cache first, explicit refresh from the page
+ * header. Both public reset monitors share this exact shape. */
+interface ResetSourceRead<S> {
+  snapshot: CodexResetRead<S> | null;
+  cacheLoading: boolean;
+  cacheError: string | null;
+  loading: boolean;
+  readError: string | null;
+  readStatus: () => Promise<void>;
+}
+
+function useResetSourceRead<S>(
+  enabled: boolean,
+  loadCache: () => Promise<CodexResetRead<S> | null>,
+  check: () => Promise<CodexResetRead<S>>,
+): ResetSourceRead<S> {
+  const [snapshot, setSnapshot] = useState<CodexResetRead<S> | null>(null);
   const [cacheLoading, setCacheLoading] = useState(true);
   const [cacheError, setCacheError] = useMessageState();
   const [loading, setLoading] = useState(false);
   const [readError, setReadError] = useMessageState();
-  const requestRef = useRef<Promise<CodexResetRead> | null>(null);
+  const requestRef = useRef<Promise<CodexResetRead<S>> | null>(null);
   const cacheRevisionRef = useRef(0);
 
   useEffect(() => {
@@ -122,9 +137,9 @@ export function useCodexResetSignal(enabled: boolean) {
     let active = true;
     const revision = ++cacheRevisionRef.current;
 
-    const loadCache = async () => {
+    const load = async () => {
       try {
-        const cached = await getCachedCodexResetStatus();
+        const cached = await loadCache();
         if (active && cacheRevisionRef.current === revision) setSnapshot(cached);
       } catch (reason) {
         if (active && cacheRevisionRef.current === revision) setCacheError(reason);
@@ -133,10 +148,12 @@ export function useCodexResetSignal(enabled: boolean) {
       }
     };
 
-    void loadCache();
+    void load();
     return () => {
       active = false;
     };
+    // The loaders are stable module functions, not props.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
   const readStatus = async () => {
@@ -147,7 +164,7 @@ export function useCodexResetSignal(enabled: boolean) {
     setCacheError(null);
     setLoading(true);
     setReadError(null);
-    const request = Promise.resolve().then(() => checkCodexResetStatus());
+    const request = Promise.resolve().then(check);
     requestRef.current = request;
 
     try {
@@ -161,4 +178,23 @@ export function useCodexResetSignal(enabled: boolean) {
   };
 
   return { snapshot, cacheLoading, cacheError, loading, readError, readStatus };
+}
+
+export type CodexResetSource = "runway" | "hub";
+
+/** The two explicit, read-only public reset monitors: cache first, one
+ * refresh action in the page header reading both; every error and freshness
+ * state is reported per source. */
+export function useCodexResetSignal(enabled: boolean) {
+  const runway = useResetSourceRead(enabled, getCachedCodexResetStatus, checkCodexResetStatus);
+  const hub = useResetSourceRead(enabled, getCachedCodexResetHubStatus, checkCodexResetHubStatus);
+  return {
+    runway,
+    hub,
+    loading: runway.loading || hub.loading,
+    readStatus: () => {
+      void runway.readStatus();
+      void hub.readStatus();
+    },
+  };
 }

@@ -3,8 +3,7 @@ use crate::session_manager::parser;
 use rusqlite::{Connection, TransactionBehavior};
 use std::path::{Path, PathBuf};
 
-pub(super) fn delete(root: &Path, ids: &[String]) -> Result<(), String> {
-    let mut connection = store::open(root)?;
+pub(super) fn delete(connection: &mut Connection, root: &Path, ids: &[String]) -> Result<(), String> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(db_error)?;
     for id in ids {
         let originals = originals(&transaction, id)?;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   type CodexResetHeatmap,
@@ -14,8 +14,10 @@ import { Time } from "./Time";
 import { relativeLabel } from "../lib/time";
 import { UpdateIcon } from "./icons";
 import { ModuleHeader } from "./WorkspaceHeader";
-import { useCodexResetSignal } from "./quota-reads";
+import { CodexResetHubPanel } from "./CodexResetHubPanel";
+import { type CodexResetSource, useCodexResetSignal } from "./quota-reads";
 import { Table } from "./Table";
+import { Tabs } from "./Tabs";
 
 const DAY_MS = 86_400_000;
 
@@ -68,7 +70,9 @@ function forecastWindow(signal: ResetSignal): ForecastWindow | null {
   return { start: signal.effectiveAt, end };
 }
 
-function Badge({ type }: { type: ResetType }) {
+/** Reset-category chip shared by both sources: global resets and banked
+ * reset cards carry their site-tinted outline; generic categories stay neutral. */
+export function ResetBadge({ type }: { type: ResetType }) {
   const { t } = useI18n();
   return (
     <span className={`asb-codex-reset-badge${resetTypeBadgeClass(type)}`}>
@@ -145,9 +149,9 @@ function ResetHeatmap({ heatmap }: { heatmap: CodexResetHeatmap }) {
   );
 }
 
-/** An explicit, read-only view of public reset signals; the refresh action
- * and freshness state live in the usage page header. */
-export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexResetSignal> }) {
+/** Source 1: the Codex Runway feed's current-day answer and source ledger.
+ * The refresh action and freshness state live in the usage page header. */
+function RunwayResetBody({ read }: { read: ReturnType<typeof useCodexResetSignal>["runway"] }) {
   const { t } = useI18n();
   const { snapshot, cacheLoading, cacheError, readError } = read;
 
@@ -159,8 +163,7 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
   const forecastResult = forecast !== null ? forecastWindow(forecast) : null;
 
   return (
-    <section className="asb-panel asb-codex-reset" aria-labelledby="codex-reset-heading">
-      <ModuleHeader id="codex-reset-heading" title={t("codex.reset.title")} />
+    <>
       {cacheLoading && status === null && <div className="asb-quota-loading" role="status" aria-label={t("codex.reset.loadingCache")}>
         <span className="asb-skeleton" aria-hidden="true" /><span className="asb-skeleton" aria-hidden="true" /></div>}
       {status === null && !cacheLoading && readError === null && (
@@ -240,7 +243,7 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
                 <dd>
                   {latestCompleted !== null ? (
                     <>
-                      <Badge type={latestCompleted.resetType} />
+                      <ResetBadge type={latestCompleted.resetType} />
                       <span>
                         <Time iso={latestCompleted.announcedAt} />
                         <span className="asb-codex-reset-relative">
@@ -269,7 +272,7 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
                 <dd>
                   {forecast !== null ? (
                     <>
-                      <Badge type={forecast.resetType} />
+                      <ResetBadge type={forecast.resetType} />
                       <span>
                         {forecastResult !== null && <Time iso={forecastResult.start} />}
                         {forecastResult?.end != null && (
@@ -312,6 +315,30 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
           </p>
         </>
       )}
+    </>
+  );
+}
+
+/** The read-only public reset signals of both monitors, switched per source;
+ * the refresh action and freshness state live in the usage page header. */
+export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexResetSignal> }) {
+  const { t } = useI18n();
+  const id = useId();
+  const [source, setSource] = useState<CodexResetSource>("runway");
+  return (
+    <section className="asb-panel asb-codex-reset" aria-labelledby="codex-reset-heading">
+      <ModuleHeader id="codex-reset-heading" title={t("codex.reset.title")} />
+      <Tabs value={source} onChange={setSource} scope={id} label={t("codex.reset.sourcesAria")}
+        tabs={[
+          { value: "runway", label: t("codex.reset.sourceRunway"), controls: `${id}-runway-panel` },
+          { value: "hub", label: t("codex.reset.sourceHub"), controls: `${id}-hub-panel` },
+        ]} />
+      <div role="tabpanel" id={`${id}-runway-panel`} aria-labelledby={`${id}-runway-tab`} hidden={source !== "runway"}>
+        {source === "runway" && <RunwayResetBody read={read.runway} />}
+      </div>
+      <div role="tabpanel" id={`${id}-hub-panel`} aria-labelledby={`${id}-hub-tab`} hidden={source !== "hub"}>
+        {source === "hub" && <CodexResetHubPanel read={read.hub} />}
+      </div>
     </section>
   );
 }

@@ -47,7 +47,7 @@ export function useSwitchboardModel() {
     appSettingsState.loadError, reportError,
   );
   const { page, setPage } = navigation;
-  const modelRoutes = useModelRouteNavigation(navigation.openSettings);
+  const modelRoutes = useModelRouteNavigation(navigation.setPage);
   const snapshot = useConfigSnapshot({ onError: reportError });
   const { targetProfileId, setTargetProfileId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
   const refresh = useCallback(async () => { await refreshSnapshot(); }, [refreshSnapshot]);

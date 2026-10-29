@@ -34,14 +34,14 @@ pub(super) fn parse(value: Option<&Value>) -> Result<CodexChatReasoning, String>
             .transpose()
             .map(|v| v.unwrap_or("none"))
     };
-    let thinking_parameter = if !enabled("supportsThinking")? {
-        Thinking::None
+    let (thinking_parameter, separate_output) = if !enabled("supportsThinking")? {
+        (Thinking::None, false)
     } else {
         match text("thinkingParam")? {
-            "none" => Thinking::None,
-            "thinking" => Thinking::Thinking,
-            "enable_thinking" => Thinking::EnableThinking,
-            "reasoning_split" => Thinking::ReasoningSplit,
+            "none" => (Thinking::None, false),
+            "thinking" => (Thinking::Thinking, false),
+            "enable_thinking" => (Thinking::EnableThinking, false),
+            "reasoning_split" => (Thinking::None, true),
             _ => return Err("meta.codexChatReasoning.thinkingParam 不受支持".into()),
         }
     };
@@ -65,7 +65,26 @@ pub(super) fn parse(value: Option<&Value>) -> Result<CodexChatReasoning, String>
     };
     Ok(CodexChatReasoning::Configured {
         thinking_parameter,
+        separate_output,
         effort_parameter,
         effort_mode,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn external_split_metadata_imports_as_output_without_a_thinking_toggle() {
+        let source = json!({"supportsThinking":true,"thinkingParam":"reasoning_split"});
+        let parsed = parse(Some(&source)).unwrap();
+        assert_eq!(parsed, CodexChatReasoning::Configured {
+            thinking_parameter: Thinking::None,
+            separate_output: true,
+            effort_parameter: Effort::None,
+            effort_mode: Mode::Passthrough,
+        });
+    }
 }

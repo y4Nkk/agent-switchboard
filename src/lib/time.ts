@@ -2,10 +2,11 @@ import { currentLanguage, tr } from "../i18n/current.ts";
 
 /**
  * Formats an RFC 3339 UTC timestamp in the machine's local timezone as
- * `YYYY年MM月DD日 HH：MM` (zh-CN) or `Sep 21, 2026 14:30` (en-US). Rendering
- * goes through the `Time` component, the single consumer of this formatter.
+ * `YYYY年MM月DD日 HH：MM` (zh-CN) or `Sep 21, 2026 14:30` (en-US), with
+ * optional seconds for sampled readings. Time views and tray timestamps
+ * share this formatter.
  */
-export function timeLabel(iso: string): string {
+export function timeLabel(iso: string, precision: "minute" | "second" = "minute"): string {
   const date = new Date(iso);
   const [y, mo, d, h, mi] = [
     date.getFullYear(),
@@ -14,7 +15,9 @@ export function timeLabel(iso: string): string {
     date.getHours(),
     date.getMinutes(),
   ].map((part) => String(part).padStart(2, "0"));
-  const time = tr("format.time.hm", { hour: h, minute: mi });
+  const time = precision === "second"
+    ? tr("format.time.hms", { hour: h, minute: mi, second: String(date.getSeconds()).padStart(2, "0") })
+    : tr("format.time.hm", { hour: h, minute: mi });
   if (currentLanguage() === "zh-CN") {
     return `${tr("format.date.full", { year: y, month: mo, day: d })} ${time}`;
   }

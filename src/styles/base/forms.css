@@ -386,10 +386,10 @@
 }
 
 /* The fixed bar's commit button and the in-module trigger-plus-hint action
-   row (connection test, usage run) keep one shape across editor forms. */
+   row (connection test, usage run) keep the shared command geometry across
+   editor forms. */
 .asb-editor-submit {
   min-width: 7rem;
-  border-radius: var(--asb-radius-pill);
   padding-inline: var(--asb-space-4);
 }
 
@@ -414,3 +414,6 @@
   }
 }
 
+
+/* Date cutoff field shared by maintenance flows (storage archive, session purge). */
+.asb-cutoff-field { display: flex; flex-direction: column; gap: var(--asb-space-1); max-width: 24rem; font: var(--asb-text-label); }

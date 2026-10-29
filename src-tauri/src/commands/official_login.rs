@@ -193,7 +193,6 @@ fn poll_claude(
         )),
         Ok(Some(code)) => {
             let preservation = crate::session_manager::history::preserve_before_switch(root);
-            let warning = preservation.as_ref().ok().map(|warnings| warnings.iter().map(|warning| warning.text.clone()).collect::<Vec<_>>().join("；"));
             let outcome = preservation.and_then(|_| claude::exchange_code(
                 &claude::ClaudeOAuthEndpoints::default(),
                 &code,
@@ -209,11 +208,7 @@ fn poll_claude(
             // dropping the session is all the teardown needed.
             guard.remove(&target);
             Ok(match outcome {
-                Ok(()) => {
-                    let mut status = OfficialLoginStatus::completed();
-                    status.message = warning.filter(|warning| !warning.is_empty());
-                    status
-                }
+                Ok(()) => OfficialLoginStatus::completed(),
                 Err(message) => OfficialLoginStatus::failed(message),
             })
         }

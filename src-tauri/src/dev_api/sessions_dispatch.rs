@@ -9,7 +9,6 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "claude_session_sources" => command!(commands::claude_session_sources(app.clone())),
         "pick_claude_session_source" => command!(commands::pick_claude_session_source(app.clone())),
         "forget_claude_session_source" => command!(commands::forget_claude_session_source(app.clone(), argument(&request.args, "path")?)),
-        "convert_session_sources" => command!(commands::convert_session_sources(app.clone(), argument(&request.args, "ids")?)),
         "start_session_search" => command!(commands::start_session_search(app.clone(), argument(&request.args, "request")?)),
         "read_session_search" => command!(commands::read_session_search(app.clone(), argument(&request.args, "id")?)),
         "cancel_session_search" => command!(commands::cancel_session_search(app.clone(), argument(&request.args, "id")?)),
@@ -32,6 +31,8 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "delete_session" => command!(commands::delete_session(app.clone(),
             argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "delete_sessions" => command!(commands::delete_sessions(app.clone(), argument(&request.args, "requests")?)),
+        "preview_session_cleanup" => command!(commands::preview_session_cleanup(app.clone(), argument(&request.args, "cutoff")?)),
+        "cleanup_sessions" => command!(commands::cleanup_sessions(app.clone(), argument(&request.args, "cutoff")?)),
         _ => return Ok(None),
     };
     result.map(Some)

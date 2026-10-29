@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { BackupRecord, ConfigWriteRecord } from "../api/client";
 import type { useCloudBackup } from "../app/useCloudBackup";
+import { BackupCleanup } from "../components/BackupCleanup";
 import { BackupHistory } from "../components/BackupHistory";
 import { Button } from "../components/Button";
 import { CloudBackupPanel } from "../components/CloudBackupPanel";
@@ -20,9 +21,11 @@ interface BackupsPageProps {
   onRestore: (backupId: string) => void | Promise<void>;
   onUndo: (lastSwitch: ConfigWriteRecord) => void;
   onOpenDir: () => void;
+  /** Refreshes the record list after a bulk cleanup reclaimed backups. */
+  onCleaned: () => void;
 }
 
-type BackupTab = "local" | "cloud";
+type BackupTab = "local" | "cloud" | "cleanup";
 
 /** Backup history with restore, undo of the last switch, and the handoff to
  * the system file manager for cleanup. */
@@ -36,6 +39,7 @@ export function BackupsPage({
   onRestore,
   onUndo,
   onOpenDir,
+  onCleaned,
 }: BackupsPageProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<BackupTab>("local");
@@ -49,7 +53,8 @@ export function BackupsPage({
         primary={
           <Tabs value={activeTab} onChange={setActiveTab} scope="backup" label={t("backup.tabsAria")}
             tabs={[{ value: "local", label: t("backup.tab.local"), controls: "backup-local-panel" },
-              { value: "cloud", label: t("backup.tab.cloud"), controls: "backup-cloud-panel" }]} />
+              { value: "cloud", label: t("backup.tab.cloud"), controls: "backup-cloud-panel" },
+              { value: "cleanup", label: t("backup.tab.cleanup"), controls: "backup-cleanup-panel" }]} />
         }
       />
       {/* Keep both panels mounted to preserve each tab's session state. */}
@@ -113,6 +118,14 @@ export function BackupsPage({
             onUpload={cloudBackup.upload}
             onRestore={cloudBackup.restore}
           />
+      </div>
+      <div
+        id="backup-cleanup-panel"
+        role="tabpanel"
+        aria-labelledby="backup-cleanup-tab"
+        hidden={activeTab !== "cleanup"}
+      >
+          <BackupCleanup busy={busy} onCleaned={onCleaned} />
       </div>
     </section>
   );

@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 
 export { ArrowsLeftRightIcon as ProviderSwitchIcon } from "@phosphor-icons/react/dist/csr/ArrowsLeftRight";
+export { NetworkIcon as GatewayNavigationIcon } from "@phosphor-icons/react/dist/csr/Network";
 export { SlidersHorizontalIcon as ClientConfigurationIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 export { PuzzlePieceIcon as ExtensionsIcon } from "@phosphor-icons/react/dist/csr/PuzzlePiece";
 export { ChatsIcon as SessionsIcon } from "@phosphor-icons/react/dist/csr/Chats";

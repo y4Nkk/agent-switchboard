@@ -65,6 +65,7 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
   const usage = useModelUsageReport(consumptionActive, range);
   const resourcesActive = visible && section === "resources";
   const resources = useResourceUsage(resourcesActive);
+  const showResources = section === "resources" || resources.read !== null || resources.error !== null;
   const radarActive = visible && section === "radar";
   const { form, runCount, setRunCount, setQuestionId, reuseQuestion } = useProbeForm(probe, () => setHistoryOpen(false));
   const quotaActive = visible && section === "quota";
@@ -97,7 +98,7 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
           {radarOpened && <CodexProbePanel probe={probe} form={form} />}
         </div>
         <div id={`${id}-resources-panel`} role="tabpanel" aria-labelledby={`${id}-resources-tab`} hidden={section !== "resources"}>
-          {resourcesActive && <ResourceUsagePage resources={resources} />}
+          {showResources && <ResourceUsagePage resources={resources} />}
         </div>
       </div>
       {historyOpened && (

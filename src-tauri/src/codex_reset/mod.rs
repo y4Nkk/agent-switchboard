@@ -1,12 +1,13 @@
-//! Read-only Codex reset signals from Codex Runway's public status feed.
-//!
-//! The feed is an independent public monitor, not an OpenAI account API. This
-//! module normalizes only the facts shown on the reset panel — the forecast
-//! answer, the completion ledger, the Tibo post, and the history heatmap — and
-//! never reads local credentials, session data, or account quotas.
+//! Read-only Codex reset signals from two independent public monitors: the
+//! Codex Runway status feed and the codex-reset.com aggregate (forecast,
+//! timeline, platform status history, X radar). Neither is an OpenAI account
+//! API. The contracts here normalize only the facts shown on the reset panel
+//! and never read local credentials, session data, or account quotas.
 
 mod feed;
-
+mod hub;
+mod hub_status;
+pub use hub_status::*;
 
 use crate::probe;
 use feed::{is_tibo_post_url, parse_feed, validate_timestamp, STATUS_URL};
@@ -32,19 +33,28 @@ pub struct CodexResetStatus {
     pub source_warning: Option<String>,
 }
 
-/// What the overview is currently showing. `Cached` means the app has not
-/// completed a newer public read in this run; it is not a claim about the
-/// freshness of the external monitor itself.
+/// How a source read was obtained: `Cached` means the app has not completed a
+/// newer public read in this run; it is not a claim about the freshness of the
+/// external monitor itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexResetFreshness {
+    Cached,
+    Live,
+}
+
+/// One source's normalized public snapshot plus how the overview obtained it.
+/// Generic over the per-source status so both monitors share one envelope.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexResetRead {
-    pub status: CodexResetStatus,
+pub struct CodexResetRead<S> {
+    pub status: S,
     pub freshness: CodexResetFreshness,
     pub cache_warning: Option<String>,
 }
 
-impl CodexResetRead {
-    pub fn cached(status: CodexResetStatus) -> Self {
+impl<S> CodexResetRead<S> {
+    pub fn cached(status: S) -> Self {
         Self {
             status,
             freshness: CodexResetFreshness::Cached,
@@ -52,20 +62,13 @@ impl CodexResetRead {
         }
     }
 
-    pub fn live(status: CodexResetStatus, cache_warning: Option<String>) -> Self {
+    pub fn live(status: S, cache_warning: Option<String>) -> Self {
         Self {
             status,
             freshness: CodexResetFreshness::Live,
             cache_warning,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CodexResetFreshness {
-    Cached,
-    Live,
 }
 
 /// The monitor's own health declaration. It says nothing about a user's
@@ -191,4 +194,10 @@ pub fn check() -> Result<CodexResetStatus, String> {
         &body,
         chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     )
+}
+
+/// One explicit read of the second monitor: all four codex-reset.com
+/// endpoints in a row, answered as a whole or not at all.
+pub fn check_hub() -> Result<CodexResetHubStatus, String> {
+    hub::check()
 }

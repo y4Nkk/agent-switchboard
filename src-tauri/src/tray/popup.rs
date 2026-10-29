@@ -1,5 +1,7 @@
-//! A persistent, initially hidden WebView. Readiness and visibility are separate
-//! so the first activation cannot display an unpainted window.
+//! An initially hidden WebView, kept ready for instant tray activation and
+//! destroyed after five idle minutes to free the WebView2 renderer. Readiness
+//! and visibility are separate so an activation never displays an unpainted
+//! window; recreation after a teardown reuses the missing-window rebuild path.
 
 use super::position::{place, Bounds};
 use std::sync::Mutex;
@@ -15,6 +17,11 @@ pub const LABEL: &str = "tray";
 /// Windows the tray click activates the taskbar, which can take the foreground
 /// right after `set_focus` and instantly re-hide the freshly shown panel.
 const SHOW_FOCUS_GRACE: Duration = Duration::from_millis(250);
+
+/// How long a hidden, unrequested panel may keep its WebView before it is
+/// destroyed. The teardown frees the renderer process (~30 MB); the next
+/// activation rebuilds through the missing-window path and pays one page load.
+const IDLE_DESTROY_AFTER: Duration = Duration::from_secs(300);
 
 #[derive(Default)]
 struct Lifecycle {
@@ -59,6 +66,8 @@ pub fn setup(app: &AppHandle) -> Result<(), String> {
     // WebView creation is supported during setup; doing it synchronously in
     // the Windows tray-event handler can deadlock WebView2 initialization.
     ensure_window(app)?;
+    let generation = with_state(app, |state| state.generation)?;
+    schedule_idle_destroy(app, generation);
     Ok(())
 }
 
@@ -350,12 +359,44 @@ pub fn hide(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LABEL) {
         window.hide().map_err(|error| error.to_string())?;
     }
-    with_state(app, |state| {
+    let generation = with_state(app, |state| {
         state.lifecycle.visible = false;
         state.lifecycle.requested = false;
         state.lifecycle.shown_at = None;
         state.generation = state.generation.wrapping_add(1);
-    })
+        state.generation
+    })?;
+    schedule_idle_destroy(app, generation);
+    Ok(())
+}
+
+/// Tears the hidden panel down once nothing has touched it for
+/// `IDLE_DESTROY_AFTER`. The final check runs on the main thread so it cannot
+/// interleave with the tray-event handlers: any interaction bumps the
+/// generation (or sets `requested`/`visible` atomically with it), which
+/// cancels the teardown, while a teardown that lands first leaves the next
+/// activation to the proven missing-window rebuild path.
+fn schedule_idle_destroy(app: &AppHandle, generation: u64) {
+    let handle = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("tray-idle-destroy".into())
+        .spawn(move || {
+            std::thread::sleep(IDLE_DESTROY_AFTER);
+            let callback_handle = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let idle = with_state(&callback_handle, |state| !state.lifecycle.visible
+                    && !state.lifecycle.requested && state.generation == generation).unwrap_or(false);
+                if !idle { return; }
+                if let Some(window) = callback_handle.get_webview_window(LABEL) {
+                    if let Err(error) = window.destroy() {
+                        log::warn!("托盘闲置窗口销毁失败: {error}");
+                    }
+                }
+            });
+        });
+    if let Err(error) = spawned {
+        log::debug!("无法调度托盘闲置销毁: {error}");
+    }
 }
 
 pub fn window_event(window: &tauri::Window, event: &tauri::WindowEvent) {

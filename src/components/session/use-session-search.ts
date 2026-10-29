@@ -16,11 +16,10 @@ export function useSessionSearch(active: boolean) {
   const [timeDraft, setTimeDraft] = useState({ range: "all", from: "", to: "" });
   const [projects, setProjects] = useState<SessionSearchPage["projects"]>([]);
   const [tags, setTags] = useState<string[]>([]);
-  const [issues, setIssues] = useState<SessionSearchPage["issues"]>([]);
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
   const identity = JSON.stringify([query, filter, page, project, tag, pinnedOnly, dates]);
-  const [snapshot, setSnapshot] = useState<{ identity: string; value: Omit<SessionSearchPage, "issues"> } | null>(null);
+  const [snapshot, setSnapshot] = useState<{ identity: string; value: SessionSearchPage } | null>(null);
   const result = snapshot?.identity === identity ? snapshot.value : null;
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<SessionSearchProgress | null>(null);
@@ -38,12 +37,10 @@ export function useSessionSearch(active: boolean) {
           offset: (page - 1) * SESSION_PAGE_SIZE, project, tag, pinnedOnly, ...dates }, controller.signal,
           (nextProgress) => { if (!controller.signal.aborted) setProgress(nextProgress); });
         if (controller.signal.aborted) return;
-        const { issues: nextIssues, ...value } = next;
-        setIssues(nextIssues);
         setProjects(next.projects); setTags(next.tags);
         const lastPage = Math.max(1, Math.ceil(next.total / SESSION_PAGE_SIZE));
         if (page > lastPage) setPage(lastPage);
-        else setSnapshot({ identity, value });
+        else setSnapshot({ identity, value: next });
       } catch (caught) {
         if (!controller.signal.aborted) setError(caught);
       } finally {
@@ -69,7 +66,7 @@ export function useSessionSearch(active: boolean) {
   const changePinned = (value: boolean) => { setPinnedOnly(value); setPage(1); };
   const changeDates = (value: typeof dates) => { setDates(value); setPage(1); };
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
-  return { draft, setDraft: changeDraft, query, filter, changeFilter, page, setPage, result, busy, progress, issues, error, submit, refresh,
+  return { draft, setDraft: changeDraft, query, filter, changeFilter, page, setPage, result, busy, progress, error, submit, refresh,
     project, changeProject, openProject, projects, tags, tag, changeTag, pinnedOnly, changePinned, changeDates, timeDraft, setTimeDraft };
 }
 

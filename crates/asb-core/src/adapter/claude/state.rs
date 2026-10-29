@@ -180,6 +180,7 @@ pub fn route_state(text: &str) -> RouteState {
         haiku_model,
         sonnet_model: string_at("env.ANTHROPIC_DEFAULT_SONNET_MODEL"),
         opus_model: string_at("env.ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        fable_model: string_at("env.ANTHROPIC_DEFAULT_FABLE_MODEL"),
         available_models,
         scope_warnings: vec![],
     }

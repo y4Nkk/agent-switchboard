@@ -33,7 +33,7 @@ fn paired_backup_round_trips_exact_saved_intent_and_previews_settings_only_chang
     let mut wrong_identity = backup.clone();
     wrong_identity.id = "different-backup".into();
     assert!(load(&state, &wrong_identity).is_err());
-    let snapshot_path = path(&state, &backup).unwrap();
+    let snapshot_path = state.client_settings_backup_path(&backup).unwrap();
     let mut damaged: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&snapshot_path).unwrap()).unwrap();
     damaged["settingsHash"] = serde_json::json!("corrupted");
     std::fs::write(snapshot_path, serde_json::to_string(&damaged).unwrap()).unwrap();

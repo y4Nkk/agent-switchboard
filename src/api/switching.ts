@@ -21,6 +21,7 @@ export interface RouteState {
   haikuModel: string | null;
   sonnetModel: string | null;
   opusModel: string | null;
+  fableModel: string | null;
   availableModels: string[] | null;
   scopeWarnings: LocalizedMessage[];
 }

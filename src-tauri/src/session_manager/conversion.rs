@@ -2,10 +2,11 @@ mod store;
 
 use super::{content, parser, records, sources, SessionIssue, SessionMessage, SessionMeta, SessionSource};
 use asb_core::contracts::AppKind;
-use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::fs::{self, File};
+use std::fs::File;
+#[cfg(test)]
+use std::fs;
 use std::io::Read;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
@@ -31,9 +32,8 @@ impl Candidate {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionConversionOutcome {
+#[derive(Debug)]
+struct SessionConversionOutcome {
     pub converted: usize,
     pub records: usize,
     pub failures: Vec<SessionIssue>,
@@ -84,10 +84,39 @@ pub(super) fn include(
     sources: &mut Vec<SessionSource>,
     issues: &mut Vec<SessionIssue>,
 ) {
-    let (converted, failures) = store::list(root);
+    if let Err(error) = include_observed(root, sources, issues, &|| Ok(())) {
+        issues.push(SessionIssue::new(AppKind::Claude, error));
+    }
+}
+
+pub(super) fn include_observed(root: &Path, sources: &mut Vec<SessionSource>, issues: &mut Vec<SessionIssue>,
+    checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(), String> {
+    checkpoint()?;
+    let deleted = super::history::deleted_ids(root)?;
+    issues.retain(|issue| issue.conversion_id.as_deref().is_none_or(|id| !suppressed(id, &deleted)));
+    let (mut converted, mut failures) = store::list(root);
+    let ready: HashSet<_> = converted.iter().map(|(header, _)| format!("{}:{}", header.source_key, header.revision)).collect();
+    let pending: Vec<_> = issues.iter().filter_map(|issue| issue.conversion_id.as_ref())
+        .filter(|id| !ready.contains(*id)).cloned().collect::<HashSet<_>>().into_iter().collect();
+    if !pending.is_empty() {
+        match repair_sources(root, &pending, checkpoint) {
+            Ok(outcome) => {
+                if outcome.converted > 0 {
+                    log::info!("已自动整理 {} 个 Claude workflow，{} 条记录", outcome.converted, outcome.records);
+                    let refreshed = store::list(root);
+                    converted = refreshed.0;
+                    failures.extend(refreshed.1);
+                }
+                issues.extend(outcome.failures);
+            }
+            Err(error) => failures.push(error),
+        }
+    }
     let mut completed = HashSet::new();
     let mut known: HashSet<_> = sources.iter().map(|source| (source.meta.app, source.meta.session_id.clone())).collect();
     for (header, path) in converted {
+        checkpoint()?;
+        if deleted.contains(&header.meta.session_id) { continue; }
         if !known.insert((AppKind::Claude, header.meta.session_id.clone())) {
             issues.push(SessionIssue::new(AppKind::Claude, format!("转换记录 {} 与现有会话身份冲突，未覆盖现有来源", path.display())));
             continue;
@@ -98,39 +127,52 @@ pub(super) fn include(
     }
     issues.retain(|issue| issue.conversion_id.as_ref().is_none_or(|id| !completed.contains(id)));
     issues.extend(failures.into_iter().map(|message| SessionIssue::new(AppKind::Claude, message)));
+    checkpoint()
 }
 
-pub fn convert_session_sources(root: &Path, ids: &[String]) -> Result<SessionConversionOutcome, String> {
+fn suppressed(id: &str, deleted: &HashSet<String>) -> bool {
+    id.split_once(':').is_some_and(|(key, _)| deleted.contains(&format!("workflow-{key}")))
+}
+
+fn repair_sources(root: &Path, ids: &[String], checkpoint: &dyn Fn() -> Result<(), String>) -> Result<SessionConversionOutcome, String> {
     let roots = super::history::workflow_roots(root)?.into_iter().map(|path| (AppKind::Claude, path)).collect::<Vec<_>>();
-    convert_from_roots(root, ids, &roots)
+    convert_from_roots(root, ids, &roots, checkpoint)
 }
 
-fn convert_from_roots(root: &Path, ids: &[String], roots: &[(AppKind, PathBuf)]) -> Result<SessionConversionOutcome, String> {
+fn convert_from_roots(root: &Path, ids: &[String], roots: &[(AppKind, PathBuf)], checkpoint: &dyn Fn() -> Result<(), String>) -> Result<SessionConversionOutcome, String> {
     if ids.is_empty() { return Err("没有选择可转换的来源".into()); }
     let _guard = CONVERSION_GATE.lock().map_err(|_| "会话转换锁不可用")?;
+    let deleted = super::history::deleted_ids(root)?;
+    let completed: HashSet<_> = store::list(root).0.into_iter()
+        .map(|(header, _)| format!("{}:{}", header.source_key, header.revision)).collect();
     let mut requested: HashSet<_> = ids.iter().cloned().collect();
     let mut outcome = SessionConversionOutcome { converted: 0, records: 0, failures: Vec::new() };
     let mut unavailable = Vec::new();
     for (app, directory) in roots {
         if *app != AppKind::Claude { continue; }
-        let files = sources::collect(directory);
+        checkpoint()?;
+        let files = sources::collect_observed(directory, checkpoint)?;
         unavailable.extend(files.issues);
         for path in files.paths.into_iter().filter(|path| is_workflow(path)) {
+            checkpoint()?;
             let prefix = format!("{}:", source_key(&path));
             let selected: Vec<_> = requested.iter().filter(|id| id.starts_with(prefix.as_str())).cloned().collect();
             if selected.is_empty() { continue; }
             let current = candidate(&path);
             for id in selected {
                 requested.remove(&id);
+                if suppressed(&id, &deleted) { continue; }
+                if completed.contains(&id) && current.as_ref().is_ok_and(|source| source.id() == id) { continue; }
                 let result = current.as_ref().map_err(|error| error.clone()).and_then(|source| {
                     if source.id() != id { return Err("来源已经变化，请刷新后重新转换".into()); }
-                    convert(root, source)
+                    convert(root, source, checkpoint)
                 });
                 match result {
                     Ok(count) => { outcome.converted += 1; outcome.records += count; }
                     Err(error) => outcome.failures.push(SessionIssue { app: *app, conversion_id: Some(id),
                         message: format!("{}: {error}", path.display()) }),
                 }
+                checkpoint()?;
             }
         }
     }
@@ -142,15 +184,15 @@ fn convert_from_roots(root: &Path, ids: &[String], roots: &[(AppKind, PathBuf)])
     Ok(outcome)
 }
 
-fn convert(root: &Path, source: &Candidate) -> Result<usize, String> {
-    let (meta, count) = metadata(source)?;
-    store::write(root, source, meta, count)
+fn convert(root: &Path, source: &Candidate, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<usize, String> {
+    let (meta, count) = metadata(source, checkpoint)?;
+    store::write(root, source, meta, count, checkpoint)
 }
 
-fn metadata(source: &Candidate) -> Result<(SessionMeta, usize), String> {
+fn metadata(source: &Candidate, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(SessionMeta, usize), String> {
     if source.parent_file.is_symlink() { return Err("所属主会话是符号链接，未读取链接目标".into()); }
     let parent = if source.parent_file.try_exists().map_err(|error| error.to_string())? {
-        let (meta, issues) = parser::parse_session(AppKind::Claude, &source.parent_file).map_err(|error| error.to_string())?;
+        let (meta, issues) = parser::parse_session_observed(AppKind::Claude, &source.parent_file, checkpoint).map_err(|error| error.to_string())?;
         if meta.session_id != source.parent_id { return Err("所属主会话身份与目录不一致".into()); }
         if !issues.is_empty() { return Err(issues.join("；")); }
         Some(meta)
@@ -158,7 +200,7 @@ fn metadata(source: &Candidate) -> Result<(SessionMeta, usize), String> {
     let mut created_at = None;
     let mut last_active_at = None;
     let mut count = 0;
-    let issues = records::visit_records(&source.path, 0, |_, _, value| {
+    let scan = records::scan_records_observed(&source.path, 0, 0, checkpoint, |_, _, value| {
         count += 1;
         if let Some(at) = parser::timestamp_from(&value) {
             if created_at.as_ref().is_none_or(|current| &at < current) { created_at = Some(at.clone()); }
@@ -166,7 +208,7 @@ fn metadata(source: &Candidate) -> Result<(SessionMeta, usize), String> {
         }
         Ok(ControlFlow::Continue(()))
     })?;
-    if !issues.is_empty() { return Err(issues.join("；")); }
+    if !scan.issues.is_empty() { return Err(scan.issues.join("；")); }
     if count == 0 { return Err("事件日志为空，没有可转换记录".into()); }
     let title = parser::clamp_title(&format!("Workflow · {}", source.workflow));
     Ok((SessionMeta { app: AppKind::Claude, session_id: format!("workflow-{}", source.source_key),
@@ -181,9 +223,12 @@ fn message(ordinal: usize, value: &serde_json::Value) -> SessionMessage {
         content: content::json(value), at: parser::timestamp_from(value), images: Vec::new() }
 }
 
-pub(super) fn remove(path: &Path) -> Result<(), String> {
+pub(super) fn remove(root: &Path, path: &Path, id: &str) -> Result<(), String> {
     let _guard = CONVERSION_GATE.lock().map_err(|_| "会话转换锁不可用")?;
-    fs::remove_file(path).map_err(|error| format!("无法删除转换记录 {}: {error}", path.display()))
+    if path.file_stem().and_then(|name| name.to_str()).is_none_or(|name| format!("workflow-{name}") != id) {
+        return Err("转换记录与删除身份不一致".into());
+    }
+    super::history::delete_converted(root, id, path)
 }
 
 #[cfg(test)]

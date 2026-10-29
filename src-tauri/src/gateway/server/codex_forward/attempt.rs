@@ -65,7 +65,6 @@ pub(in crate::gateway::server) fn prepare(
     )
     .and_then(|request| crate::gateway::transform::minimal::apply(request, route.responses_options))
     .map_err(|error| invalid(error.to_string()))?;
-    crate::gateway::transform::apply_request_compat(route, &mut converted.body).map_err(invalid)?;
     let anthropic_beta =
         crate::gateway::codex::request::prepare(route, &body, &mut converted.body, Some(incoming))
             .map_err(invalid)?;

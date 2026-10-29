@@ -6,6 +6,9 @@ import { EditorFrame } from "../EditorFrame";
 interface Props {
   title: string;
   titleRef?: Ref<HTMLHeadingElement>;
+  /** Required: every two-level session hands the viewport to its editor hook,
+   * which resets scroll when entering runtime parameters. */
+  viewportRef: Ref<HTMLDivElement>;
   backLabel: string;
   busy: boolean;
   onBack: () => void;
@@ -20,6 +23,7 @@ interface Props {
 export function ProviderEditorFrame({
   title,
   titleRef,
+  viewportRef,
   backLabel,
   busy,
   onBack,
@@ -34,6 +38,7 @@ export function ProviderEditorFrame({
     <EditorFrame
       title={title}
       titleRef={titleRef}
+      viewportRef={viewportRef}
       backLabel={backLabel}
       busy={busy}
       onBack={onBack}

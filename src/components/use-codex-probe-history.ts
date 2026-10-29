@@ -130,7 +130,7 @@ export function useCodexProbeHistory(enabled: boolean, revision: string) {
     setDeleting(true); setDeleteError(null);
     try {
       const result = await deleteCodexProbeBatches(ids);
-      if (result.warning) toast({ kind: "warning", title: toastMessage("storage.probeReclaimWarning", { detail: result.warning }) });
+      if (result.warning) toast({ kind: "warning", title: toastMessage("usage.radar.reclaimWarning", { detail: result.warning }) });
       clearSelection(); setPage(1); refresh();
       return true;
     } catch (reason) {

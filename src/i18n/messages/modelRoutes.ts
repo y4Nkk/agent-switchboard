@@ -1,5 +1,4 @@
 export const messages = {
-  "modelRoutes.title": ["模型路由", "Model routing"],
   "modelRoutes.client": ["选择配置的客户端", "Client to configure"],
   "modelRoutes.provider": ["主供应商", "Primary provider"],
   "modelRoutes.targetProvider": ["目标供应商", "Target provider"],
@@ -10,6 +9,7 @@ export const messages = {
   "modelRoutes.role.haiku": ["Haiku 档位", "Haiku tier"],
   "modelRoutes.role.sonnet": ["Sonnet 档位", "Sonnet tier"],
   "modelRoutes.role.opus": ["Opus 档位", "Opus tier"],
+  "modelRoutes.role.fable": ["Fable 档位", "Fable tier"],
   "modelRoutes.graphAria": ["客户端、用途与模型服务的配置方案", "Configured client, purpose and model service"],
   "modelRoutes.runtime": ["查看实际连接与最近请求", "View actual connections and recent requests"],
   "modelRoutes.clientNode": ["发起请求", "Sends requests"],

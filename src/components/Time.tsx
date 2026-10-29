@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { countdownLabel, dateLabel, relativeLabel, timeLabel } from "../lib/time";
 
-/** All timestamp views share local-time formatting; "date" shows a UTC
- * calendar date verbatim. Relative views tick only while visible. */
-export function Time({ iso, mode = "absolute" }: { iso: string; mode?: "absolute" | "date" | "relative" | "reset" }) {
+/** Absolute precision follows the supplied timestamp; it never creates a clock.
+ * "date" shows a UTC calendar date verbatim. Relative views tick while visible. */
+export function Time({ iso, mode = "absolute", precision = "minute" }: {
+  iso: string; mode?: "absolute" | "date" | "relative" | "reset"; precision?: "minute" | "second";
+}) {
   useI18n();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -22,6 +24,6 @@ export function Time({ iso, mode = "absolute" }: { iso: string; mode?: "absolute
   }, [mode]);
   const label = mode === "relative" ? relativeLabel(iso, now)
     : mode === "reset" ? countdownLabel(iso, now)
-    : mode === "date" ? dateLabel(iso) : timeLabel(iso);
+    : mode === "date" ? dateLabel(iso) : timeLabel(iso, precision);
   return <time dateTime={iso} title={mode === "relative" || mode === "reset" ? timeLabel(iso) : undefined}>{label}</time>;
 }

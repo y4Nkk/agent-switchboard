@@ -32,6 +32,7 @@ pub(super) struct MessageIndex {
     pub issues: Vec<String>,
     connection: Option<Connection>,
     thread: String,
+    readers: jsonl::Readers,
 }
 
 pub(super) fn index(source: &SessionSource) -> Result<MessageIndex, String> {
@@ -43,9 +44,9 @@ pub(super) fn index_observed(source: &SessionSource, checkpoint: &dyn Fn() -> Re
     let index = ReadIndex::open_observed(&source.index_root, checkpoint)?;
     if let Some(path) = &source.converted {
         let (entries, issues) = index.file("converted-messages", path, || converted_positions(path, checkpoint))?;
-        return Ok(MessageIndex { entries, issues, connection: None, thread: source.meta.session_id.clone() });
+        return Ok(MessageIndex { entries, issues, connection: None, thread: source.meta.session_id.clone(), readers: Default::default() });
     }
-    let mut result = MessageIndex { entries: Vec::new(), issues: Vec::new(), connection: None, thread: source.meta.session_id.clone() };
+    let mut result = MessageIndex { entries: Vec::new(), issues: Vec::new(), connection: None, thread: source.meta.session_id.clone(), readers: Default::default() };
     if let Some(history) = &source.native_history {
         let snapshot = native::open(history).and_then(|connection| {
             connection.execute_batch("BEGIN DEFERRED").map_err(|error| error.to_string())?;
@@ -86,6 +87,11 @@ fn converted_positions(path: &std::path::Path, checkpoint: &dyn Fn() -> Result<(
 
 impl MessageIndex {
     pub(super) fn load(&self, entry: &Position) -> Result<SessionMessage, String> {
+        self.load_observed(entry, &|| Ok(()))
+    }
+
+    fn load_observed(&self, entry: &Position, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<SessionMessage, String> {
+        checkpoint()?;
         let mut message = match &entry.location {
             Location::Saved { source, offset, digest } => {
                 let value = records::Source::Saved(source.clone()).load(*offset)?;
@@ -94,9 +100,9 @@ impl MessageIndex {
                 message.images = super::history::bind_images(source, message.images);
                 message
             }
-            Location::Jsonl { path, offset, digest } => parser::message_from(&jsonl::value(path, *offset, digest)?)
+            Location::Jsonl { path, offset, digest } => parser::message_from(&self.readers.value(path, *offset, digest, checkpoint)?)
                 .ok_or("原消息内容已不可读")?,
-            Location::Converted { path, offset, digest } => serde_json::from_value(jsonl::value(path, *offset, digest)?)
+            Location::Converted { path, offset, digest } => serde_json::from_value(self.readers.value(path, *offset, digest, checkpoint)?)
                 .map_err(|error| error.to_string())?,
             Location::Native { turn, item, realtime } => {
                 let connection = self.connection.as_ref().ok_or("缺少原生消息读取事务")?;
@@ -110,6 +116,19 @@ impl MessageIndex {
         Ok(message)
     }
 
+    pub(super) fn load_batch<T>(&self, entries: &[Position], mut summarize: impl FnMut(SessionMessage) -> T)
+        -> Vec<Result<T, String>> {
+        let mut order: Vec<_> = entries.iter().enumerate().collect();
+        order.sort_by_key(|(ordinal, entry)| match &entry.location {
+            Location::Jsonl { path, offset, .. } if super::record_file::compressed(path) =>
+                (Some(path.clone()), *offset, 0),
+            _ => (None, 0, *ordinal),
+        });
+        let mut results = std::collections::BTreeMap::new();
+        for (ordinal, entry) in order { results.insert(ordinal, self.load(entry).map(&mut summarize)); }
+        results.into_values().collect()
+    }
+
     pub(super) fn find(&self, id: &str) -> Result<SessionMessage, String> {
         let entry = self.entries.iter().find(|entry| entry.id == id)
             .ok_or_else(|| if self.issues.is_empty() { "原消息已改变或不存在；请重新打开会话".into() } else { self.issues.join("；") })?;
@@ -117,15 +136,17 @@ impl MessageIndex {
     }
 
     pub(super) fn visit(&self, visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>) -> Result<Vec<String>, String> {
-        self.visit_observed(|_, _| Ok(()), visitor)
+        self.visit_observed(|_, _| Ok(()), &|| Ok(()), visitor)
     }
 
     pub(super) fn visit_observed(&self, mut progress: impl FnMut(usize, usize) -> Result<(), String>,
+        checkpoint: &dyn Fn() -> Result<(), String>,
         mut visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>) -> Result<Vec<String>, String> {
         let mut issues = self.issues.clone();
         progress(0, self.entries.len())?;
         for (completed, entry) in self.entries.iter().enumerate() {
-            let stop = match self.load(entry) {
+            checkpoint()?;
+            let stop = match self.load_observed(entry, checkpoint) {
                 Ok(message) => visitor(message)?.is_break(),
                 Err(error) => { issues.push(error); false },
             };

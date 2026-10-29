@@ -25,7 +25,7 @@ pub(super) fn matches(source: &SessionSource, query: &TextQuery, control: &super
         return Ok(matches);
     }
     let mut hits = Vec::new();
-    let issues = messages.visit_observed(|completed, total| control.messages(completed, total), |message| {
+    let issues = messages.visit_observed(|completed, total| control.messages(completed, total), &|| control.checkpoint(), |message| {
         control.checkpoint()?;
         if let Some(position) = query.find(&message.content) {
             let raw = raw_offset(&message.content, position).ok_or("搜索正文位置无效")?;

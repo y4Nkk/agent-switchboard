@@ -116,6 +116,18 @@ function freshnessLabel(freshness: "cached" | "live", t: TFunction) {
   return t(freshness === "cached" ? "usage.freshness.cached" : "usage.freshness.live");
 }
 
+function resetSourceFreshness(
+  source: ReturnType<typeof useCodexResetSignal>["runway" | "hub"],
+  labelKey: MessageKey,
+  t: TFunction,
+) {
+  return (
+    <>
+      {t(labelKey)} {source.snapshot ? freshnessLabel(source.snapshot.freshness, t) : t("usage.quota.noCache")}
+    </>
+  );
+}
+
 export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption,
   officialReset, resetSignal, radar, resources, providerQuota }: HeaderProps) {
   const { t } = useI18n();
@@ -146,16 +158,18 @@ export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption
       {t("usage.quota.officialLabel")}
       {officialReset.quota ? freshnessLabel(officialReset.freshness, t) : t("usage.quota.noReadings")}
       {" · "}{t("usage.quota.resetLabel")}
-      {resetSignal.snapshot ? freshnessLabel(resetSignal.snapshot.freshness, t) : t("usage.quota.noCache")}
+      {resetSourceFreshness(resetSignal.runway, "usage.quota.resetSource1", t)}
+      {" · "}
+      {resetSourceFreshness(resetSignal.hub, "usage.quota.resetSource2", t)}
     </>;
   } else if (section === "resources") {
-    actions = <Button variant="secondary" disabled={resources.loading || !resources.active} onClick={resources.refresh}>
-      {t(resources.loading ? "usage.action.refreshing" : "usage.action.refresh")}
+    actions = <Button variant="secondary" className="asb-resource-refresh" aria-busy={resources.refreshing}
+      disabled={resources.initialLoading || resources.refreshing || !resources.active} onClick={resources.refresh}>
+      {t(resources.refreshing ? "usage.action.refreshing" : "usage.action.refresh")}
     </Button>;
-    status = resources.read ? <>
-      {t("resources.sampledAt")}<Time iso={resources.read.sampledAt} />
-      {resources.loading ? t("usage.status.updating") : null}
-    </> : t("resources.noReadings");
+    status = resources.read ? <span className="asb-resource-sampled-at">
+      {t("resources.sampledAt")}<Time iso={resources.read.sampledAt} precision="second" />
+    </span> : t("resources.noReadings");
   } else {
     actions = <RadarControls {...radar} />;
     status = t("usage.radar.statusNote");

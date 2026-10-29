@@ -101,7 +101,6 @@ fn parse_content(
     if let Some(reasoning_content) = message.get("reasoning_content") {
         match reasoning_content {
             Value::Null => {}
-            Value::String(value) if value.is_empty() => {}
             Value::String(value) => {
                 let transport = reasoning_transport
                     .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;

@@ -1,5 +1,4 @@
 use super::CodexRequestRecord;
-mod archive;
 use rusqlite::{params, Connection};
 use std::{
     path::{Path, PathBuf},

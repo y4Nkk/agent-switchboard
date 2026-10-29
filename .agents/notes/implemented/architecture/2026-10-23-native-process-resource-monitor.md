@@ -16,7 +16,7 @@ Status: implemented
 
 界面直接复用全局 Table、Pagination 与 Collapsible；三组名称入口使用[共享 CollapsibleTrigger](2026-10-14-unified-collapsible-primitive.md)，按钮外观和 compact 尺寸交给 Button.ghost，页面只保留软件信息、指标排列和表格列宽，不维护私有按钮样式或另一套展开语义。
 
-三行主表中的 CPU 与驻留内存各使用小型 SVG 圆环仪表，观测状态收进软件名称下方，不重复铺设概览卡片。CPU 共用 0–100% 整机刻度；内存只以本样本可读值的最大值向上取整到二的幂作为共同坐标上限，最小刻度为 1 MiB，不冒充整机内存占比。全部内存不可读时不生成刻度。软件标记与圆弧共用中性、Codex 蓝和 Claude 紫，环旁的数字、状态、主表与明细表头继续左对齐。未知值显示虚线空环，部分值以斜纹圆弧和文字说明表示，真实零值仅显示底环，不加最小圆弧或圆头端点。ResourceUsageRing 是唯一图形实现，旧横条组件与样式删除；圆环尺寸与线宽由 tokens.css 拥有，斜纹使用稳定的局部 SVG 标识避免多图串用。轴标签与数值共用 ResourceMetric 的格式化函数，圆环是同一样本的纯展示，不增加读取器、历史、定时器、依赖或持续状态。
+三行主表中的 CPU 与驻留内存各使用小型 SVG 圆环仪表，观测状态收进软件名称下方，不重复铺设概览卡片。CPU 共用 0–100% 整机刻度；内存以当前可见周期内已知读数的最大值向上取整到二的幂作为共同坐标上限，最小刻度为 1 MiB，只扩展不缩小，重新进入后按新读数建立，不冒充整机内存占比。当前全部内存不可读时不显示刻度；坐标上限只是临时显示状态，不改变后端读数或保存资源历史。软件标记与圆弧共用中性、Codex 蓝和 Claude 紫，环旁的数字、状态、主表与明细表头继续左对齐。未知值显示虚线空环，部分值以斜纹圆弧和文字说明表示，真实零值仅显示底环，不加最小圆弧或圆头端点。ResourceUsageRing 是唯一图形实现，旧横条组件与样式删除；圆环尺寸与线宽由 tokens.css 拥有，斜纹使用稳定的局部 SVG 标识避免多图串用。轴标签与数值共用 ResourceMetric 的格式化函数，圆环是同一样本的纯展示，不增加读取器、历史、定时器或依赖。
 
 `src-tauri/src/resource_monitor/` 是身份、归属、差分和指标完整性的唯一所有者。三平台原生采集共用一个契约，前端只保留当前阅读选择、最新三行汇总和最多 50 条明细。运行配置、原始会话、凭据和业务数据库不参与采集或写入。没有资源历史数据库、常驻采样线程、旧 API 别名、旧客户端 JS 兼容表或第二条采样路径。
 
@@ -24,11 +24,11 @@ Status: implemented
 
 | 平台 | 当前采集来源 | 事实边界 |
 | --- | --- | --- |
-| Windows | WTS 原生进程表的用户 SID 与 ToolHelp 拓扑；打开后复核令牌、映像路径、完整创建 FILETIME；GetProcessTimes；GetProcessMemoryInfo 工作集；全部处理器组的在线逻辑核数 | 先区分当前用户、其他用户和身份未核实；用户未核实的候选只形成枚举覆盖提示，不能按名称派发 AccessDenied；WebView2 Environment8 关联当前应用环境，合并主窗和托盘并去重，API 不列 crashpad，只有可证实父链才补入 |
+| Windows | WTS 原生进程表的用户 SID 与 ToolHelp 拓扑；打开后复核令牌、映像路径、完整创建 FILETIME；GetProcessTimes；PDH `Working Set - Private` 专用工作集（每轮一次全表快照，按 PID 联接，含本轮内已退出进程的 `ProcessExited` 语义）；全部处理器组的在线逻辑核数 | 先区分当前用户、其他用户和身份未核实；用户未核实的候选只形成枚举覆盖提示，不能按名称派发 AccessDenied；WebView2 Environment8 关联当前应用环境，合并主窗和托盘并去重，API 不列 crashpad，只有可证实父链才补入 |
 | macOS | libproc 按当前有效 UID 枚举；BSD 身份、路径和 task 资源；Mach 时间基准换算 | 先收窄用户范围再读拓扑，读数前后复核用户及身份；公开接口不能证明全部 WebKit 辅助进程归属，界面覆盖明确为 partial，不调用私有 selector |
 | Linux | 当前 `/proc` 的 status 有效 UID、exe、stat 身份/父子关系、CPU tick 和 RSS 页数 | 使用有效 UID 而非可能因不可转储而变为 root 的目录所有者；核验 `/proc/self` 与应用 PID namespace 一致，权限、namespace 边界和近似 RSS 明示；可证实的 WebKit 后代正常计入，界面整体仍标部分覆盖 |
 
-采集复用现有 `windows-sys`、`windows`、`webview2-com` 和 `libc`。Windows 清单明确声明 ProcessStatus 与 RemoteDesktop feature，没有新增 crate 或包版本变动。WTS 分配的进程表和所有原生句柄在当前采集内释放。原生计数不通过 PowerShell、CIM、`ps` 或 `tasklist` 子进程执行。
+采集复用现有 `windows-sys`、`windows`、`webview2-com` 和 `libc`。Windows 清单明确声明 Performance 与 RemoteDesktop feature（ProcessStatus 随工作集旧口径一并删除），没有新增 crate 或包版本变动。WTS 分配的进程表和所有原生句柄在当前采集内释放。原生计数不通过 PowerShell、CIM、`ps` 或 `tasklist` 子进程执行。
 
 界面线程只取得 WebView 关联的进程键，包含 PID 与当时的原生创建标识；阻塞采集再次比对身份和 WebView 映像。一个进程身份读取失败不丢弃已核实的其他界面进程。原生枚举与资源计数在阻塞池运行，不持有采样状态锁等待 UI 返回。
 
@@ -52,7 +52,7 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 
 首次、重新进入、间隔异常、睡眠或墙钟变化、计数回退及 CPU 拓扑变化均显式重建区间。成功测得的零值才是 0%；预热、拒绝访问、已退出和不可用不序列化为零。调度计时粒度造成接近满载的微小舍入允许收敛到 100%，明显越界则拒绝本轮 CPU。内存和进程数不因 CPU 预热一并失败。
 
-驻留内存按字节在后端汇总，界面按 MiB/GiB 显示；包含共享页，不等于去重物理内存或关闭可释放容量。Linux RSS 使用内核近似计数。每个指标独立表达 measured、partial、unavailable，包含已测/缺失进程数量及具体原因；未知全量不能变成一个无条件总量。
+驻留内存按字节在后端汇总，界面按 MiB/GiB 显示。Windows 统计各进程专用工作集（PDH `Working Set - Private`，与任务管理器「内存」列同口径）：不含共享页，多进程合计不重复计页，WebView2 等多进程软件不再因共享运行时页显示约一倍虚高。macOS 与 Linux 仍统计驻留集、包含共享页，Linux RSS 使用内核近似计数。序列化字段名保持 `residentBytes`（专用工作集本身是驻留页的独占子集，名称在三个平台都为真），跨平台口径差异由页面按平台区分的常显说明承担，不由字段名伪装统一。任何平台都不等于关闭可释放容量。每个指标独立表达 measured、partial、unavailable，包含已测/缺失进程数量及具体原因；未知全量不能变成一个无条件总量。
 
 相关枚举和识别成功且没有进程才显示“未检测到”；候选身份受限显示“无法确认”。平台或权限限制存在时显示“已识别进程合计”，局部读取失败保留正常指标。
 
@@ -63,6 +63,10 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 响应拥有单调 sampleId、展示时间、nextReadInMs、平台覆盖、固定三组汇总和选中明细；汇总与明细来自同一不可变样本，越界页码由后端收敛。原生命令在进入阻塞池前合并在途读取，重叠调用等待同一原始结果，再按各自明细选择投影；期限内复用当前样本。超时只报告采样仍在继续，底层任务真正结束前保持唯一在途所有权。
 
 `use-resource-usage.ts` 的可见生命周期复用共享 `useReadQueue`。`resource-usage-reader.ts` 统一入口、手动刷新、明细变更、约两秒期限和失败五秒重试；一个执行中任务、一个最新待执行请求。隐藏或离开立即取消未开始的请求和定时器，代次拒绝迟到结果；重新进入建立 CPU 基线，明细翻页和手动刷新不重置基线。失败保留带原时间的上次结果，不把它计入新样本。
+
+调度器把首次、手动、明细请求的前台反馈与自动采样的内部进行状态分开。自动读取不发布加载状态；首次仅在没有结果时显示骨架，手动刷新只驱动固定宽度的刷新按钮，明细切换只驱动对应明细。同软件翻页期间保留上一次接受的整份样本及明细，明确标注请求页与实际展示页，不能先移除长表而让滚动容器高度骤降；切换软件不展示另一组的旧明细，后端页码修正仍只随当前请求提交。一次可见周期的重置标志在首次成功的原生响应返回时消费，先于当前选择是否接受结果的判断；被新选择作废的首次成功结果也已经建立了原生区间，后续请求不得再次重置。首次请求失败则保留重置要求，避免把隐藏前的区间当成恢复后的新读数。手动反馈在后续明细请求替换时保持到最新请求完成，防止按钮提前恢复。错误只在成功接受新结果后清除，自动重试不先清空错误。
+
+主表保留稳定的软件键，明细保留原生进程键和当前选择，自动更新不重挂载表格或折叠区域。资源面板进入后以既有结果或错误决定继续挂载，页签隐藏和窗口隐藏只停止读取，不卸载已有阅读内容，避免因卸载重建而重新播放展开动画、替换焦点节点或清空明细滚动容器。固定列布局、按钮宽度、数值和说明空间承担视觉稳定性；采样时间由共享 Time 以秒精度显示，直接使用后端 sampledAt，不加前端时钟。后台读取不把整页标记 busy，也不逐轮发布辅助技术状态；明确的首次、手动和明细操作各自拥有反馈。
 
 原生主窗口可见性由 `workspace_visibility.rs` 读取实际 visible/minimized 状态并发布失效事实；显示、托盘隐藏、关闭吸收、快捷键和窗口事件均接入同一入口。`use-workspace-visible.ts` 合并原生状态与 document 可见性，所有原有工作区共用一个订阅来源；失焦不等于隐藏。初始查询与事件按顺序核验，过期订阅不能写入当前来源。资源命令还在原生侧拒绝隐藏窗口的读取。浏览器开发独立使用 document 可见性，明确只计原生后端、不认领用户整个浏览器。
 
@@ -77,6 +81,8 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 
 ## Alternatives considered
 
+- 单一 loading 最容易接线，能在任意读取时显示统一反馈；但定时采样会反复改变按钮、整页 busy 与错误区域，因此由同一调度器区分请求来源，删除原全局 loading 字段，不保留双套状态。
+- 每轮按最大值重设内存刻度能充分利用圆环长度；但在二的幂边界会反复改变图形比例和表头，因此可见周期只扩大坐标，不缓动或伪造真实读数。
 - 横条共享起点，更容易跨软件比较长度；用户选择圆环后，保持原来的统一刻度、绝对数值和三行表格，只替换图形呈现，不保留双模式。
 - 将三款软件拼成总量构成环能快速强调组成关系；但当前没有去重后的整机内存总量，部分进程读数也不能作为完整分母。逐软件仪表保留明确刻度和完整性，避免把软件构成或未知余量误称为整机占比。
 - 实时折线能表现趋势；但当前契约只保存最近一份快照，连接离散、隐藏期间中断的读数会暗示连续历史。因此本次只呈现当前占用，不新增历史采样事实。
@@ -86,7 +92,8 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 - 按名称和全部后代求和最容易覆盖常见场景；但会误认通用运行时、共享服务并重复计算检测进程，因此只使用可证实身份和最近软件根。
 - 只追加具体版本的目录白名单改动最少；但桌面下载、编辑器更新和自定义扩展目录仍会漏报，因此包安装按所属清单与入口布局核实，固定下载目录只锚定实际用户目录，不保留旧的宽泛路径子串识别。
 - 要求提权能读取更多系统服务；但服务不属于当前用户编码任务，提权还会掩盖错误分组，因此原生枚举先提供用户范围，只有已确认属于当前用户的进程失败才派发该软件的读取错误。
-- 各平台分别使用 private bytes、footprint、PSS 更接近各自系统工具；但数值含义不相同，会掩盖跨平台口径差异，因此使用驻留内存并常显共享页和 Linux 近似性说明。
+- 各平台分别使用 private bytes、footprint、PSS 更接近各自系统工具；其最强理由是每个平台都能拿到最诚实的单进程数值。最初因此选择统一的驻留内存口径并常显共享页说明；2026-10-28 修订为：Windows 单平台改用专用工作集——实测 WebView2 多进程把共享页重复计入约一倍（安装实例工作集合计 436 MiB，专用工作集合计 224.9 MiB），统一口径在该平台掩盖而非揭示事实，而任务管理器「内存」列本就是专用工作集。不逐平台各用 private/footprint/PSS 的理由维持不变：三个私有口径互不可比；Linux/macOS 维持驻留集避免引入本机无法验证的口径迁移，差异改由平台条件文案明示。
+- Windows 逐进程读取专用内存没有公开的按句柄接口：`GetProcessMemoryInfo` 的 `PrivateUsage` 是私有提交字节而非专用工作集，不能混用；因此采用 PDH 每轮一次的 `\Process(*)\Working Set - Private` 全表快照按 PID 联接，`ID Process` 计数器解决同名实例 `#N` 后缀的映射，格式化数组缓冲按 f64 对齐分配。
 - 私有 WKWebView selector 可得到部分进程 ID；但它是非公开契约，也不能证明所有共享辅助进程的独占归属，因此无法确认时明确展示子集。
 
 ## Consequences
@@ -94,7 +101,7 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 - 当前源码拥有三平台采集、唯一归属、指标有效性、同源分页、窗口隐藏控制、命令与开发桥接和双语页面；旧的运行环境及存储管理不承担第二套资源事实。没有新依赖版本、设置迁移、持久化历史或真实客户端写入。
 - 原生 FFI 的维护成本高于单一跨平台库；平台 API、安装布局或 OS 计数变化必须更新对应实现和夹具，不能增加猜测或双读路径。
 - macOS/Linux 界面覆盖当前是可证实子集，不能把它包装成整款软件全量。权限、命名空间和短命任务也限制观测范围；扩展到持续追踪或跨 WSL/远端采集会改变产品范围。
-- 驻留内存含共享页，Linux 计数近似；页面数值不形成释放空间承诺，也不承诺等于系统工具默认私有内存列。
+- Windows 驻留内存为专用工作集、合计不重复计页；macOS/Linux 含共享页且 Linux 计数近似。Windows 显示值约为原工作集合计的一半，属口径修正而非内存下降；页面数值不形成释放空间承诺。
 - `resource_monitor/tests.rs`、`sampling/tests.rs` 及平台内测试记录嵌套软件根、PID/映像变化、父 PID 复用、断裂/循环父链、错误不变零、严格请求、并发单槽、实际 CPU 区间、软件归属改变、墙钟/睡眠、明细分页和 Mach 单位的回归用例。
 - `tests/resource-usage-reader.test.ts` 记录可见进入、周期读取、隐藏停止、最新明细选择、迟到响应、失败保留与重试的用例。测试不发起模型请求，也不写真实配置。
 - 原生读取烟测在各平台直接枚举并读取当前测试进程，核实稳定的创建身份、映像路径、驻留内存、在线处理器数和不倒退的 CPU 累计计数；它补足模拟观测夹具无法覆盖的 FFI 与权限边界，不写真实配置。
@@ -102,6 +109,10 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 - `executables/tests.rs` 与 `executables/installations/tests.rs` 记录桌面下载、版本入口、自定义编辑器根、当前 npm 原生布局、外壳和伪装目录、错误清单与原生格式的回归用例；`discovery/tests.rs` 记录两款客户端的任务归属、外部用户、未核实用户、真实受限错误和错误边界。所有文件夹夹具均在临时目录内创建，Windows 本地隔离 CI 已执行通过。
 
 ### 验证边界
+
+2026-10-28 的专用工作集口径修订以只读 PowerShell 实测当前安装实例确认：8 进程（1 主程序 + 7 msedgewebview2）、工作集合计 436 MiB、专用工作集合计 224.9 MiB，逐进程角色（渲染 91.1/29、GPU 42.3、主程序 35.4、浏览器 21.2 MiB）与 UI 阅读一致；同轮实测验证了 `Working Set - Private` 性能计数器在本机可用。本次请求未要求编译或自动化测试，PDH 采样路径与平台条件文案的新用例尚未执行；下述发布测试结果属于改动前的证据。
+
+当前静默采样改动新增请求来源、重置标志消费、失败提示保留、迟到明细、可见周期和内存坐标的回归用例；本次请求未要求运行编译或自动化测试，这些新用例尚未执行。下述发布测试结果属于改动前的证据，不覆盖本次生命周期与展示改动。
 
 2026-10-26 的识别修复先以本机只读原生审查确认：运行中的 7 个 Codex 引擎属于当前用户且可读取，其中桌面下载和 VS Code 内置映像均不在已安装 Switchboard 的 PATH；Claude Code 已安装编辑器内置原生程序及独立桌面下载。WTS 原生接口成功提供当前用户进程身份，系统 Codex 沙盒服务没有当前用户证据，不能按名称分派 AccessDenied。随后按用户明确授权执行 Windows 隔离 CI，真实进程树测试验证两款引擎及其辅助任务的唯一归属。测试不启动真实模型任务或修改客户端配置；macOS/Linux 的原生行为由各自 CI 验证，不能以 Windows 结果代替。
 
@@ -119,6 +130,7 @@ Windows 本地隔离 CI 通过笔记门禁、44 项前端测试、723 项 Rust �
 
 - [Tauri 进程模型](https://tauri.app/concept/process-model/)、[WebView2 Environment8](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2environment8)：原生核心、环境进程集合及 crashpad 边界。
 - [GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes)、[GetProcessMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getprocessmemoryinfo)：创建时刻、累计 CPU、工作集与失败。
+- [PdhGetFormattedCounterArrayW](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhgetformattedcounterarrayw)、[PdhAddEnglishCounterW](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhaddenglishcounterw)：本地化无关的计数器路径、格式化数组缓冲尺寸与实例名映射；`Working Set - Private` 即任务管理器「内存（专用工作集）」列的数据源。
 - [WTSEnumerateProcessesExW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsenumerateprocessesexw)、[WTS_PROCESS_INFO_EXW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/ns-wtsapi32-wts_process_info_exw)：原生用户 SID、跨会话权限边界与当前用户范围；SID 缺失不等同于当前用户访问受限。
 - [Apple proc_info.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h)、[bsd_kern.c](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/bsd_kern.c)：进程身份、task 累计 Mach 时间及驻留计数；换算使用当前 SDK timebase。
 - [Linux proc 文档](https://www.kernel.org/doc/html/latest/filesystems/proc.html)：身份、PID 复用、权限和 RSS 近似性。

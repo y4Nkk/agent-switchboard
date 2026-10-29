@@ -2,7 +2,7 @@
 use crate::local_state::LocalState;
 use asb_core::contracts::{BackupRecord, SettingsValues};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -10,19 +10,6 @@ struct Snapshot {
     backup: BackupRecord,
     settings: SettingsValues,
     settings_hash: String,
-}
-
-fn path(state: &LocalState, backup: &BackupRecord) -> Result<PathBuf, String> {
-    let file = Path::new(&backup.backup_path);
-    if file.parent() != Some(state.backup_dir().as_path())
-        || Path::new(&backup.target_path) != state.target(backup.app)?
-        || backup.linked_backup_id.is_some()
-    {
-        return Err("客户端设置快照不属于当前配置备份".into());
-    }
-    Ok(state.backup_dir().join("client-settings").join(
-        file.file_name().ok_or("配置备份文件名无效")?
-    ).with_extension("json"))
 }
 
 fn settings_hash(settings: &SettingsValues) -> Result<String, String> {
@@ -48,7 +35,7 @@ fn read(path: &Path, backup: &BackupRecord) -> Result<Option<SettingsValues>, St
 
 pub(super) fn save(state: &LocalState, backup: &BackupRecord, settings: &SettingsValues) -> Result<(), String> {
     settings.validate_client_settings(backup.app).map_err(|error| error.to_string())?;
-    let path = path(state, backup)?;
+    let path = state.client_settings_backup_path(backup)?;
     if let Some(existing) = read(&path, backup)? {
         return if existing == *settings { Ok(()) } else { Err("拒绝覆盖已有客户端设置备份".into()) };
     }
@@ -64,7 +51,7 @@ pub(super) fn save(state: &LocalState, backup: &BackupRecord, settings: &Setting
 }
 
 pub(super) fn load(state: &LocalState, backup: &BackupRecord) -> Result<Option<SettingsValues>, String> {
-    let settings = read(&path(state, backup)?, backup)?;
+    let settings = read(&state.client_settings_backup_path(backup)?, backup)?;
     if settings.is_none() && matches!(backup.reason.as_str(),
         "client-configuration-apply" | "client-configuration-native-defaults"
         | "client-configuration-native-defaults-unmanaged" | "client-configuration-clear-extra-configuration"

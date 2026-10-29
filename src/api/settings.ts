@@ -310,7 +310,7 @@ export type MotionPreference = "system" | "reduce";
 export type LanguagePreference = "system" | "zh-CN" | "en-US";
 export type InterfaceScale = 90 | 100 | 110 | 125;
 export type StartupPage = "providers" | "lastVisited";
-export type WorkspacePage = "providers" | "clientConfiguration" | "extensions" | "sessions" | "usage" | "settings";
+export type WorkspacePage = "providers" | "gateway" | "clientConfiguration" | "extensions" | "sessions" | "usage" | "settings";
 
 /** Application-runtime desktop preferences; separate from client config. */
 export interface AppSettings {

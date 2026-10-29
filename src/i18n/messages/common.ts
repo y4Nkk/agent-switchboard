@@ -6,10 +6,8 @@ import type { MessageEntry } from "../types";
  * display text lives only here.
  */
 export const messages = {
-  "notice.acknowledge": ["标为已知晓", "Acknowledge"],
-  "notice.acknowledged": ["已知晓", "Acknowledged"],
-  "notice.review": ["查看已知提示（{count} 条）", "Review acknowledged notices ({count})"],
   "nav.page.providers": ["供应商切换", "Providers"],
+  "nav.page.gateway": ["模型路由与网关", "Model routing & gateway"],
   "nav.page.clientConfiguration": ["客户端配置", "Client Config"],
   "nav.page.extensions": ["扩展", "Extensions"],
   "nav.page.sessions": ["会话记录", "Sessions"],
@@ -18,8 +16,8 @@ export const messages = {
 
   "nav.section.application": ["偏好设置", "Preferences"],
   "nav.section.clientManagement": ["客户端工具", "Client Tools"],
-  "nav.section.gateway": ["模型路由与网关", "Model routing & gateway"],
   "nav.section.backups": ["备份恢复", "Backup & Restore"],
+  "nav.section.storage": ["存储与缓存", "Storage and cache"],
   "nav.section.diagnostics": ["诊断", "Diagnostics"],
   "nav.section.about": ["关于", "About"],
 

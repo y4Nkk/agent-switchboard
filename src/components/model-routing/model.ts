@@ -2,7 +2,7 @@ import type { AppKind, CodexProviderDraft, CodexProviderRecord, ProviderDraft, P
 import { claudeOptions, codexProviderDraft, providerDraft } from "../../lib/provider-drafts.ts";
 import type { MessageKey } from "../../i18n";
 
-export type RouteRole = "main" | "subagent" | "haiku" | "sonnet" | "opus";
+export type RouteRole = "main" | "subagent" | "haiku" | "sonnet" | "opus" | "fable";
 export type RouteDocument =
   | { kind: "codex"; record: CodexProviderRecord; draft: CodexProviderDraft }
   | { kind: "profile"; record: ProviderRecord; draft: ProviderDraft };
@@ -34,7 +34,7 @@ export function routeRecords(inventory: RouteInventory, app: AppKind): RouteReco
 
 export function routeRoles(document: RouteDocument): RouteRole[] {
   if (document.kind === "codex") return ["main", "subagent"];
-  return document.draft.routeMode === "official" ? ["main"] : ["main", "haiku", "sonnet", "opus"];
+  return document.draft.routeMode === "official" ? ["main"] : ["main", "haiku", "sonnet", "opus", "fable"];
 }
 
 export function roleTarget(document: RouteDocument, role: RouteRole, codex: CodexProviderRecord[]) {
@@ -69,6 +69,6 @@ export function resetRouting(document: RouteDocument): RouteDocument {
   return { ...document, draft: { ...document.draft, model: null,
     modelOptions: document.draft.routeMode === "official" ? null : claudeOptions(document.draft.modelOptions, {
       primaryOneM: false, haikuModel: null, haikuOneM: false, sonnetModel: null, sonnetOneM: false,
-      opusModel: null, opusOneM: false,
+      opusModel: null, opusOneM: false, fableModel: null, fableOneM: false,
     }) } };
 }

@@ -34,12 +34,12 @@ pub(super) fn begin(
     expected_hash: &str,
     expected_rendered_hash: &str,
     auth: Option<super::transaction::AuthIntent>,
-) -> Result<Vec<asb_core::contracts::LocalizedMessage>, CommandError> {
+) -> Result<(), CommandError> {
     let plan = &projection.plan;
-    let preservation = if plan.app() == AppKind::Claude {
+    if plan.app() == AppKind::Claude {
         crate::session_manager::history::preserve_before_switch(state.root())
-            .map_err(|message| CommandError::new("claude-session-preservation-failed", message))?
-    } else { Vec::new() };
+            .map_err(|message| CommandError::new("claude-session-preservation-failed", message))?;
+    }
     let catalog = match (plan.app(), plan.profile.route_mode) {
         (AppKind::Codex, asb_core::RouteMode::Custom) => {
             super::plan::catalog_artifact(target, projection.codex_catalog.as_ref())?
@@ -79,7 +79,7 @@ pub(super) fn begin(
         }
     }
     super::transaction::stage_catalog(state, gateway, catalog.as_ref())?;
-    Ok(preservation)
+    Ok(())
 }
 pub(super) fn commit(
     state: &LocalState,

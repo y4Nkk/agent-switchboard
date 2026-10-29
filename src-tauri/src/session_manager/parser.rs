@@ -2,7 +2,7 @@ use super::{content, SessionMessage, SessionMeta, TITLE_LIMIT};
 use asb_core::contracts::AppKind;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{fs::File, io::{self, BufRead, BufReader, Read}};
+use std::io::{self, BufRead};
 use std::ops::ControlFlow;
 use std::path::Path;
 
@@ -14,9 +14,8 @@ pub(super) fn parse_session(app: AppKind, path: &Path) -> Result<(SessionMeta, V
 
 pub(super) fn parse_session_observed(app: AppKind, path: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(SessionMeta, Vec<String>), io::Error> {
     checkpoint().map_err(io::Error::other)?;
-    let file = File::open(path)?;
-    let length = file.metadata()?.len();
-    parse_session_reader(app, path, BufReader::new(file.take(length)), checkpoint)
+    let reader = super::record_file::open(path, 0, checkpoint).map_err(io::Error::other)?;
+    parse_session_reader(app, path, reader, checkpoint)
 }
 
 pub(super) fn parse_session_reader(app: AppKind, path: &Path, reader: impl BufRead,
@@ -76,9 +75,8 @@ pub(crate) fn session_identity(path: &Path) -> io::Result<Option<SessionIdentity
 
 pub(super) fn session_identity_observed(path: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> io::Result<Option<SessionIdentity>> {
     checkpoint().map_err(io::Error::other)?;
-    let file = File::open(path)?;
-    let length = file.metadata()?.len();
-    session_identity_reader(path, BufReader::new(file.take(length)), checkpoint)
+    let reader = super::record_file::open(path, 0, checkpoint).map_err(io::Error::other)?;
+    session_identity_reader(path, reader, checkpoint)
 }
 
 pub(super) fn session_identity_reader(path: &Path, reader: impl BufRead,

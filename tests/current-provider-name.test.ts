@@ -13,7 +13,7 @@ function status(): ConfigFileStatus {
     route: {
       app: "codex", routeMode: "official", providerName: "openai", model: "live-model",
       baseUrl: null, apiKey: "", wireApi: null, codexModelOptions: null,
-      haikuModel: null, sonnetModel: null, opusModel: null, availableModels: null, scopeWarnings: [],
+      haikuModel: null, sonnetModel: null, opusModel: null, fableModel: null, availableModels: null, scopeWarnings: [],
     },
   };
 }

@@ -118,9 +118,10 @@ fn scan_page(source: &SessionSource, requested_offset: usize, anchor: Option<&st
     let mut page = MessagePage { session: source.meta.clone(), items: Vec::new(), total, offset,
         page_size: PAGE_SIZE, bookmark_issue: None, issues: Vec::new() };
     page.issues = index.issues.clone();
-    for entry in index.entries.iter().skip(offset).take(PAGE_SIZE) {
-        match index.load(entry) {
-            Ok(message) => page.items.push(message.into()),
+    let end = (offset + PAGE_SIZE).min(total);
+    for result in index.load_batch(&index.entries[offset..end], Into::into) {
+        match result {
+            Ok(message) => page.items.push(message),
             Err(error) => page.issues.push(error),
         }
     }

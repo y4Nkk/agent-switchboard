@@ -5,7 +5,7 @@ import type { MessageKey } from "../i18n/messages";
  * by display text; labels resolve from the catalog at render time. */
 export type Page = WorkspacePage;
 export const PAGES: readonly Page[] = [
-  "providers", "clientConfiguration", "extensions", "sessions", "usage", "settings",
+  "providers", "gateway", "clientConfiguration", "extensions", "sessions", "usage", "settings",
 ];
 export function pageLabelKey(page: Page): MessageKey {
   return `nav.page.${page}`;
@@ -19,13 +19,13 @@ export type ProviderView =
 export const SETTINGS_SECTIONS = [
   { value: "application", labelKey: "nav.section.application" },
   { value: "client-management", labelKey: "nav.section.clientManagement" },
-  { value: "gateway", labelKey: "nav.section.gateway" },
   { value: "backups", labelKey: "nav.section.backups" },
+  { value: "storage", labelKey: "nav.section.storage" },
   { value: "diagnostics", labelKey: "nav.section.diagnostics" },
   { value: "about", labelKey: "nav.section.about" },
 ] as const satisfies ReadonlyArray<{ value: SettingsSection; labelKey: MessageKey }>;
 export type SettingsSection =
-  | "application" | "client-management" | "gateway" | "backups" | "diagnostics" | "about";
+  | "application" | "client-management" | "backups" | "storage" | "diagnostics" | "about";
 
 export const EXTENSION_SECTIONS = [
   { value: "skill", labelKey: "nav.section.skill" },

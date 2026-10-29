@@ -8,8 +8,7 @@ use asb_core::contracts::{
 use serde_json::{json, Map, Value};
 
 pub(super) struct Directive {
-    enabled: bool,
-    effort: String,
+    effort: Option<String>,
     configuration: CodexChatReasoning,
 }
 
@@ -25,24 +24,43 @@ pub(super) fn extract(
     let root = value
         .as_object_mut()
         .ok_or_else(|| TransformError("Responses 请求必须是 JSON 对象".to_string()))?;
-    let Some(reasoning) = root.get_mut("reasoning") else {
-        return Ok(None);
-    };
-    let reasoning = reasoning
-        .as_object_mut()
-        .ok_or_else(|| TransformError("reasoning 必须是对象".to_string()))?;
-    let Some(effort) = reasoning.remove("effort") else {
-        return Ok(None);
-    };
-    let effort = effort
-        .as_str()
-        .ok_or_else(|| TransformError("reasoning.effort 必须是字符串".to_string()))?
-        .to_ascii_lowercase();
-    if reasoning.is_empty() {
+    let effort = root
+        .get_mut("reasoning")
+        .map(|value| {
+            let reasoning = value
+                .as_object_mut()
+                .ok_or_else(|| TransformError("reasoning 必须是对象".to_string()))?;
+            reasoning
+                .remove("effort")
+                .map(|effort| {
+                    effort.as_str()
+                        .map(str::to_ascii_lowercase)
+                        .ok_or_else(|| TransformError("reasoning.effort 必须是字符串".to_string()))
+                })
+                .transpose()
+        })
+        .transpose()?
+        .flatten();
+    if root
+        .get("reasoning")
+        .and_then(Value::as_object)
+        .is_some_and(Map::is_empty)
+    {
         root.remove("reasoning");
+    }
+    let split_output = matches!(
+        configuration,
+        Some(CodexChatReasoning::Configured {
+            separate_output: true,
+            ..
+        })
+    );
+    if effort.is_none() && !split_output {
+        return Ok(None);
     }
     let Some(CodexChatReasoning::Configured {
         thinking_parameter,
+        separate_output,
         effort_parameter,
         effort_mode,
     }) = configuration
@@ -50,10 +68,10 @@ pub(super) fn extract(
         return error("Chat 上游未声明 Codex reasoning.effort 方言");
     };
     Ok(Some(Directive {
-        enabled: !matches!(effort.as_str(), "none" | "off" | "disabled"),
         effort,
         configuration: CodexChatReasoning::Configured {
             thinking_parameter: *thinking_parameter,
+            separate_output: *separate_output,
             effort_parameter: *effort_parameter,
             effort_mode: *effort_mode,
         },
@@ -69,33 +87,41 @@ pub(super) fn render(
     };
     let CodexChatReasoning::Configured {
         thinking_parameter,
+        separate_output,
         effort_parameter,
         effort_mode,
     } = directive.configuration
     else {
         return error("Chat 上游未声明 Codex reasoning.effort 方言");
     };
+    let root = value
+        .as_object_mut()
+        .ok_or_else(|| TransformError("转换后的 Chat 请求必须是对象".to_string()))?;
+    if separate_output {
+        root.insert("reasoning_split".into(), Value::Bool(true));
+    }
+    let Some(effort) = directive.effort else {
+        return Ok(());
+    };
+    let enabled = !matches!(effort.as_str(), "none" | "off" | "disabled");
     if thinking_parameter == CodexChatThinkingParameter::None
         && effort_parameter == CodexChatEffortParameter::None
     {
         // Fixed-reasoning presets expose no toggle. Never acknowledge an off
         // request while the upstream would keep thinking.
-        if !directive.enabled {
+        if !enabled {
             return error("所选 Chat 上游的固定推理模式不能关闭");
         }
-        if map_effort(&directive.effort, CodexChatEffortMode::Passthrough).is_none() {
+        if map_effort(&effort, CodexChatEffortMode::Passthrough).is_none() {
             return error("Codex 推理档位不受支持");
         }
         return Ok(());
     }
-    let root = value
-        .as_object_mut()
-        .ok_or_else(|| TransformError("转换后的 Chat 请求必须是对象".to_string()))?;
-    render_thinking(root, thinking_parameter, directive.enabled);
-    if !directive.enabled {
+    render_thinking(root, thinking_parameter, enabled);
+    if !enabled {
         return render_disabled_effort(root, thinking_parameter, effort_parameter, effort_mode);
     }
-    render_effort(root, effort_parameter, effort_mode, &directive.effort)
+    render_effort(root, effort_parameter, effort_mode, &effort)
 }
 
 fn render_thinking(
@@ -113,9 +139,6 @@ fn render_thinking(
         }
         CodexChatThinkingParameter::EnableThinking => {
             root.insert("enable_thinking".to_string(), Value::Bool(enabled));
-        }
-        CodexChatThinkingParameter::ReasoningSplit => {
-            root.insert("reasoning_split".to_string(), Value::Bool(enabled));
         }
     }
 }
@@ -192,3 +215,6 @@ fn map_effort(effort: &str, mode: CodexChatEffortMode) -> Option<String> {
     };
     Some(mapped.to_string())
 }
+
+#[cfg(test)]
+mod tests;

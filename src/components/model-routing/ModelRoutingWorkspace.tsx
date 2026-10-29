@@ -84,8 +84,8 @@ export function ModelRoutingWorkspace(props: Props) {
   const editor = useRouteDraft({ ...props, busy: disabled });
   const activeId = props.inventory.activeIds[editor.app];
   const activeRecord = editor.sources.find(({ record }) => record.profile.id === activeId);
-  return <section className="asb-panel asb-model-routing" aria-label={t("modelRoutes.title")}>
-    <WorkspaceHeader title={t("modelRoutes.title")} primary={
+  return <section className="asb-panel asb-model-routing" aria-label={t("nav.page.gateway")}>
+    <WorkspaceHeader title={t("nav.page.gateway")} primary={
       <Tabs value={editor.app} onChange={editor.selectApp} scope={id} label={t("modelRoutes.client")}
         tabs={(["codex", "claude"] as const).map((app) => ({ value: app,
           label: <><ClientLogo app={app} className="asb-model-route-logo" />{clientName(app)}</>, controls: `${id}-panel`, disabled }))} />

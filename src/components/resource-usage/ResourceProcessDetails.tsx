@@ -4,9 +4,14 @@ import { Pagination } from "../Pagination";
 import { Table, type TableColumn } from "../Table";
 import { ResourceMetric } from "./ResourceMetric";
 
-interface Props { details: ResourceDetails | null; loading: boolean; onPageChange: (page: number) => void }
+interface Props {
+  details: ResourceDetails | null;
+  requestedPage: number | null;
+  loading: boolean;
+  onPageChange: (page: number) => void;
+}
 
-export function ResourceProcessDetails({ details, loading, onPageChange }: Props) {
+export function ResourceProcessDetails({ details, requestedPage, loading, onPageChange }: Props) {
   const { t } = useI18n();
   if (!details) return <p className="asb-field-help" role="status">
     {t(loading ? "resources.details.loading" : "resources.details.unavailable")}
@@ -24,6 +29,12 @@ export function ResourceProcessDetails({ details, loading, onPageChange }: Props
     {details.rows.length ? <Table columns={columns} rows={details.rows} rowKey={(row) => row.key}
       ariaLabel={t("resources.details.aria")} className="asb-resource-process-table" />
       : <p className="asb-field-help">{t("resources.details.empty")}</p>}
+    <p className="asb-resource-page-status asb-field-help" role="status">
+      {requestedPage !== null && requestedPage !== details.page
+        ? t(loading ? "resources.details.readingPage" : "resources.details.previousPage", {
+          requested: requestedPage, current: details.page,
+        }) : null}
+    </p>
     <Pagination total={details.total} page={details.page} pageSize={details.pageSize}
       onPageChange={onPageChange} label={t("resources.details.pages")} />
   </div>;

@@ -80,7 +80,7 @@ fn page(root: &Path, id: &str) -> MessagePage {
 
 fn capture(root: &Path, state: &Path) {
     assert_eq!(search(state, "").total, 1);
-    assert!(history::preserve_before_switch(state).unwrap().is_empty());
+    history::preserve_before_switch(state).unwrap();
     std::env::set_var("CLAUDE_CONFIG_DIR", root.join("account B"));
     let both = search(state, "沙箱跨账号完整正文");
     assert_eq!(both.total, 2);

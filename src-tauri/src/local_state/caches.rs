@@ -1,6 +1,6 @@
 use super::{AppSettings, CloudBackupSettings, LocalState};
 use crate::codex_official_quota::CodexQuotaBaseline;
-use crate::codex_reset::CodexResetStatus;
+use crate::codex_reset::{CodexResetHubStatus, CodexResetStatus};
 use crate::usage_cache::UsageCache;
 use asb_core::discovery::DiscoveryReport;
 use std::fs;
@@ -113,6 +113,41 @@ impl LocalState {
         fs::write(&temporary, content)
             .map_err(|_| "无法写入 Codex 重置信号缓存临时文件".to_string())?;
         if fs::rename(&temporary, self.codex_reset_cache_path()).is_err() {
+            let _ = fs::remove_file(&temporary);
+            return Err("无法原子保存 Codex 重置信号缓存".to_string());
+        }
+        Ok(())
+    }
+
+    /// The second monitor's last successfully normalized aggregate. An absent
+    /// file is a normal first-run state; invalid data is left untouched rather
+    /// than silently being mistaken for a current result.
+    pub fn load_codex_reset_hub_cache(&self) -> Result<Option<CodexResetHubStatus>, String> {
+        let text = match fs::read_to_string(self.codex_reset_hub_cache_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("Codex 重置信号缓存不可读".to_string()),
+        };
+        let status: CodexResetHubStatus =
+            serde_json::from_str(&text).map_err(|_| "Codex 重置信号缓存格式无效".to_string())?;
+        status
+            .validate_cached()
+            .map_err(|_| "Codex 重置信号缓存格式无效".to_string())?;
+        Ok(Some(status))
+    }
+
+    /// Replaces the prior aggregate snapshot atomically after a successful
+    /// source read. It never stores the upstream raw payloads or credentials.
+    pub fn save_codex_reset_hub_cache(&self, status: &CodexResetHubStatus) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(status)
+            .map_err(|_| "Codex 重置信号缓存序列化失败".to_string())?;
+        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+        let temporary = self
+            .root
+            .join(format!("codex-reset-hub-cache.{}.tmp", Uuid::new_v4()));
+        fs::write(&temporary, content)
+            .map_err(|_| "无法写入 Codex 重置信号缓存临时文件".to_string())?;
+        if fs::rename(&temporary, self.codex_reset_hub_cache_path()).is_err() {
             let _ = fs::remove_file(&temporary);
             return Err("无法原子保存 Codex 重置信号缓存".to_string());
         }

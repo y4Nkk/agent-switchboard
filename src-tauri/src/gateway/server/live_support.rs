@@ -250,6 +250,7 @@ fn live_draft(route: &LiveRoute, api_key: &str) -> CodexProviderDraft {
     let chat_reasoning = if route.upstream == CodexUpstream::ChatCompletions {
         CodexChatReasoning::Configured {
             thinking_parameter: CodexChatThinkingParameter::None,
+            separate_output: false,
             effort_parameter: CodexChatEffortParameter::ReasoningEffort,
             effort_mode: CodexChatEffortMode::LowHigh,
         }

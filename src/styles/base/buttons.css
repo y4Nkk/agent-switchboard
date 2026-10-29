@@ -116,12 +116,12 @@ button:disabled {
   color: var(--asb-action);
 }
 
-/* New-provider action uses the same solid action surface as every primary
-   command. It remains compact to align with the client tab row. */
+/* New-provider action uses the same solid action surface and standard
+   geometry as every primary command. It remains compact to align with the
+   client tab row. */
 .asb-btn-plus {
   min-height: var(--asb-control-height);
   border: 0;
-  border-radius: var(--asb-radius-pill);
   background: var(--asb-action);
   color: var(--asb-text-on-action);
   font-weight: 600;

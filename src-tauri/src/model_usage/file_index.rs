@@ -10,6 +10,7 @@ use std::io::BufReader;
 use std::ops::ControlFlow;
 use std::path::Path;
 mod saved;
+mod compressed;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) enum UsageState {
@@ -59,6 +60,15 @@ pub(super) fn read_source(index: &ReadIndex, source: &records::Source, app: AppK
 }
 
 pub(super) fn read(index: &ReadIndex, path: &Path, app: AppKind, session: &str) -> Result<FileUsage, String> {
+    let before = FileRevision::read(path)?;
+    let result = read_snapshot(index, path, app, session);
+    if result.is_err() && FileRevision::read(path).is_ok_and(|current| current != before) {
+        return read_snapshot(index, path, app, session);
+    }
+    result
+}
+
+fn read_snapshot(index: &ReadIndex, path: &Path, app: AppKind, session: &str) -> Result<FileUsage, String> {
     let revision = FileRevision::read(path)?;
     let cache_key = key(&(app, session, path))?;
     let encoded = revision.encoded()?;
@@ -72,6 +82,9 @@ pub(super) fn read(index: &ReadIndex, path: &Path, app: AppKind, session: &str) 
 
 fn capture(path: &Path, app: AppKind, session: &str, revision: FileRevision,
     previous: Option<FileUsage>) -> Result<(FileUsage, bool), String> {
+    if crate::session_manager::record_file::compressed(path) {
+        return compressed::capture(path, app, session, revision);
+    }
     let (mut next, mut hash) = resume(path, app, revision.clone(), previous)?;
     let start = next.offset;
     let mut reader = DigestReader::open(path, start, revision.bytes.saturating_sub(start), &mut hash)?;
@@ -98,7 +111,13 @@ fn capture(path: &Path, app: AppKind, session: &str, revision: FileRevision,
 }
 
 fn verify(path: &Path, snapshot: &FileUsage) -> Result<(), String> {
-    prefix::verify(path, &snapshot.revision, snapshot.offset, &snapshot.prefix, &|| Ok(()))
+    let compressed = crate::session_manager::record_file::compressed(path);
+    let length = if compressed { snapshot.revision.bytes } else { snapshot.offset };
+    prefix::verify(path, &snapshot.revision, length, &snapshot.prefix, &|| Ok(()))?;
+    if compressed && FileRevision::read(path)? != snapshot.revision {
+        return Err(format!("归档在用量读取期间变化：{}", path.display()));
+    }
+    Ok(())
 }
 
 fn resume(path: &Path, app: AppKind, revision: FileRevision, previous: Option<FileUsage>) -> Result<(FileUsage, Sha256), String> {

@@ -5,6 +5,7 @@ import { useI18n } from "../i18n";
 import { pageLabelKey, type Page } from "./navigation";
 import { ClientConfigurationWorkspace } from "./ClientConfigurationWorkspace";
 import { ExtensionsWorkspace } from "./ExtensionsWorkspace";
+import { GatewayWorkspace } from "./GatewayWorkspace";
 import { ProvidersWorkspace } from "./ProvidersWorkspace";
 import { SettingsWorkspace } from "./SettingsWorkspace";
 import { UsageWorkspace } from "./UsageWorkspace";
@@ -31,6 +32,9 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
       <div hidden={page !== "providers"} className="asb-page-stack">
         <ProvidersWorkspace model={model} active={page === "providers"} />
       </div>
+      {visited("gateway") && <div hidden={page !== "gateway"} className="asb-page-stack">
+        <GatewayWorkspace model={model} active={page === "gateway"} />
+      </div>}
       {visited("clientConfiguration") && <div hidden={page !== "clientConfiguration"} className="asb-page-stack">
         <ClientConfigurationWorkspace model={model} active={page === "clientConfiguration"} />
       </div>}

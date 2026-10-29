@@ -7,6 +7,7 @@ export const messages = {
   "format.date.unset": ["选择日期", "Pick a date"],
   "format.date.clear": ["清空日期", "Clear date"],
   "format.time.hm": ["{hour}：{minute}", "{hour}:{minute}"],
+  "format.time.hms": ["{hour}：{minute}：{second}", "{hour}:{minute}:{second}"],
   "format.countdown.reached": ["已到重置时间", "Reset time reached"],
   "format.countdown.underMinute": ["不到 1 分钟后", "in less than 1 minute"],
   "format.countdown.daysHours": ["约 {days} 天 {hours} 小时后", "in about {days} days {hours} hours"],

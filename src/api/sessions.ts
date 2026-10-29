@@ -1,7 +1,8 @@
 import { invoke } from "./client";
 import type { AppKind } from "./shared";
-import type { StorageReclaimOutcome } from "./storage";
 import type { LocalizedMessage } from "./switching";
+
+export interface StorageReclaimOutcome { removed: number; warning: string | null }
 
 /** Read-only local session metadata. The backend never exposes source paths. */
 export interface SessionMeta {
@@ -64,18 +65,6 @@ export const getSessionCopyText = (source: SessionCopySource): Promise<string> =
 export interface SessionIssue {
   app: AppKind;
   message: string;
-  conversionId: string | null;
-}
-
-export interface SessionConversionOutcome {
-  converted: number;
-  records: number;
-  failures: SessionIssue[];
-}
-
-/** Converts only the exact backend-discovered revisions into application-owned records. */
-export function convertSessionSources(ids: string[]): Promise<SessionConversionOutcome> {
-  return invoke("convert_session_sources", { ids });
 }
 
 export interface SessionSearchHit {
@@ -210,4 +199,17 @@ export interface SessionDeleteOutcome {
 /** Deletes several records against one backend scan; each item reports its own outcome. */
 export function deleteSessions(requests: SessionDeleteRequest[]): Promise<SessionDeleteOutcome[]> {
   return invoke<SessionDeleteOutcome[]>("delete_sessions", { requests });
+}
+
+export interface SessionCleanupPlan { cutoff: string; sessions: number; bytes: number }
+export interface SessionCleanupOutcome { removed: number; warnings: LocalizedMessage[] }
+
+/** Previews how many preserved Claude sessions fall before the cutoff. */
+export function previewSessionCleanup(cutoff: string): Promise<SessionCleanupPlan> {
+  return invoke("preview_session_cleanup", { cutoff });
+}
+
+/** Purges preserved sessions older than the cutoff, including the raw client records. */
+export function cleanupSessions(cutoff: string): Promise<SessionCleanupOutcome> {
+  return invoke("cleanup_sessions", { cutoff });
 }

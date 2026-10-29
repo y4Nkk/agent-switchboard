@@ -59,7 +59,7 @@ fn shared_http_and_websocket_json_rendering_restores_upstream_tool_spelling() {
     let mut request = json!({"tools":[{"type":"namespace","name":"mcp__files__","tools":[{
         "type":"function","name":"read","parameters":{},
     }]}]}).to_string().into_bytes();
-    crate::gateway::transform::apply_request_compat(&route, &mut request).unwrap();
+    crate::gateway::transform::prepare_upstream_request(&route, &mut request).unwrap();
     let request: Value = serde_json::from_slice(&request).unwrap();
     let response = json!({"id":"r","object":"response","status":"completed","model":"m",
         "vendor_metadata":{"kept":true},"output":[{"type":"function_call",
@@ -88,4 +88,21 @@ fn native_response_restoration_respects_the_client_protocol_and_endpoint() {
         crate::gateway::transform::NativeResponsesDialect::for_route(&route).restore_json(&mut rendered);
         assert_eq!(rendered, body);
     }
+}
+
+#[test]
+fn shared_codex_preparation_finalizes_native_fields_after_profile_overrides() {
+    let mut route = codex_route(UpstreamProtocol::ChatCompletions);
+    route.upstream_base_url = "https://resource.openai.azure.com/openai/v1".into();
+    route.connection.local_proxy_request_overrides = Some(asb_core::contracts::LocalProxyRequestOverrides {
+        headers: Default::default(),
+        body: json!({"max_tokens":456}),
+    });
+    let source = br#"{"model":"m","input":"hi","store":false}"#;
+    let mut wire = br#"{"model":"m","messages":[{"role":"user","content":"hi"}],"max_tokens":123}"#.to_vec();
+    crate::gateway::codex::request::prepare(&route, source, &mut wire, None).unwrap();
+    let value: Value = serde_json::from_slice(&wire).unwrap();
+    assert_eq!(value["max_completion_tokens"], 456);
+    assert!(value.get("max_tokens").is_none());
+    assert_eq!(value["messages"][0]["content"], "hi");
 }

@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::io::Write;
 
 fn fixture(root: &Path, name: &str, values: &[Value]) -> PathBuf {
-    let project = root.join("projects/encoded-project");
+    let project = root.join("client/projects/encoded-project");
     fs::create_dir_all(&project).unwrap();
     fs::write(project.join("parent-session.jsonl"), format!("{}\n", json!({
         "type":"user", "sessionId":"parent-session", "cwd":"C:/actual-project",
@@ -12,6 +12,12 @@ fn fixture(root: &Path, name: &str, values: &[Value]) -> PathBuf {
     let path = project.join("parent-session/subagents/workflows").join(name).join("journal.jsonl");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     write(&path, values);
+    let state = root.join("state");
+    super::super::history::initialize(&state).unwrap();
+    // Register only the fixture; native-home discovery is deliberately excluded.
+    let connection = rusqlite::Connection::open(state.join("sessions/claude.sqlite3")).unwrap();
+    connection.execute("INSERT OR IGNORE INTO roots(path,automatic) VALUES(?1,0)",
+        [root.join("client").to_str().unwrap()]).unwrap();
     path
 }
 
@@ -20,7 +26,7 @@ fn write(path: &Path, values: &[Value]) {
 }
 
 fn run(root: &Path, ids: &[String]) -> SessionConversionOutcome {
-    convert_from_roots(&root.join("state"), ids, &[(AppKind::Claude, root.join("projects"))]).unwrap()
+    convert_from_roots(&root.join("state"), ids, &[(AppKind::Claude, root.join("client/projects"))], &|| Ok(())).unwrap()
 }
 
 fn converted(root: &Path, path: &Path) -> (SessionSource, Vec<SessionIssue>) {
@@ -28,6 +34,32 @@ fn converted(root: &Path, path: &Path) -> (SessionSource, Vec<SessionIssue>) {
     let mut issues = vec![pending_issue(path).unwrap()];
     include(&root.join("state"), &mut sources, &mut issues);
     (sources.into_iter().next().unwrap(), issues)
+}
+
+#[test]
+fn discovered_workflows_are_recovered_without_a_frontend_conversion_request() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = fixture(temp.path(), "wf_automatic", &[json!({"type":"result","text":"kept"})]);
+    let original = fs::read(&path).unwrap();
+    let (source, issues) = converted(temp.path(), &path);
+    assert!(issues.is_empty());
+    assert_eq!(messages(&source).len(), 1);
+    assert_eq!(fs::read(&path).unwrap(), original);
+    assert_eq!(run(temp.path(), &[candidate(&path).unwrap().id()]).converted, 0);
+}
+
+#[test]
+fn cached_workflow_discovery_keeps_the_internal_recovery_identity() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = fixture(temp.path(), "wf_cached", &[json!({"type":"result","text":"kept"})]);
+    let id = candidate(&path).unwrap().id();
+    let roots = [(AppKind::Claude, temp.path().join("client/projects"))];
+    for _ in 0..2 {
+        let mut indexed = std::collections::HashMap::new();
+        let mut issues = Vec::new();
+        sources::scan_roots(&roots, &mut indexed, &mut issues);
+        assert!(issues.iter().any(|issue| issue.conversion_id.as_deref() == Some(id.as_str())));
+    }
 }
 
 fn messages(source: &SessionSource) -> Vec<SessionMessage> {
@@ -40,7 +72,7 @@ fn messages(source: &SessionSource) -> Vec<SessionMessage> {
 fn source_identity_is_shared_by_path_components_discovery_and_saved_copies() {
     let temp = tempfile::tempdir().unwrap();
     let path = fixture(temp.path(), "wf_example", &[json!({"type":"result","text":"retained"})]);
-    let root = temp.path().join("projects");
+    let root = temp.path().join("client/projects");
     let discovered = sources::collect(&root).paths.into_iter().find(|path| is_workflow(path)).unwrap();
     let equivalent = root.join("encoded-project/./parent-session//subagents/workflows/wf_example/journal.jsonl");
     assert_eq!(source_key(&path), source_key(&discovered));
@@ -91,14 +123,11 @@ fn refresh_replaces_one_record_and_keeps_existing_message_ids_stable() {
     let (first, _) = converted(temp.path(), &path);
     let first_id = messages(&first)[0].id.clone();
     let id = candidate(&path).unwrap().id();
-    assert_eq!(run(temp.path(), &[id]).converted, 1);
+    assert_eq!(run(temp.path(), &[id]).converted, 0);
     File::options().append(true).open(&path).unwrap().write_all(b"{\"type\":\"result\",\"value\":\"new\"}\n").unwrap();
-    let (_, issues) = converted(temp.path(), &path);
-    assert_eq!(issues.len(), 1);
-    let outcome = run(temp.path(), &[issues[0].conversion_id.clone().unwrap()]);
-    assert_eq!((outcome.converted, outcome.records), (1, 2));
     let (next, issues) = converted(temp.path(), &path);
     assert!(issues.is_empty());
+    assert_eq!(messages(&next).len(), 2);
     assert_eq!(first.meta.session_id, next.meta.session_id);
     assert_eq!(messages(&next)[0].id, first_id);
     assert_eq!(store::list(&temp.path().join("state")).0.len(), 1);
@@ -119,9 +148,9 @@ fn stale_requests_and_broken_records_never_replace_the_previous_complete_copy() 
     assert_eq!(rejected.failures.len(), 1);
     assert!(rejected.failures[0].message.contains("来源已经变化"));
     let during = candidate(&path).unwrap();
-    let (meta, count) = metadata(&during).unwrap();
+    let (meta, count) = metadata(&during, &|| Ok(())).unwrap();
     File::options().append(true).open(&path).unwrap().write_all(b"{\"partial\":").unwrap();
-    assert!(store::write(&temp.path().join("state"), &during, meta, count).is_err());
+    assert!(store::write(&temp.path().join("state"), &during, meta, count, &|| Ok(())).is_err());
     let broken = run(temp.path(), &[candidate(&path).unwrap().id()]);
     assert_eq!(broken.converted, 0);
     assert_eq!(broken.failures.len(), 1);
@@ -155,9 +184,14 @@ fn converted_material_is_excluded_from_usage_and_deletion_only_removes_the_copy(
     assert_eq!(report.coverage.scanned_files, 0);
     assert!(report.groups.is_empty());
     assert!(report.issues.is_empty());
-    super::super::remove_source(&temp.path().join("state"), &source, &[source.meta.session_id.clone()]).unwrap();
+    super::super::remove_source(&temp.path().join("state"), &source, &[source.meta.session_id.clone()], None).unwrap();
     assert!(path.is_file());
     assert!(!source.converted.unwrap().exists());
+    let mut sources = Vec::new();
+    let mut issues = vec![pending_issue(&path).unwrap()];
+    include(&temp.path().join("state"), &mut sources, &mut issues);
+    assert!(sources.is_empty());
+    assert!(issues.is_empty());
 }
 
 #[test]

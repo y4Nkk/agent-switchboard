@@ -17,6 +17,8 @@ struct ChatSource {
     model: Option<String>,
     usage: Usage,
     stop: Option<StopReason>,
+    pending_reasoning: Option<String>,
+    reasoning_seen: bool,
     done: bool,
 }
 
@@ -100,6 +102,14 @@ impl ChatSource {
                 ));
             }
             self.stop = Some(stop);
+        }
+        for reasoning in &update.reasoning {
+            if !reasoning.is_empty() || !self.reasoning_seen {
+                self.pending_reasoning
+                    .get_or_insert_with(String::new)
+                    .push_str(reasoning);
+                self.reasoning_seen = true;
+            }
         }
         if update.done {
             if self.stop.is_none() {
@@ -243,9 +253,7 @@ fn parse_chat_delta(value: &Value, update: &mut ChatUpdate) -> Result<(), Transf
             update.text.push(text);
         }
     }
-    if let Some(reasoning) =
-        optional_string(delta, "reasoning_content")?.filter(|value| !value.is_empty())
-    {
+    if let Some(reasoning) = optional_string(delta, "reasoning_content")? {
         update.reasoning.push(reasoning);
     }
     if let Some(calls) = delta.get("tool_calls").filter(|value| !value.is_null()) {

@@ -24,7 +24,7 @@ export function providerDraft(record: ProviderRecord): ProviderDraft {
 export function claudeOptions(current: ModelOptions | null, patch: Partial<ClaudeModelSettings>): ModelOptions {
   const base: ClaudeModelSettings = current?.kind === "claude" ? current : {
     primaryOneM: false, haikuModel: null, sonnetModel: null, sonnetOneM: false,
-    opusModel: null, opusOneM: false, availableModels: null,
+    opusModel: null, opusOneM: false, availableModels: null, fableModel: null, fableOneM: false,
   };
   const next: ClaudeModelSettings = { ...base, ...patch };
   if (base.haikuOneM && "haikuModel" in patch && patch.haikuModel !== base.haikuModel

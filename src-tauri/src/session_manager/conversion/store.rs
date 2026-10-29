@@ -84,7 +84,7 @@ pub(super) fn list(root: &Path) -> (Vec<(Header, PathBuf)>, Vec<String>) {
     (converted, failures)
 }
 
-pub(super) fn write(root: &Path, source: &Candidate, meta: SessionMeta, count: usize) -> Result<usize, String> {
+pub(super) fn write(root: &Path, source: &Candidate, meta: SessionMeta, count: usize, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<usize, String> {
     let directory = directory(root);
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     if directory.is_symlink() { return Err("转换记录目录不能是符号链接".into()); }
@@ -96,12 +96,12 @@ pub(super) fn write(root: &Path, source: &Candidate, meta: SessionMeta, count: u
         source_path: source.path.clone(), meta, records: count };
     line(&mut writer, &header)?;
     let mut written = 0;
-    let issues = records::visit_records(&source.path, 0, |_, _, value| {
+    let scan = records::scan_records_observed(&source.path, 0, 0, checkpoint, |_, _, value| {
         written += 1;
         line(&mut writer, &message(written, &value))?;
         Ok(ControlFlow::Continue(()))
     })?;
-    if !issues.is_empty() { return Err(issues.join("；")); }
+    if !scan.issues.is_empty() { return Err(scan.issues.join("；")); }
     if written != count || fingerprint(&source.path)? != source.revision {
         return Err("日志在转换期间发生变化，请稍后重试；未发布部分记录".into());
     }
@@ -110,6 +110,7 @@ pub(super) fn write(root: &Path, source: &Candidate, meta: SessionMeta, count: u
     file.sync_all().map_err(|error| error.to_string())?;
     drop(file);
     validate(&temporary.0, count)?;
+    checkpoint()?;
     crate::storage::publish::replace(&temporary.0, &target)?;
     Ok(count)
 }

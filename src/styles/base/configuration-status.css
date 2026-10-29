@@ -127,7 +127,10 @@
 }
 
 /* Daily rows expand with the page; this module owns spacing only. */
-.asb-table-scroll:has(> .asb-scroll-viewport > .asb-codex-reset-daily-table) {
+.asb-table-scroll:has(> .asb-scroll-viewport > .asb-codex-reset-daily-table),
+.asb-table-scroll:has(> .asb-scroll-viewport > .asb-codex-reset-timeline-table),
+.asb-table-scroll:has(> .asb-scroll-viewport > .asb-codex-reset-incidents-table),
+.asb-table-scroll:has(> .asb-scroll-viewport > .asb-codex-reset-banked-table) {
   margin-top: var(--asb-space-2);
 }
 
@@ -149,7 +152,7 @@
   align-self: flex-start;
   padding: 0 var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: 999px;
+  border-radius: var(--asb-radius-pill);
   background: var(--asb-content);
   font: var(--asb-text-label);
   font-weight: 700;
@@ -241,7 +244,9 @@
   margin-top: auto;
 }
 
-.asb-codex-reset > .asb-warn-text {
+/* Warn lines live inside the source tabpanels since the reset panel gained
+   its source switcher. */
+.asb-codex-reset [role="tabpanel"] > .asb-warn-text {
   margin: var(--asb-space-2) 0 0;
   font: var(--asb-text-label);
 }
@@ -279,6 +284,48 @@
 .asb-codex-reset-heatmap {
   margin-top: var(--asb-space-4);
   padding-top: var(--asb-space-3);
+}
+
+/* The second source's ledger sections (timeline, platform status, banked
+   observations) share the heatmap's head anatomy: one title, one total line. */
+.asb-codex-reset-section {
+  margin-top: var(--asb-space-4);
+  padding-top: var(--asb-space-3);
+}
+
+.asb-codex-reset-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  flex-wrap: wrap;
+}
+
+.asb-codex-reset-section-title,
+.asb-codex-reset-section-total {
+  margin: 0;
+  font: var(--asb-text-label);
+  font-weight: 700;
+  color: var(--asb-text);
+}
+
+.asb-codex-reset-section-total {
+  font-weight: 400;
+  color: var(--asb-text-muted);
+}
+
+/* Platform surfaces read as one status pill per monitored surface; the shared
+   pill's dot carries the state color. */
+.asb-codex-reset-surfaces {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-unit);
+  margin-top: var(--asb-space-2);
+}
+
+.asb-codex-reset-surfaces + .asb-codex-reset-detail {
+  margin-top: var(--asb-space-2);
 }
 
 .asb-codex-reset-heatmap-head {

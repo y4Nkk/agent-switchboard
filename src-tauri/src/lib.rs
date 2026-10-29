@@ -41,6 +41,7 @@ mod storage;
 #[cfg(test)]
 mod test_client_paths;
 mod tray;
+mod update_temp_sweep;
 mod upstream_overrides;
 mod usage_cache;
 mod usage_history;
@@ -285,6 +286,7 @@ fn start_background_services(app: &mut tauri::App, local: &local_state::LocalSta
     usage_query::scheduler::spawn(app.handle().clone());
     storage::spawn(app.handle().clone());
     session_manager::history::spawn(app.handle(), local.root().to_path_buf());
+    update_temp_sweep::spawn(app.handle().clone());
     runtime_log::record_started();
     #[cfg(debug_assertions)]
     {

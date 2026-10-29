@@ -70,11 +70,7 @@ pub(super) fn send(
         penalize: false,
     })?;
     if request.is_cancelled() {
-        return Err(Failure::preparation(
-            &candidate.upstream_base_url,
-            "客户端已取消请求",
-            499,
-        ));
+        return Err(Failure::preparation(&candidate.upstream_base_url, "客户端已取消请求", 499));
     }
     let candidate = &effective;
     span.protect_secrets(&[&candidate.api_key]);
@@ -172,6 +168,8 @@ fn prepare(
     crate::upstream_overrides::apply_body_override(&mut converted.body, &candidate.connection)
         .map_err(|error| Failure::preparation(url, &error, 422))?;
     super::accounts::prepare_body(candidate, &mut converted.body, body)
+        .map_err(|error| Failure::preparation(url, &error, 422))?;
+    transform::prepare_upstream_request(candidate, &mut converted.body)
         .map_err(|error| Failure::preparation(url, &error, 422))?;
     if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&converted.body) {
         span.note_mapped_model(model_from_value(candidate.upstream_protocol, &value));

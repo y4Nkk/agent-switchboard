@@ -42,9 +42,9 @@ export function GatewayPage({ active, busy, profiles, routing }: Props & {
   const [focus, setFocus] = useState<ClientFilterValue>("all");
   const [portSheet, setPortSheet] = useState<PortSheetState | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  // The sheet is portaled over the whole window; leaving the gateway context
-  // (settings section or workspace) must close it so it never floats over an
-  // unrelated page. The flow hook releases any held preparation on unmount.
+  // The sheet is portaled over the whole window; leaving the gateway workspace
+  // must close it so it never floats over an unrelated page. The flow hook
+  // releases any held preparation on unmount.
   useEffect(() => {
     if (!active) setPortSheet(null);
   }, [active]);
