@@ -62,13 +62,14 @@ pub(super) fn read_source(index: &ReadIndex, source: &records::Source, app: AppK
 pub(super) fn read(index: &ReadIndex, path: &Path, app: AppKind, session: &str) -> Result<FileUsage, String> {
     let before = FileRevision::read(path)?;
     let result = read_snapshot(index, path, app, session);
-    if result.is_err() && FileRevision::read(path).is_ok_and(|current| current != before) {
-        return read_snapshot(index, path, app, session);
+    if matches!(&result, Err(prefix::SnapshotError::Changed(_)))
+        || result.is_err() && FileRevision::read(path).is_ok_and(|current| current != before) {
+        return read_snapshot(index, path, app, session).map_err(String::from);
     }
-    result
+    result.map_err(String::from)
 }
 
-fn read_snapshot(index: &ReadIndex, path: &Path, app: AppKind, session: &str) -> Result<FileUsage, String> {
+fn read_snapshot(index: &ReadIndex, path: &Path, app: AppKind, session: &str) -> Result<FileUsage, prefix::SnapshotError> {
     let revision = FileRevision::read(path)?;
     let cache_key = key(&(app, session, path))?;
     let encoded = revision.encoded()?;
@@ -110,12 +111,12 @@ fn capture(path: &Path, app: AppKind, session: &str, revision: FileRevision,
     Ok((next, cacheable))
 }
 
-fn verify(path: &Path, snapshot: &FileUsage) -> Result<(), String> {
+fn verify(path: &Path, snapshot: &FileUsage) -> Result<(), prefix::SnapshotError> {
     let compressed = crate::session_manager::record_file::compressed(path);
     let length = if compressed { snapshot.revision.bytes } else { snapshot.offset };
     prefix::verify(path, &snapshot.revision, length, &snapshot.prefix, &|| Ok(()))?;
     if compressed && FileRevision::read(path)? != snapshot.revision {
-        return Err(format!("归档在用量读取期间变化：{}", path.display()));
+        return Err(prefix::SnapshotError::Changed(format!("归档在用量读取期间变化：{}", path.display())));
     }
     Ok(())
 }

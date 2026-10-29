@@ -2,6 +2,19 @@ use super::FileRevision;
 use sha2::{Digest, Sha256};
 use std::{fs::File, io::{Read, Seek, SeekFrom, Take}, path::Path};
 
+#[derive(Debug)]
+pub(crate) enum SnapshotError { Changed(String), Unavailable(String) }
+
+impl From<String> for SnapshotError {
+    fn from(message: String) -> Self { Self::Unavailable(message) }
+}
+
+impl From<SnapshotError> for String {
+    fn from(error: SnapshotError) -> Self {
+        match error { SnapshotError::Changed(message) | SnapshotError::Unavailable(message) => message }
+    }
+}
+
 pub(crate) struct DigestReader<'a> { reader: Take<File>, hash: &'a mut Sha256, pub bytes: u64 }
 
 impl<'a> DigestReader<'a> {
@@ -22,16 +35,16 @@ impl Read for DigestReader<'_> {
 }
 
 pub(crate) fn verify(path: &Path, revision: &FileRevision, length: u64, expected: &str,
-    checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(), String> {
+    checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(), SnapshotError> {
     checkpoint()?;
     let current = FileRevision::read(path)?;
     if current.created != revision.created || current.bytes < revision.bytes {
-        return Err(format!("来源被替换或截断，已跳过本次读取：{}", path.display()));
+        return Err(SnapshotError::Changed(format!("来源被替换或截断，已跳过本次读取：{}", path.display())));
     }
     let mut hash = Sha256::new();
     extend_hash(path, 0, length, &mut hash, checkpoint)?;
     if format!("{:x}", hash.finalize()) != expected {
-        return Err(format!("记录在读取期间被改写，已跳过本次读取：{}", path.display()));
+        return Err(SnapshotError::Changed(format!("记录在读取期间被改写，已跳过本次读取：{}", path.display())));
     }
     Ok(())
 }

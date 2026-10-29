@@ -30,11 +30,15 @@ fn prefix_index_rebuilds_changed_sources_before_publishing() {
     for changed in [b"other\n".as_slice(), b""] {
         let source = temp.path().join(format!("source-{}.jsonl", changed.len()));
         fs::write(&source, b"first\n").unwrap();
+        let modified = fs::metadata(&source).unwrap().modified().unwrap();
         let rewritten = Cell::new(false);
         let reading: Result<String, String> = index.file_prefix("prefix", &source, &|| Ok(()), |reader| {
             let mut value = String::new();
             reader.read_to_string(&mut value).map_err(|error| error.to_string())?;
-            if !rewritten.replace(true) { fs::write(&source, changed).unwrap(); }
+            if !rewritten.replace(true) {
+                fs::write(&source, changed).unwrap();
+                fs::File::options().write(true).open(&source).unwrap().set_modified(modified).unwrap();
+            }
             Ok(value)
         });
         assert_eq!(reading.unwrap().as_bytes(), changed);

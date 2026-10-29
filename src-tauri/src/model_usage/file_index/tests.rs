@@ -41,7 +41,7 @@ fn rewriting_a_captured_prefix_is_rejected_and_the_next_read_rebuilds_it() {
     let previous = read(&index, &path, AppKind::Claude, "session").unwrap();
     let (snapshot, _) = capture(&path, AppKind::Claude, "session", FileRevision::read(&path).unwrap(), Some(previous)).unwrap();
     fs::write(&path, message("first", 90)).unwrap();
-    assert!(verify(&path, &snapshot).is_err());
+    assert!(matches!(verify(&path, &snapshot), Err(prefix::SnapshotError::Changed(_))));
     assert_eq!(total(read(&index, &path, AppKind::Claude, "session").unwrap()), 92);
     fs::write(&path, b"").unwrap();
     assert!(verify(&path, &snapshot).is_err());

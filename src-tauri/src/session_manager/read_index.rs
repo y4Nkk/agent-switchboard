@@ -134,14 +134,15 @@ impl ReadIndex {
         let before = FileRevision::read(path)?;
         let result = self.prefix_snapshot(kind, path, checkpoint, &mut build);
         checkpoint()?;
-        if result.is_err() && FileRevision::read(path).is_ok_and(|current| current != before) {
-            return self.prefix_snapshot(kind, path, checkpoint, &mut build);
+        if matches!(&result, Err(prefix::SnapshotError::Changed(_)))
+            || result.is_err() && FileRevision::read(path).is_ok_and(|current| current != before) {
+            return self.prefix_snapshot(kind, path, checkpoint, &mut build).map_err(String::from);
         }
-        result
+        result.map_err(String::from)
     }
 
     fn prefix_snapshot<T: Serialize + DeserializeOwned>(&self, kind: &str, path: &Path, checkpoint: &dyn Fn() -> Result<(), String>,
-        build: &mut impl FnMut(&mut dyn std::io::BufRead) -> Result<T, String>) -> Result<T, String> {
+        build: &mut impl FnMut(&mut dyn std::io::BufRead) -> Result<T, String>) -> Result<T, prefix::SnapshotError> {
         use sha2::{Digest, Sha256};
         let revision = FileRevision::read(path)?;
         let encoded = revision.encoded()?;
@@ -157,7 +158,7 @@ impl ReadIndex {
         drop(reader);
         prefix::verify(path, &revision, length, &format!("{:x}", hash.finalize()), checkpoint)?;
         if super::record_file::compressed(path) && FileRevision::read(path)? != revision {
-            return Err(format!("归档在读取期间变化，稍后重新读取：{}", path.display()));
+            return Err(prefix::SnapshotError::Changed(format!("归档在读取期间变化，稍后重新读取：{}", path.display())));
         }
         self.put(kind, &cache_key, &encoded, &value)?;
         Ok(value)
