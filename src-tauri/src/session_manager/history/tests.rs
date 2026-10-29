@@ -250,7 +250,7 @@ fn deletion_prevents_an_old_offline_copy_from_being_imported_again() {
     let mut fixture = Fixture::new();
     fixture.write(&[user("delete once")]);
     fixture.sync();
-    super::delete(&fixture.root, &[ID.into()]).unwrap();
+    super::delete(&fixture.root, &[ID.into()], None).unwrap();
     fixture.write(&[user("delete once")]);
     let (sources, issues) = fixture.sync();
     assert!(issues.is_empty());
@@ -295,7 +295,7 @@ fn resumed_appends_are_preserved_and_deleting_cleans_all_resume_files() {
     fs::remove_file(&output).unwrap();
     let (saved, _) = fixture.sync();
     assert!(messages(&saved[0]).iter().any(|message| message.content == "continued answer"));
-    super::delete(&fixture.root, &[ID.into()]).unwrap();
+    super::delete(&fixture.root, &[ID.into()], None).unwrap();
     assert!(!package.exists());
     assert!(fixture.sync().0.is_empty());
 }
