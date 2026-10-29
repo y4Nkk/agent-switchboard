@@ -352,7 +352,9 @@ pub(crate) fn scan_filtered_sources_observed(root: &Path, app: Option<AppKind>, 
     checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
     let (mut sources, mut issues) = sources::scan_observed(root, app, session, checkpoint)?;
     if app != Some(AppKind::Codex) && session.is_none_or(|id| id.starts_with("workflow-")) {
-        conversion::include_observed(root, &mut sources, &mut issues, checkpoint)?;
+        if let Err(message) = conversion::include_observed(root, &mut sources, &mut issues, checkpoint) {
+            issues.push(SessionIssue::new(AppKind::Claude, message));
+        }
     }
     checkpoint()?;
     sources.retain(|source| app.is_none_or(|app| source.meta.app == app)

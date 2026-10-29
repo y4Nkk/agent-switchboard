@@ -41,18 +41,18 @@ fn json_response_round_trip_distinguishes_empty_reasoning_from_absent_reasoning(
 #[test]
 fn chat_tool_history_preserves_an_original_empty_reasoning_field() {
     let transport = ReasoningTransport::from_continuation_key([9; 32]);
-    let body = json!({"model":"m", "messages":[
-        {"role":"user","content":"inspect"},
-        {"role":"assistant","content":null,"reasoning_content":"","tool_calls":[
+    let body = json!({"id":"r", "model":"m", "choices":[{"index":0,
+        "message":{"role":"assistant","content":null,"reasoning_content":"","tool_calls":[
             {"id":"c","type":"function","function":{"name":"read","arguments":"{}"}},
-        ]},
-        {"role":"tool","tool_call_id":"c","content":"ok"},
-    ]});
-    let translated = convert_request(
-        Protocol::ChatCompletions, Protocol::Responses, body.to_string().as_bytes(), None, Some(&transport), None,
+        ]}, "finish_reason":"tool_calls"}]});
+    let translated = convert_response(
+        Protocol::ChatCompletions, Protocol::Responses, body.to_string().as_bytes(), Some(&transport),
     ).unwrap();
-    let converted: Value = serde_json::from_slice(&translated.body).unwrap();
-    let restored = replay(Protocol::Responses, converted["input"].clone(), &transport);
+    let converted: Value = serde_json::from_slice(&translated).unwrap();
+    let mut input = vec![json!({"role":"user","content":"inspect"})];
+    input.extend(converted["output"].as_array().unwrap().iter().cloned());
+    input.push(json!({"type":"function_call_output","call_id":"c","output":"ok"}));
+    let restored = replay(Protocol::Responses, Value::Array(input), &transport);
     assert_eq!(restored["messages"][1]["reasoning_content"], "");
     assert_eq!(restored["messages"][1]["tool_calls"][0]["id"], "c");
     assert_eq!(restored["messages"][2]["tool_call_id"], "c");

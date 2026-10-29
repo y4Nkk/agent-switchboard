@@ -1,4 +1,5 @@
 use super::*;
+use std::cell::Cell;
 use std::io::Write;
 
 #[test]
@@ -25,22 +26,21 @@ fn prefix_index_captures_a_fixed_range_while_the_source_keeps_appending() {
 #[test]
 fn prefix_index_rebuilds_changed_sources_before_publishing() {
     let temp = tempfile::tempdir().unwrap();
-    let source = temp.path().join("source.jsonl");
     let index = ReadIndex::open(&temp.path().join("state")).unwrap();
     for changed in [b"other\n".as_slice(), b""] {
+        let source = temp.path().join(format!("source-{}.jsonl", changed.len()));
         fs::write(&source, b"first\n").unwrap();
+        let rewritten = Cell::new(false);
         let reading: Result<String, String> = index.file_prefix("prefix", &source, &|| Ok(()), |reader| {
             let mut value = String::new();
             reader.read_to_string(&mut value).map_err(|error| error.to_string())?;
-            fs::write(&source, changed).unwrap();
+            if !rewritten.replace(true) { fs::write(&source, changed).unwrap(); }
             Ok(value)
         });
         assert_eq!(reading.unwrap().as_bytes(), changed);
         assert_eq!(index.previous::<String>("prefix", &key(&source).unwrap()).unwrap().unwrap().as_bytes(), changed);
     }
 }
-use std::cell::Cell;
-
 #[test]
 fn file_projection_survives_reopen_and_only_rebuilds_a_changed_source() {
     let temporary = tempfile::tempdir().unwrap();
