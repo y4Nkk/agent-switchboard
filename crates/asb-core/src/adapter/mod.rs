@@ -59,7 +59,10 @@ pub fn scrub_message(message: impl Into<String>) -> String {
     let parts: Vec<String> = original.split_whitespace().map(str::to_string).collect();
     let mut out = original;
     for part in parts {
-        let token_like = (part.contains("sk-") || part.len() >= 24)
+        // Keep the bare credential marker out of the linker's string pool.
+        let has_openai_marker = part.as_bytes().windows(3)
+            .any(|bytes| matches!(bytes, [b's', b'k', b'-']));
+        let token_like = (has_openai_marker || part.len() >= 24)
             && part
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || "-_.:=/".contains(c));
