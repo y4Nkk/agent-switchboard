@@ -98,7 +98,7 @@ fn runner_uses_the_final_answer_file_and_the_emitted_session_id() {
     let result = result.unwrap();
     assert_eq!(clock.deadline(), deadline);
     assert_eq!(clock.view(false).phase, super::super::progress::ProbeRunPhase::Collecting);
-    assert_eq!(result.outcome, ProbeRunOutcome::Passed);
+    assert_eq!(result.outcome, ProbeRunOutcome::Passed, "{result:?}");
     assert_eq!(result.final_answer.as_deref(), Some("45"));
     assert_eq!(result.session_id.as_deref(), Some(ID));
     // The session id was reported while the CLI was still running.

@@ -6,6 +6,10 @@ pub fn command(item: &Installation) -> Result<Command, String> {
         if item.executable.extension().is_some_and(|extension| extension == "js" || extension == "cjs") {
             let Some(Owner::Npm { node, .. }) = &item.owner else { return Err("The owning Node runtime is unavailable".into()); };
             let mut command = Command::new(node);
+            // Node's module loader cannot resolve verbatim Windows script paths.
+            #[cfg(windows)]
+            command.arg(display(&item.executable));
+            #[cfg(not(windows))]
             command.arg(&item.executable);
             return Ok(command);
         }
