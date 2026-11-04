@@ -237,7 +237,7 @@ function recentColumns(t: TFunction, profileNames: Map<string, string>): Array<T
       render: (sample) => {
         if (sample.status === null) return <span className="asb-fail-text">{t("gateway.interrupted")}</span>;
         if (sample.status === 206) return <span className="asb-fail-text">{t("gateway.partialOutput")}</span>;
-        if (sample.status === 499) return <span className="asb-fail-text">{t("gateway.clientDisconnected")}</span>;
+        if (sample.status === 499) return <span className="asb-fail-text">{t("gateway.requestClientDisconnected")}</span>;
         const status = t("gateway.accountingStatus", { status: sample.status });
         if (sample.status >= 400) return <span className="asb-fail-text">{t("gateway.requestFailed", { status })}</span>;
         return <span className="asb-gateway-row-value">{t("gateway.requestSucceeded", { status })}</span>;

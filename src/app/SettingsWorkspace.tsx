@@ -21,7 +21,7 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         active={active && model.settingsSection === "backups"}
         cloudBackup={model.cloudBackup} onRestore={operations.runRestore} onUndo={operations.requestUndo}
         onOpenDir={model.openBackupFolder} onCleaned={() => { void snapshot.refresh(); }} />}
-      clientManagement={<ClientManagementPage active={active && model.settingsSection === "clientManagement"} onChanged={() => void snapshot.refresh()} />}
+      clientManagement={<ClientManagementPage active={active && model.settingsSection === "client-management"} onChanged={() => void snapshot.refresh()} />}
       diagnostics={<DiagnosticsPage active={active && model.settingsSection === "diagnostics"}
         section={model.diagnosticSection} onSectionChange={model.setDiagnosticSection}
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks} busy={busy}

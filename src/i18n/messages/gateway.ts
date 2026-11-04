@@ -75,7 +75,7 @@ export const messages = {
   "gateway.noRouteMatch": ["未找到对应连接", "No matching connection"],
   "gateway.interrupted": ["未完成", "Did not finish"],
   "gateway.partialOutput": ["部分输出 · 206", "Partial output · 206"],
-  "gateway.clientDisconnected": ["客户端断连 · 499", "Client disconnected · 499"],
+  "gateway.requestClientDisconnected": ["客户端断连 · 499", "Client disconnected · 499"],
   "gateway.accountingStatus": ["状态 {status}", "Status {status}"],
   "gateway.sheetTitle": ["更换网关端口", "Change gateway port"],
   "gateway.newPortLabel": ["新端口（当前为 {port}）", "New port (currently {port})"],
