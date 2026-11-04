@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ClientUpdateTask } from "../src/api/client-software";
-import { latestClientUpdate } from "../src/components/client-software/task-state";
+import type { ClientUpdateTask } from "../src/api/client-software.ts";
+import { latestClientUpdate } from "../src/components/client-software/task-state.ts";
 
 const task = (id: string, revision: number, phase: ClientUpdateTask["phase"]): ClientUpdateTask => ({
   id, revision, phase, startedAt: "2026-11-04T00:00:00Z", finishedAt: null, actualVersion: null,
