@@ -21,6 +21,27 @@ fn events() -> String {
 {{"type":"turn.completed"}}"#)
 }
 
+#[cfg(windows)]
+fn windows_probe_stub(home: &Path) -> PathBuf {
+    let package = home.join("node_modules/@openai/codex");
+    std::fs::create_dir_all(package.join("bin")).unwrap();
+    std::fs::write(package.join("package.json"),
+        r#"{"name":"@openai/codex","bin":{"codex":"bin/codex.js"}}"#).unwrap();
+    let output = serde_json::to_string(&format!("{}\n", events())).unwrap();
+    let script = format!(r#"const fs = require("node:fs");
+if (process.argv[3] !== "--json" || process.argv[5] !== "--output-last-message") process.exit(2);
+process.stdin.resume();
+process.stdin.on("end", () => {{
+    fs.writeFileSync(process.argv[6], "45\n");
+    process.stdout.write({output});
+}});
+"#);
+    std::fs::write(package.join("bin/codex.js"), script).unwrap();
+    let launcher = home.join("codex.cmd");
+    std::fs::write(&launcher, "@exit /b 99\r\n").unwrap();
+    launcher
+}
+
 #[test]
 fn runtime_budgets_follow_catalog_questions_and_custom_formats() {
     let pelican = resolve_question("pelican-riding-bicycle", None, None, None).unwrap();
@@ -47,21 +68,18 @@ fn runner_uses_the_final_answer_file_and_the_emitted_session_id() {
     write_rollout(&home, ID, 190);
     write_rollout(&home, "22222222-2222-4222-8222-222222222222", 99999);
     #[cfg(windows)]
-    let (stub, script) = (home.join("codex-stub.cmd"), format!(
-        "@echo off\r\nif not \"%~2\"==\"--json\" exit /b 2\r\nif not \"%~4\"==\"--output-last-message\" exit /b 2\r\nmore >nul\r\n>\"%~5\" echo 45\r\necho {}\r\necho {}\r\nexit /b 0\r\n",
-        events().lines().next().unwrap(), r#"{"type":"turn.completed"}"#,
-    ));
+    let stub = windows_probe_stub(&home);
     #[cfg(unix)]
-    let (stub, script) = (home.join("codex-stub.sh"), format!(
-        "#!/bin/sh\n[ \"$2\" = '--json' ] || exit 2\n[ \"$4\" = '--output-last-message' ] || exit 2\ncat >/dev/null\nprintf '45\\n' > \"$5\"\ncat <<'EVENTS'\n{}\nEVENTS\n",
-        events(),
-    ));
-    std::fs::write(&stub, script).unwrap();
-    #[cfg(unix)]
-    {
+    let stub = {
         use std::os::unix::fs::PermissionsExt;
+        let stub = home.join("codex-stub.sh");
+        std::fs::write(&stub, format!(
+            "#!/bin/sh\n[ \"$2\" = '--json' ] || exit 2\n[ \"$4\" = '--output-last-message' ] || exit 2\ncat >/dev/null\nprintf '45\\n' > \"$5\"\ncat <<'EVENTS'\n{}\nEVENTS\n",
+            events(),
+        )).unwrap();
         std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+        stub
+    };
     let previous = std::env::var_os("ASB_TEST_CODEX_BIN");
     std::env::set_var("ASB_TEST_CODEX_BIN", &stub);
     let question = resolve_question("divisible-or-contains-3", None, None, None).unwrap();

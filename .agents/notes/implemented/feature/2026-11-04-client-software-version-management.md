@@ -68,6 +68,8 @@ Tauri 与开发桥共同注册 read_client_software、select_client_software、r
 
 React 版本区使用既有 Button / AppDialog / FactList / Time / CollapsibleSection / CodePreview 和双语词典。更新计划与任务独立于所选客户端页签，切页继续执行；详情和长输出按需展开。失败保留旧读数、来源时间与诊断，不把探测失败显示为未安装。
 
+雷达启动回归的测试路径覆盖只选择隔离夹具入口，仍复用真实安装身份解析，不直接伪造手动安装。Windows 夹具声明 npm 包名与 JavaScript 入口，经已确认的 Node/npm 运行环境启动；未知 .cmd/.bat 入口继续拒绝执行。这样回归覆盖实际归属与启动链，避免测试与生产采用不同命令规则。
+
 ## Upstream evidence
 
 研究与实现对照日期为 2026-11-04；版本样本不是产品常量，也不是本机安装成功证据。
@@ -97,6 +99,8 @@ React 版本区使用既有 Button / AppDialog / FactList / Time / CollapsibleSe
 - WinGet 文本或额外 PowerShell 模块：接入方便；前者受本地化影响，后者修改用户环境，所以采用官方部署 API 和随源码固定的接口元数据。
 - 常驻更新服务、自动队列及通用回滚：能跨应用退出编排；当前显式更新不需要额外服务，且第三方安装器没有统一事务回滚协议，因此保留单任务、退出保护和最小操作记录。
 - Windows 挂起进程后记录身份：能把执行推迟到落盘后；但父进程在放行前崩溃会遗留永久挂起进程，所以改为输入握手，放行前 EOF 自动结束。
+
+- 测试直接伪造安装类型或放行测试脚本：夹具简单，且不依赖完整包布局；但会绕过真实归属和启动规则，使 Windows 回归失去这条边界的验证，因此夹具声明合法 npm 安装并复用真实解析。
 
 ## Consequences
 

@@ -101,9 +101,9 @@ pub fn resolve(app: AppKind) -> Result<Installation, String> {
     if app == AppKind::Codex {
         if let Some(path) = std::env::var_os("ASB_TEST_CODEX_BIN") {
             let path = PathBuf::from(path);
-            return Ok(Installation { id: "test-codex".into(), app, form: Form::Cli, manager: Manager::Manual,
-                launcher: path.clone(), executable: path.clone(), root: path.parent().unwrap().into(),
-                version: None, version_text: None, active: true, channel: "latest".into(), detail: None, owner: None });
+            let mut item = inspect_identity(app, &path)?;
+            item.active = true;
+            return Ok(item);
         }
     }
     for directory in directories() {
