@@ -113,7 +113,7 @@ zbus = "5.19"
 # environment-conflict check reads, backs up, and removes `ANTHROPIC*` there.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38.2"
-windows = { version = "0.61", default-features = false, features = ["Foundation", "System", "ApplicationModel", "Management_Deployment", "Storage", "Security_Cryptography_Certificates", "Win32_System_Com"] }
+windows = { version = "0.61", default-features = false, features = ["Foundation", "System", "ApplicationModel", "Management_Deployment", "Storage_Search", "Security_Cryptography_Certificates", "Win32_System_Com"] }
 windows-core = "0.61"
 windows-collections = "0.2"
 windows-future = "0.2"

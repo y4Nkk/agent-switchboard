@@ -59,12 +59,13 @@ quit = "ctrl-q"
     let changes = asb_core::adapter::full_diff(AppKind::Codex, &rendered, current).unwrap();
     assert_eq!(changes.iter().map(|change| change.key.as_str()).collect::<Vec<_>>(), vec!["agents.enabled", "unknown"]);
 
-    let current = json!({"permissions":{"deny":["Bash(rm *)"]},"env":{"USER_FLAG":"keep"},
+    let current = json!({"permissions":{"deny":["Bash(rm *)"],"custom":"keep"},"env":{"USER_FLAG":"keep"},
         "modelSettings":{"model.with.dots":{"effortLevel":"high"}},"voice":{"enabled":true},
         "spinnerTipsEnabled":true,"unknown":true});
     let reset = kind.settings(AppKind::Claude, ownership::default_client_settings(AppKind::Claude)).unwrap();
     let rendered = render_reset_configuration(AppKind::Claude, &current.to_string(), kind, &reset, "").unwrap();
     let mut expected = current;
+    expected["permissions"].as_object_mut().unwrap().remove("deny");
     expected.as_object_mut().unwrap().remove("spinnerTipsEnabled");
     expected.as_object_mut().unwrap().remove("unknown");
     assert_eq!(serde_json::from_str::<serde_json::Value>(&rendered).unwrap(), expected);
