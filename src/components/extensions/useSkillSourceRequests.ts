@@ -1,5 +1,5 @@
 import { useMessageState } from "../../i18n/use-message-state";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { sourceErrorMessage } from "./skill-source-model";
 
@@ -13,17 +13,17 @@ export function useSkillSourceRequests<T>(busy: boolean) {
   const [error, setError] = useMessageState();
   useEffect(() => () => { generation.current += 1; active.current = null; }, []);
 
-  const cancel = () => {
+  const cancel = useCallback(() => {
     generation.current += 1;
     active.current = null;
     setLoading(false);
     setError(null);
-  };
-  const update = (transform: (previous: T | null) => T | null) => {
+  }, [setError]);
+  const update = useCallback((transform: (previous: T | null) => T | null) => {
     latest.current = transform(latest.current);
     setResult(latest.current);
-  };
-  const clear = () => { cancel(); update(() => null); };
+  }, []);
+  const clear = useCallback(() => { cancel(); update(() => null); }, [cancel, update]);
   const run = async (read: (isCurrent: () => boolean) => Promise<T | null>) => {
     if (busy || active.current !== null) return null;
     const id = ++generation.current;

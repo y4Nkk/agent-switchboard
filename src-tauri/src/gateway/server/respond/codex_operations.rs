@@ -74,7 +74,7 @@ pub(crate) fn respond_passthrough(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("application/json; charset=utf-8");
     span.finish(Some(status), body.len() as u64);
-    respond_bytes_with_headers(
+    let _ = respond_bytes_with_headers(
         request,
         status,
         content_type,

@@ -21,6 +21,15 @@ pub(super) fn open(path: &Path) -> Result<Connection, String> {
     Ok(connection)
 }
 
+pub(super) fn usage_identities(root: &Path) -> Result<Vec<String>, String> {
+    let database = crate::local_state::codex_paths::sqlite_root(root)?.join("state_5.sqlite");
+    if !database.try_exists().map_err(|error| error.to_string())? { return Ok(Vec::new()); }
+    let connection = open(&database)?;
+    let mut statement = connection.prepare("SELECT id FROM threads ORDER BY id").map_err(|error| error.to_string())?;
+    let rows = statement.query_map([], |row| row.get(0)).map_err(|error| error.to_string())?;
+    rows.collect::<Result<_,_>>().map_err(|error| error.to_string())
+}
+
 pub(super) fn threads_matching(root: &Path, session: Option<&str>, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<NativeThread>, Vec<String>), String> {
     checkpoint()?;
     let database = crate::local_state::codex_paths::sqlite_root(root)?.join("state_5.sqlite");

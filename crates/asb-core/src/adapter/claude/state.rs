@@ -75,7 +75,7 @@ fn collect_with(
 pub(crate) fn owned_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>, AdapterError> {
     let mut native = super::native::owned_paths(&parse(current)?)?;
     native.extend(super::native::owned_paths(&parse(previous)?)?);
-    let keep = |path: &str| is_owned(AppKind::Claude, path) || path == "effortLevel" || native.contains(path);
+    let keep = |path: &str| is_owned(AppKind::Claude, path) || path == "attribution" || native.contains(path);
     let mut changes = crate::adapter::diff_owned_maps(
         &collect_with(&parse(current)?, &keep),
         &collect_with(&parse(previous)?, &keep),

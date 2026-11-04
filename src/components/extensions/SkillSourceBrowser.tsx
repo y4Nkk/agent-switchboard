@@ -18,6 +18,8 @@ import { useSkillSource, type SkillSourceActions, type SkillSourceState } from "
 
 interface Props extends SkillSourceActions {
   busy: boolean;
+  active: boolean;
+  retain: boolean;
   items: ExtensionListItem[];
   onBack: () => void;
   /** Persistent failure notice rendered at the top of the scroll body. */

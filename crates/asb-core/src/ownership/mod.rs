@@ -31,3 +31,9 @@ pub use spec::{
     ProviderAbsentAction, SettingControl, SettingOwner, SettingSpec, SettingValueType, ToggleSpec,
 };
 pub use toggles::{CLAUDE_TOGGLES, CODEX_TOGGLES};
+
+/// Removed on an explicitly confirmed write; never read as current preferences.
+pub const RETIRED_CODEX_CLIENT_KEYS: &[&str] = &[
+    "disable_paste_burst", "tools.view_image", "features.unified_exec",
+];
+pub const RETIRED_CODEX_PROVIDER_KEYS: &[&str] = &["features.personality"];

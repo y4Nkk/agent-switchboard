@@ -7,11 +7,6 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import {
-  check as checkForUpdate,
-  type DownloadEvent,
-  type Update,
-} from "@tauri-apps/plugin-updater";
 import { isBrowserDevelopment } from "../lib/runtime";
 import {
   WEB_DEVELOPMENT_BACKEND_HEALTH_URL,
@@ -74,9 +69,9 @@ export function onTrayError(handler: (error: CommandError) => void): Promise<() 
   return listen<CommandError>("tray-error", (event) => handler(event.payload));
 }
 /** Native blocked exits reveal the exact workspace that can finish recovery. */
-export function onExitRecovery(handler: (destination: "radar" | "backups") => void): Promise<() => void> {
+export function onExitRecovery(handler: (destination: "radar" | "backups" | "clientManagement") => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
-  return listen<"radar" | "backups">("exit-recovery", (event) => handler(event.payload));
+  return listen<"radar" | "backups" | "clientManagement">("exit-recovery", (event) => handler(event.payload));
 }
 export function onDesktopSettingsError(handler: (error: CommandError) => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
@@ -142,8 +137,11 @@ export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> 
 /* Domain modules own the typed command families; this boundary re-exports
  * their public surface so consumers keep importing from "./api/client". */
 export * from "./shared";
+export * from "./updates";
 export * from "./usage";
+export * from "./codex-probe";
 export * from "./model-usage";
+export * from "./request-usage";
 export * from "./resource-usage";
 export * from "./providers";
 export * from "./provider-request";
@@ -157,118 +155,6 @@ export * from "./discovery";
 export * from "./official-login";
 export * from "./extensions/types";
 export * from "./extensions/commands";
-
-/** One verified application update discovered by Tauri's updater plugin. The
- * release body is raw markdown for the shared frontend viewer. */
-export interface UpdateCheck {
-  latestVersion: string;
-  releaseNotes: string | null;
-  checkedAt: string;
-  update: Update;
-}
-
-/** Chooses the update owner from the actual installation package. */
-export type UpdateChannel = "github" | "microsoftStore";
-
-export function getUpdateChannel(): Promise<UpdateChannel> {
-  return invoke<UpdateChannel>("update_channel");
-}
-
-/** Returns the bundled changelog body for one version as raw markdown, or
- * null when the version has no section; the backend owns the single-source
- * file and its version-section boundaries. */
-export function getChangelogSection(version: string): Promise<string | null> {
-  return invoke<string | null>("changelog_section", { version });
-}
-
-function updateFailure(operation: "check" | "install", caught: unknown): CommandError {
-  const structured =
-    typeof caught === "object" &&
-    caught !== null &&
-    "code" in caught &&
-    typeof caught.code === "string" &&
-    "message" in caught &&
-    typeof caught.message === "string"
-      ? { code: caught.code, message: caught.message }
-      : null;
-
-  const detail =
-    structured?.message ??
-    (typeof caught === "string"
-      ? caught.trim()
-      : caught instanceof Error
-        ? caught.message.trim()
-        : "");
-  if (/unexpected\s*key\s*id|signature/i.test(`${structured?.code ?? ""} ${detail}`)) {
-    return {
-      code: "updater-signature-invalid",
-      message: "更新包签名验证失败，请从 GitHub Release 页面下载安装包后重试。",
-      messageKey: "errors.updater.signatureInvalid",
-    };
-  }
-  if (structured) return structured;
-
-  if (operation === "check") {
-    return detail
-      ? {
-          code: "updater-check-failed",
-          message: `检查更新失败：${detail}`,
-          messageKey: "errors.updater.checkFailed",
-          params: { detail },
-        }
-      : {
-          code: "updater-check-failed",
-          message: "检查更新失败，请稍后重试。",
-          messageKey: "errors.updater.checkFailedRetry",
-        };
-  }
-  return detail
-    ? {
-        code: "updater-install-failed",
-        message: `下载或安装更新失败：${detail}`,
-        messageKey: "errors.updater.installFailed",
-        params: { detail },
-      }
-    : {
-        code: "updater-install-failed",
-        message: "下载或安装更新失败，请稍后重试。",
-        messageKey: "errors.updater.installFailedRetry",
-      };
-}
-
-/** Checks the signed update manifest. `null` means the installed build is current. */
-export async function checkUpdate(): Promise<UpdateCheck | null> {
-  try {
-    const update = await checkForUpdate();
-    return update
-      ? {
-          latestVersion: update.version,
-          releaseNotes: update.body?.trim() || null,
-          checkedAt: new Date().toISOString(),
-          update,
-        }
-      : null;
-  } catch (caught) {
-    throw updateFailure("check", caught);
-  }
-}
-
-/** Downloads, verifies and installs one previously discovered update. */
-export async function installUpdate(
-  update: Update,
-  onEvent: (event: DownloadEvent) => void,
-): Promise<void> {
-  try {
-    await update.downloadAndInstall(onEvent);
-  } catch (caught) {
-    throw updateFailure("install", caught);
-  }
-}
-
-/** Releases an update resource once it is superseded or no longer usable. */
-export function closeUpdate(update: Update): Promise<void> {
-  return update.close();
-}
 
 /* Integrated title bar window controls (undecorated window). These invoke
    app-owned commands in src-tauri (window_minimize / window_toggle_maximize /

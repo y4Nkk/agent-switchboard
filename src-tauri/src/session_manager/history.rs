@@ -56,6 +56,20 @@ pub(super) fn scan(root: &Path) -> Result<(Vec<SessionSource>, Vec<SessionIssue>
     scan_observed(root, &|| Ok(()))
 }
 
+/// Usage reads committed preservation facts without entering the capture gate.
+pub(super) fn committed_sources(root: &Path) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
+    let path = store::path(root);
+    let connection = store::read(&path)?;
+    let sources = reading::sources(&connection, &path)?;
+    let warnings = issues(reading::roots(&connection)?.into_iter().filter_map(|root| root.issue).collect());
+    Ok((sources, warnings))
+}
+
+pub(crate) fn visit_committed_usage(source: &Transcript, offset: u64,
+    begin: impl FnOnce(u64), visitor: impl FnMut(usize, u64, &[u8]) -> Result<(), String>) -> Result<(), String> {
+    reading::visit_committed_usage(source, offset, begin, visitor)
+}
+
 pub(super) fn scan_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
     let _guard = super::read_observer::lock(&GATE, checkpoint)?;
     let mut connection = store::open(root)?;
@@ -174,11 +188,6 @@ pub(crate) fn visit_records_observed(
     source: &Transcript, offset: u64, checkpoint: &dyn Fn() -> Result<(), String>,
     visitor: impl FnMut(usize, u64, serde_json::Value) -> Result<std::ops::ControlFlow<()>, String>,
 ) -> Result<Vec<String>, String> { reading::visit_observed(source, offset, checkpoint, visitor) }
-
-pub(crate) fn visit_record_bytes(
-    source: &Transcript, offset: u64,
-    visitor: impl FnMut(usize, u64, &[u8]) -> Result<std::ops::ControlFlow<()>, String>,
-) -> Result<Vec<String>, String> { reading::visit_bytes(source, offset, visitor) }
 
 fn session_id(meta: &SessionMeta) -> &str {
     meta.parent_session_id.as_deref().unwrap_or(&meta.session_id)

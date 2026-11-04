@@ -93,11 +93,11 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         detail: "ownership.directory.modelAutoCompactTokenLimit.detail",
     },
     OfficialSettingEntry {
-        title: "ownership.directory.tuiNotificationMethod.title",
-        path: "tui.notification_method",
-        related_paths: &["tui.notification_condition", "tui.status_line"],
+        title: "ownership.directory.permissionProfiles.title",
+        path: "permissions",
+        related_paths: &["default_permissions"],
         disposition: OfficialSettingDisposition::PreserveOnly,
-        detail: "ownership.directory.tuiNotificationMethod.detail",
+        detail: "ownership.directory.permissionProfiles.detail",
     },
     OfficialSettingEntry {
         title: "ownership.directory.codexConfigToml.title",
@@ -131,6 +131,13 @@ pub(super) const CLAUDE_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         detail: "ownership.directory.claudePermissions.detail",
     },
     OfficialSettingEntry {
+        title: "ownership.directory.claudeSandbox.title",
+        path: "sandbox",
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "ownership.directory.claudeSandbox.detail",
+    },
+    OfficialSettingEntry {
         title: "ownership.directory.claudeHooks.title",
         path: "hooks",
         related_paths: &[],
@@ -161,7 +168,7 @@ pub(super) const CLAUDE_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
     OfficialSettingEntry {
         title: "ownership.directory.outputStyles.title",
         path: "outputStyles.<name>",
-        related_paths: &["outputStyle"],
+        related_paths: &[],
         disposition: OfficialSettingDisposition::PreserveOnly,
         detail: "ownership.directory.outputStyles.detail",
     },

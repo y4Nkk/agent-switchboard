@@ -1,50 +1,29 @@
 import { useMessageState } from "../i18n/use-message-state";
-import { useCallback, useEffect, useState } from "react";
-import { useReadQueue } from "../hooks/use-read-queue";
-import { getModelUsageReport, type ModelUsageRange, type ModelUsageRead } from "../api/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readModelUsageSnapshot, refreshModelUsage, readModelUsageRefresh, type ModelUsageRange, type ModelUsageRead } from "../api/client";
+import { startModelUsageReading, type ModelUsageActivity, type ModelUsageRunning } from "./model-usage-reader";
 
-function refreshDelay(refreshAfter: string): number {
-  const target = new Date(refreshAfter).getTime();
-  return Number.isNaN(target) ? 30_000 : Math.max(0, target - Date.now());
-}
-
-/** One visible reader owns entry, manual refresh, retries and the next deadline. */
 export function useModelUsageReport(active: boolean, range: ModelUsageRange) {
-  const [read, setRead] = useState<ModelUsageRead | null>(null);
-  const [displayRange, setDisplayRange] = useState(range);
-  const [loading, setLoading] = useState(false);
+  const [snapshot, setSnapshot] = useState<ModelUsageRead | null>(null);
+  const [activity, setActivity] = useState<ModelUsageActivity>(null);
+  const [task, setTask] = useState<ModelUsageRunning | null>(null);
   const [error, setError] = useMessageState();
-  const [revision, setRevision] = useState(0);
-  const enqueue = useReadQueue();
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const reader = useRef<ReturnType<typeof startModelUsageReading> | null>(null);
 
   useEffect(() => {
-    if (!active) { setLoading(false); return undefined; }
-    let current = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let cancel: (() => void) | undefined;
-    const load = (forceRefresh: boolean) => {
-      if (!current) return;
-      setDisplayRange(range); setLoading(true); setError(null);
-      cancel = enqueue(async () => {
-        if (!current) return;
-        try {
-          const next = await getModelUsageReport({ range, forceRefresh });
-          if (!current) return;
-          setRead(next);
-          timer = setTimeout(() => load(false), refreshDelay(next.refreshAfter));
-        } catch (caught) {
-          if (!current) return;
-          setError(caught);
-          timer = setTimeout(() => load(false), 30_000);
-        } finally { if (current) setLoading(false); }
-      }, (caught) => { if (current) setError(caught); });
-    };
-    load(true);
-    return () => { current = false; cancel?.(); clearTimeout(timer); };
-  }, [active, range, revision, enqueue, setError]);
+    if (!active) return undefined;
+    const lifetime = startModelUsageReading({ readSnapshot: readModelUsageSnapshot, refresh: refreshModelUsage,
+      readRefresh: readModelUsageRefresh, onProgress: setTask,
+      onActivity: setActivity, onError: setError, onRead: setSnapshot });
+    reader.current = lifetime;
+    return () => { lifetime.stop(); reader.current = null; };
+  }, [active, setError]);
 
-  return { read: read?.report.range === range ? read : null,
-    loading: displayRange === range ? loading : active,
-    error: displayRange === range ? error : null, refresh };
+  const refresh = useCallback(() => { void reader.current?.refresh(); }, []);
+  const read = useMemo(() => {
+    const report = snapshot?.reports.find((candidate) => candidate.range === range);
+    return snapshot && report ? { report, freshness: snapshot.freshness, refreshAfter: snapshot.refreshAfter } : null;
+  }, [snapshot, range]);
+  return { read, task: active ? task : null, activity: active ? activity : null,
+    loading: active && activity !== null, error, refresh };
 }

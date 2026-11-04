@@ -22,6 +22,7 @@ mod jsonl;
 mod layout;
 pub(crate) use layout::initialize_storage;
 mod sources;
+pub(crate) mod usage_sources;
 pub(crate) mod read_index;
 pub(crate) mod history;
 pub(crate) use sources::{collect as collect_session_files, SessionSource};
@@ -53,7 +54,8 @@ pub use organization::{update_session_organization, SessionOrganizationChange};
 use asb_core::contracts::AppKind;
 #[cfg(test)]
 use parser::collect_messages;
-use resume::{launch_terminal, resume_arguments, resume_command};
+use resume::resume_command;
+#[cfg(test)] use resume::resume_arguments;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 #[cfg(test)]
@@ -155,10 +157,10 @@ pub fn resume_session(root: &Path, app: AppKind, session_id: &str) -> Result<Ses
     let target = if app == AppKind::Claude {
         history::prepare_resume(root, &source)?.to_str().ok_or("恢复路径无法无损传递给客户端")?.to_string()
     } else { session_id.to_string() };
-    launch_terminal(&resume_arguments(app, &target), project_dir)?;
+    let command = resume::launch_client(app, &target, project_dir)?;
 
     Ok(SessionResume {
-        command: resume_command(app, &target),
+        command,
         used_project_dir: project_dir.is_some(),
     })
 }
@@ -364,10 +366,6 @@ pub(crate) fn scan_filtered_sources_observed(root: &Path, app: Option<AppKind>, 
         diagnostics::report(root, area, issues.iter().map(|issue| format!("{}: {}", issue.app.label(), issue.message)));
     }
     Ok((sources, issues))
-}
-
-pub(crate) fn scan_usage_sources(root: &Path) -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    scan_filtered_sources(root, None, None)
 }
 
 /// The Codex root every Codex-owned sidecar (sessions, rename index, state

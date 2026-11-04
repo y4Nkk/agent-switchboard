@@ -21,7 +21,7 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         active={active && model.settingsSection === "backups"}
         cloudBackup={model.cloudBackup} onRestore={operations.runRestore} onUndo={operations.requestUndo}
         onOpenDir={model.openBackupFolder} onCleaned={() => { void snapshot.refresh(); }} />}
-      clientManagement={<ClientManagementPage onChanged={() => void snapshot.refresh()} />}
+      clientManagement={<ClientManagementPage active={active && model.settingsSection === "clientManagement"} onChanged={() => void snapshot.refresh()} />}
       diagnostics={<DiagnosticsPage active={active && model.settingsSection === "diagnostics"}
         section={model.diagnosticSection} onSectionChange={model.setDiagnosticSection}
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks} busy={busy}
@@ -32,8 +32,9 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
       onRepair={() => void settings.repairSettings()} busy={busy} onPatch={settings.saveSettingsPatch}
       onRestart={() => void settings.restart()} updateCheck={update.updateCheck} updateChannel={update.updateChannel}
       appVersion={update.appVersion} updateChecking={update.checking} updateInstalling={update.installing}
-      updateProgress={update.downloadProgress} updateCheckedAt={update.lastCheckedAt}
+      updateDownload={update} updateCheckedAt={update.lastCheckedAt}
       updateRestartRequired={update.restartRequired} onCheckUpdate={() => void update.runUpdateCheck()}
-      onInstallUpdate={() => void update.installAvailableUpdate()} onRestartInstalledUpdate={() => void update.restartInstalledUpdate()} />
+      onInstallUpdate={update.installAvailableUpdate} onCancelUpdateDownload={update.cancelUpdateDownload}
+      onRestartInstalledUpdate={update.restartInstalledUpdate} />
   );
 }

@@ -9,6 +9,7 @@ export type UsageStat = {
   value: string;
   /** Unit shown beside the value when the value alone is ambiguous. */
   unit?: string;
+  detail?: string;
 };
 
 /** The model-usage summary band. */
@@ -22,6 +23,7 @@ export function StatCards({ stats }: { stats: UsageStat[] }) {
             {stat.unit && <span className="asb-usage-stat-unit">{stat.unit}</span>}
           </div>
           <p className="asb-usage-stat-label">{stat.label}</p>
+          {stat.detail && <p className="asb-usage-stat-detail">{stat.detail}</p>}
         </section>
       ))}
     </div>

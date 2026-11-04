@@ -2,10 +2,11 @@ import { uiMessage } from "../i18n/errors";
 import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  cancelCodexProbe, getCurrentCodexProbe, getCodexProbeCatalog, retryCodexProbeSave,
-  startCodexProbe, type CodexProbeBatch, type CodexProbeCatalog, type CodexProbeRequest,
+  cancelCodexProbe, getCodexProbeObservation, getCodexProbeCatalog, retryCodexProbeSave,
+  startCodexProbe, type CodexProbeObservation, type CodexProbeCatalog, type CodexProbeRequest,
 } from "../api/client";
 import { notifyProbeError, useProbeEvents, useProbeNotifications } from "./useProbeNotifications";
+import { probeDetailRevision } from "./probe-observation";
 
 const POLL_INTERVAL_MS = 1000;
 
@@ -29,7 +30,7 @@ function useProbeCatalog(epoch: number) {
 
 /** One application-wide reader, independent of workspace/window visibility. */
 function useProbePolling(epoch: number) {
-  const [read, setRead] = useState<{ epoch: number; status: CodexProbeBatch | null } | null>(null);
+  const [read, setRead] = useState<{ epoch: number; status: CodexProbeObservation | null } | null>(null);
   const [readError, setReadError] = useMessageState();
   const dismissReadError = useRef<(() => void) | null>(null);
   useEffect(() => () => { dismissReadError.current?.(); }, []);
@@ -39,7 +40,7 @@ function useProbePolling(epoch: number) {
     const tick = async () => {
       let keepPolling = false;
       try {
-        const next = await getCurrentCodexProbe();
+        const next = await getCodexProbeObservation();
         if (!active) return;
         setRead({ epoch, status: next });
         setReadError(null);
@@ -139,7 +140,7 @@ export function useCodexProbe() {
   const progress = status?.status === "running" ? status.progress : null;
   const stopping = progress?.kind === "preparing" ? progress.cancelling : progress?.phase === "cancelling";
   return {
-    ...catalog, status, readError, synchronized,
+    ...catalog, status, readError, synchronized, detailRevision: `${epoch}:${probeDetailRevision(status)}`,
     ...run, cancelling: run.cancelling || stopping,
     running: status?.status === "running",
     /** One-shot re-read, e.g. after history deletions. */

@@ -76,7 +76,7 @@ fn retired_effort_only_change_is_persisted_even_without_missing_settings() {
 }
 
 #[test]
-fn explicit_retired_effort_rejects_repair_without_changing_any_file() {
+fn conflicting_effort_rejects_repair_without_changing_any_file() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
     let mut automatic = serde_json::to_value(provider(100)).unwrap();
@@ -84,6 +84,7 @@ fn explicit_retired_effort_rejects_repair_without_changing_any_file() {
     write_provider(&store, &automatic);
     let mut explicit = serde_json::to_value(provider(200)).unwrap();
     explicit["parameters"]["settings"]["effortLevel"] = json!({"mode": "explicit", "value": "high"});
+    explicit["claudeFragment"]["effortLevel"] = json!("low");
     write_provider(&store, &explicit);
     let before = file_tree(&store.configuration_dir()).unwrap();
     assert!(store.repair().unwrap_err().contains("effortLevel"));

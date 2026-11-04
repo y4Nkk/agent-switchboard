@@ -47,6 +47,7 @@ pub(crate) struct SseTranscoder<R> {
     usage: TokenUsage,
     failed: bool,
     has_token: bool,
+    incomplete: bool,
     native_responses_dialect: super::NativeResponsesDialect,
 }
 
@@ -155,6 +156,7 @@ where
             usage: TokenUsage::default(),
             failed: false,
             has_token: false,
+            incomplete: false,
             native_responses_dialect: Default::default(),
         })
     }
@@ -174,6 +176,8 @@ where
     pub(crate) fn has_token(&self) -> bool {
         self.has_token
     }
+
+    pub(crate) fn incomplete(&self) -> bool { self.incomplete }
 
     pub(crate) fn usage(&self) -> TokenUsage {
         self.usage.clone()
@@ -224,6 +228,12 @@ where
             return;
         };
         self.has_token |= super::usage::frame_has_token(self.source_protocol, &value);
+        let kind = value.get("type").and_then(Value::as_str);
+        let logical_status = super::response_accounting_status(value.get("response").unwrap_or(&value));
+        self.incomplete |= kind == Some("response.incomplete") || logical_status == Some(206);
+        if matches!(&self.mode, StreamMode::Direct) {
+            self.failed |= matches!(kind, Some("response.failed" | "error")) || logical_status == Some(502);
+        }
         let (model, usage) = metadata_from_value(self.source_protocol, &value);
         if model.is_some() {
             self.model = model;

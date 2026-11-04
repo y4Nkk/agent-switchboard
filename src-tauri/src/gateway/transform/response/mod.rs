@@ -6,6 +6,19 @@ use super::{
 use asb_core::contracts::UpstreamProtocol;
 use serde_json::{json, Map, Value};
 
+/// Logical response result for accounting, independent of the HTTP envelope.
+/// A valid partial result stays 2xx for routing health, but is not a completed generation.
+pub(crate) fn response_accounting_status(value: &Value) -> Option<u16> {
+    if value.get("error").is_some_and(|error| !error.is_null()) {
+        return Some(502);
+    }
+    match value.get("status").and_then(Value::as_str) {
+        Some("failed") => Some(502),
+        Some("incomplete") => Some(206),
+        _ => None,
+    }
+}
+
 pub(crate) fn convert_response(
     from: UpstreamProtocol,
     to: UpstreamProtocol,

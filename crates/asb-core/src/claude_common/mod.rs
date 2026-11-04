@@ -6,6 +6,10 @@ mod shared;
 mod restore;
 pub use restore::restore_profile_models;
 mod validation;
+mod ownership;
+pub use ownership::take_controlled;
+pub(crate) use ownership::normalize_attribution;
+pub(crate) use projection::reconcile_manifests;
 pub mod model_preferences;
 pub use import::import_fragment;
 pub use projection::{
@@ -79,8 +83,14 @@ fn declared(root: &Value, manifest: &str) -> Result<Vec<String>, String> {
     if paths.len() > 512 {
         return Err("Claude 通用配置所有权标记超过限制".into());
     }
-    for path in &paths {
-        validation::path(&pointer::decode(path)?)?;
+    let mut current = Vec::new();
+    for path in paths {
+        let segments = pointer::decode(&path)?;
+        // The typed catalog owns these leaves now. A manifest is never a
+        // second owner; projection will rewrite its remaining claims.
+        if ownership::controlled(&segments) { continue; }
+        validation::path(&segments)?;
+        current.push(path);
     }
-    Ok(paths)
+    Ok(current)
 }

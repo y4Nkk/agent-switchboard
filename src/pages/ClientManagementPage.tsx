@@ -8,13 +8,15 @@ import { IntegrationPane } from "../components/claude-management/IntegrationPane
 import { useClaudeOperations } from "../components/claude-management/operations";
 import { ProjectPlansPane } from "../components/codex-management/ProjectPlansPane";
 import { useCodexOperations } from "../components/codex-management/operations";
+import { ClientSoftwarePanel } from "../components/client-software/ClientSoftwarePanel";
 
 interface ClientManagementPageProps {
   onChanged: () => void;
+  active: boolean;
 }
 
 /** Only client-specific tools without another workspace owner belong here. */
-export function ClientManagementPage({ onChanged }: ClientManagementPageProps) {
+export function ClientManagementPage({ onChanged, active }: ClientManagementPageProps) {
   const { t } = useI18n();
   const [client, setClient] = useState<AppKind>("codex");
   const codex = useCodexOperations(onChanged);
@@ -44,7 +46,8 @@ export function ClientManagementPage({ onChanged }: ClientManagementPageProps) {
             ]} />
         }
       />
-      <div id={contentId} role="tabpanel" aria-labelledby={`client-management-client-${client}-tab`}>
+      <div className="asb-client-management-content" id={contentId} role="tabpanel" aria-labelledby={`client-management-client-${client}-tab`}>
+        <ClientSoftwarePanel client={client} active={active} />
         {operations.error && <p role="alert" className="asb-field-error">{operations.error}</p>}
         {operations.notice && <p role="status" className="asb-scope-note">{operations.notice}</p>}
         <div hidden={client !== "codex"}><ProjectPlansPane operations={codex} /></div>

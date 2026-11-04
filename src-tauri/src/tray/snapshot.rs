@@ -197,6 +197,7 @@ mod tests {
             recovery_issue: None,
             client_settings: None,
             client_settings_error: None,
+            codex_permission_profile: None,
             active_profile_id: Some(profile.id.clone()),
             last_switch: None,
         };

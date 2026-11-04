@@ -13,7 +13,7 @@ fn status(profile: &ProviderProfile, configuration: &str) -> ConfigFileStatus {
     ConfigFileStatus {
         app: profile.app, path: "isolated-config".into(), exists: true, syntax_ok: true,
         route: Some(route), gateway_port: crate::gateway::client_gateway_port(profile.app, configuration),
-        read_error: None, recovery_issue: None, client_settings: None, client_settings_error: None,
+        read_error: None, recovery_issue: None, client_settings: None, client_settings_error: None, codex_permission_profile: None,
         active_profile_id: Some(profile.id.clone()), last_switch: None,
     }
 }

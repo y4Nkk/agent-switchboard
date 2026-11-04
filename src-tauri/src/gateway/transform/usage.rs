@@ -231,10 +231,14 @@ pub(super) fn frame_has_token(
             .is_some_and(|parts| {
                 parts
                     .iter()
-                    .any(|part| nonempty(part.get("text")) || part.get("functionCall").is_some())
+                    .any(|part| nonempty(part.get("text"))
+                        || nonempty(part.pointer("/functionCall/name"))
+                        || part.pointer("/functionCall/args").and_then(Value::as_object)
+                            .is_some_and(|args| !args.is_empty()))
             }),
         asb_core::contracts::UpstreamProtocol::AnthropicMessages => {
-            ["/delta/text", "/delta/thinking", "/delta/partial_json"]
+            ["/delta/text", "/delta/thinking", "/delta/partial_json",
+                "/content_block/text", "/content_block/thinking", "/content_block/name"]
                 .iter()
                 .any(|path| nonempty(value.pointer(path)))
         }
@@ -245,6 +249,7 @@ pub(super) fn frame_has_token(
                 matches!(
                     kind,
                     "response.output_text.delta"
+                        | "response.reasoning_text.delta"
                         | "response.reasoning_summary_text.delta"
                         | "response.function_call_arguments.delta"
                 ) && nonempty(value.get("delta"))
@@ -267,7 +272,8 @@ pub(super) fn frame_has_token(
                             .is_some_and(|tools| {
                                 tools
                                     .iter()
-                                    .any(|tool| nonempty(tool.pointer("/function/arguments")))
+                                    .any(|tool| nonempty(tool.pointer("/function/arguments"))
+                                        || nonempty(tool.pointer("/function/name")))
                             })
                 })
             }),

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { sameClaudeExtra, type ClaudeExtraSettings } from "./claude-common-settings";
+import { sameSettingValue } from "../lib/setting-values";
 import {
   getClientSettingsEditor,
   getCurrentClientConfiguration,
@@ -37,8 +38,7 @@ function sameValues(left: Record<string, SettingValue>, right: Record<string, Se
   return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every((key) => {
     const before = left[key];
     const after = right[key];
-    return after && before.mode === after.mode &&
-      (before.mode === "automatic" || (after.mode === "explicit" && before.value === after.value));
+    return after !== undefined && sameSettingValue(before, after);
   });
 }
 

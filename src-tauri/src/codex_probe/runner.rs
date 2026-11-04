@@ -5,13 +5,11 @@ use super::{ProbeGrading, ProbeRunOutcome, ProbeRunResult, ResolvedQuestion};
 use crate::process_control::terminate_process_tree;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-
-const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
 pub(super) enum ProbeAbort {
@@ -53,7 +51,9 @@ pub(super) fn run_once(
     let started = progress.started();
     let workdir = Workdir::create()?;
     let answer_path = workdir.0.join("answer.txt");
-    let mut command = Command::new(codex_executable());
+    let _launch = crate::client_software::gate::launch(asb_core::contracts::AppKind::Codex).map_err(ProbeAbort::Spawn)?;
+    let installation = crate::client_software::discovery::resolve(asb_core::contracts::AppKind::Codex).map_err(ProbeAbort::Spawn)?;
+    let mut command = crate::client_software::discovery::launch::command(&installation).map_err(ProbeAbort::Spawn)?;
     // Keep the active client configuration; only output transport and answer
     // formatting belong to the probe. Never include the expected answer.
     command.args(["exec", "--json", "--skip-git-repo-check", "--output-last-message"])
@@ -67,7 +67,7 @@ pub(super) fn run_once(
     let stderr = drain_pipe(child.stderr.take().expect("piped stderr"), noop);
     let mut stdin = child.stdin.take().expect("piped stdin");
     let prompt = question.execution_prompt();
-    // Stdin preserves multiline custom questions through Windows .cmd launchers.
+    // Stdin preserves multiline custom questions through the resolved launcher.
     let input = std::thread::spawn(move || stdin.write_all(prompt.as_bytes()));
     let outcome = wait_for_exit(&mut child, cancel, progress.deadline(), check_config);
     progress.collecting();
@@ -92,32 +92,11 @@ pub(super) fn run_once(
 /// Best-effort CLI version for the batch snapshot; a hanging or failing
 /// `codex --version` never blocks a probe.
 pub(super) fn cli_version() -> Option<String> {
-    let mut command = Command::new(codex_executable());
-    command.arg("--version").stdin(Stdio::null())
-        .stdout(Stdio::piped()).stderr(Stdio::null());
-    let (mut child, _lifetime) = super::process::spawn(&mut command).ok()?;
-    let deadline = Instant::now() + VERSION_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            _ => {
-                terminate_process_tree(&mut child);
-                return None;
-            }
-        }
-    };
-    if !status.success() { return None; }
-    let mut text = String::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        let _ = stdout.read_to_string(&mut text);
-    }
-    text.lines().map(str::trim).find(|line| !line.is_empty())
-        .map(|line| line.chars().take(120).collect())
+    let app = asb_core::contracts::AppKind::Codex;
+    let _launch = crate::client_software::gate::launch(app).ok()?;
+    let item = crate::client_software::discovery::resolve(app).ok()?;
+    crate::client_software::discovery::inspect(app, &item.launcher).ok()?.version
 }
-
 fn wait_for_exit(child: &mut Child, cancel: &AtomicBool, deadline: Instant,
     check_config: &dyn Fn() -> Result<(), ProbeAbort>) -> Result<(ExitStatus, bool), ProbeAbort> {
     loop {
@@ -200,21 +179,6 @@ fn collect_result(
         duration_ms: started.elapsed().as_millis() as u64,
         error,
     }
-}
-
-pub(crate) fn codex_executable() -> PathBuf {
-    if let Some(explicit) = std::env::var_os("ASB_TEST_CODEX_BIN") {
-        return PathBuf::from(explicit);
-    }
-    if let Some(path) = std::env::var_os("PATH") {
-        for directory in std::env::split_paths(&path) {
-            for name in ["codex.exe", "codex.cmd", "codex.bat"] {
-                let candidate = directory.join(name);
-                if candidate.is_file() { return candidate; }
-            }
-        }
-    }
-    "codex".into()
 }
 
 fn drain_pipe<R: Read + Send + 'static>(

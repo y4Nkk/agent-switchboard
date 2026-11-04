@@ -28,6 +28,8 @@ Skill 与 MCP 编辑使用完整工作区和固定提交区；版本恢复展示
 
 ## Related decisions
 
+- [运行时资源回收](2026-11-03-frontend-runtime-memory-lifecycle.md)收窄雷达只读预览、完整详情和扩展扫描载荷的持有寿命；本篇继续拥有草稿、编辑器与导航状态，不通过整页卸载回收。
+
 - [连续原生玻璃外框](2026-10-14-unified-native-glass-shell.md)拥有外框材质、grid 占位、固定圆角裁切区与滚动边界；本篇继续拥有导航尺寸与其他页面交互规则。
 - [旧导航](../../archived/feature/2026-10-12-sidebar-navigation.md) 的固定 64px、无收起态和中性选中决定被本方案取代并归档。历史侧栏字段升级分支与窗口内状态路径由[侧栏状态持久化](../feature/2026-10-23-sidebar-state-persistence.md)删除，不再自动丢弃或转换旧 sidebarCollapsed 字段。
 - [图标状态](../../implemented/feature/2026-10-12-sidebar-icon-states.md) 的库图标和实心当前态继续保留；尺寸与选中颜色随共享布局更新。

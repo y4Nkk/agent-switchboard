@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { AppKind, ExtensionDraft, ExtensionListItem } from "../../api/client";
 import type { ExtensionsDeps } from "../../app/extensions/extension-ops";
 import {
@@ -68,7 +69,7 @@ function definitionActions(
   return { edit, deleteDefinition, importCandidate, createMcp };
 }
 
-export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation) {
+export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation & { active: boolean }) {
   const ext = useExtensions(deps);
   const discovery = useDiscoverScan({
     refresh: ext.refresh,
@@ -99,6 +100,10 @@ export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation
     ),
   );
   const busy = ext.busy || applies.phase !== null;
+  const releaseDiscovery = discovery.release;
+  useEffect(() => {
+    if (!deps.active && !busy && nav.dialog === null && !discovery.scanning) releaseDiscovery();
+  }, [deps.active, busy, nav.dialog, discovery.scanning, releaseDiscovery]);
   const writeBlocked = busy || !ext.workspace || ext.workspace.recoveryRequired.length > 0;
   const toggleClient = (item: ExtensionListItem, client: AppKind) =>
     applies.run({

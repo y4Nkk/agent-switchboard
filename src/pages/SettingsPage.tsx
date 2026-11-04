@@ -2,7 +2,7 @@ import { useId, type ReactNode } from "react";
 import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
 import appIcon from "../assets/app-icon.svg";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
-import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
+import type { UpdateDownloadView } from "../app/update-download-state";
 import { useI18n } from "../i18n";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
@@ -40,11 +40,12 @@ interface SettingsPageProps {
   /** A startup or user-triggered release lookup is currently in flight. */
   updateChecking: boolean;
   updateInstalling: boolean;
-  updateProgress: UpdateDownloadProgress | null;
+  updateDownload: UpdateDownloadView;
   updateCheckedAt: string | null;
   updateRestartRequired: boolean;
   onCheckUpdate: () => void;
   onInstallUpdate: () => void;
+  onCancelUpdateDownload: () => void;
   onRestartInstalledUpdate: () => void;
 }
 
@@ -94,8 +95,9 @@ function AboutSettings(props: SettingsPageProps) {
       </div>
       <UpdateSection channel={props.updateChannel} appVersion={props.appVersion}
         result={props.updateCheck} busy={props.busy || props.updateChecking} installing={props.updateInstalling}
-        progress={props.updateProgress} checkedAt={props.updateCheckedAt} restartRequired={props.updateRestartRequired}
-        onCheck={props.onCheckUpdate} onInstall={props.onInstallUpdate} onRestart={props.onRestartInstalledUpdate} />
+        download={props.updateDownload} checkedAt={props.updateCheckedAt} restartRequired={props.updateRestartRequired}
+        onCheck={props.onCheckUpdate} onInstall={props.onInstallUpdate} onCancel={props.onCancelUpdateDownload}
+        onRestart={props.onRestartInstalledUpdate} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 use super::*;
 mod purge;
+mod usage;
 use crate::session_manager::{SessionMessage, records};
 use base64::Engine;
 use serde_json::{json, Value};
@@ -201,10 +202,10 @@ fn appending_after_a_complete_unterminated_record_keeps_contiguous_bytes() {
     assert!(issues.is_empty());
     assert_eq!(sources[0].retained.len(), 1);
     let mut end = 0;
-    visit_record_bytes(&sources[0].retained[0], 0, |_, position, raw| {
+    visit_committed_usage(&sources[0].retained[0], 0, |_| {}, |_, position, raw| {
         assert_eq!(position, end);
         end += raw.len() as u64;
-        Ok(ControlFlow::Continue(()))
+        Ok(())
     }).unwrap();
     assert_eq!(end, fs::metadata(fixture.path()).unwrap().len());
     let report = crate::model_usage::report(asb_core::contracts::ModelUsageRange::All, sources, issues, chrono::Local::now());

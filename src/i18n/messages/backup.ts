@@ -70,6 +70,8 @@ export const messages = {
 
   // Runtime log actions
   "backup.action.appStarted": ["应用已启动", "Application started"],
+  "backup.action.webviewMemoryLow": ["降低界面内存目标", "Lower interface memory target"],
+  "backup.action.webviewMemoryNormal": ["恢复界面内存目标", "Restore interface memory target"],
   "backup.action.appSettingsSaved": ["已保存应用设置", "Application settings saved"],
   "backup.action.appSettingsRepaired": ["已修复应用设置", "Application settings repaired"],
   "backup.action.profileStoreRepaired": ["已检查供应商存储修复", "Provider storage repair checked"],
@@ -196,8 +198,17 @@ export const messages = {
   // Software update section
   "backup.update.title": ["软件更新", "Software update"],
   "backup.update.notesAria": ["{version} 更新内容", "What's new in {version}"],
-  "backup.update.progressBytes": ["正在下载更新 {kb} KB", "Downloading update {kb} KB"],
-  "backup.update.progressPercent": ["正在下载更新 {percent}%", "Downloading update {percent}%"],
+  "backup.update.downloading": ["正在下载更新", "Downloading update"],
+  "backup.update.verifying": ["下载完成，正在验证更新包", "Download complete; verifying update"],
+  "backup.update.cancelDownload": ["取消下载", "Cancel download"],
+  "backup.update.cancelling": ["正在取消…", "Cancelling…"],
+  "backup.update.cancelled": ["下载已取消", "Download cancelled"],
+  "backup.update.failed": ["更新未完成", "Update did not complete"],
+  "backup.update.downloadedUnknown": ["已下载 {size} · 总大小未知", "{size} downloaded · total size unknown"],
+  "backup.update.retryHint": ["重新下载将从头开始。", "A new download starts from the beginning."],
+  "backup.update.retryDownload": ["重新下载并安装", "Download and install again"],
+  "backup.update.installHint": ["安装已开始，无法取消。完成后应用会重新启动。", "Installation has started and cannot be cancelled. The app will restart when it finishes."],
+  "backup.update.statusRetry": ["暂时无法读取更新进度，正在重试。", "Unable to read update progress; retrying."],
   "backup.update.releasePageError": ["无法打开更新发布页", "Could not open the releases page"],
   "backup.update.releasePageErrorDetail": ["请检查默认浏览器后重试。", "Check the default browser and try again."],
   "backup.update.storeManaged": ["由 Microsoft Store 管理更新", "Updates are managed by Microsoft Store"],

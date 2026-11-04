@@ -36,21 +36,31 @@ impl Read for DigestReader<'_> {
 
 pub(crate) fn verify(path: &Path, revision: &FileRevision, length: u64, expected: &str,
     checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(), SnapshotError> {
+    verify_observed(path, revision, length, expected, checkpoint, &|_| {})
+}
+
+pub(crate) fn verify_observed(path: &Path, revision: &FileRevision, length: u64, expected: &str,
+    checkpoint: &dyn Fn() -> Result<(), String>, bytes: &dyn Fn(u64)) -> Result<(), SnapshotError> {
     checkpoint()?;
     let current = FileRevision::read(path)?;
     if current.created != revision.created || current.bytes < revision.bytes {
         return Err(SnapshotError::Changed(format!("来源被替换或截断，已跳过本次读取：{}", path.display())));
     }
     let mut hash = Sha256::new();
-    extend_hash(path, 0, length, &mut hash, checkpoint)?;
+    extend_hash_observed(path, 0, length, &mut hash, checkpoint, bytes)?;
     if format!("{:x}", hash.finalize()) != expected {
         return Err(SnapshotError::Changed(format!("记录在读取期间被改写，已跳过本次读取：{}", path.display())));
     }
     Ok(())
 }
 
-pub(crate) fn extend_hash(path: &Path, start: u64, mut length: u64, hash: &mut Sha256,
+pub(crate) fn extend_hash(path: &Path, start: u64, length: u64, hash: &mut Sha256,
     checkpoint: &dyn Fn() -> Result<(), String>) -> Result<(), String> {
+    extend_hash_observed(path, start, length, hash, checkpoint, &|_| {})
+}
+
+pub(crate) fn extend_hash_observed(path: &Path, start: u64, mut length: u64, hash: &mut Sha256,
+    checkpoint: &dyn Fn() -> Result<(), String>, bytes: &dyn Fn(u64)) -> Result<(), String> {
     let mut file = File::open(path).map_err(|error| error.to_string())?;
     file.seek(SeekFrom::Start(start)).map_err(|error| error.to_string())?;
     let mut buffer = [0; 64 * 1024];
@@ -59,6 +69,7 @@ pub(crate) fn extend_hash(path: &Path, start: u64, mut length: u64, hash: &mut S
         let size = length.min(buffer.len() as u64) as usize;
         file.read_exact(&mut buffer[..size]).map_err(|error| error.to_string())?;
         hash.update(&buffer[..size]);
+        bytes(size as u64);
         length -= size as u64;
     }
     Ok(())

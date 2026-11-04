@@ -50,6 +50,12 @@ pub fn validate_fragment(text: &str) -> Result<(), AdapterError> {
         if error.is_some() {
             return;
         }
+        if crate::ownership::RETIRED_CODEX_CLIENT_KEYS.iter()
+            .chain(crate::ownership::RETIRED_CODEX_PROVIDER_KEYS.iter())
+            .any(|key| path == *key || path.starts_with(&format!("{key}."))) {
+            error = Some(AdapterError { message: format!("通用配置片段不能包含已移除的配置项 {path}，请使用当前客户端设置"), line: None });
+            return;
+        }
         if path == RESERVED_BUILTIN_PROVIDER_PATH
             || path.starts_with(&format!("{RESERVED_BUILTIN_PROVIDER_PATH}."))
         {

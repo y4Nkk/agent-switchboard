@@ -89,6 +89,8 @@ pub(super) fn client_settings_overlay(
         })
         .collect();
     entries.push((super::subagents::RETIRED_MAX_THREADS_KEY.into(), OverlayEntry::RemoveIfPresent));
+    entries.extend(crate::ownership::RETIRED_CODEX_CLIENT_KEYS.iter()
+        .map(|key| ((*key).into(), OverlayEntry::RemoveIfPresent)));
     entries
 }
 
@@ -126,6 +128,10 @@ pub(super) fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
         .collect();
     if plan.writes_client_settings() {
         entries.push((super::subagents::RETIRED_MAX_THREADS_KEY.into(), OverlayEntry::RemoveIfPresent));
+        entries.extend(crate::ownership::RETIRED_CODEX_CLIENT_KEYS.iter()
+            .map(|key| ((*key).into(), OverlayEntry::RemoveIfPresent)));
     }
+    entries.extend(crate::ownership::RETIRED_CODEX_PROVIDER_KEYS.iter()
+        .map(|key| ((*key).into(), OverlayEntry::RemoveIfPresent)));
     entries
 }

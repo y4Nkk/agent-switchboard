@@ -15,6 +15,7 @@ crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+windows-bindgen = "=0.61.1"
 
 [dependencies]
 aes-gcm = "0.10"
@@ -23,6 +24,7 @@ asb-core = { path = "../crates/asb-core" }
 asb-switch = { path = "../crates/asb-switch" }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+iana-time-zone = "0.1"
 # Platform defaults, used after honoring Windows process directory overrides.
 dirs = "6"
 # GitHub tarball extraction for skill sources (gzip + untar, size-capped).
@@ -66,6 +68,7 @@ rusqlite = { version = "0.32", features = ["bundled", "backup", "hooks", "limits
 rquickjs = "0.12.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
+semver = "1"
 thiserror = { workspace = true }
 sha2 = "0.10"
 sha1 = "0.10"
@@ -110,7 +113,10 @@ zbus = "5.19"
 # environment-conflict check reads, backs up, and removes `ANTHROPIC*` there.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38.2"
-windows = { version = "0.61", default-features = false }
+windows = { version = "0.61", default-features = false, features = ["Foundation", "System", "ApplicationModel", "Management_Deployment", "Storage", "Security_Cryptography_Certificates", "Win32_System_Com"] }
+windows-core = "0.61"
+windows-collections = "0.2"
+windows-future = "0.2"
 winreg = "0.55"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Performance", "Win32_System_RemoteDesktop"] }
 

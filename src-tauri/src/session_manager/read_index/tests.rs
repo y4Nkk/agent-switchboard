@@ -92,15 +92,55 @@ fn a_corrupt_projection_rebuilds_itself_without_changing_other_cache_entries() {
 #[test]
 fn known_legacy_projections_are_retired_once_without_touching_business_material() {
     let temp = tempfile::tempdir().unwrap();
-    let index = ReadIndex::open(temp.path()).unwrap();
-    index.put("identity", "source", "unchanged", &Option::<String>::None).unwrap();
-    index.connection.pragma_update(None, "user_version", 1).unwrap();
+    let directory = layout::directory(temp.path());
+    fs::create_dir_all(&directory).unwrap();
+    let connection = Connection::open(directory.join("read-index.sqlite3")).unwrap();
+    connection.execute_batch("CREATE TABLE entries (
+ kind TEXT NOT NULL, cache_key TEXT NOT NULL, revision TEXT NOT NULL, data TEXT NOT NULL,
+ PRIMARY KEY(kind,cache_key)
+) STRICT; PRAGMA user_version=1;").unwrap();
+    connection.execute("INSERT INTO entries VALUES('identity','source','unchanged','null')", []).unwrap();
     fs::write(temp.path().join("collections-material"), b"keep").unwrap();
-    drop(index);
+    drop(connection);
     let index = ReadIndex::open(temp.path()).unwrap();
     assert!(index.previous::<Option<String>>("identity", "source").unwrap().is_none());
     assert_eq!(fs::read(temp.path().join("collections-material")).unwrap(), b"keep");
-    assert_eq!(index.connection.pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0)).unwrap(), 2);
+    assert_eq!(index.connection.pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0)).unwrap(), 3);
+}
+
+#[test]
+fn version_two_moves_only_the_valid_summary_and_retires_the_old_usage_state() {
+    use asb_core::contracts::{ModelUsageRange, ModelUsageReport};
+    let temp = tempfile::tempdir().unwrap();
+    let directory = layout::directory(temp.path());
+    fs::create_dir_all(&directory).unwrap();
+    let connection = Connection::open(directory.join("read-index.sqlite3")).unwrap();
+    connection.execute_batch("CREATE TABLE entries (
+ kind TEXT NOT NULL, cache_key TEXT NOT NULL, revision TEXT NOT NULL, data TEXT NOT NULL,
+ PRIMARY KEY(kind,cache_key)
+) STRICT; PRAGMA user_version=2;").unwrap();
+    let roots = vec![temp.path().join("sessions")];
+    let native = temp.path().join("native");
+    let old_key = key(&(&roots, Ok::<_,String>(&native))).unwrap();
+    let scope = key(&(&roots, &native)).unwrap();
+    let at = "2026-11-04T01:00:00Z";
+    let reports: Vec<_> = [ModelUsageRange::Today,ModelUsageRange::Last7Days,ModelUsageRange::Last30Days,ModelUsageRange::All]
+        .into_iter().map(|range| ModelUsageReport { range, generated_at: at.into(),
+            groups: vec![], days: vec![], unassigned_tokens: Default::default(), issues: vec![], coverage: Default::default() }).collect();
+    let snapshot = serde_json::json!({"cached_at":at,"reports":reports}).to_string();
+    connection.execute("INSERT INTO entries VALUES('usage-reports',?1,'old',?2)", params![old_key,snapshot]).unwrap();
+    connection.execute("INSERT INTO entries VALUES('usage-reports','invalid','old','{')", []).unwrap();
+    connection.execute("INSERT INTO entries VALUES('usage-file','source','old','{}')", []).unwrap();
+    connection.execute("INSERT INTO entries VALUES('usage-saved-events','source','old','{}')", []).unwrap();
+    connection.execute("INSERT INTO entries VALUES('message-index','kept','same','\"retained\"')", []).unwrap();
+    drop(connection);
+    let index = ReadIndex::open(temp.path()).unwrap();
+    let stored: String = index.connection.query_row("SELECT reports FROM usage_snapshot WHERE scope=?1", [scope], |row| row.get(0)).unwrap();
+    assert_eq!(serde_json::from_str::<Vec<ModelUsageReport>>(&stored).unwrap(), reports);
+    assert_eq!(index.previous::<String>("message-index", "kept").unwrap().as_deref(), Some("retained"));
+    assert_eq!(index.connection.query_row::<u64,_,_>("SELECT count(*) FROM entries WHERE kind LIKE 'usage-%'", [], |row| row.get(0)).unwrap(), 0);
+    drop(index);
+    assert!(ReadIndex::open(temp.path()).is_ok());
 }
 
 #[test]

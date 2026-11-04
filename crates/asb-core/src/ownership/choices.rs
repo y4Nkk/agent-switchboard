@@ -43,6 +43,25 @@ const CODEX_REASONING_EFFORT_OPTIONS: &[ChoiceOption] = &[
 
 pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     ChoiceSpec {
+        key: "tui.notification_method", owner: SettingOwner::Client,
+        label: "ownership.label.notificationMethod", group: "ownership.group.terminalUi",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "auto", label: "ownership.option.notificationMethod.auto" },
+            ChoiceOption { value: "osc9", label: "ownership.option.notificationMethod.osc9" },
+            ChoiceOption { value: "bel", label: "ownership.option.notificationMethod.bel" },
+        ],
+    },
+    ChoiceSpec {
+        key: "tui.notification_condition", owner: SettingOwner::Client,
+        label: "ownership.label.notificationCondition", group: "ownership.group.terminalUi",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "unfocused", label: "ownership.option.notificationCondition.unfocused" },
+            ChoiceOption { value: "always", label: "ownership.option.notificationCondition.always" },
+        ],
+    },
+    ChoiceSpec {
         key: "tui.alternate_screen",
         owner: SettingOwner::Client,
         label: "ownership.label.tuiAlternate_screen",
@@ -214,23 +233,6 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         ],
     },
     ChoiceSpec {
-        key: "approval_policy",
-        owner: SettingOwner::Client,
-        label: "ownership.label.approval_policy",
-        group: "ownership.group.safetyAndApprovals",
-        control: ChoiceControl::Segment,
-        options: &[
-            ChoiceOption {
-                value: "on-request",
-                label: "ownership.option.approval_policy.on-request",
-            },
-            ChoiceOption {
-                value: "never",
-                label: "ownership.option.approval_policy.never",
-            },
-        ],
-    },
-    ChoiceSpec {
         key: "approvals_reviewer",
         owner: SettingOwner::Client,
         label: "ownership.label.approvals_reviewer",
@@ -317,11 +319,81 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
 ];
 pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
     ChoiceSpec {
+        key: "permissions.defaultMode", owner: SettingOwner::Client,
+        label: "ownership.label.permissionMode", group: "ownership.group.safetyAndApprovals",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "default", label: "ownership.option.permissionMode.default" },
+            ChoiceOption { value: "acceptEdits", label: "ownership.option.permissionMode.acceptEdits" },
+            ChoiceOption { value: "plan", label: "ownership.option.permissionMode.plan" },
+            ChoiceOption { value: "auto", label: "ownership.option.permissionMode.auto" },
+            ChoiceOption { value: "dontAsk", label: "ownership.option.permissionMode.dontAsk" },
+            ChoiceOption { value: "bypassPermissions", label: "ownership.option.permissionMode.bypassPermissions" },
+        ],
+    },
+    ChoiceSpec {
+        key: "editorMode", owner: SettingOwner::Client,
+        label: "ownership.label.editorMode", group: "ownership.group.interfaceAndInteraction",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "normal", label: "ownership.option.editorMode.normal" },
+            ChoiceOption { value: "vim", label: "ownership.option.editorMode.vim" },
+        ],
+    },
+    ChoiceSpec {
+        key: "defaultShell", owner: SettingOwner::Client,
+        label: "ownership.label.defaultShell", group: "ownership.group.interfaceAndInteraction",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "bash", label: "ownership.option.defaultShell.bash" },
+            ChoiceOption { value: "powershell", label: "ownership.option.defaultShell.powershell" },
+        ],
+    },
+    ChoiceSpec {
+        key: "autoUpdatesChannel", owner: SettingOwner::Client,
+        label: "ownership.label.autoUpdatesChannel", group: "ownership.group.toolsAndFeatures",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "stable", label: "ownership.option.autoUpdatesChannel.stable" },
+            ChoiceOption { value: "latest", label: "ownership.option.autoUpdatesChannel.latest" },
+        ],
+    },
+    ChoiceSpec {
+        key: "maxEffortLevel", owner: SettingOwner::Provider,
+        label: "ownership.label.maxEffortLevel", group: "ownership.group.modelBehavior",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "low", label: "ownership.option.maxEffortLevel.low" },
+            ChoiceOption { value: "medium", label: "ownership.option.maxEffortLevel.medium" },
+            ChoiceOption { value: "high", label: "ownership.option.maxEffortLevel.high" },
+            ChoiceOption { value: "xhigh", label: "ownership.option.maxEffortLevel.xhigh" },
+            ChoiceOption { value: "max", label: "ownership.option.maxEffortLevel.max" },
+        ],
+    },
+    ChoiceSpec {
+        key: "promptCacheTtl", owner: SettingOwner::Provider,
+        label: "ownership.label.promptCacheTtl", group: "ownership.group.modelBehavior",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "5m", label: "ownership.option.promptCacheTtl.5m" },
+            ChoiceOption { value: "1h", label: "ownership.option.promptCacheTtl.1h" },
+        ],
+    },
+    ChoiceSpec {
+        key: "subagentPromptCacheTtl", owner: SettingOwner::Provider,
+        label: "ownership.label.subagentPromptCacheTtl", group: "ownership.group.modelBehavior",
+        control: ChoiceControl::Segment,
+        options: &[
+            ChoiceOption { value: "5m", label: "ownership.option.subagentPromptCacheTtl.5m" },
+            ChoiceOption { value: "1h", label: "ownership.option.subagentPromptCacheTtl.1h" },
+        ],
+    },
+    ChoiceSpec {
         key: "outputStyle",
         owner: SettingOwner::Provider,
         label: "ownership.label.outputStyle",
         group: "ownership.group.modelBehavior",
-        control: ChoiceControl::Segment,
+        control: ChoiceControl::Editable,
         options: &[
             ChoiceOption {
                 value: "Proactive",

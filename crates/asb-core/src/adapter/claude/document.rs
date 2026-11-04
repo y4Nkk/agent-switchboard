@@ -141,6 +141,7 @@ fn to_json(value: ConfigValue) -> Json {
             .map(Json::Number)
             .unwrap_or(Json::Null),
         ConfigValue::Array(items) => Json::Array(items.into_iter().map(to_json).collect()),
+        ConfigValue::Object(items) => Json::Object(items.into_iter().map(|(key, value)| (key, to_json(value))).collect()),
     }
 }
 

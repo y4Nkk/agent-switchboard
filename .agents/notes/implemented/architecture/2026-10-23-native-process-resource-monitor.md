@@ -34,6 +34,8 @@ Status: implemented
 
 ### 身份与归属
 
+纯安装身份的文件布局、原生包和编辑器包证据由 `client_software/identity` 共享拥有；`resource_monitor/executables` 保留资源分组投影，更新占用检查复用原生进程用户和出生身份。边界见[客户端版本管理](../feature/2026-11-04-client-software-version-management.md)。该次提取未重跑自动化测试，历史验证结果不代表新增更新路径已验收。
+
 - 系统拓扑包含 PID、PPID、候选名称与用户范围证据。身份和资源只读取当前用户的候选编码程序、自身界面、必要的已确认后代及上轮记录，不读取全机命令行、环境或内存映射。其他用户不参与错误归属；尚未核实用户的候选保留枚举覆盖限制，不冒充已知属于某款软件。
 - 客户端根由实际运行映像与安装证据相互印证：规范 PATH 和固定原生入口、用户目录中的桌面下载、原生版本入口、编码 bundle，以及运行映像所属的 npm/编辑器包清单、Codex 原生发布清单与入口布局。包清单最多读取六级父目录、单文件 256 KiB，不依赖编辑器安装根或扩展版本号，也不扫描全部安装目录。Codex 原生清单只接受当前 layoutVersion 1、codex variant 与相符的 bin 入口，因此自定义原生发布安装根不依赖 PATH。当前 Claude npm 分发是原生程序，Codex npm 的 Node 启动外壳不向上并入编码引擎；未知映像仍明确报告无法核实。
 - 包清单只拥有实际匹配的入口布局。Codex 编辑器包把发布产物平铺到 `bin/<target>/` 并携带仍声明 `bin/codex` 的原生清单副本；该副本不拥有平铺入口，按编辑器本身的包清单核实。原生发布入口才接受原生清单，不把复制的发布描述误当成编辑器目录事实，也不接受未知原生布局版本。
@@ -93,7 +95,8 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 - 只追加具体版本的目录白名单改动最少；但桌面下载、编辑器更新和自定义扩展目录仍会漏报，因此包安装按所属清单与入口布局核实，固定下载目录只锚定实际用户目录，不保留旧的宽泛路径子串识别。
 - 要求提权能读取更多系统服务；但服务不属于当前用户编码任务，提权还会掩盖错误分组，因此原生枚举先提供用户范围，只有已确认属于当前用户的进程失败才派发该软件的读取错误。
 - 各平台分别使用 private bytes、footprint、PSS 更接近各自系统工具；其最强理由是每个平台都能拿到最诚实的单进程数值。最初因此选择统一的驻留内存口径并常显共享页说明；2026-10-28 修订为：Windows 单平台改用专用工作集——实测 WebView2 多进程把共享页重复计入约一倍（安装实例工作集合计 436 MiB，专用工作集合计 224.9 MiB），统一口径在该平台掩盖而非揭示事实，而任务管理器「内存」列本就是专用工作集。不逐平台各用 private/footprint/PSS 的理由维持不变：三个私有口径互不可比；Linux/macOS 维持驻留集避免引入本机无法验证的口径迁移，差异改由平台条件文案明示。
-- Windows 逐进程读取专用内存没有公开的按句柄接口：`GetProcessMemoryInfo` 的 `PrivateUsage` 是私有提交字节而非专用工作集，不能混用；因此采用 PDH 每轮一次的 `\Process(*)\Working Set - Private` 全表快照按 PID 联接，`ID Process` 计数器解决同名实例 `#N` 后缀的映射，格式化数组缓冲按 f64 对齐分配。
+- Windows 维持 PDH 每轮一次的 `\Process(*)\Working Set - Private` 全表快照按 PID 联接，格式化数组缓冲按 f64 对齐分配。`PdhGetFormattedCounterArrayW` 返回的实例名省略 #N，同名进程不能按名称转 HashMap；同一次 collect、同一个 Process 对象的 PID/内存数组按实例位置联接，并校验数量及名称对应，失败槽也保留位置，禁止过滤后错位。读取时进程仍存在而本轮未获得计数，应明确 CollectionFailed，不能假称进程已退出。2026-11-03 [内存生命周期验收](2026-11-03-frontend-runtime-memory-lifecycle.md)在多个同名 WebView2 进程中复现并修复此缺口。
+- `GetProcessMemoryInfo` 的 `PrivateUsage` 是私有提交字节，不能用作驻留内存；较新的公开 `PROCESS_MEMORY_COUNTERS_EX2.PrivateWorkingSetSize` 可直接读专用工作集，但要求 Windows 10/11 22H2 的 2023-09 累积更新。直接采用它的最强理由是按句柄读取且不需实例联接；当前没有授权收窄产品系统要求，因此只用于本机隔离验收的独立参照，不增加生产双读或回退路径。逐页 QueryWorkingSet 虽支持旧系统，却需要更高读取权限并随页面数扫描，不适合作为本轮两秒采样的替换。
 - 私有 WKWebView selector 可得到部分进程 ID；但它是非公开契约，也不能证明所有共享辅助进程的独占归属，因此无法确认时明确展示子集。
 
 ## Consequences
@@ -106,7 +109,7 @@ CPU 按 `100 × Δ(userCpu + kernelCpu) / (ΔmonotonicTime × onlineLogicalCpuCo
 - `tests/resource-usage-reader.test.ts` 记录可见进入、周期读取、隐藏停止、最新明细选择、迟到响应、失败保留与重试的用例。测试不发起模型请求，也不写真实配置。
 - 原生读取烟测在各平台直接枚举并读取当前测试进程，核实稳定的创建身份、映像路径、驻留内存、在线处理器数和不倒退的 CPU 累计计数；它补足模拟观测夹具无法覆盖的 FFI 与权限边界，不写真实配置。
 - `process_tree_tests.rs` 将当前测试程序复制到独立临时目录，按两款客户端的编辑器原生入口建立包身份，并启动真实引擎、辅助程序和任务进程树。每个入口复制独立映像，避免 macOS 对同一硬链接节点返回共享的原始名称或路径，真实进程身份必须对应实际入口；最近软件根拥有全部任务，名为系统服务的独立测试子进程不因前缀转入 Codex。测试不运行真实客户端、不读取模型凭据、不发起模型调用，退出信号、子进程等待和限定等待时间共同清理夹具。
-- `executables/tests.rs` 与 `executables/installations/tests.rs` 记录桌面下载、版本入口、自定义编辑器根、当前 npm 原生布局、外壳和伪装目录、错误清单与原生格式的回归用例；`discovery/tests.rs` 记录两款客户端的任务归属、外部用户、未核实用户、真实受限错误和错误边界。所有文件夹夹具均在临时目录内创建，Windows 本地隔离 CI 已执行通过。
+- `executables/tests.rs` 与 `client_software/identity/installations/tests.rs` 记录桌面下载、版本入口、自定义编辑器根、当前 npm 原生布局、外壳和伪装目录、错误清单与原生格式的回归用例；`discovery/tests.rs` 记录两款客户端的任务归属、外部用户、未核实用户、真实受限错误和错误边界。所有文件夹夹具均在临时目录内创建，Windows 本地隔离 CI 已执行通过。
 
 ### 验证边界
 
@@ -122,7 +125,9 @@ Windows 本地隔离 CI 通过笔记门禁、44 项前端测试、723 项 Rust �
 
 最初受限执行环境的本机 HTTP 用例不能连接，停止该次隔离任务后在允许本机连接的执行环境重跑共用门禁通过；没有为环境限制放宽产品逻辑或测试断言。源码审查、自动化测试与安装交互分别报告，不互相替代。
 
-尚未实测的运行验收包括：三平台真实原生安装识别；Windows 主窗/托盘 WebView 去重与检测跨软件归属；macOS/Linux 覆盖提示；最小化、托盘隐藏、快捷键恢复和失焦仍可见；同口径系统数值对照；重复进出不累积句柄、任务或快照。受控负载仅使用隔离夹具，不自动调用模型或写客户端文件。
+2026-11-03 的[内存生命周期验收](2026-11-03-frontend-runtime-memory-lifecycle.md)补充通过完整 CI（839 项 Rust、62 项前端及类型/构建）、两个真实同名测试进程的 PDH 覆盖，以及隔离 Windows 程序的主窗/托盘进程去重。生产 PDH 与独立 PROCESS_MEMORY_COUNTERS_EX2 对照的 9 个进程均为 measured，最大采样差约 0.39 MiB；真实关闭到托盘、最小化、恢复、密集窗口切换与反复进入后回收也通过。完整证据位于 `.tmp/memory-verification-20261103/`，不将调试构建数字当作发布包性能承诺。
+
+尚未实测的运行验收包括：三平台真实原生安装识别、实际检测跨软件归属、macOS/Linux 覆盖提示、全局快捷键恢复，以及数小时运行下的句柄/任务趋势。受控负载仅使用隔离夹具，不自动调用模型或写客户端文件。
 
 性能目标仍待实测：约 1000 个系统进程、两秒刷新时，采样 p95 ≤200ms，监控增量 CPU <整机 0.5%，额外常驻内存 <16MiB。当前没有声称这些目标已通过，也不通过放宽阈值隐藏缺口。
 
@@ -131,6 +136,7 @@ Windows 本地隔离 CI 通过笔记门禁、44 项前端测试、723 项 Rust �
 - [Tauri 进程模型](https://tauri.app/concept/process-model/)、[WebView2 Environment8](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2environment8)：原生核心、环境进程集合及 crashpad 边界。
 - [GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes)、[GetProcessMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getprocessmemoryinfo)：创建时刻、累计 CPU、工作集与失败。
 - [PdhGetFormattedCounterArrayW](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhgetformattedcounterarrayw)、[PdhAddEnglishCounterW](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhaddenglishcounterw)：本地化无关的计数器路径、格式化数组缓冲尺寸与实例名映射；`Working Set - Private` 即任务管理器「内存（专用工作集）」列的数据源。
+- [重复实例名称](https://learn.microsoft.com/en-us/windows/win32/perfctrs/handling-duplicate-instance-names)、[PROCESS_MEMORY_COUNTERS_EX2](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex2)：同名实例不能合并，新按句柄接口的系统版本要求与独立验收参照。
 - [WTSEnumerateProcessesExW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsenumerateprocessesexw)、[WTS_PROCESS_INFO_EXW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/ns-wtsapi32-wts_process_info_exw)：原生用户 SID、跨会话权限边界与当前用户范围；SID 缺失不等同于当前用户访问受限。
 - [Apple proc_info.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h)、[bsd_kern.c](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/bsd_kern.c)：进程身份、task 累计 Mach 时间及驻留计数；换算使用当前 SDK timebase。
 - [Linux proc 文档](https://www.kernel.org/doc/html/latest/filesystems/proc.html)：身份、PID 复用、权限和 RSS 近似性。

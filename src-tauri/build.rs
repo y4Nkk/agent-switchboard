@@ -58,6 +58,16 @@ fn embed_common_controls_manifest() {
 }
 
 fn main() {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        let metadata = "vendor/winget/Microsoft.Management.Deployment.winmd";
+        let output = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is set")).join("winget.rs");
+        windows_bindgen::bindgen([
+            "--in", "default", metadata, "--out", output.to_str().expect("UTF-8 output path"),
+            "--filter", "Microsoft.Management.Deployment", "--reference", "windows",
+            "--flat", "--no-allow", "--no-toml",
+        ]).unwrap();
+        println!("cargo:rerun-if-changed={metadata}");
+    }
     #[cfg(target_os = "windows")]
     let attrs = {
         // Skip tauri-build's own app manifest; ours above covers every target

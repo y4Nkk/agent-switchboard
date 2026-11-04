@@ -16,6 +16,7 @@ import {
 import { ClaudeExtraConfigurationEditor } from "./ClaudeExtraConfigurationEditor";
 import { OfficialSettingsDirectory } from "./OfficialSettingsDirectory";
 import { SettingsFields } from "./SettingsFields";
+import { CodexPermissionProfileNotice } from "./CodexPermissionProfileNotice";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 interface ClientSettingsPanelProps {
@@ -184,6 +185,8 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
       )}
       {props.subagentSettings}
       {remainingGroups.length > 0 && (
+        <>
+        {app === "codex" && <CodexPermissionProfileNotice status={props.configStatus} />}
         <SettingsFields
           specs={state.editor.specs}
           groups={remainingGroups}
@@ -196,6 +199,7 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
           presentation="client"
           clientApp={app}
         />
+        </>
       )}
     </>
   );

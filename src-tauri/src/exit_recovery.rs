@@ -5,7 +5,7 @@ use tauri_plugin_dialog::DialogExt;
 
 #[derive(Clone, Copy, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) enum Destination { Radar, Backups }
+pub(crate) enum Destination { Radar, Backups, ClientManagement }
 
 pub(crate) fn show(app: &AppHandle, destination: Destination, error: &str) {
     let language = LocalState::from_app(app).and_then(|state| state.get_app_settings())
@@ -16,6 +16,8 @@ pub(crate) fn show(app: &AppHandle, destination: Destination, error: &str) {
         LanguagePreference::System => system_chinese(),
     };
     let copy = match (destination, chinese) {
+        (Destination::ClientManagement, true) => "客户端正在更新或复验，已取消退出。请在设置的客户端管理中等待操作完成。",
+        (Destination::ClientManagement, false) => "A client update or verification is still running. Wait for it to finish in Settings → Client management before quitting.",
         (Destination::Radar, true) => "检测未能安全结束，已取消退出。请在降智雷达中重试保存后退出。",
         (Destination::Radar, false) => "Exit cancelled because the probe could not finish safely. Retry saving in Intelligence radar before quitting.",
         (Destination::Backups, true) => "Claude 接管恢复失败，已取消退出。请在设置的本地备份中处理恢复后再退出。",

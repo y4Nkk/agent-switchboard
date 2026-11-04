@@ -1,21 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CodexProbeBatch, CodexProbeRun } from "../src/api/usage.ts";
+import type { CodexProbeObservation } from "../src/api/codex-probe.ts";
 import { advanceProbeNotification, type ProbeNotificationState } from "../src/app/probe-notifications.ts";
 
 const idle = (): ProbeNotificationState => ({ watching: null, delivered: null });
 const watching = (): ProbeNotificationState => ({ ...idle(), watching: "batch" });
-const run = (status: CodexProbeRun["status"] = "passed"): CodexProbeRun => ({
-  seq: 1, status, sessionId: "session", finalAnswer: "42", reportedModel: "model",
-  reasoningTokens: null, totalTokens: null, usageError: null, durationMs: 100, executionError: null,
-});
-function batch(status: Exclude<CodexProbeBatch["status"], "running"> = "completed",
-  overrides: Partial<CodexProbeBatch> = {}): CodexProbeBatch {
-  return { batchId: "batch", startedAt: "2026-10-23T00:00:00Z", finishedAt: "2026-10-23T00:00:01Z",
-    plannedRuns: 1, completedRuns: 1, gradingVersion: "1", cliVersion: "test", statusError: null,
-    question: { id: "custom", label: "Question", text: "6 × 7", expectedAnswer: "42" },
-    config: { profileId: null, profileName: null, profileModel: null, reasoningEffort: null,
-      connectionIdentity: null, fingerprint: "test" }, runs: [run()],
+function batch(status: Exclude<CodexProbeObservation["status"], "running"> = "completed",
+  overrides: Partial<CodexProbeObservation> = {}): CodexProbeObservation {
+  return { batchId: "batch", plannedRuns: 1, completedRuns: 1, gradingVersion: "1", statusError: null,
+    questionLabel: "Question", passedRuns: 1, judgedRuns: 1, executionFailed: false,
     persistPending: false, persistError: null, ...overrides, status, progress: null };
 }
 
@@ -35,7 +28,7 @@ test("任务信号覆盖未读到 running 的短任务，重复事件与重新�
 });
 
 test("重新连接到运行批次后仍通知完成，读取空值不丢失正在关注的任务", () => {
-  const live: CodexProbeBatch = { ...batch(), status: "running", persistPending: false,
+  const live: CodexProbeObservation = { ...batch(), status: "running", persistPending: false,
     progress: { kind: "preparing", seq: 1, cancelling: false } };
   const observed = advanceProbeNotification(idle(), live);
   assert.equal(observed.notice, null);
@@ -58,16 +51,16 @@ test("所有结束原因都有各自的全局反馈", () => {
 });
 
 test("判分未通过和执行未判定给出警告，视觉题要求人工观察", () => {
-  for (const status of ["failed", "undetermined"] as const) {
-    assert.equal(advanceProbeNotification(watching(), batch("completed", { runs: [run(status)] })).notice?.kind, "warning");
+  for (const judgedRuns of [0, 1]) {
+    assert.equal(advanceProbeNotification(watching(), batch("completed", { passedRuns: 0, judgedRuns })).notice?.kind, "warning");
   }
-  const visual = batch("completed", { gradingVersion: "html-visual-v1", runs: [run("undetermined")] });
+  const visual = batch("completed", { gradingVersion: "html-visual-v1", passedRuns: 0, judgedRuns: 0 });
   const notice = advanceProbeNotification(watching(), visual).notice;
   assert.equal(notice?.kind, "success");
   assert.deepEqual(notice?.description, { __toastMessage: true, key: "codex.probe.notify.visual",
     params: { question: "Question" } });
   assert.equal(advanceProbeNotification(watching(), { ...visual,
-    runs: [{ ...run("undetermined"), executionError: "timeout" }] }).notice?.kind, "warning");
+    executionFailed: true }).notice?.kind, "warning");
 });
 
 test("首次待保存结果立即提示，重试失败不重播，提交后只确认保存一次", () => {

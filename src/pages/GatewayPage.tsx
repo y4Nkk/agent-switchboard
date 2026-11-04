@@ -10,6 +10,7 @@ import { GatewayPanel } from "../components/GatewayPagePrimitives";
 import { GatewayIcon } from "../components/icons";
 import { CollapsibleSection } from "../components/Collapsible";
 import { useI18n } from "../i18n";
+import { useWorkspaceVisible } from "../hooks/use-workspace-visible";
 import {
   discardGatewayPortChange,
   getGatewayStatus,
@@ -42,13 +43,14 @@ export function GatewayPage({ active, busy, profiles, routing }: Props & {
   const [focus, setFocus] = useState<ClientFilterValue>("all");
   const [portSheet, setPortSheet] = useState<PortSheetState | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const visible = useWorkspaceVisible(active);
   // The sheet is portaled over the whole window; leaving the gateway workspace
   // must close it so it never floats over an unrelated page. The flow hook
   // releases any held preparation on unmount.
   useEffect(() => {
     if (!active) setPortSheet(null);
   }, [active]);
-  const { status, error, retrying, refreshedAt, refresh, retryBind, discardRecovery } = useGatewayRuntime(active);
+  const { status, error, retrying, refreshedAt, refresh, retryBind, discardRecovery } = useGatewayRuntime(visible);
   const profileNames = useMemo(() => {
     const names = new Map<string, string>();
     for (const profile of profiles) names.set(profile.id, profile.name);
@@ -58,7 +60,7 @@ export function GatewayPage({ active, busy, profiles, routing }: Props & {
   const failed = status ? FAILURE_STATES.has(status.status) : false;
   const summary = status ? <>
     {error && <p className="asb-fail-text" role="alert">{error}</p>}
-    <GatewayHub status={status} failed={failed} refreshedAt={refreshedAt} retrying={retrying || busy} active={active}
+    <GatewayHub status={status} failed={failed} refreshedAt={refreshedAt} retrying={retrying || busy} active={visible}
       onRetry={retryBind} onChangePort={() => setPortSheet({ stage: "input" })} />
     <GatewayGuidance status={status} busy={retrying || busy} onDiscardRecovery={discardRecovery} />
   </> : error ? <GatewayUnavailable error={error} onRetry={refresh} /> : <GatewayLoading />;
@@ -96,25 +98,38 @@ function useGatewayRuntime(active: boolean) {
   const [retrying, setRetrying] = useState(false);
   const mutation = useRef(false);
   const generation = useRef(0);
+  const visible = useRef(active);
+  visible.current = active;
+  const flight = useRef<Promise<void> | null>(null);
   const refresh = useCallback(async () => {
-    if (mutation.current) return;
+    const previous = generation.current;
+    if (flight.current) await flight.current;
+    if (!visible.current || mutation.current || previous !== generation.current) return;
     const request = ++generation.current;
-    try {
-      const snapshot = await getGatewayStatus();
-      if (request !== generation.current) return;
-      setStatus(snapshot);
-      setRefreshedAt(Date.now());
-      setError(null);
-    } catch (cause) {
-      if (request === generation.current) setError(cause);
-    }
+    const pending = (async () => {
+      try {
+        const snapshot = await getGatewayStatus();
+        if (!visible.current || request !== generation.current) return;
+        setStatus(snapshot); setRefreshedAt(Date.now()); setError(null);
+      } catch (cause) {
+        if (visible.current && request === generation.current) setError(cause);
+      }
+    })();
+    flight.current = pending;
+    await pending;
+    if (flight.current === pending) flight.current = null;
   }, []);
 
   useEffect(() => {
     if (!active) return;
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => window.clearInterval(timer);
+    let current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      await refresh();
+      if (current) timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
+    };
+    void poll();
+    return () => { current = false; generation.current += 1; clearTimeout(timer); };
   }, [active, refresh]);
 
   const mutate = useCallback(async (action: () => Promise<GatewayStatus>) => {

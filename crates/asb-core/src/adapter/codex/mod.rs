@@ -5,6 +5,8 @@
 //! `toml_edit` instead of re-serializing from a typed mirror.
 
 mod common;
+mod permissions;
+pub use permissions::{permission_profile_status, PermissionProfileStatus};
 mod common_fragment;
 mod document;
 pub use common::extract_client_settings;

@@ -110,13 +110,13 @@ fn every_range_reuses_the_same_indexed_events_and_removed_sources_stop_contribut
     let temp = tempfile::tempdir().unwrap();
     let source = source(temp.path(), "shared.jsonl", "same", AppKind::Codex, &codex("same", 16, 10));
     let root = temp.path().join("state");
-    let first = reports(&root, vec![source.clone()], vec![], now()).unwrap();
+    let first = fixture_reports(&root, vec![source.clone()], vec![], now()).unwrap();
     assert_eq!(first.len(), 4);
     let before = crate::session_manager::records::decoded_record_count();
-    let second = reports(&root, vec![source], vec![], now()).unwrap();
+    let second = fixture_reports(&root, vec![source], vec![], now()).unwrap();
     assert_eq!(crate::session_manager::records::decoded_record_count(), before);
     assert!(second.iter().all(|report| total(report) == 13));
-    let empty = reports(&root, vec![], vec![], now()).unwrap();
+    let empty = fixture_reports(&root, vec![], vec![], now()).unwrap();
     assert!(empty.iter().all(|report| total(report) == 0 && report.coverage.source_sessions == 0));
 }
 
@@ -196,4 +196,25 @@ fn missing_dates_and_models_are_explicit_and_invalid_components_are_not_accepted
     assert_eq!(total(&all), 13);
     assert_eq!(all.unassigned_tokens.total_tokens, 13);
     assert!(all.groups[0].model.is_none());
+}
+
+#[test]
+fn appended_model_and_original_receipt_move_the_existing_call_between_buckets() {
+    use std::io::Write;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("state");
+    let original = codex("one",16,10);
+    let compacted = json!({"type":"compacted","payload":{"latest_token_usage_record":original[2]["payload"]}});
+    let source = source(temp.path(),"one.jsonl","one",AppKind::Codex,&[original[0].clone(),compacted]);
+    let first = fixture_reports(&root,vec![source.clone()],vec![],now()).unwrap();
+    assert_eq!(first.last().unwrap().unassigned_tokens.total_tokens,13);
+    assert!(first.last().unwrap().groups[0].model.is_none());
+    writeln!(std::fs::OpenOptions::new().append(true).open(&source.paths[0]).unwrap(),"{}",original[1]).unwrap();
+    let modeled = fixture_reports(&root,vec![source.clone()],vec![],now()).unwrap();
+    assert_eq!(total(modeled.last().unwrap()),13);
+    assert_eq!(modeled.last().unwrap().groups[0].model.as_deref(),Some("model-codex"));
+    writeln!(std::fs::OpenOptions::new().append(true).open(&source.paths[0]).unwrap(),"{}",original[2]).unwrap();
+    let dated = fixture_reports(&root,vec![source],vec![],now()).unwrap();
+    assert!(dated.iter().all(|report| total(report) == 13 && report.unassigned_tokens.total_tokens == 0));
+    assert_eq!(dated.last().unwrap().groups[0].session_count,1);
 }

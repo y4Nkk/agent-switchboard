@@ -1,7 +1,6 @@
-//! In-memory request telemetry for the loopback gateway. Samples exist only
-//! for the status page: nothing about gateway traffic is persisted, and a
-//! sample never carries credentials — only the profile id that owned the
-//! route.
+//! The loopback gateway's in-memory status samples and per-request observation span.
+//! Spans also feed the existing client-owned durable ledgers; no credentials enter
+//! either metadata surface.
 
 use asb_core::contracts::{AppKind, UpstreamProtocol};
 use serde::Serialize;
@@ -24,9 +23,9 @@ mod codex;
 const SAMPLE_CAPACITY: usize = 512;
 
 /// One completed gateway request, recorded exactly once at the boundary that
-/// answered the client. `status` is the HTTP status for direct HTTP traffic
-/// and `Some(101)` for an accepted WebSocket upgrade or `Some(200)` / `None`
-/// for a served / failed WebSocket message exchange.
+/// answered the client. `status` is the final accounting status: upstream HTTP
+/// status unless projected to partial output (206), logical/protocol failure
+/// (502), or client disconnection (499). WebSocket upgrades use 101.
 /// `profile_id`, `route_revision`, and `upstream_protocol` are set together
 /// only when the capability token matched an immutable route snapshot.
 /// Rejected or unmatched traffic stays unattributed instead of wearing
@@ -51,7 +50,7 @@ pub(crate) struct GatewaySample {
 
 impl GatewaySample {
     fn failed(&self) -> bool {
-        self.status.is_none_or(|status| status >= 400)
+        self.status.is_none_or(|status| status == 206 || status >= 400)
     }
 }
 

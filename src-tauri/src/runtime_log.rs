@@ -80,6 +80,8 @@ static ACTIVE_LOG_LEVEL: AtomicU8 = AtomicU8::new(RuntimeLogLevel::Info.as_code(
 #[serde(rename_all = "camelCase")]
 pub enum RuntimeLogAction {
     AppStarted,
+    WebviewMemoryLow,
+    WebviewMemoryNormal,
     StorageCacheMaintained,
     StorageHistoryArchived,
     StorageBackupsCleaned,

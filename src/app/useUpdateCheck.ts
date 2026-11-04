@@ -1,166 +1,66 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  checkUpdate,
-  closeUpdate,
-  getRuntimeOverview,
-  getUpdateChannel,
-  installUpdate,
-  restartApplication,
-  type CommandError,
-  type UpdateChannel,
-  type UpdateCheck,
-} from "../api/client";
+import { checkUpdate, getRuntimeOverview, getUpdateChannel,
+  type CommandError, type UpdateChannel, type UpdateCheck } from "../api/client";
 import { toast, toastMessage } from "../components/use-toast";
+import { useUpdateDownload } from "./useUpdateDownload";
 
-export interface UpdateDownloadProgress {
-  downloadedBytes: number;
-  totalBytes: number | null;
-}
-
-interface UpdateCheckDeps {
-  onError: (error: CommandError) => void;
-}
-
-/** The sole frontend state owner for signed update checks and installation. */
-export function useUpdateCheck({ onError }: UpdateCheckDeps) {
+function useUpdateEnvironment(runCheck: (source: "manual" | "startup") => Promise<void>) {
   const [updateChannel, setUpdateChannel] = useState<UpdateChannel | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const automaticCheckStarted = useRef(false);
+  useEffect(() => {
+    let current = true;
+    void getUpdateChannel().then((channel) => {
+      if (!current) return;
+      setUpdateChannel(channel);
+      if (channel === "github" && !automaticCheckStarted.current) {
+        automaticCheckStarted.current = true;
+        void runCheck("startup");
+      }
+    }).catch(() => undefined);
+    void getRuntimeOverview().then((overview) => {
+      if (current) setAppVersion(overview.appVersion);
+    }).catch(() => undefined);
+    return () => { current = false; };
+  }, [runCheck]);
+  return { updateChannel, appVersion };
+}
+
+/** One app-wide state owner survives navigation away from About. */
+export function useUpdateCheck({ onError }: { onError: (error: CommandError) => void }) {
   const [updateCheck, setUpdateCheck] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
-  const [installing, setInstalling] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<UpdateDownloadProgress | null>(null);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
-  const [restartRequired, setRestartRequired] = useState(false);
-  const activeUpdate = useRef<UpdateCheck | null>(null);
-  const disposed = useRef(false);
-  const inFlight = useRef(false);
-  const automaticCheckStarted = useRef(false);
-
-  const discardUpdate = useCallback((update: UpdateCheck | null) => {
-    if (update) void closeUpdate(update.update).catch(() => undefined);
-  }, []);
-
-  const replaceUpdate = useCallback(
-    (next: UpdateCheck | null) => {
-      const previous = activeUpdate.current;
-      activeUpdate.current = next;
-      if (!disposed.current) setUpdateCheck(next);
-      if (previous && previous !== next) discardUpdate(previous);
-    },
-    [discardUpdate],
-  );
-
+  const operation = useRef(false);
+  const mounted = useRef(true);
+  const onInstalled = useCallback(() => setUpdateCheck(null), []);
+  const download = useUpdateDownload(operation, onInstalled, onError);
+  const resetDownload = download.reset;
   const runUpdateCheck = useCallback(async (source: "manual" | "startup") => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+    if (operation.current || download.restartRequired) return;
+    operation.current = true;
     setChecking(true);
     try {
       const next = await checkUpdate();
-      if (disposed.current) {
-        discardUpdate(next);
-        return;
-      }
-      replaceUpdate(next);
+      if (!mounted.current) return;
+      resetDownload();
+      setUpdateCheck(next);
       setLastCheckedAt(next?.checkedAt ?? new Date().toISOString());
       if (source === "manual" && next === null) {
         toast({ kind: "success", title: toastMessage("backup.update.upToDate") });
       }
-    } catch (caught) {
-      if (source === "manual" && !disposed.current) onError(caught as CommandError);
-    } finally {
-      inFlight.current = false;
-      if (!disposed.current) setChecking(false);
-    }
-  }, [discardUpdate, onError, replaceUpdate]);
-
+    } catch (error) {
+      if (source === "manual" && mounted.current) onError(error as CommandError);
+    } finally { operation.current = false; if (mounted.current) setChecking(false); }
+  }, [operation, download.restartRequired, resetDownload, onError]);
+  const environment = useUpdateEnvironment(runUpdateCheck);
   useEffect(() => {
-    disposed.current = false;
-    return () => {
-      disposed.current = true;
-      discardUpdate(activeUpdate.current);
-      activeUpdate.current = null;
-    };
-  }, [discardUpdate]);
-
-  useEffect(() => {
-    if (automaticCheckStarted.current) return;
-    automaticCheckStarted.current = true;
-    void getUpdateChannel()
-      .then((channel) => {
-        if (disposed.current) return;
-        setUpdateChannel(channel);
-        if (channel === "github") void runUpdateCheck("startup");
-      })
-      .catch(() => undefined);
-  }, [runUpdateCheck]);
-
-  // The running build's version is read from the process itself so the
-  // settings page can show it before any update check has run.
-  useEffect(() => {
-    void getRuntimeOverview()
-      .then((overview) => {
-        if (!disposed.current) setAppVersion(overview.appVersion);
-      })
-      .catch(() => undefined);
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
-
-  const installAvailableUpdate = useCallback(async () => {
-    const availableUpdate = activeUpdate.current;
-    if (!availableUpdate || installing || restartRequired) return;
-    setInstalling(true);
-    setDownloadProgress(null);
-    try {
-      await installUpdate(availableUpdate.update, (event) => {
-        if (event.event === "Started") {
-          setDownloadProgress({ downloadedBytes: 0, totalBytes: event.data.contentLength ?? null });
-        } else if (event.event === "Progress") {
-          setDownloadProgress((current) => ({
-            downloadedBytes: (current?.downloadedBytes ?? 0) + event.data.chunkLength,
-            totalBytes: current?.totalBytes ?? null,
-          }));
-        }
-      });
-    } catch (caught) {
-      setInstalling(false);
-      setDownloadProgress(null);
-      onError(caught as CommandError);
-      return;
-    }
-
-    replaceUpdate(null);
-    setRestartRequired(true);
-    try {
-      // Windows exits inside the updater before this promise resolves. macOS
-      // and Linux return after replacing the bundle and need this relaunch.
-      await restartApplication();
-    } catch (caught) {
-      setInstalling(false);
-      onError(caught as CommandError);
-    }
-  }, [installing, onError, replaceUpdate, restartRequired]);
-
-  const restartInstalledUpdate = useCallback(async () => {
-    if (!restartRequired || installing) return;
-    setInstalling(true);
-    try {
-      await restartApplication();
-    } catch (caught) {
-      setInstalling(false);
-      onError(caught as CommandError);
-    }
-  }, [installing, onError, restartRequired]);
-
-  return {
-    updateChannel,
-    appVersion,
-    updateCheck,
-    checking,
-    installing,
-    downloadProgress,
-    lastCheckedAt,
-    restartRequired,
+  return { ...environment, updateCheck, checking, lastCheckedAt, ...download,
     runUpdateCheck: () => runUpdateCheck("manual"),
-    installAvailableUpdate,
-    restartInstalledUpdate,
-  };
+    installAvailableUpdate: () => { if (updateCheck) void download.start(updateCheck); },
+    cancelUpdateDownload: download.cancel,
+    restartInstalledUpdate: download.restart };
 }

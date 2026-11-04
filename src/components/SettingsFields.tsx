@@ -10,6 +10,8 @@ import { RadioOption } from "./RadioOption";
 import { Slider } from "./Slider";
 import { SettingInput } from "./SettingInput";
 import { ScrollArea } from "./ScrollArea";
+import { settingDetail } from "./setting-detail";
+import { sameSettingValue } from "../lib/setting-values";
 
 interface Props {
   specs: SettingSpec[];
@@ -40,19 +42,22 @@ function choiceIndex(spec: SettingSpec, value: SettingValue): number {
 }
 
 export function choiceLabel(spec: SettingSpec, value: SettingValue, t: TFunction): string {
+  if (spec.control === "approvalPolicy" && value.mode === "explicit"
+    && typeof value.value === "object" && !Array.isArray(value.value)) {
+    const fields = value.value.granular;
+    if (typeof fields === "object" && !Array.isArray(fields)) return t("clientConfig.settings.granularSummary", {
+      enabled: Object.values(fields).filter((enabled) => enabled === true).length, total: spec.options.length,
+    });
+  }
   return value.mode === "automatic"
     ? t("clientConfig.settings.automatic")
     : catalogText(spec.options.find((option) => option.value === value.value)?.label ?? "", t)
-      || (Array.isArray(value.value) ? JSON.stringify(value.value) : String(value.value));
-}
-
-export function sameSettingValue(left: SettingValue, right: SettingValue): boolean {
-  return left.mode === right.mode &&
-    (left.mode === "automatic" || (right.mode === "explicit" && JSON.stringify(left.value) === JSON.stringify(right.value)));
+      || (value.value === "" ? t("clientConfig.settings.emptyText")
+        : typeof value.value === "object" ? JSON.stringify(value.value) : String(value.value));
 }
 
 function diffValue(value: SettingValue): string | null {
-  return value.mode === "automatic" ? null : Array.isArray(value.value) ? JSON.stringify(value.value) : String(value.value);
+  return value.mode === "automatic" ? null : typeof value.value === "object" ? JSON.stringify(value.value) : String(value.value);
 }
 
 function actualValueLabel(spec: SettingSpec, value: SettingValue | undefined, t: TFunction): string {
@@ -91,7 +96,7 @@ type ProviderParameterRowProps = Pick<ControlProps, "spec" | "value" | "baseline
 
 function SettingControl({ spec, value, busy, onChange }: SettingControlProps) {
   const { t } = useI18n();
-  if (spec.control === "text" || spec.control === "integer" || spec.control === "stringInteger" || spec.control === "notifications") {
+  if (spec.control !== "toggle" && spec.control !== "slider" && spec.control !== "segment") {
     return <SettingInput spec={spec} value={value} busy={busy} onChange={onChange} />;
   }
   if (spec.control === "slider") {
@@ -121,15 +126,20 @@ function SettingControl({ spec, value, busy, onChange }: SettingControlProps) {
 }
 
 function preferenceDetail(spec: SettingSpec, t: TFunction): string {
+  const detail = settingDetail(spec.key, t);
+  if (detail) return detail;
   if (spec.key === "autoMemoryDirectory") return t("clientConfig.settings.memoryDirectoryHelp");
   if (spec.control === "text" || spec.control === "integer" || spec.control === "stringInteger") return t("clientConfig.settings.preferenceDetailInput");
   if (spec.control === "notifications") return t("clientConfig.settings.notificationsHelp");
+  if (spec.control === "stringList") return t("clientConfig.settings.listHelp");
   if (spec.control === "toggle") return t("clientConfig.settings.preferenceDetailToggle");
   if (spec.control === "slider") return t("clientConfig.settings.preferenceDetailSlider");
   return t("clientConfig.settings.preferenceDetailChoice");
 }
 
 function providerParameterDetail(spec: SettingSpec, t: TFunction): string {
+  const detail = settingDetail(spec.key, t);
+  if (detail) return detail;
   if (spec.key === "alwaysThinkingEnabled") return t("clientConfig.settings.thinkingHelp");
   if (spec.key === "service_tier") return t("clientConfig.settings.serviceTierHelp");
   if (spec.key === "fastMode") return t("clientConfig.settings.fastModeHelp");
@@ -152,7 +162,9 @@ function pendingSettingMessage(spec: SettingSpec, value: SettingValue, apply: bo
 }
 
 function scalarCode(value: import("../api/client").ConfigValue): string {
-  return typeof value === "string" || Array.isArray(value) ? JSON.stringify(value) : String(value);
+  if (Array.isArray(value)) return `[${value.map(scalarCode).join(", ")}]`;
+  if (typeof value === "object") return `{ ${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)} = ${scalarCode(item)}`).join(", ")} }`;
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
 }
 
 function settingCode(app: AppKind, key: string, value: SettingValue | undefined, t: TFunction): string {
@@ -328,6 +340,7 @@ export function SettingsFields({
                 <Button variant="secondary" disabled={busy} onClick={() => onResetGroup(group)}>{t("clientConfig.settings.resetGroup")}</Button>
               )}
             </div>
+            {group === "ownership.group.sandbox" && <p className="asb-field-help">{t("clientConfig.settings.sandboxPlatform")}</p>}
             {groupSpecs.map((spec) => (
               <SettingsRow key={spec.key} spec={spec} value={values[spec.key]}
                 baselineValue={baselineValues?.[spec.key]} actualValue={actualValues?.[spec.key]}

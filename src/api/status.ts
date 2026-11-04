@@ -7,6 +7,8 @@ import type { RouteState, ConfigWriteRecord } from "./switching";
 /** Closed, renderer-safe runtime events emitted by the application backend. */
 export type RuntimeLogAction =
   | "appStarted"
+  | "webviewMemoryLow"
+  | "webviewMemoryNormal"
   | "storageCacheMaintained"
   | "storageHistoryArchived"
   | "storageBackupsCleaned"
@@ -65,6 +67,7 @@ export interface ConfigFileStatus {
   /** Values read from the real client configuration, never from ASB storage. */
   clientSettings: SettingsValues | null;
   clientSettingsError: string | null;
+  codexPermissionProfile: { selected: string | null; hasProfiles: boolean; legacySettings: string[] } | null;
   /** Connection identity, independent of model, preferences and file health. */
   activeProfileId: string | null;
   lastSwitch: ConfigWriteRecord | null;
@@ -93,8 +96,9 @@ export interface GatewayRouteStatus {
   upstreamProtocol: UpstreamProtocol;
 }
 
-/** One completed gateway request. `status` is the HTTP status, or null when
- * a WebSocket exchange ended without a complete converted answer.
+/** One finished gateway request. `status` is its accounting status, including
+ * partial output (206), logical/protocol failure (502), client disconnection
+ * (499), or null for an unclassified interruption. Upgrades use 101.
  * `profileId`, `routeRevision`, and `upstreamProtocol` are set only when the
  * request matched an active route; rejected traffic stays unattributed. */
 export interface GatewaySample {

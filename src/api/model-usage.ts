@@ -55,27 +55,45 @@ export interface ModelUsageReport {
   coverage: { sourceSessions: number; scannedFiles: number; sessionsWithoutUsage: number; undatedEventTokens: number };
 }
 
-/** Explicit local-session report cache policy. `forceRefresh` re-scans the
- * approved local session roots instead of returning their saved snapshot. */
-export interface ModelUsageRequest {
-  range: ModelUsageRange;
-  forceRefresh: boolean;
-}
-
-/** Whether the report came from its persisted local-session snapshot or this
- * request's completed scan. It does not describe provider quota freshness. */
+/** Whether the report came from a persisted summary or a completed refresh
+ * task. It does not describe provider quota freshness. */
 export type ModelUsageFreshness = "cached" | "fresh";
 
 /** Backend-owned local-session snapshot timing. The UI schedules its next
  * foreground refresh from `refreshAfter`, not from a separate client TTL. */
 export interface ModelUsageRead {
-  report: ModelUsageReport;
+  reports: ModelUsageReport[];
   freshness: ModelUsageFreshness;
   refreshAfter: string;
 }
 
-/** Reads the shared local-session snapshot or revalidates approved source
- * revisions and rebuilds range totals from indexed call facts. */
-export function getModelUsageReport(request: ModelUsageRequest): Promise<ModelUsageRead> {
-  return invoke<ModelUsageRead>("get_model_usage_report", { request });
+export type ModelUsagePhase = "discovering" | "checking" | "reading" | "verifying" | "aggregating" | "publishing";
+
+export interface ModelUsageProgress {
+  phase: ModelUsagePhase;
+  completedSources: number;
+  totalSources: number | null;
+  completedBytes: number;
+  totalBytes: number | null;
+  completedCalls: number;
+  totalCalls: number | null;
+}
+
+export type ModelUsageRefresh =
+  | { status: "running"; id: string; startedAt: string; progress: ModelUsageProgress }
+  | { status: "completed"; id: string; startedAt: string; read: ModelUsageRead }
+  | { status: "failed"; id: string; startedAt: string; message: string };
+
+/** Reads the last verified summaries without discovering or scanning sessions. */
+export function readModelUsageSnapshot(): Promise<ModelUsageRead | null> {
+  return invoke<ModelUsageRead | null>("read_model_usage_snapshot");
+}
+
+/** Starts or joins the backend task. Its terminal result contains all ranges. */
+export function refreshModelUsage(): Promise<ModelUsageRefresh> {
+  return invoke<ModelUsageRefresh>("refresh_model_usage");
+}
+
+export function readModelUsageRefresh(id: string): Promise<ModelUsageRefresh> {
+  return invoke<ModelUsageRefresh>("read_model_usage_refresh", { id });
 }

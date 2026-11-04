@@ -14,6 +14,8 @@ import { RUNTIME_LOG_PAGE_SIZE, levelLabel, useRuntimeLogs } from "./use-runtime
 
 const ACTION_LABEL: Record<RuntimeLogAction, MessageKey> = {
   appStarted: "backup.action.appStarted",
+  webviewMemoryLow: "backup.action.webviewMemoryLow",
+  webviewMemoryNormal: "backup.action.webviewMemoryNormal",
   storageCacheMaintained: "backup.action.storageCacheMaintained",
   storageHistoryArchived: "backup.action.storageHistoryArchived",
   storageBackupsCleaned: "backup.action.storageBackupsCleaned",

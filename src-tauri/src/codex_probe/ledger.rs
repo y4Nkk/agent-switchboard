@@ -56,6 +56,7 @@ pub(crate) fn now_rfc3339() -> String {
 mod types;
 pub(crate) use types::*;
 mod history;
+mod observation;
 mod recovery;
 mod writes;
 

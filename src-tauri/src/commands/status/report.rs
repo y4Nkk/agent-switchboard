@@ -96,6 +96,7 @@ fn observe_client_file(
         recovery_issue: recovery_issue.map(str::to_owned),
         client_settings: None,
         client_settings_error: None,
+        codex_permission_profile: None,
         active_profile_id: None,
         last_switch: state
             .configuration()
@@ -123,6 +124,9 @@ fn observe_client_file(
         return Ok(status);
     }
     status.syntax_ok = true;
+    if kind == AppKind::Codex {
+        status.codex_permission_profile = adapter::codex::permission_profile_status(&text).ok();
+    }
     match adapter::extract_client_settings(kind, &text) {
         Ok(settings) => status.client_settings = Some(settings),
         Err(error) => status.client_settings_error = Some(error.to_string()),

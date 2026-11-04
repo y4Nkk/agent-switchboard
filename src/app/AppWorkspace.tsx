@@ -39,7 +39,7 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
         <ClientConfigurationWorkspace model={model} active={page === "clientConfiguration"} />
       </div>}
       {visited("extensions") && <div hidden={page !== "extensions"} className="asb-page-stack">
-        <ExtensionsWorkspace model={model} />
+        <ExtensionsWorkspace model={model} active={page === "extensions"} />
       </div>}
       {visited("sessions") && <section className="asb-panel" hidden={page !== "sessions"} aria-label={t("shell.sessions.aria")}>
         <SessionManager active={page === "sessions"} />

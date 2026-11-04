@@ -59,6 +59,7 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
     let stop: (() => void) | undefined;
     void onExitRecovery((destination) => {
       if (destination === "radar") { setUsageSection("radar"); setPage("usage"); }
+      else if (destination === "clientManagement") { setSettingsSection("clientManagement"); setPage("settings"); }
       else { setBackupRecoveryRequest((request) => request + 1); setSettingsSection("backups"); setPage("settings"); }
     }).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten; })
       .catch((error: CommandError) => onError(error));

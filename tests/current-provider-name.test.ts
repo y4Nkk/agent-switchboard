@@ -8,7 +8,7 @@ const profiles = [{ app: "codex" as const, id: "official-fixture", name: "Saved 
 function status(): ConfigFileStatus {
   return {
     app: "codex", path: "isolated-config", exists: true, syntaxOk: true,
-    readError: null, recoveryIssue: null, clientSettings: null, clientSettingsError: null,
+    readError: null, recoveryIssue: null, clientSettings: null, clientSettingsError: null, codexPermissionProfile: null,
     activeProfileId: "official-fixture", lastSwitch: null,
     route: {
       app: "codex", routeMode: "official", providerName: "openai", model: "live-model",

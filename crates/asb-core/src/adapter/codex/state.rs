@@ -47,6 +47,14 @@ fn collect_item(
     keep: &dyn Fn(&str) -> bool,
     repr: &dyn Fn(&Item) -> Option<String>,
 ) {
+    if path == "approval_policy" {
+        if let Ok(value) = super::common::item_value(item, path) {
+            if crate::validate::approval_policy::valid(&value) {
+                if keep(path) { out.insert(path.to_string(), value.display()); }
+                return;
+            }
+        }
+    }
     if let Some(value) = repr(item) {
         if keep(path) { out.insert(path.to_string(), value); }
     }
@@ -99,6 +107,8 @@ fn diff_keep(path: &str) -> bool {
     is_owned(AppKind::Codex, path)
         || crate::contracts::CodexSubagentKey::ALL.iter().any(|key| key.path() == path)
         || path == "agents.max_threads"
+        || crate::ownership::RETIRED_CODEX_CLIENT_KEYS.contains(&path)
+        || crate::ownership::RETIRED_CODEX_PROVIDER_KEYS.contains(&path)
 }
 
 /// Owned-key diff between the live text and a previous copy.

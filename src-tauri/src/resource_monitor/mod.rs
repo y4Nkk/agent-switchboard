@@ -1,5 +1,6 @@
 mod discovery;
 mod executables;
+pub(crate) mod client_processes;
 mod observation;
 mod ownership;
 mod platform;

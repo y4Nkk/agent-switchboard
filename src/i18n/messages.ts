@@ -7,6 +7,8 @@
  */
 import { messages as backup } from "./messages/backup.ts";
 import { messages as clientConfig } from "./messages/clientConfig.ts";
+import { messages as clientSoftware } from "./messages/client-software.ts";
+import { messages as clientSettingsExpanded } from "./messages/client-settings-expanded.ts";
 import { messages as cmdConfig } from "./messages/cmd-config.ts";
 import { messages as cmdExtlib } from "./messages/cmd-extlib.ts";
 import { messages as cmdExtops } from "./messages/cmd-extops.ts";
@@ -36,6 +38,7 @@ import { messages as skillWorkbench } from "./messages/skill-workbench.ts";
 import { messages as settings } from "./messages/settings.ts";
 import { messages as tray } from "./messages/tray.ts";
 import { messages as usage } from "./messages/usage.ts";
+import { messages as requestPerformance } from "./messages/requestPerformance.ts";
 import { messages as resources } from "./messages/resources.ts";
 import { messages as modelRoutes } from "./messages/modelRoutes.ts";
 
@@ -43,6 +46,8 @@ export const messages = Object.freeze({
   ...modelRoutes,
   ...backup,
   ...clientConfig,
+  ...clientSoftware,
+  ...clientSettingsExpanded,
   ...cmdConfig,
   ...cmdExtlib,
   ...cmdExtops,
@@ -72,6 +77,7 @@ export const messages = Object.freeze({
   ...skillWorkbench,
   ...tray,
   ...usage,
+  ...requestPerformance,
   ...resources,
 } as const);
 

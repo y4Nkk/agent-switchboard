@@ -190,14 +190,18 @@ fn respond_json(
                 recorder.record_json(&body);
             }
             let client_status = native.then_some(status).unwrap_or(200);
-            span.finish(Some(client_status), body.len() as u64);
-            respond_bytes_with_headers(
+            let accounting_status = native.then(|| serde_json::from_slice::<serde_json::Value>(&body).ok())
+                .flatten().and_then(|value| super::super::transform::response_accounting_status(&value))
+                .unwrap_or(client_status);
+            let response_bytes = body.len() as u64;
+            let delivered = respond_bytes_with_headers(
                 request,
                 client_status,
                 "application/json; charset=utf-8",
                 body,
                 response_headers,
-            )
+            ).is_ok();
+            span.finish(Some(if delivered { accounting_status } else { 499 }), response_bytes);
         }
         Err(error) => {
             span.finish(Some(502), 0);
@@ -316,7 +320,7 @@ pub(super) fn respond_stream<R>(
     let mut writer = match request.stream_response_with_headers(status, &headers) {
         Ok(writer) => writer,
         Err(_) => {
-            span.finish(None, 0);
+            span.finish(Some(499), 0);
             return;
         }
     };
@@ -349,13 +353,13 @@ pub(super) fn respond_stream<R>(
         }
         written += count as u64;
     }
-    let _ = writer.flush();
+    write_failed |= writer.flush().is_err();
     span.note_response_model(stream.model());
     span.note_usage(stream.usage());
     let status = if write_failed {
-        None
+        Some(499)
     } else {
-        Some(if stream.failed() { 502 } else { status })
+        Some(if stream.failed() { 502 } else if stream.incomplete() { 206 } else { status })
     };
     span.finish(status, written);
 }

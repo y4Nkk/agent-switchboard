@@ -179,9 +179,7 @@
 }
 
 .asb-model-usage { container: model-usage / inline-size; }
-.asb-model-usage-loading { display: grid; gap: var(--asb-space-4); }
-.asb-model-usage-loading .asb-usage-stat-band > .asb-skeleton { height: var(--asb-space-6); }
-.asb-model-usage-loading-chart { height: 24rem; }
+
 
 @container model-usage (min-width: 72rem) {
   .asb-model-usage-analysis { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }

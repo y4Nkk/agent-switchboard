@@ -2,6 +2,7 @@
 //! preferences. Provider parameters are saved only with their provider draft.
 
 use super::error::{blocking, operation_error, state, store_error, CommandError};
+pub(crate) mod software_policy;
 use asb_core::contracts::{AppKind, ClientSettingsSnapshot, SettingsValues};
 use asb_core::ownership::{
     self, ChoiceControl, OfficialSettingDisposition, SettingControl, SettingOwner,
@@ -15,6 +16,8 @@ use tauri::{AppHandle, Manager};
 pub struct SettingChoiceOption {
     pub value: String,
     pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
 }
 
 /// A redacted snapshot of the current client file. The renderer may edit this
@@ -83,7 +86,16 @@ pub struct ProviderParametersCatalog {
     pub defaults: SettingsValues,
     pub groups: Vec<String>,
     pub specs: Vec<SettingSpec>,
-    pub claude_effort_options: Vec<SettingChoiceOption>,
+    pub claude_model_preferences: Option<ClaudeModelPreferencesCatalog>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeModelPreferencesCatalog {
+    pub effort_options: Vec<SettingChoiceOption>,
+    pub cap_options: Vec<SettingChoiceOption>,
+    pub auto_compact_min: u64,
+    pub auto_compact_max: u64,
 }
 
 fn directory_catalog(target: AppKind) -> Vec<OfficialSettingDirectoryEntry> {
@@ -117,10 +129,14 @@ fn editor_catalog(target: AppKind, owner: SettingOwner) -> Vec<SettingSpec> {
                 SettingControl::Integer { .. } => ("integer".to_string(), vec![]),
                 SettingControl::StringInteger { .. } => ("stringInteger".to_string(), vec![]),
                 SettingControl::Notifications => ("notifications".to_string(), vec![]),
+                SettingControl::StringList => ("stringList".to_string(), vec![]),
+                SettingControl::MultilineText => ("multilineText".to_string(), vec![]),
+                SettingControl::ApprovalPolicy => ("approvalPolicy".to_string(), approval_options()),
                 SettingControl::Choice { presentation } => (
                     match presentation {
                         ChoiceControl::Slider => "slider",
                         ChoiceControl::Segment => "segment",
+                        ChoiceControl::Editable => "editableChoice",
                     }
                     .to_string(),
                     spec.allowed_values
@@ -128,6 +144,7 @@ fn editor_catalog(target: AppKind, owner: SettingOwner) -> Vec<SettingSpec> {
                         .map(|option| SettingChoiceOption {
                             value: option.value.to_string(),
                             label: option.label.to_string(),
+                            required: None,
                         })
                         .collect(),
                 ),
@@ -158,14 +175,19 @@ fn editor_catalog(target: AppKind, owner: SettingOwner) -> Vec<SettingSpec> {
         .collect()
 }
 
-fn editor_groups(specs: &[SettingSpec]) -> Vec<String> {
-    let mut groups = Vec::new();
-    for spec in specs {
-        if !groups.contains(&spec.group) {
-            groups.push(spec.group.clone());
-        }
-    }
-    groups
+fn approval_options() -> Vec<SettingChoiceOption> {
+    use asb_core::validate::approval_policy::{OPTIONAL_FIELDS, REQUIRED_FIELDS};
+    REQUIRED_FIELDS.iter().map(|field| (field, true))
+        .chain(OPTIONAL_FIELDS.iter().map(|field| (field, false)))
+        .map(|(field, required)| SettingChoiceOption {
+            value: (*field).into(), label: format!("ownership.approval.{field}"), required: Some(required),
+        }).collect()
+}
+
+fn editor_groups(target: AppKind, specs: &[SettingSpec]) -> Vec<String> {
+    ownership::setting_groups(target).iter().copied()
+        .filter(|group| specs.iter().any(|spec| spec.group == *group))
+        .map(str::to_string).collect()
 }
 
 fn editor_from_snapshot(target: AppKind, snapshot: ClientSettingsSnapshot) -> ClientSettingsEditor {
@@ -174,7 +196,7 @@ fn editor_from_snapshot(target: AppKind, snapshot: ClientSettingsSnapshot) -> Cl
         app: target,
         settings_hash: snapshot.settings_hash,
         settings: snapshot.settings,
-        groups: editor_groups(&specs),
+        groups: editor_groups(target, &specs),
         specs,
         directory: directory_catalog(target),
     }
@@ -186,14 +208,25 @@ pub fn get_provider_parameters_catalog(target: AppKind) -> ProviderParametersCat
     ProviderParametersCatalog {
         app: target,
         defaults: ownership::default_provider_parameters(target),
-        claude_effort_options: if target == AppKind::Claude {
-            asb_core::claude_common::model_preferences::EFFORT_LEVELS.iter().map(|level| SettingChoiceOption {
-                value: (*level).to_string(),
-                label: format!("ownership.option.effortLevel.{level}"),
-            }).collect()
-        } else { vec![] },
-        groups: editor_groups(&specs),
+        claude_model_preferences: (target == AppKind::Claude).then(model_preferences_catalog),
+        groups: editor_groups(target, &specs),
         specs,
+    }
+}
+
+fn model_preferences_catalog() -> ClaudeModelPreferencesCatalog {
+    use asb_core::claude_common::model_preferences::{EFFORT_LEVELS, COMPACT_WINDOW_MIN, COMPACT_WINDOW_MAX};
+    let option = |level: &str| SettingChoiceOption {
+        value: level.into(), label: format!("ownership.option.effortLevel.{level}"), required: None,
+    };
+    ClaudeModelPreferencesCatalog {
+        effort_options: EFFORT_LEVELS.iter().map(|level| option(level)).collect(),
+        cap_options: ownership::choice_spec(AppKind::Claude, "maxEffortLevel")
+            .expect("effort ceiling belongs to the catalog").options.iter().map(|choice| SettingChoiceOption {
+                value: choice.value.into(), label: choice.label.into(), required: None,
+            }).collect(),
+        auto_compact_min: COMPACT_WINDOW_MIN,
+        auto_compact_max: COMPACT_WINDOW_MAX,
     }
 }
 
@@ -305,9 +338,10 @@ mod tests {
                     assert!(!setting.group.is_empty());
                     assert!(matches!(
                         setting.control.as_str(),
-                        "toggle" | "slider" | "segment" | "text" | "integer" | "stringInteger" | "notifications"
+                        "toggle" | "slider" | "segment" | "editableChoice" | "text" | "integer" | "stringInteger"
+                            | "notifications" | "stringList" | "multilineText" | "approvalPolicy"
                     ));
-                    if matches!(setting.control.as_str(), "slider" | "segment") {
+                    if matches!(setting.control.as_str(), "slider" | "segment" | "editableChoice" | "approvalPolicy") {
                         assert!(!setting.options.is_empty());
                     } else {
                         assert!(setting.options.is_empty());
@@ -334,10 +368,10 @@ mod tests {
     #[test]
     fn claude_extra_editor_accepts_only_extra_fields() {
         let parsed = tauri::async_runtime::block_on(parse_claude_extra_configuration(
-            r#"{"permissions":{"allow":["Read"]}}"#.to_string(),
+            r#"{"permissions":{"disableBypassPermissionsMode":"disable"}}"#.to_string(),
         ))
         .expect("extra configuration");
-        assert_eq!(parsed["permissions"]["allow"], serde_json::json!(["Read"]));
+        assert_eq!(parsed["permissions"]["disableBypassPermissionsMode"], "disable");
 
         let error = tauri::async_runtime::block_on(parse_claude_extra_configuration(
             r#"{"spinnerTipsEnabled":true}"#.to_string(),

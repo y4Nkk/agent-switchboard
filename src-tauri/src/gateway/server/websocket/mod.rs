@@ -220,12 +220,13 @@ enum ExchangeOutcome {
 }
 
 impl ExchangeOutcome {
-    /// The HTTP-style status for telemetry: `None` marks every exchange that
-    /// did not deliver a complete converted answer.
+    /// Final logical status for telemetry; the upgraded connection itself remains 101.
     fn completed_status(self) -> Option<u16> {
         match self {
             Self::Served => Some(200),
-            Self::Incomplete | Self::Rejected | Self::Disconnect => None,
+            Self::Incomplete => Some(206),
+            Self::Rejected => Some(502),
+            Self::Disconnect => Some(499),
         }
     }
 }

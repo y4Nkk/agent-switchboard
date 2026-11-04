@@ -46,8 +46,7 @@ pub(crate) fn render_client_settings_into_file(
 ) -> Result<String, AdapterError> {
     crate::claude_common::validate_shared_write(current, &client_settings.claude_extra)
         .map_err(|message| AdapterError { message, line: None })?;
-    let mut entries = client_settings_overlay(client_settings);
-    entries.push(("effortLevel".into(), OverlayEntry::RemoveIfPresent));
+    let entries = client_settings_overlay(client_settings);
     let rendered = render_entries(current, entries)?;
     crate::claude_common::apply(&rendered, &client_settings.claude_extra).map_err(|message| {
         AdapterError {
@@ -59,8 +58,7 @@ pub(crate) fn render_client_settings_into_file(
 
 pub(crate) fn reset_client_settings(current: &str) -> Result<String, AdapterError> {
     let defaults = crate::ownership::default_client_settings(crate::AppKind::Claude);
-    let mut entries = client_settings_overlay(&defaults);
-    entries.push(("effortLevel".into(), OverlayEntry::RemoveIfPresent));
+    let entries = client_settings_overlay(&defaults);
     render_entries(current, entries)
 }
 
@@ -69,6 +67,11 @@ pub(crate) fn render_entries(
     entries: Vec<(String, OverlayEntry)>,
 ) -> Result<String, AdapterError> {
     let mut root = parse(current)?;
+    let writes_preferences = entries.iter().any(|(key, _)| crate::ownership::setting_spec(crate::AppKind::Claude, key)
+        .is_some_and(|spec| spec.control != crate::ownership::SettingControl::None));
+    if entries.iter().any(|(key, _)| key.starts_with("attribution.")) {
+        crate::claude_common::normalize_attribution(&mut root);
+    }
     for (key, entry) in entries {
         match entry {
             OverlayEntry::Set(value) => set(&mut root, &key, value)?,
@@ -78,6 +81,9 @@ pub(crate) fn render_entries(
             }
             OverlayEntry::RemoveTableIfEmpty => {}
         }
+    }
+    if writes_preferences {
+        crate::claude_common::reconcile_manifests(&mut root).map_err(|message| AdapterError { message, line: None })?;
     }
     serde_json::to_string_pretty(&root).map_err(|_| AdapterError {
         message: "配置序列化失败".to_string(),

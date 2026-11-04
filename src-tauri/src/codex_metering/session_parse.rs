@@ -38,7 +38,6 @@ pub(crate) struct CodexTokenEvent {
     pub tokens: TokenCounters,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct Receipt {
     event: CodexTokenEvent,
     turn: String,
@@ -97,45 +96,61 @@ pub(crate) fn visit_token_usage(
     Ok(issues)
 }
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub(crate) struct TokenUsageState {
+#[derive(Default)]
+struct TokenUsageState {
     seen_meta: bool,
     models: HashMap<String, Option<String>>,
     receipts: Vec<Receipt>,
 }
 
+pub(crate) enum TokenChange {
+    Model { turn: String, model: Option<String> },
+    Receipt { turn: String, event: CodexTokenEvent },
+    Issue(String),
+}
+
+pub(crate) fn observe_token(value: &Value, session_id: &str, seen_meta: &mut bool) -> Result<Option<TokenChange>, String> {
+    let payload = &value["payload"];
+    match value.get("type").and_then(Value::as_str) {
+        Some("session_meta") if !*seen_meta => {
+            if payload.get("id").and_then(Value::as_str) != Some(session_id) {
+                return Err("会话文件身份已改变，未读取另一会话的用量".into());
+            }
+            *seen_meta = true;
+        }
+        Some("turn_context") => {
+            if let Some(turn) = payload.get("turn_id").and_then(Value::as_str) {
+                return Ok(Some(TokenChange::Model { turn: turn.into(), model: payload.get("model")
+                    .and_then(Value::as_str).filter(|model| !model.trim().is_empty()).map(str::to_string) }));
+            }
+        }
+        Some("token_usage_record" | "compacted") => {
+            let (payload, at) = if value["type"] == "compacted" {
+                let Some(record) = payload.get("latest_token_usage_record").filter(|record| !record.is_null()) else { return Ok(None); };
+                (record, None)
+            } else { (payload, crate::session_manager::parser::timestamp_from(value)) };
+            return Ok(Some(match if *seen_meta { receipt(payload, at) } else { Err("真实调用记录出现于会话身份确认之前".into()) } {
+                Ok(receipt) => TokenChange::Receipt { turn: receipt.turn, event: receipt.event },
+                Err(error) => TokenChange::Issue(error),
+            }));
+        }
+        _ => {}
+    }
+    Ok(None)
+}
+
 impl TokenUsageState {
-    pub(crate) fn observe(&mut self, value: &Value, session_id: &str) -> Result<Option<String>, String> {
-        let payload = &value["payload"];
-        match value.get("type").and_then(Value::as_str) {
-            Some("session_meta") if !self.seen_meta => {
-                if payload.get("id").and_then(Value::as_str) != Some(session_id) {
-                    return Err("会话文件身份已改变，未读取另一会话的用量".into());
-                }
-                self.seen_meta = true;
-            }
-            Some("turn_context") => {
-                if let Some(turn) = payload.get("turn_id").and_then(Value::as_str) {
-                    self.models.insert(turn.to_string(), payload.get("model").and_then(Value::as_str)
-                        .filter(|model| !model.trim().is_empty()).map(str::to_string));
-                }
-            }
-            Some("token_usage_record" | "compacted") => {
-                let (payload, at) = if value["type"] == "compacted" {
-                    let Some(record) = payload.get("latest_token_usage_record").filter(|record| !record.is_null()) else { return Ok(None); };
-                    (record, None)
-                } else { (payload, crate::session_manager::parser::timestamp_from(value)) };
-                match if self.seen_meta { receipt(payload, at) } else { Err("真实调用记录出现于会话身份确认之前".into()) } {
-                    Ok(receipt) => self.receipts.push(receipt),
-                    Err(error) => return Ok(Some(error)),
-                }
-            }
-            _ => {}
+    fn observe(&mut self, value: &Value, session_id: &str) -> Result<Option<String>, String> {
+        match observe_token(value, session_id, &mut self.seen_meta)? {
+            Some(TokenChange::Model { turn, model }) => { self.models.insert(turn, model); }
+            Some(TokenChange::Receipt { turn, event }) => self.receipts.push(Receipt { turn, event }),
+            Some(TokenChange::Issue(issue)) => return Ok(Some(issue)),
+            None => {}
         }
         Ok(None)
     }
 
-    pub(crate) fn events(&self) -> impl Iterator<Item = CodexTokenEvent> + '_ {
+    fn events(&self) -> impl Iterator<Item = CodexTokenEvent> + '_ {
         self.receipts.iter().map(|record| {
             let mut event = record.event.clone();
             event.model = self.models.get(&record.turn).cloned().flatten();

@@ -21,20 +21,14 @@ fn apply_with(text: &str, extra: &Extra, manifest: &str) -> Result<String, Strin
     for (path, value) in &desired {
         pointer::set(&mut root, &pointer::decode(path)?, value.clone())?;
     }
-    let path = vec!["env".into(), manifest.into()];
-    if desired.is_empty() {
-        remove_pruning(&mut root, &path)?;
-    } else {
-        let keys = serde_json::to_string(&desired.keys().collect::<Vec<_>>())
-            .map_err(|_| "Claude 通用配置标记无法编码")?;
-        pointer::set(&mut root, &path, Value::String(keys))?;
-    }
+    write_manifest(&mut root, manifest, desired.into_keys().collect())?;
+    reconcile_manifests(&mut root)?;
     serde_json::to_string_pretty(&root).map_err(|_| "Claude 通用配置无法编码".to_string())
 }
 
 /// Removes one leaf and every parent container it emptied, so switching a
 /// fragment away leaves no dangling empty objects behind.
-fn remove_pruning(root: &mut Value, segments: &[String]) -> Result<(), String> {
+pub(super) fn remove_pruning(root: &mut Value, segments: &[String]) -> Result<(), String> {
     pointer::remove(root, segments)?;
     for depth in (0..segments.len().saturating_sub(1)).rev() {
         let parent = pointer::encode(&segments[..=depth]);
@@ -46,6 +40,21 @@ fn remove_pruning(root: &mut Value, segments: &[String]) -> Result<(), String> {
         } else {
             break;
         }
+    }
+    Ok(())
+}
+
+fn write_manifest(root: &mut Value, manifest: &str, paths: Vec<String>) -> Result<(), String> {
+    let path = vec!["env".into(), manifest.into()];
+    if paths.is_empty() { return remove_pruning(root, &path); }
+    let keys = serde_json::to_string(&paths).map_err(|_| "Claude 通用配置标记无法编码")?;
+    pointer::set(root, &path, Value::String(keys))
+}
+
+pub(crate) fn reconcile_manifests(root: &mut Value) -> Result<(), String> {
+    for manifest in [MANIFEST, PROFILE_MANIFEST] {
+        let claims = declared(root, manifest)?;
+        write_manifest(root, manifest, claims)?;
     }
     Ok(())
 }

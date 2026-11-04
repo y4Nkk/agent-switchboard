@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import type { CodexProbeBatch, CodexProbeGradingVersion, CodexProbeHistoryItem, CodexProbeQuestionSnapshot } from "../api/client";
+import { useState } from "react";
+import type { CodexProbeGradingVersion, CodexProbeHistoryItem, CodexProbeQuestionSnapshot } from "../api/client";
 import type { MessageKey, TFunction } from "../i18n";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
@@ -171,13 +171,12 @@ function HistoryList({ history, onRequestDelete }: {
   );
 }
 
-function HistoryDetail({ history, onReuseQuestion, liveBatch }: {
+function HistoryDetail({ history, onReuseQuestion }: {
   history: ReturnType<typeof useCodexProbeHistory>;
   onReuseQuestion: Props["onReuseQuestion"];
-  liveBatch: CodexProbeBatch | null;
 }) {
   const { t } = useI18n();
-  const batch = liveBatch?.batchId === history.detailId ? liveBatch : history.detail;
+  const batch = history.detail;
   const summary = batch ? summarizeRuns(batch.runs) : null;
   return (
     <div className="asb-codex-probe-history">
@@ -242,17 +241,16 @@ function HistoryDetail({ history, onReuseQuestion, liveBatch }: {
  * running batch. */
 export function CodexProbeHistory({ active, probe, onClose, onReuseQuestion, onChanged }: Props) {
   const { t } = useI18n();
-  const batch = probe.status;
-  const revision = `${batch?.batchId}:${batch?.status}:${batch?.completedRuns}:${batch?.persistPending}`;
-  const history = useCodexProbeHistory(active, revision);
-  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
-  const pendingItems = useMemo(
-    () => history.items.filter((item) => pendingDelete?.includes(item.batchId)),
-    [history.items, pendingDelete],
-  );
+  const [pendingDelete, setPendingDelete] = useState<CodexProbeHistoryItem[] | null>(null);
+  const history = useCodexProbeHistory(active, probe.detailRevision, pendingDelete !== null);
+  const pendingItems = pendingDelete ?? [];
+  const requestDelete = (ids: string[]) => {
+    const items = history.items.filter((item) => ids.includes(item.batchId));
+    setPendingDelete(items.length ? items : null);
+  };
   const running = probe.running && probe.status;
   const confirmDelete = async () => {
-    const batchIds = pendingDelete ?? [];
+    const batchIds = pendingItems.map((item) => item.batchId);
     const deleted = await history.deleteSelected(batchIds);
     if (deleted) {
       setPendingDelete(null);
@@ -278,10 +276,10 @@ export function CodexProbeHistory({ active, probe, onClose, onReuseQuestion, onC
       {probe.readError && <p className="asb-warn-text" role="alert">
         {t("codex.probe.readError", { error: probe.readError })}
       </p>}
-      {history.detailId === null
-        ? <HistoryList history={history} onRequestDelete={setPendingDelete} />
-        : <HistoryDetail history={history} onReuseQuestion={onReuseQuestion} liveBatch={probe.status} />}
-      {pendingDelete !== null && pendingItems.length > 0 && (
+      {active && (history.detailId === null
+        ? <HistoryList history={history} onRequestDelete={requestDelete} />
+        : <HistoryDetail history={history} onReuseQuestion={onReuseQuestion} />)}
+      {active && pendingDelete !== null && pendingItems.length > 0 && (
         <ConfirmSheet
           title={t("codex.history.deleteTitle")}
           confirmLabel={t("codex.history.confirmDelete")}

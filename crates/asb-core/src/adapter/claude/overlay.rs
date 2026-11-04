@@ -149,7 +149,7 @@ pub(super) fn client_settings_overlay(
 /// map the declared slots to plan data; ownership and cleanup actions
 /// themselves remain owned by that directory.
 pub(super) fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
-    let mut entries: Vec<_> = setting_specs(AppKind::Claude)
+    setting_specs(AppKind::Claude)
         .into_iter()
         .filter(|spec| spec.owner != SettingOwner::Client || plan.writes_client_settings())
         .map(|spec| {
@@ -176,7 +176,5 @@ pub(super) fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
             };
             (spec.key.to_string(), entry)
         })
-        .collect();
-    entries.push(("effortLevel".into(), OverlayEntry::RemoveIfPresent));
-    entries
+        .collect()
 }

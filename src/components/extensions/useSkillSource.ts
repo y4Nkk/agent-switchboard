@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import type { SkillDirectoryEntry } from "../../api/extensions/skill-sources";
 import {
@@ -26,12 +26,16 @@ function sourceRows(source: SkillSourceKind, catalog: ReturnType<typeof useSkill
   }));
 }
 
-export function useSkillSource(actions: SkillSourceActions & { busy: boolean; items: ExtensionListItem[] }) {
+export function useSkillSource(actions: SkillSourceActions & {
+  busy: boolean; items: ExtensionListItem[]; active: boolean; retain: boolean;
+}) {
   const [source, setSource] = useState<SkillSourceKind>("catalog");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<SkillSourceFilter>("all");
   const [repository, setRepository] = useState("all");
   const [managerOpen, setManagerOpen] = useState(false);
+  const [installingDirectory, setInstallingDirectory] = useState(false);
+  const directoryInstall = useRef(false);
   const catalog = useSkillSourceCatalog(actions.busy);
   const directory = useSkillSourceDirectory(actions.busy);
   const files = useSkillSourceFiles(actions);
@@ -42,7 +46,14 @@ export function useSkillSource(actions: SkillSourceActions & { busy: boolean; it
     catalog.reconcile(next);
     setRepository((current) => next?.some((repo) => repo.id === current) ? current : "all");
   });
-  const locked = () => imports.isLocked() || (actions.busy && !loading);
+  const locked = () => directoryInstall.current || imports.isLocked() || (actions.busy && !loading);
+  const clearCatalog = catalog.clear;
+  const clearDirectory = directory.clear;
+  const clearFiles = files.clear;
+  const retained = actions.active || actions.retain || imports.busy || installingDirectory || managerOpen;
+  useEffect(() => {
+    if (!retained) { clearCatalog(); clearDirectory(); clearFiles(); }
+  }, [retained, clearCatalog, clearDirectory, clearFiles]);
   const changeSource = (next: SkillSourceKind) => {
     if (locked() || next === source || (managerOpen && repositories.loading)) return;
     setSource(next); catalog.cancel(); directory.cancel();
@@ -63,8 +74,12 @@ export function useSkillSource(actions: SkillSourceActions & { busy: boolean; it
   };
   const installDirectory = async (entry: SkillDirectoryEntry) => {
     if (locked()) return;
-    const candidates = await directory.resolve(entry);
-    if (candidates?.length === 1) await imports.install(candidates[0]);
+    directoryInstall.current = true;
+    setInstallingDirectory(true);
+    try {
+      const candidates = await directory.resolve(entry);
+      if (candidates?.length === 1) await imports.install(candidates[0]);
+    } finally { directoryInstall.current = false; setInstallingDirectory(false); }
   };
   const candidates = sourceRows(source, catalog, files);
   const rows = candidates?.map((row) => ({ ...row, installed: skillCandidateInstalled(row.candidate, actions.items) })) ?? [];

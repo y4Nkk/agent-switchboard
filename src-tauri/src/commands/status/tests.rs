@@ -110,6 +110,7 @@ fn public_status_contains_only_observations_identity_and_write_history() {
         recovery_issue: Some("isolated recovery detail".into()),
         client_settings: Some(adapter::extract_client_settings(AppKind::Codex, live).unwrap()),
         client_settings_error: Some("isolated setting detail".into()),
+        codex_permission_profile: Some(adapter::codex::permission_profile_status(live).unwrap()),
         active_profile_id: Some("official-fixture".into()),
         last_switch: Some(history(None, WriteOperation::Restore)),
     };
@@ -118,7 +119,7 @@ fn public_status_contains_only_observations_identity_and_write_history() {
     actual.sort_unstable();
     let mut expected = vec![
         "app", "path", "exists", "syntaxOk", "route", "readError", "recoveryIssue",
-        "clientSettings", "clientSettingsError", "activeProfileId", "lastSwitch",
+        "clientSettings", "clientSettingsError", "codexPermissionProfile", "activeProfileId", "lastSwitch",
     ];
     expected.sort_unstable();
     assert_eq!(actual, expected);

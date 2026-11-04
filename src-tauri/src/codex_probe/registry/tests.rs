@@ -21,8 +21,8 @@ fn result(seq: u32) -> ledger::ProbeRunRecord {
         final_answer: Some("45".into()), ..Default::default() }
 }
 
-fn clock_view(view: ProbeBatchView) -> ProbeRunProgressView {
-    match view.progress.unwrap() {
+fn clock_view(progress: Option<ProbeProgressView>) -> ProbeRunProgressView {
+    match progress.unwrap() {
         ProbeProgressView::Run { clock } => clock,
         ProbeProgressView::Preparing { .. } => panic!("expected an executing run"),
     }
@@ -32,11 +32,11 @@ fn clock_view(view: ProbeBatchView) -> ProbeRunProgressView {
 fn preparing_cancellation_uses_the_workers_signal_and_retains_the_slot() {
     let (_directory, ledger, registry) = fixture("live", 1);
     assert!(registry.begin("other").is_err());
-    let view = registry.read_view(&ledger, None).unwrap().unwrap();
+    let view = registry.read_view(&ledger, "live").unwrap().unwrap();
     assert!(matches!(view.progress, Some(ProbeProgressView::Preparing { seq: 1, cancelling: false })));
     assert!(registry.cancel());
     assert!(!registry.cancel());
-    let view = registry.read_view(&ledger, None).unwrap().unwrap();
+    let view = registry.read_view(&ledger, "live").unwrap().unwrap();
     assert!(matches!(view.progress, Some(ProbeProgressView::Preparing { seq: 1, cancelling: true })));
     registry.finish_batch(&ledger, "live", ProbeBatchStatus::Cancelled, None, vec![]).unwrap();
     assert!(!registry.cancel());
@@ -54,7 +54,7 @@ fn clocks_cannot_reset_or_skip_runs_and_old_handles_cannot_change_the_next_run()
     assert!(registry.start_run(&ledger, "other", 1, 900).is_err());
     assert_eq!(first.deadline(), deadline);
     registry.save_run(&ledger, "live", result(1)).unwrap();
-    let ready = registry.read_view(&ledger, None).unwrap().unwrap();
+    let ready = registry.read_view(&ledger, "live").unwrap().unwrap();
     assert_eq!(ready.completed_runs, 1);
     assert!(matches!(ready.progress, Some(ProbeProgressView::Preparing { seq: 2, .. })));
     assert!(registry.start_run(&ledger, "live", 1, 180).is_err());
@@ -62,12 +62,12 @@ fn clocks_cannot_reset_or_skip_runs_and_old_handles_cannot_change_the_next_run()
     let second = registry.start_run(&ledger, "live", 2, 180).unwrap();
     first.running();
     first.collecting();
-    let active = clock_view(registry.read_view(&ledger, None).unwrap().unwrap());
+    let active = clock_view(registry.read_view(&ledger, "live").unwrap().unwrap().progress);
     assert_eq!(active.seq, 2);
     assert_eq!(active.phase, ProbeRunPhase::Starting);
     assert!(registry.cancel());
     second.running();
-    assert_eq!(clock_view(registry.read_view(&ledger, None).unwrap().unwrap()).phase, ProbeRunPhase::Cancelling);
+    assert_eq!(clock_view(registry.read_view(&ledger, "live").unwrap().unwrap().progress).phase, ProbeRunPhase::Cancelling);
 }
 
 #[test]
@@ -77,25 +77,27 @@ fn both_public_views_reconnect_to_one_clock_and_terminal_commit_removes_it() {
     let clock = registry.start_run(&ledger, "live", 1, 300).unwrap();
     clock.running();
     let deadline = clock.deadline();
-    let current = clock_view(current_view(&local, &registry).unwrap().unwrap());
-    let detail = clock_view(batch_view(&local, &registry, "live").unwrap().unwrap());
+    let current = clock_view(current_observation(&local, &registry).unwrap().unwrap().progress);
+    let detail = clock_view(batch_view(&local, &registry, "live").unwrap().unwrap().progress);
     assert_eq!(current.time_limit_ms, 300_000);
     assert_eq!(detail.seq, current.seq);
     assert_eq!(detail.phase, current.phase);
     assert!(detail.elapsed_ms >= current.elapsed_ms);
     assert_eq!(clock.deadline(), deadline);
     clock.saving();
-    assert_eq!(clock_view(current_view(&local, &registry).unwrap().unwrap()).phase, ProbeRunPhase::Saving);
+    assert_eq!(clock_view(current_observation(&local, &registry).unwrap().unwrap().progress).phase, ProbeRunPhase::Saving);
     registry.finish_batch(&ledger, "live", ProbeBatchStatus::Completed, None, vec![result(1)]).unwrap();
-    for view in [current_view(&local, &registry).unwrap().unwrap(), batch_view(&local, &registry, "live").unwrap().unwrap()] {
-        assert_eq!(view.batch.status, ProbeBatchStatus::Completed);
-        assert!(view.progress.is_none());
-        assert_eq!(view.completed_runs, 1);
-    }
+    let observation = current_observation(&local, &registry).unwrap().unwrap();
+    let detail = batch_view(&local, &registry, "live").unwrap().unwrap();
+    assert_eq!(observation.status, ProbeBatchStatus::Completed);
+    assert_eq!(observation.status, detail.batch.status);
+    assert!(observation.progress.is_none() && detail.progress.is_none());
+    assert_eq!(observation.completed_runs, 1);
+    assert_eq!(observation.completed_runs, detail.completed_runs);
 }
 
 #[test]
-fn current_view_prefers_the_slot_over_wall_clock_order() {
+fn observation_prefers_the_slot_over_wall_clock_order() {
     let (_directory, ledger, registry) = fixture("live", 1);
     let (mut future, _) = ledger.load_snapshot(Some("live")).unwrap().unwrap();
     future.id = "future".into();
@@ -106,15 +108,15 @@ fn current_view_prefers_the_slot_over_wall_clock_order() {
     }).unwrap();
     ledger.finish_batch("future", ProbeBatchStatus::Completed, None, &[]).unwrap();
     assert_eq!(ledger.load_snapshot(None).unwrap().unwrap().0.id, "future");
-    assert_eq!(registry.read_view(&ledger, None).unwrap().unwrap().batch.id, "live");
+    assert_eq!(registry.read_observation(&ledger).unwrap().unwrap().batch_id, "live");
 }
 
 #[test]
 fn missing_ownership_and_out_of_band_writes_are_errors_not_empty_progress() {
     let (_directory, ledger, registry) = fixture("live", 1);
-    assert!(ProbeRegistry::new().read_view(&ledger, None).err().unwrap().contains("运行槽"));
+    assert!(ProbeRegistry::new().read_view(&ledger, "live").err().unwrap().contains("运行槽"));
     ledger.start_run("live", 1).unwrap();
-    assert!(registry.read_view(&ledger, None).err().unwrap().contains("不一致"));
+    assert!(registry.read_view(&ledger, "live").err().unwrap().contains("不一致"));
     registry.start_run(&ledger, "live", 1, 180).err().unwrap();
 }
 
@@ -128,7 +130,7 @@ fn a_direct_worker_cancellation_signal_is_visible_without_a_separate_phase_updat
     drop(slot);
     clock.collecting();
     clock.running();
-    assert_eq!(clock_view(registry.read_view(&ledger, None).unwrap().unwrap()).phase, ProbeRunPhase::Cancelling);
+    assert_eq!(clock_view(registry.read_view(&ledger, "live").unwrap().unwrap().progress).phase, ProbeRunPhase::Cancelling);
 }
 
 #[test]
@@ -143,16 +145,17 @@ fn failed_terminal_save_retains_results_in_both_views_and_retry_owns_the_slot() 
     assert!(registry.begin("other").is_err());
     assert!(!registry.cancel());
     assert!(registry.retry_save(&ledger).is_err());
-    for view in [current_view(&local, &registry).unwrap().unwrap(), batch_view(&local, &registry, "pending").unwrap().unwrap()] {
-        assert!(view.persist_pending);
-        assert!(view.persist_error.unwrap().contains("blocked finish"));
-        assert_eq!(view.runs[0].final_answer.as_deref(), Some("45"));
-        assert_eq!(view.completed_runs, 1);
-        assert!(view.progress.is_none());
-    }
+    let observation = current_observation(&local, &registry).unwrap().unwrap();
+    let detail = batch_view(&local, &registry, "pending").unwrap().unwrap();
+    assert!(observation.persist_pending && detail.persist_pending);
+    assert!(observation.persist_error.unwrap().contains("blocked finish"));
+    assert_eq!(detail.runs[0].final_answer.as_deref(), Some("45"));
+    assert_eq!(observation.completed_runs, 1);
+    assert_eq!(observation.passed_runs, 1);
+    assert!(observation.progress.is_none() && detail.progress.is_none());
     connection.execute_batch("DROP TRIGGER block_finish").unwrap();
     registry.retry_save(&ledger).unwrap();
-    assert!(!registry.read_view(&ledger, None).unwrap().unwrap().persist_pending);
+    assert!(!registry.read_view(&ledger, "pending").unwrap().unwrap().persist_pending);
     assert!(registry.begin("other").is_ok());
 }
 
@@ -164,7 +167,7 @@ fn intermediate_save_failure_retains_results_and_the_slot() {
     connection.execute_batch("CREATE TRIGGER block_run BEFORE UPDATE OF status ON probe_runs
         BEGIN SELECT RAISE(ABORT, 'blocked run'); END;").unwrap();
     assert!(registry.save_run(&ledger, "pending", result(1)).is_err());
-    let pending = registry.read_view(&ledger, None).unwrap().unwrap();
+    let pending = registry.read_view(&ledger, "pending").unwrap().unwrap();
     assert!(pending.persist_pending);
     assert_eq!(pending.runs[0].status, ProbeRunStatus::Passed);
     assert!(registry.begin("other").is_err());
@@ -177,7 +180,7 @@ fn intermediate_save_failure_retains_results_and_the_slot() {
 fn run_creation_failure_retains_the_recorded_batch_until_save_retry() {
     let (_directory, ledger, registry) = fixture("failed-start", 1);
     registry.fail_start("failed-start", "创建失败".into()).unwrap();
-    let pending = registry.read_view(&ledger, None).unwrap().unwrap();
+    let pending = registry.read_view(&ledger, "failed-start").unwrap().unwrap();
     assert!(pending.persist_pending);
     assert_eq!(pending.batch.status, ProbeBatchStatus::Failed);
     assert!(pending.progress.is_none());
@@ -197,4 +200,21 @@ fn progress_wire_format_requires_an_explicit_stage_and_keeps_clock_fields_camel_
     assert_eq!(running["timeLimitMs"], 180_000);
     assert_eq!(running["phase"], "starting");
     assert!(running.get("clock").is_none());
+}
+
+#[test]
+fn observation_excludes_answer_prompt_configuration_and_run_payloads() {
+    let (_directory, ledger, registry) = fixture("light", 1);
+    registry.start_run(&ledger, "light", 1, 180).unwrap();
+    let mut record = result(1);
+    record.final_answer = Some("large-answer-".repeat(100_000));
+    record.execution_error = Some("diagnostic".into());
+    registry.finish_batch(&ledger, "light", ProbeBatchStatus::Completed, None, vec![record]).unwrap();
+    let observation = registry.read_observation(&ledger).unwrap().unwrap();
+    assert!(observation.execution_failed);
+    let value = serde_json::to_value(observation).unwrap();
+    assert_eq!(value["questionLabel"], "Question");
+    for key in ["runs", "finalAnswer", "question", "config"] { assert!(value.get(key).is_none()); }
+    assert!(serde_json::to_string(&value).unwrap().len() < 1024);
+    assert!(registry.read_view(&ledger, "light").unwrap().unwrap().runs[0].final_answer.as_ref().unwrap().len() > 1_000_000);
 }

@@ -3,19 +3,21 @@ import { discoverExtensions, type CommandError, type ExtensionDiscovery } from "
 
 export function useDiscoverySnapshot(onError: (error: CommandError) => void) {
   const [snapshot, setSnapshot] = useState<ExtensionDiscovery | null>(null);
+  const [scanId, setScanId] = useState<string | undefined>(undefined);
   const [scanning, setScanning] = useState(false);
   const [stale, setStale] = useState(false);
   const started = useRef(false);
   const inFlight = useRef(false);
+  const generation = useRef(0);
 
   const scan = useCallback(async () => {
     if (inFlight.current) return null;
     inFlight.current = true;
+    const version = ++generation.current;
     setScanning(true);
     try {
       const next = await discoverExtensions();
-      setSnapshot(next);
-      setStale(false);
+      if (version === generation.current) { setSnapshot(next); setScanId(next.scanId); setStale(false); }
       return next;
     } catch (caught) {
       setStale(true);
@@ -27,11 +29,18 @@ export function useDiscoverySnapshot(onError: (error: CommandError) => void) {
     }
   }, [onError]);
 
+  const release = useCallback(() => {
+    if (inFlight.current) return;
+    generation.current += 1;
+    setSnapshot(null);
+    setStale(false);
+  }, []);
+
   const ensureInitialScan = useCallback(() => {
     if (started.current || snapshot !== null) return;
     started.current = true;
     void scan();
   }, [scan, snapshot]);
 
-  return { snapshot, scanning, stale, scan, ensureInitialScan };
+  return { snapshot, scanId, scanning, stale, scan, ensureInitialScan, release };
 }

@@ -32,7 +32,7 @@ enum LiveRun {
 }
 
 impl LiveProbe {
-    fn view(&self, runs: &[ledger::ProbeRunRecord], planned: u32) -> Result<progress::ProbeProgressView, String> {
+    fn view(&self, runs: &[observation::RunObservation], planned: u32) -> Result<progress::ProbeProgressView, String> {
         let cancelling = self.cancel.load(Ordering::SeqCst);
         let completed = runs.iter().filter(|run| run.status != ProbeRunStatus::Running).count() as u32;
         if runs.iter().enumerate().any(|(index, run)| run.seq != index as u32 + 1) {
@@ -54,6 +54,21 @@ fn running_mut<'a>(slot: &'a mut Option<ProbeSlot>, batch_id: &str) -> Result<&'
     match slot {
         Some(ProbeSlot::Running(live)) if live.batch_id == batch_id => Ok(live),
         _ => Err("检测任务已失去运行槽".into()),
+    }
+}
+
+fn read_lifecycle<'a>(
+    slot: Option<&'a ProbeSlot>, batch_id: &str, status: ProbeBatchStatus,
+    runs: &[observation::RunObservation], planned: u32,
+) -> Result<(Option<&'a UnsavedProbe>, Option<progress::ProbeProgressView>), String> {
+    match slot {
+        Some(ProbeSlot::Running(live)) if live.batch_id == batch_id => {
+            if status != ProbeBatchStatus::Running { return Err("活动检测批次已被外部结束，状态不一致".into()); }
+            Ok((None, Some(live.view(runs, planned)?)))
+        }
+        Some(ProbeSlot::Unsaved(pending)) if pending.batch_id == batch_id => Ok((Some(pending), None)),
+        _ if status == ProbeBatchStatus::Running => Err("检测批次缺少活动运行槽，请重启应用恢复中断记录".into()),
+        _ => Ok((None, None)),
     }
 }
 
@@ -148,20 +163,21 @@ impl ProbeRegistry {
     }
 
     /// Lifecycle writes use this same lock; SQLite supplies one batch/run snapshot.
-    pub(super) fn read_view(&self, ledger: &ProbeLedger, batch_id: Option<&str>) -> Result<Option<ProbeBatchView>, String> {
+    pub(super) fn read_view(&self, ledger: &ProbeLedger, batch_id: &str) -> Result<Option<ProbeBatchView>, String> {
         let slot = self.slot.lock().expect("probe registry");
-        let selected = batch_id.or_else(|| slot.as_ref().map(ProbeSlot::batch_id));
-        let Some((batch, runs)) = ledger.load_snapshot(selected)? else { return Ok(None); };
-        let (pending, progress) = match slot.as_ref() {
-            Some(ProbeSlot::Running(live)) if live.batch_id == batch.id => {
-                if batch.status != ProbeBatchStatus::Running { return Err("活动检测批次已被外部结束，状态不一致".into()); }
-                (None, Some(live.view(&runs, batch.planned_runs)?))
-            }
-            Some(ProbeSlot::Unsaved(pending)) if pending.batch_id == batch.id => (Some(pending.clone()), None),
-            _ if batch.status == ProbeBatchStatus::Running => return Err("检测批次缺少活动运行槽，请重启应用恢复中断记录".into()),
-            _ => (None, None),
-        };
-        Ok(Some(assemble_view(batch, runs, pending, progress)))
+        let Some((batch, runs)) = ledger.load_snapshot(Some(batch_id))? else { return Ok(None); };
+        let summaries: Vec<_> = runs.iter().map(observation::RunObservation::from).collect();
+        let (pending, progress) = read_lifecycle(slot.as_ref(), &batch.id, batch.status, &summaries, batch.planned_runs)?;
+        Ok(Some(assemble_view(batch, runs, pending.cloned(), progress)))
+    }
+
+    pub(super) fn read_observation(&self, ledger: &ProbeLedger) -> Result<Option<ProbeObservation>, String> {
+        let slot = self.slot.lock().expect("probe registry");
+        let selected = slot.as_ref().map(ProbeSlot::batch_id);
+        let Some(snapshot) = ledger.load_observation(selected)? else { return Ok(None); };
+        let (pending, progress) = read_lifecycle(slot.as_ref(), &snapshot.batch_id, snapshot.status,
+            &snapshot.runs, snapshot.planned_runs)?;
+        Ok(Some(observation::assemble(snapshot, pending, progress)))
     }
 
     pub(crate) fn cancel(&self) -> bool {

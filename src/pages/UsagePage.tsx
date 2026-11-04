@@ -1,3 +1,6 @@
+import { memo } from "react";
+import { ModelUsageRefreshStatus } from "../components/ModelUsageRefreshStatus";
+import { ModelUsageIssues } from "../components/ModelUsageIssues";
 import type { ModelUsageGroup, ModelUsageReport } from "../api/client";
 import { ModelUsageDistributionChart } from "../components/charts/ModelUsageDistributionChart";
 import { UsageTrendChart } from "../components/charts/UsageTrendChart";
@@ -70,6 +73,12 @@ function UsageAnalysis({ report }: { report: ModelUsageReport }) {
   </div>;
 }
 
+const UsageContent = memo(function UsageContent({ report }: { report: ModelUsageReport }) {
+  return <div className="asb-model-usage-content">
+    <UsageTotals report={report} /><UsageAnalysis report={report} /><ModelUsageTable report={report} />
+  </div>;
+});
+
 export function UsagePage({ usage }: { usage: ReturnType<typeof useModelUsageReport> }) {
   const { t } = useI18n();
   const { read, loading, error } = usage;
@@ -77,13 +86,12 @@ export function UsagePage({ usage }: { usage: ReturnType<typeof useModelUsageRep
   const hasData = report !== null && report.groups.length > 0;
   return <section className="asb-panel asb-model-usage" aria-label={t("usage.consumption")}>
     <ModuleHeader title={t("usage.consumption")} />
-    {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}
-    {loading && report === null ? <div className="asb-model-usage-loading" role="status" aria-label={t("usage.loading")}>
-      <div className="asb-usage-stat-band">{[0, 1, 2, 3].map((key) => <div key={key} className="asb-skeleton" />)}</div>
-      <div className="asb-skeleton asb-model-usage-loading-chart" />
-    </div> : report && hasData ? <div className="asb-model-usage-content">
-      <UsageTotals report={report} /><UsageAnalysis report={report} /><ModelUsageTable report={report} />
-    </div> : report ? <><UsageTotals report={report} />
+    {error && <p className="asb-model-usage-notice" role="alert">
+      {t(loading ? "usage.refresh.retrying" : report ? "usage.refresh.failedSaved" : "usage.refresh.failed")} {error}
+    </p>}
+    <ModelUsageRefreshStatus activity={usage.activity} task={usage.task} hasReport={!!report} />
+    {report && <ModelUsageIssues issues={report.issues} />}
+    {report && hasData ? <UsageContent report={report} /> : report ? <><UsageTotals report={report} />
       <div className="asb-empty-state asb-model-usage-empty">
         <span className="asb-empty-state-icon" aria-hidden="true"><UsageIcon /></span>
         <h3 className="asb-section-title">{t("usage.empty")}</h3>

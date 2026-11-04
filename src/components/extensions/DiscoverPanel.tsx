@@ -88,7 +88,7 @@ export function DiscoverPanel(props: Props) {
   const [open, setOpen] = useState(false);
   const [focusDiagnosticId, setFocusDiagnosticId] = useState<string | null>(null);
   useEffect(() => { ensureInitialScan(); }, [ensureInitialScan]);
-  useEffect(() => { setOpen(false); setFocusDiagnosticId(null); }, [snapshot?.scanId]);
+  useEffect(() => { setOpen(false); setFocusDiagnosticId(null); }, [discovery.scanId]);
   const surfaceWarning = (id: string) => {
     const first = view.diagnostics.find((item) => item.subject.kind === "discoveryEntry" && item.subject.observationId === id);
     if (first) { setFocusDiagnosticId(first.id); setOpen(true); }

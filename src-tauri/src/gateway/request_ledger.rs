@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 pub(crate) const LEDGER_VERSION: u8 = 2;
-const MAX_ENTRIES: usize = 10_000;
+pub(crate) const MAX_ENTRIES: usize = 10_000;
 const MAX_FAILOVER_ATTEMPTS: usize = 32;
 const MAX_TEXT_LENGTH: usize = 512;
 
@@ -99,6 +99,17 @@ pub(crate) struct ClaudeRequestLedger {
 impl ClaudeRequestLedger {
     pub(crate) fn new(path: PathBuf) -> Self {
         Self { path }
+    }
+
+    pub(crate) fn visit_requests(
+        &self,
+        mut visit: impl FnMut(usize, ClaudeRequestRecord),
+    ) -> Result<(), String> {
+        let _guard = mutation_lock().lock().map_err(|_| "Claude 请求账本读取锁不可用")?;
+        if let Some(ledger) = self.load()? {
+            for (index, record) in ledger.entries.into_iter().enumerate() { visit(index, record); }
+        }
+        Ok(())
     }
 
     pub(crate) fn append(&self, mut record: ClaudeRequestRecord) -> Result<(), String> {

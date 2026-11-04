@@ -1,5 +1,5 @@
 import { uiMessage } from "../../i18n/errors";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SkillCandidateDto } from "../../api/client";
 import {
   resolveDirectorySkill, searchSkillDirectory, type SkillDirectoryEntry, type SkillDirectoryResult,
@@ -31,6 +31,11 @@ export function useSkillSourceDirectory(busy: boolean) {
   const resolution = useSkillSourceRequests<Record<string, SkillCandidateDto[]>>(busy);
   const cancelResolution = () => { active.current = null; setResolving(null); resolution.cancel(); };
   const cancel = () => { searchRequests.cancel(); cancelResolution(); };
+  const clearSearch = searchRequests.clear;
+  const clearResolution = resolution.clear;
+  const clear = useCallback(() => {
+    active.current = null; setResolving(null); clearSearch(); clearResolution();
+  }, [clearSearch, clearResolution]);
   const changeInput = (value: string) => { setInput(value); cancel(); };
   const search = async () => {
     const query = input.trim();
@@ -63,7 +68,7 @@ export function useSkillSourceDirectory(busy: boolean) {
     return next?.[key] ?? null;
   };
   return {
-    input, changeInput, search, loadMore, cancel, resolve, resolving,
+    input, changeInput, search, loadMore, cancel, clear, resolve, resolving,
     result: searchRequests.result, resolutions: resolution.result ?? {},
     searching: searchRequests.loading, loading: searchRequests.loading || resolving !== null,
     error: searchRequests.error, resolveError: resolution.error,

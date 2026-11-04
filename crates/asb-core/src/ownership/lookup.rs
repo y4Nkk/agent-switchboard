@@ -41,8 +41,11 @@ pub fn setting_groups(app: AppKind) -> &'static [&'static str] {
         ],
         AppKind::Claude => &[
             "ownership.group.modelBehavior",
+            "ownership.group.safetyAndApprovals",
+            "ownership.group.sandbox",
             "ownership.group.interfaceAndInteraction",
             "ownership.group.filesAndGit",
+            "ownership.group.toolsAndFeatures",
         ],
     }
 }
@@ -140,8 +143,10 @@ pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
         key: spec.key,
         owner: spec.owner,
         value_type: match spec.control {
-            SettingControl::Integer { .. } => SettingValueType::PositiveInteger,
+            SettingControl::Integer { .. } => SettingValueType::Integer,
             SettingControl::Notifications => SettingValueType::BoolOrStringArray,
+            SettingControl::StringList => SettingValueType::StringArray,
+            SettingControl::ApprovalPolicy => SettingValueType::StringOrObject,
             _ => SettingValueType::String,
         },
         allowed_values: &[],

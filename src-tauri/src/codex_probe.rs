@@ -9,6 +9,7 @@ mod process;
 mod snapshot;
 mod config_watch;
 mod progress;
+mod observation;
 #[cfg(test)]
 mod tests;
 
@@ -22,9 +23,8 @@ pub(crate) use ledger::{
     ProbeLedger, ProbeProfileFilter,
 };
 pub(crate) use questions::{resolve_question, ProbeGrading, ResolvedQuestion, QUESTIONS};
+pub(crate) use observation::ProbeObservation;
 use runner::{cli_version, run_once, ProbeAbort};
-#[cfg(test)]
-pub(crate) use runner::codex_executable;
 pub(crate) const MAX_RUN_COUNT: u32 = 10;
 
 /// Automatic grading outcome. Visual answers, execution failures,
@@ -90,14 +90,13 @@ pub(crate) fn notify_changed(app: &tauri::AppHandle, batch_id: &str) {
 
 // -------------------------------------------------------------- read paths
 
-/// The live-or-latest batch view the radar panel reconnects to after a
-/// refresh or restart.
-pub(crate) fn current_view(
+/// The live-or-latest lightweight status, independent of any visible detail.
+pub(crate) fn current_observation(
     local: &crate::local_state::LocalState,
     registry: &ProbeRegistry,
-) -> Result<Option<ProbeBatchView>, String> {
+) -> Result<Option<ProbeObservation>, String> {
     let ledger = ProbeLedger::new(local.root());
-    registry.read_view(&ledger, None)
+    registry.read_observation(&ledger)
 }
 
 /// One historical batch by id.
@@ -107,7 +106,7 @@ pub(crate) fn batch_view(
     batch_id: &str,
 ) -> Result<Option<ProbeBatchView>, String> {
     let ledger = ProbeLedger::new(local.root());
-    registry.read_view(&ledger, Some(batch_id))
+    registry.read_view(&ledger, batch_id)
 }
 
 fn assemble_view(

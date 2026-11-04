@@ -1,85 +1,69 @@
-//! All calendar ranges share one derived snapshot and the same indexed call facts.
+//! Snapshot reads never discover sources or wait for a refresh task.
+mod task;
+pub(crate) use task::ModelUsageManager;
 use crate::local_state::LocalState;
-use crate::session_manager::{read_index::{key, FileRevision, ReadIndex}, SessionIssue, SessionSource};
-use asb_core::contracts::{ModelUsageFreshness, ModelUsageRead, ModelUsageReport, ModelUsageRequest};
+use crate::session_manager::read_index::{key, ReadIndex};
+use asb_core::contracts::{ModelUsageFreshness, ModelUsageProgress, ModelUsageRead, ModelUsageReport};
 use chrono::{DateTime, Duration, Local, Utc};
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use rusqlite::{params, OptionalExtension};
+use std::path::Path;
 
-pub(crate) const MODEL_USAGE_REFRESH_INTERVAL: Duration = Duration::minutes(5);
-static REFRESH_GATE: Mutex<()> = Mutex::new(());
+const MODEL_USAGE_REFRESH_INTERVAL: Duration = Duration::minutes(5);
 
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Snapshot { cached_at: String, reports: Vec<ModelUsageReport> }
-
-pub(crate) fn get_or_refresh(state: &LocalState, request: ModelUsageRequest) -> Result<ModelUsageRead, String> {
-    let _guard = REFRESH_GATE.lock().map_err(|_| "本地用量索引刷新锁不可用")?;
-    let index = ReadIndex::open(state.root())?;
+fn cache_key() -> Result<String, String> {
     let roots = crate::session_manager::codex_session_roots()?;
-    let native = crate::local_state::codex_paths::sqlite_root(&crate::session_manager::codex_root()?);
-    let cache_key = key(&(roots, native))?;
-    let (mut sources, mut issues) = crate::session_manager::scan_usage_sources(state.root())?;
-    sources.sort_by(|left, right| (left.meta.app, &left.meta.session_id).cmp(&(right.meta.app, &right.meta.session_id)));
-    issues.retain(|issue| issue.conversion_id.is_none());
-    issues.sort_by(|left, right| (left.app, &left.message).cmp(&(right.app, &right.message)));
-    let revision = source_revision(state.root(), &sources, &issues)?;
-    if !request.force_refresh {
-        if let Some(snapshot) = index.get::<Snapshot>("usage-reports", &cache_key, &revision)? {
-            if DateTime::parse_from_rfc3339(&refresh_after(&snapshot.cached_at)?).map_err(|error| error.to_string())?
-                .with_timezone(&Utc) > Utc::now() {
-                return read(snapshot, request, ModelUsageFreshness::Cached);
-            }
-        }
-    }
-    let reports = crate::model_usage::reports(state.root(), sources.clone(), issues.clone(), Local::now())?;
-    let current_revision = source_revision(state.root(), &sources, &issues)?;
-    let snapshot = Snapshot { cached_at: Utc::now().to_rfc3339(), reports };
-    finish_refresh(&index, &cache_key, &revision, &current_revision, snapshot, request)
+    let native = crate::local_state::codex_paths::sqlite_root(&crate::session_manager::codex_root()?)?;
+    key(&(roots, native))
 }
 
-fn finish_refresh(index: &ReadIndex, cache_key: &str, revision: &str, current_revision: &str,
-    snapshot: Snapshot, request: ModelUsageRequest) -> Result<ModelUsageRead, String> {
-    let stable = current_revision == revision;
-    if stable { index.put("usage-reports", cache_key, revision, &snapshot)?; }
-    let next_refresh = refresh_deadline(&snapshot.cached_at,
-        if stable { MODEL_USAGE_REFRESH_INTERVAL } else { Duration::seconds(10) })?;
-    let mut reading = read(snapshot, request, ModelUsageFreshness::Fresh)?;
-    reading.refresh_after = next_refresh;
-    Ok(reading)
+pub(crate) fn read_cached(state: &LocalState) -> Result<Option<ModelUsageRead>, String> {
+    let index = ReadIndex::open(state.root())?;
+    read_snapshot(&index, &cache_key()?)
 }
 
-fn source_revision(root: &std::path::Path, sources: &[SessionSource], issues: &[SessionIssue]) -> Result<String, String> {
-    let mut files = Vec::new();
-    for source in sources {
-        let revisions: Vec<_> = source.paths.iter().filter(|_| source.retained.is_empty()).map(|path| (path, FileRevision::read(path))).collect();
-        files.push((&source.meta, revisions, &source.retained));
-    }
-    let retained = crate::session_manager::history::revision(root);
-    let encoded = key(&(Local::now().format("%Y-%m-%d%:z").to_string(), files, issues, retained))?;
-    Ok(asb_switch::sha256_hex(&encoded))
+fn read_snapshot(index: &ReadIndex, scope: &str) -> Result<Option<ModelUsageRead>, String> {
+    let row: Option<(String,String)> = index.connection().query_row(
+        "SELECT cached_at,reports FROM usage_snapshot WHERE scope=?1", [scope],
+        |row| Ok((row.get(0)?,row.get(1)?))).optional().map_err(|error| error.to_string())?;
+    row.map(|(at, raw)| {
+        let reports = serde_json::from_str(&raw).map_err(|error| format!("用量汇总无效：{error}"))?;
+        reading(reports, &at, ModelUsageFreshness::Cached, MODEL_USAGE_REFRESH_INTERVAL)
+    }).transpose()
 }
 
-fn read(snapshot: Snapshot, request: ModelUsageRequest, freshness: ModelUsageFreshness) -> Result<ModelUsageRead, String> {
-    use asb_core::contracts::ModelUsageRange::{Today, Last7Days, Last30Days, All};
-    if !snapshot.reports.iter().map(|report| report.range).eq([Today, Last7Days, Last30Days, All]) {
+fn rebuild(root: &Path, scope: &str, publish: &dyn Fn(ModelUsageProgress)) -> Result<ModelUsageRead, String> {
+    let progress = crate::model_usage::progress::Progress::new(publish);
+    let index = ReadIndex::open(root)?;
+    let manifest = crate::session_manager::usage_sources::discover(root, &index)?;
+    let batch = crate::model_usage::refresh(&index, scope, manifest, Local::now, &progress)?;
+    let cached_at = Utc::now().to_rfc3339();
+    let transaction = index.connection().unchecked_transaction().map_err(|error| error.to_string())?;
+    transaction.execute("INSERT INTO usage_snapshot(scope,cached_at,reports)
+        VALUES(?1,?2,?3) ON CONFLICT(scope) DO UPDATE SET
+        cached_at=excluded.cached_at,reports=excluded.reports",
+        params![scope,cached_at,key(&batch.reports)?]).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    crate::session_manager::diagnostics::report(root, "本地消耗统计",
+        batch.reports.iter().take(1).flat_map(|report| report.issues.iter())
+            .map(|issue| format!("{}: {}", issue.app.label(), issue.message)));
+    reading(batch.reports, &cached_at, ModelUsageFreshness::Fresh,
+        if batch.refresh_soon { Duration::seconds(10) } else { MODEL_USAGE_REFRESH_INTERVAL })
+}
+
+fn reading(reports: Vec<ModelUsageReport>, cached_at: &str, freshness: ModelUsageFreshness,
+    interval: Duration) -> Result<ModelUsageRead, String> {
+    use asb_core::contracts::ModelUsageRange::{Today,Last7Days,Last30Days,All};
+    if !reports.iter().map(|report| report.range).eq([Today,Last7Days,Last30Days,All]) {
         return Err("本地用量索引的日期范围集合无效".into());
     }
-    let refresh_after = refresh_after(&snapshot.cached_at)?;
-    let report = snapshot.reports.into_iter().find(|report| report.range == request.range)
-        .ok_or("本地用量索引缺少当前日期范围")?;
-    Ok(ModelUsageRead { report, freshness, refresh_after })
-}
-
-fn refresh_after(cached_at: &str) -> Result<String, String> {
-    refresh_deadline(cached_at, MODEL_USAGE_REFRESH_INTERVAL)
+    Ok(ModelUsageRead { reports, freshness, refresh_after: refresh_deadline(cached_at, interval)? })
 }
 
 fn refresh_deadline(cached_at: &str, interval: Duration) -> Result<String, String> {
     let cached_at = DateTime::parse_from_rfc3339(cached_at).map_err(|error| error.to_string())?.with_timezone(&Utc);
     let expires = cached_at.checked_add_signed(interval).ok_or("用量索引刷新时间无效")?;
     let midnight = cached_at.with_timezone(&Local).date_naive().succ_opt()
-        .and_then(|date| date.and_hms_opt(0, 0, 0)).and_then(|date| date.and_local_timezone(Local).earliest())
+        .and_then(|date| date.and_hms_opt(0,0,0)).and_then(|date| date.and_local_timezone(Local).earliest())
         .ok_or("无法确定本机日期边界")?.with_timezone(&Utc);
     Ok(expires.min(midnight).to_rfc3339())
 }

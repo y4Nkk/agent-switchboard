@@ -1,0 +1,62 @@
+.asb-client-management-content {
+  display: grid;
+  gap: var(--asb-space-6);
+  min-width: 0;
+}
+
+.asb-software-installation,
+.asb-software-task,
+.asb-software-details {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-software-installation,
+.asb-software-task {
+  padding: var(--asb-space-4);
+  background: var(--asb-content-muted);
+  border-radius: var(--asb-radius-medium);
+}
+
+.asb-software-heading,
+.asb-software-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-software-heading time {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-software-state {
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-software-installation p,
+.asb-software-task p,
+.asb-software-details p {
+  margin: 0;
+}
+
+.asb-software-installation code,
+.asb-software-task code {
+  font: var(--asb-text-code);
+  overflow-wrap: anywhere;
+}
+
+.asb-software-issues {
+  margin: 0;
+  padding-inline-start: var(--asb-space-4);
+  color: var(--asb-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.asb-software-task > .asb-btn,
+.asb-software-details > .asb-btn {
+  justify-self: start;
+}

@@ -9,6 +9,19 @@ pub(super) async fn windows(app: &AppHandle, request: &InvokeRequest) -> Result<
         "update_channel" => {
             as_json(Ok::<_, CommandError>(crate::distribution::update_channel()))
         }
+        "check_application_update" => command!(crate::app_update::check_application_update(app.clone())),
+        "start_update_download" => command!(crate::app_update::start_update_download(
+            app.clone(), argument(&request.args, "updateId")?,
+        )),
+        "read_update_download" => command!(crate::app_update::read_update_download(
+            app.clone(), argument(&request.args, "id")?,
+        )),
+        "cancel_update_download" => command!(crate::app_update::cancel_update_download(
+            app.clone(), argument(&request.args, "id")?,
+        )),
+        "changelog_section" => as_json(Ok::<_, CommandError>(crate::changelog::changelog_section(
+            app.clone(), argument(&request.args, "version")?,
+        ))),
         "pick_directory" => {
             command!(commands::window::pick_directory(app.clone()))
         }

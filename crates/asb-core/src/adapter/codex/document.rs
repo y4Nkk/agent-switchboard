@@ -57,6 +57,15 @@ fn leaf_conflict(path: &str) -> AdapterError {
 }
 
 pub(super) fn validate_path(doc: &DocumentMut, path: &str) -> Result<(), AdapterError> {
+    if path == "approval_policy" {
+        if let Some(item) = doc.get(path).filter(|item| item.as_table_like().is_some()) {
+            let value = super::common::item_value(item, path)?;
+            if !crate::validate::approval_policy::valid(&value) {
+                return Err(AdapterError { message: "approval_policy 不是有效的当前审批策略；原值已保留".into(), line: None });
+            }
+        }
+        return Ok(());
+    }
     let segs: Vec<&str> = path.split('.').collect();
     let (&last, parents) = segs.split_last().expect("non-empty path");
     let mut current = doc.as_item();
@@ -92,6 +101,7 @@ pub(super) fn set_path(
     path: &str,
     value: ConfigValue,
 ) -> Result<(), AdapterError> {
+    validate_path(doc, path)?;
     let segs: Vec<&str> = path.split('.').collect();
     let (&last, parents) = segs.split_last().expect("non-empty path");
     let mut current = doc.as_item_mut();
@@ -123,6 +133,10 @@ pub(super) fn set_path(
         // would reset the key's decor and drop live-file comments attached
         // to it (e.g. the leading `# live comment`).
         Some(item) => {
+            if path == "approval_policy" && item.as_table_like().is_some() {
+                *item = Item::Value(to_toml_value(value));
+                return Ok(());
+            }
             let value_slot = item
                 .as_value_mut()
                 .ok_or_else(|| leaf_conflict(path))?;
@@ -152,6 +166,11 @@ fn to_toml_value(value: ConfigValue) -> TomlValue {
                 array.push(to_toml_value(item));
             }
             TomlValue::Array(array)
+        }
+        ConfigValue::Object(items) => {
+            let mut table = toml_edit::InlineTable::new();
+            for (key, value) in items { table.insert(&key, to_toml_value(value)); }
+            TomlValue::InlineTable(table)
         }
     }
 }

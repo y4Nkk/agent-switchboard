@@ -48,9 +48,10 @@ pub enum SettingValueType {
     Bool,
     String,
     Secret,
-    PositiveInteger,
+    Integer,
     StringArray,
     BoolOrStringArray,
+    StringOrObject,
 }
 
 /// What a provider projection does when the current provider has no value for
@@ -72,6 +73,9 @@ pub enum SettingControl {
     Integer { min: u64, max: u64 },
     StringInteger { min: u64, max: u64 },
     Notifications,
+    StringList,
+    MultilineText,
+    ApprovalPolicy,
     Choice {
         presentation: ChoiceControl,
     },
@@ -117,12 +121,12 @@ pub struct ChoiceOption {
     pub label: &'static str,
 }
 
-/// How the settings page renders a choice: the reasoning-effort slider keeps
-/// its dedicated slider control; every other choice renders as segments.
+/// How the settings page renders a choice, including native custom values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChoiceControl {
     Slider,
     Segment,
+    Editable,
 }
 
 /// One multi-value general setting from the client's official configuration

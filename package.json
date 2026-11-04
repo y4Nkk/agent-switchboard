@@ -35,7 +35,6 @@
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
-    "@tauri-apps/plugin-updater": "2.11.0",
     "lucide-react": "^1.41.0",
     "react": "^19.1.0",
     "react-aria": "^3.52.1",

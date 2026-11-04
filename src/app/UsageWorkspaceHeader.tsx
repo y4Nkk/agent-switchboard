@@ -105,7 +105,7 @@ function ConsumptionControls({ active, range, onRangeChange, usage }: HeaderProp
           checked={range === option.value} disabled={!active} label={t(option.labelKey)}
           onChange={() => onRangeChange(option.value)} />)}
       </div>
-      <Button variant="secondary" disabled={usage.loading || !active} onClick={() => void usage.refresh()}>
+      <Button variant="secondary" aria-busy={usage.loading} disabled={usage.loading || !active} onClick={usage.refresh}>
         {usage.loading ? t("usage.action.refreshing") : t("usage.action.refresh")}
       </Button>
     </div>
@@ -137,11 +137,12 @@ export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption
   let status: ReactNode;
   if (section === "consumption") {
     actions = <ConsumptionControls {...consumption} />;
-    status = report ? <>
-      {t(usage.read?.freshness === "cached" ? "usage.status.snapshot" : "usage.status.current")}
-      <Time iso={report.generatedAt} />
-      {usage.loading ? t("usage.status.updating") : null}
-    </> : t("usage.status.noSummary");
+    status = <>
+      {report ? <>{t(usage.loading || usage.error || usage.read?.freshness === "cached"
+        ? "usage.status.snapshot" : "usage.status.current")}<Time iso={report.generatedAt} /></>
+        : !usage.loading ? t("usage.status.noSummary") : null}
+      {usage.loading ? t(report ? "usage.status.updatingSaved" : "usage.loading") : null}
+    </>;
   } else if (section === "quota") {
     actions = <>
       <Button variant="secondary" disabled={providerQuota.loading || !providerQuota.enabled} onClick={() => void providerQuota.refresh()}>

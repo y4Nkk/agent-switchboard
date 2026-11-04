@@ -2,18 +2,20 @@ use super::http::{argument, as_json, optional_argument, InvokeRequest};
 use crate::commands::{self, error::CommandError};
 use crate::local_state::CloudBackupSettings;
 use asb_core::contracts::{
-    AppKind, ModelUsageRequest, ProviderDraft, SettingsValues, UsageHistoryRequest,
+    AppKind, ProviderDraft, SettingsValues, UsageHistoryRequest,
 };
 use serde_json::Value;
 use tauri::AppHandle;
 
 mod system;
+mod client_software;
 mod providers;
 mod usage;
 mod configuration;
 
 pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandError> {
     tauri::async_runtime::block_on(async {
+        if let Some(result) = client_software::dispatch(app, &request).await? { return Ok(result); }
         if let Some(result) = super::settings_dispatch::dispatch(app, &request).await? {
             return Ok(result);
         }

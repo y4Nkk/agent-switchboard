@@ -14,7 +14,7 @@ export interface GlobalPromptDocument {
 }
 
 /** One concrete client configuration value. */
-export type ConfigValue = boolean | string | number | string[];
+export type ConfigValue = boolean | string | number | ConfigValue[] | { [key: string]: ConfigValue };
 
 /** One application-owned setting intent. Automatic means that no line/key is
  * written to the client configuration; explicit values are always projected. */
@@ -32,6 +32,7 @@ export interface SettingsValues {
 export interface SettingChoiceOption {
   value: string;
   label: string;
+  required?: boolean;
 }
 
 /** One backend-owned parameter or client preference. */
@@ -47,14 +48,14 @@ export type SettingSpec =
       key: string;
       label: string;
       group: string;
-      control: "slider" | "segment";
+      control: "slider" | "segment" | "editableChoice" | "approvalPolicy";
       options: SettingChoiceOption[];
     }
   | {
       key: string;
       label: string;
       group: string;
-      control: "text" | "notifications";
+      control: "text" | "notifications" | "stringList" | "multilineText";
       options: [];
     }
   | {
@@ -116,7 +117,14 @@ export interface ProviderParametersCatalog {
   defaults: SettingsValues;
   groups: string[];
   specs: SettingSpec[];
-  claudeEffortOptions: SettingChoiceOption[];
+  claudeModelPreferences: ClaudeModelPreferencesCatalog | null;
+}
+
+export interface ClaudeModelPreferencesCatalog {
+  effortOptions: SettingChoiceOption[];
+  capOptions: SettingChoiceOption[];
+  autoCompactMin: number;
+  autoCompactMax: number;
 }
 
 export function getProviderParametersCatalog(app: AppKind): Promise<ProviderParametersCatalog> {

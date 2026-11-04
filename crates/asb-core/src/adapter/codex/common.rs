@@ -16,12 +16,8 @@ pub fn extract_client_settings(text: &str) -> Result<SettingsValues, AdapterErro
             item = item.and_then(|item| item.get(segment));
         }
         if let Some(item) = item {
-            let value = item.as_value().ok_or_else(|| AdapterError {
-                message: format!("通用配置 {key} 必须是标量值"),
-                line: None,
-            })?;
             *setting = SettingValue::Explicit {
-                value: toml_value(value, key)?,
+                value: item_value(item, key)?,
             };
         }
     }
@@ -32,6 +28,16 @@ pub fn extract_client_settings(text: &str) -> Result<SettingsValues, AdapterErro
             line: None,
         })?;
     Ok(settings)
+}
+
+pub(super) fn item_value(item: &toml_edit::Item, key: &str) -> Result<ConfigValue, AdapterError> {
+    if let Some(table) = item.as_table_like() {
+        return table.iter().map(|(name, item)| Ok((name.to_string(), item_value(item, key)?)))
+            .collect::<Result<std::collections::BTreeMap<_, _>, _>>().map(ConfigValue::Object);
+    }
+    item.as_value().ok_or_else(|| AdapterError {
+        message: format!("配置 {key} 不是可读取的值"), line: None,
+    }).and_then(|value| toml_value(value, key))
 }
 
 /// Decodes a TOML configuration value without losing integer precision.
@@ -54,6 +60,9 @@ pub fn toml_value(value: &TomlValue, key: &str) -> Result<ConfigValue, AdapterEr
         }
         TomlValue::Array(items) => items.iter().map(|item| toml_value(item, key))
             .collect::<Result<Vec<_>, _>>().map(ConfigValue::Array),
+        TomlValue::InlineTable(table) => table.iter().map(|(name, value)|
+            Ok((name.to_string(), toml_value(value, key)?)))
+            .collect::<Result<std::collections::BTreeMap<_, _>, _>>().map(ConfigValue::Object),
         _ => Err(AdapterError {
             message: format!("配置 {key} 必须是受支持的标量或数组值"),
             line: None,

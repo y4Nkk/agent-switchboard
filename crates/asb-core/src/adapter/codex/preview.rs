@@ -13,6 +13,7 @@ pub(crate) fn preview(
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
     super::validate_projection(plan)?;
+    super::render::render(current, plan)?;
     let mut preview = preview_entries(current, overlay(plan), backup_dir)?;
     let doc = parse(current)?;
     let previous = item_at(&doc, "model_provider")
@@ -51,7 +52,11 @@ pub(crate) fn preview_entries(
     }
     let mut changes = Vec::new();
     for (key, entry) in entries {
-        let existing = item_at(&doc, &key).and_then(item_repr);
+        let existing = item_at(&doc, &key).and_then(|item| {
+            if key == "approval_policy" {
+                super::common::item_value(item, &key).ok().map(|value| value.display())
+            } else { item_repr(item) }
+        });
         match entry {
             OverlayEntry::Set(value) => {
                 let after = value.display();

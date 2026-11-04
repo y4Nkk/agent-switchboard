@@ -1,4 +1,5 @@
 use super::*;
+use std::process::Command;
 use crate::codex_probe::{resolve_question, tests::write_rollout, ProbeRunOutcome, QUESTIONS};
 use std::sync::Mutex;
 

@@ -39,6 +39,7 @@ pub struct ConfigFileStatus {
     pub client_settings: Option<SettingsValues>,
     /// A valid client file can still contain an invalid value for an owned setting.
     pub client_settings_error: Option<String>,
+    pub codex_permission_profile: Option<asb_core::adapter::codex::PermissionProfileStatus>,
     /// Connection identity only; model, preferences and write history do not prove file health.
     pub active_profile_id: Option<String>,
     pub last_switch: Option<ConfigWriteRecord>,

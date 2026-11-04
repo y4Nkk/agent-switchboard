@@ -1,12 +1,12 @@
-import { uiMessage } from "../i18n/errors";
 import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useState } from "react";
 import { toast, toastMessage } from "./use-toast";
 import {
-  deleteCodexProbeBatches, getCodexProbeBatch, listCodexProbeHistory,
-  listCodexProbeHistoryProfiles, type CodexProbeBatch, type CodexProbeBatchStatus,
+  deleteCodexProbeBatches, listCodexProbeHistory,
+  listCodexProbeHistoryProfiles, type CodexProbeBatchStatus,
   type CodexProbeHistoryItem, type CodexProbeHistoryRange,
 } from "../api/client";
+import { useCodexProbeDetail } from "./use-codex-probe-detail";
 
 const PAGE_SIZE = 20;
 export interface CodexProbeHistoryProfileOption {
@@ -29,7 +29,7 @@ function useHistoryFilters() {
     page, setPage, clearFilters };
 }
 
-function useHistoryPage(enabled: boolean, revision: string, epoch: number,
+function useHistoryPage(enabled: boolean, retain: boolean, revision: string, epoch: number,
   filters: ReturnType<typeof useHistoryFilters>) {
   const { range, profileFilter, statusFilter, page, setPage } = filters;
   const [items, setItems] = useState<CodexProbeHistoryItem[]>([]);
@@ -38,7 +38,11 @@ function useHistoryPage(enabled: boolean, revision: string, epoch: number,
   const [listError, setListError] = useMessageState();
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      if (!retain) { setItems([]); setTotal(0); }
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     setListError(null);
@@ -58,7 +62,7 @@ function useHistoryPage(enabled: boolean, revision: string, epoch: number,
       if (active) setListError(reason);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [enabled, revision, epoch, range, profileFilter, statusFilter, page, setPage]);
+  }, [enabled, retain, revision, epoch, range, profileFilter, statusFilter, page, setPage]);
   const toggleSelected = useCallback((id: string, checked: boolean) => {
     setSelection((previous) => {
       const next = new Set(previous);
@@ -70,58 +74,41 @@ function useHistoryPage(enabled: boolean, revision: string, epoch: number,
   return { items, total, loading, listError, selection, toggleSelected, clearSelection };
 }
 
-function useHistoryProfiles(enabled: boolean, revision: string, epoch: number) {
+function useHistoryProfiles(enabled: boolean, retain: boolean, revision: string, epoch: number) {
   const [profiles, setProfiles] = useState<CodexProbeHistoryProfileOption[] | null>(null);
   const [profilesError, setProfilesError] = useMessageState();
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) { if (!retain) setProfiles(null); return; }
     let active = true;
     listCodexProbeHistoryProfiles().then((options) => {
       if (active) { setProfiles(options); setProfilesError(null); }
     }).catch((reason) => { if (active) setProfilesError(reason); });
     return () => { active = false; };
-  }, [enabled, revision, epoch]);
+  }, [enabled, retain, revision, epoch]);
   return { profiles, profilesError };
 }
 
-function useHistoryDetail(enabled: boolean, revision: string) {
+function useHistoryDetail(enabled: boolean, retain: boolean, revision: string) {
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<CodexProbeBatch | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useMessageState();
   const [epoch, setEpoch] = useState(0);
-  useEffect(() => {
-    if (!enabled || detailId === null) return;
-    let active = true;
-    setDetailLoading(true);
-    setDetailError(null);
-    getCodexProbeBatch(detailId).then((batch) => {
-      if (!active) return;
-      setDetail(batch);
-      setDetailError(batch === null ? uiMessage("codex.history.missingBatch") : null);
-    }).catch((reason) => { if (active) setDetailError(reason); })
-      .finally(() => { if (active) setDetailLoading(false); });
-    return () => { active = false; };
-  }, [enabled, detailId, epoch, revision]);
+  const detail = useCodexProbeDetail(enabled, detailId, `${revision}:${epoch}`, retain);
   const openDetail = useCallback((id: string) => {
-    setDetail(null); setDetailError(null); setDetailLoading(true);
     setDetailId(id); setEpoch((value) => value + 1);
   }, []);
-  const closeDetail = useCallback(() => {
-    setDetailId(null); setDetail(null); setDetailLoading(false); setDetailError(null);
-  }, []);
-  return { detailId, detail, detailLoading, detailError, openDetail, closeDetail };
+  const closeDetail = useCallback(() => setDetailId(null), []);
+  return { detailId, ...detail, openDetail, closeDetail };
 }
 
 /** Visibility and live-batch revisions invalidate reads, retaining only UI
  * filters and selection across navigation. Obsolete requests cannot win. */
-export function useCodexProbeHistory(enabled: boolean, revision: string) {
+export function useCodexProbeHistory(enabled: boolean, revision: string, confirmingDelete: boolean) {
   const filters = useHistoryFilters();
   const [epoch, setEpoch] = useState(0);
-  const page = useHistoryPage(enabled, revision, epoch, filters);
-  const profiles = useHistoryProfiles(enabled, revision, epoch);
-  const detail = useHistoryDetail(enabled, revision);
   const [deleting, setDeleting] = useState(false);
+  const retain = deleting || confirmingDelete;
+  const page = useHistoryPage(enabled, retain, revision, epoch, filters);
+  const profiles = useHistoryProfiles(enabled, retain, revision, epoch);
+  const detail = useHistoryDetail(enabled, retain, revision);
   const [deleteError, setDeleteError] = useMessageState();
   const refresh = useCallback(() => setEpoch((value) => value + 1), []);
   const { setPage } = filters;

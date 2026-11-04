@@ -8,6 +8,7 @@ mod codex;
 mod error;
 mod profile;
 mod settings;
+pub mod approval_policy;
 mod usage;
 
 pub(crate) use codex::validate_connection as validate_codex_connection;

@@ -22,6 +22,8 @@ mod responses;
 mod settings;
 mod subagents;
 mod usage;
+mod model_usage;
+pub use model_usage::*;
 
 
 pub use codex::{
@@ -61,9 +63,7 @@ pub use subagents::{
 pub use usage::{
     CodexOfficialQuota, CodexOfficialQuotaReset, CodexOfficialQuotaResetKind,
     CodexOfficialQuotaStatus, CodexOfficialQuotaWindow, CodexQuotaReadFailure,
-    CodexQuotaReadFailureKind, CodexTransportClass, ModelUsageCoverage, ModelUsageDay, ModelUsageFreshness,
-    ModelUsageGroup, ModelUsageIssue, ModelUsageRange, ModelUsageRead, ModelUsageReport,
-    ModelUsageRequest, ModelUsageTokens, UsageHistoryMetric, UsageHistoryPoint,
+    CodexQuotaReadFailureKind, CodexTransportClass, UsageHistoryMetric, UsageHistoryPoint,
     UsageHistoryRequest, UsageHistorySeries, UsageQuery, UsageReading, UsageReadingInput,
     UsageAvailability, UsageSummary, UsageSnapshot,
 };

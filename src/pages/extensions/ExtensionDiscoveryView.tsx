@@ -25,7 +25,7 @@ export function ExtensionDiscoveryView({ workspace: w, notice }: Props) {
   const [search, setSearch] = useState("");
   useEffect(() => setSearch(""), [kind]);
   const view = useDiscoveryRows({ discovery: w.discovery, kindTab: kind, search, bindingInfo: w.bindingInfo });
-  const selection = useDiscoverySelection(view.allRows, w.discovery.snapshot?.scanId, kind);
+  const selection = useDiscoverySelection(view.allRows, w.discovery.scanId, kind);
   return (
     <EditorFrame
       title={t("extensions.discovery.title")}

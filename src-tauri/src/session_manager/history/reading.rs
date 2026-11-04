@@ -78,13 +78,6 @@ pub(super) fn visit_observed(
     })
 }
 
-pub(super) fn visit_bytes(
-    source: &Transcript, offset: u64,
-    visitor: impl FnMut(usize, u64, &[u8]) -> Result<ControlFlow<()>, String>,
-) -> Result<Vec<String>, String> {
-    visit_bytes_observed(source, offset, &|| Ok(()), visitor)
-}
-
 fn visit_bytes_observed(
     source: &Transcript, offset: u64, checkpoint: &dyn Fn() -> Result<(), String>,
     mut visitor: impl FnMut(usize, u64, &[u8]) -> Result<ControlFlow<()>, String>,
@@ -103,4 +96,24 @@ fn visit_bytes_observed(
         if visitor(row.get(0).map_err(db_error)?, row.get(1).map_err(db_error)?, &raw)?.is_break() { break; }
     }
     Ok(Vec::new())
+}
+
+/// A transcript id is an immutable generation. Capture may only extend its
+/// verified prefix; a non-newline final record is reread by the usage cursor.
+pub(super) fn visit_committed_usage(source: &Transcript, offset: u64,
+    begin: impl FnOnce(u64), mut visitor: impl FnMut(usize, u64, &[u8]) -> Result<(), String>) -> Result<(), String> {
+    let mut connection = store::read(&source.database)?;
+    let transaction = connection.transaction().map_err(db_error)?;
+    let (revision, length): (String, u64) = transaction.query_row(
+        "SELECT revision,byte_length FROM transcripts WHERE id=?1", [&source.id],
+        |row| Ok((row.get(0)?, row.get(1)?))).map_err(db_error)?;
+    if revision != source.revision || offset > length { return Err("已保留会话版本已更新，下一次刷新继续读取".into()); }
+    begin(length - offset);
+    let mut statement = transaction.prepare("SELECT ordinal,position,raw FROM records WHERE source=?1 AND position>=?2 ORDER BY position").map_err(db_error)?;
+    let mut rows = statement.query(params![source.id, offset]).map_err(db_error)?;
+    while let Some(row) = rows.next().map_err(db_error)? {
+        let raw: Vec<u8> = row.get(2).map_err(db_error)?;
+        visitor(row.get(0).map_err(db_error)?, row.get(1).map_err(db_error)?, &raw)?;
+    }
+    Ok(())
 }

@@ -3,6 +3,7 @@ use super::super::diagnostics::{embedded_error, response_diagnostic};
 use super::super::respond::convert_safe_json;
 use super::*;
 use crate::provider_diagnostics::redact_text;
+use crate::gateway::transform::response_accounting_status;
 
 pub(super) fn relay_response<S: Read + Write>(
     socket: &mut WebSocket<S>,
@@ -16,11 +17,8 @@ pub(super) fn relay_response<S: Read + Write>(
         Ok(response) => response,
         Err(diagnostic) => return reject_diagnostic(socket, &diagnostic),
     };
-    if response_is_failure(&response) {
-        let event = match response.get("status").and_then(Value::as_str) {
-            Some("incomplete") => "response.incomplete",
-            _ => "response.failed",
-        };
+    if let Some(status) = response_accounting_status(&response) {
+        let event = if status == 206 { "response.incomplete" } else { "response.failed" };
         return if send_value(socket, &json!({"type": event, "response": response})) {
             if event == "response.incomplete" {
                 ExchangeOutcome::Incomplete
@@ -98,14 +96,6 @@ fn read_response(
         }
     };
     Ok(response)
-}
-
-fn response_is_failure(response: &Value) -> bool {
-    response
-        .get("status")
-        .and_then(Value::as_str)
-        .is_some_and(|status| matches!(status, "failed" | "incomplete"))
-        || response.get("error").is_some_and(|error| !error.is_null())
 }
 
 pub(super) fn relay_stream<S: Read + Write>(

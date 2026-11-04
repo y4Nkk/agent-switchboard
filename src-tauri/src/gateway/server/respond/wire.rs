@@ -66,7 +66,7 @@ pub(crate) fn respond_bytes(
     content_type_value: &str,
     body: Vec<u8>,
 ) {
-    respond_bytes_with_headers(request, status, content_type_value, body, Vec::new());
+    let _ = respond_bytes_with_headers(request, status, content_type_value, body, Vec::new());
 }
 
 pub(super) fn respond_bytes_with_headers(
@@ -75,10 +75,10 @@ pub(super) fn respond_bytes_with_headers(
     content_type_value: &str,
     body: Vec<u8>,
     mut headers: Vec<Header>,
-) {
+) -> std::io::Result<()> {
     headers.push(content_type(content_type_value));
     let response = Response::new(StatusCode(status), headers, Cursor::new(body), None, None);
-    let _ = request.respond(response);
+    request.respond(response)
 }
 
 pub(super) fn allowed_response_headers(headers: &HeaderMap, secrets: &[&str]) -> Vec<Header> {

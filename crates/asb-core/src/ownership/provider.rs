@@ -53,7 +53,7 @@ pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     ProviderSettingSpec {
         app: AppKind::Codex,
         key: "model_context_window",
-        value_type: SettingValueType::PositiveInteger,
+        value_type: SettingValueType::Integer,
     },
     ProviderSettingSpec {
         app: AppKind::Claude,

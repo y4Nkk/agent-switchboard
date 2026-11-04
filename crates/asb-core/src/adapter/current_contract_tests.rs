@@ -11,7 +11,7 @@ fn profile() -> ProviderProfile {
         upstream_protocol: Some(UpstreamProtocol::AnthropicMessages), responses_options: None,
         max_output_tokens: ExplicitMaxOutputTokens::none(), model_options: None,
         parameters: ownership::default_provider_parameters(AppKind::Claude),
-        claude_fragment: json!({"modelSettings":{"vendor.model/~v1":{"effortLevel":"xhigh","autoCompactWindow":200000}}})
+        claude_fragment: json!({"modelSettings":{"vendor.model/~v1":{"effortLevel":"xhigh","maxEffortLevel":"max","autoCompactWindow":200000}}})
             .as_object().unwrap().clone(),
         notes: None, website_url: None, display: None, usage_query: None,
         official_quota_refresh_interval_minutes: None,
@@ -65,20 +65,23 @@ fn provider_readers_preserve_numbers_and_numeric_environment_strings() {
 }
 
 #[test]
-fn claude_effort_rejects_retired_forms_and_removes_the_old_top_level_visibly() {
-    for invalid in [r#"{"effortLevel":"high"}"#, r#"{"modelSettings":{"m":{"effortLevel":"max"}}}"#,
+fn claude_effort_preserves_the_native_top_level_and_rejects_invalid_defaults() {
+    for invalid in [r#"{"effortLevel":"max"}"#, r#"{"modelSettings":{"m":{"effortLevel":"max"}}}"#,
         r#"{"modelSettings":{"m":false}}"#] {
         assert!(claude_common::parse_extra(invalid).is_err());
     }
-    let current = r#"{"effortLevel":"max","unmanaged":true}"#;
+    let current = r#"{"effortLevel":"high","unmanaged":true}"#;
     let settings = ownership::default_client_settings(AppKind::Claude);
     let rendered = render_client_settings_into_file(AppKind::Claude, current, &settings).unwrap();
     let root: Value = serde_json::from_str(&rendered).unwrap();
-    assert!(root.get("effortLevel").is_none());
+    assert_eq!(root["effortLevel"], "high");
     assert_eq!(root["unmanaged"], true);
-    assert!(owned_diff(AppKind::Claude, &rendered, current).unwrap().iter().any(|change| change.key == "effortLevel"));
-    let (_, rejected) = claude_common::import_filter(json!({"effortLevel":"high"}).as_object().unwrap());
-    assert_eq!(rejected, vec!["effortLevel"]);
+    assert!(owned_diff(AppKind::Claude, &rendered, current).unwrap().iter().all(|change| change.key != "effortLevel"));
+    let (kept, rejected) = claude_common::import_filter(json!({"effortLevel":"high"}).as_object().unwrap());
+    assert!(rejected.is_empty());
+    assert_eq!(kept["effortLevel"], "high");
+    let reset: Value = serde_json::from_str(&reset_client_settings(AppKind::Claude, current).unwrap()).unwrap();
+    assert_eq!(reset["effortLevel"], "high");
     let mut retired = ownership::default_provider_parameters(AppKind::Claude);
     retired.settings.insert("effortLevel".into(), SettingValue::Automatic);
     assert!(retired.validate_provider_parameters(AppKind::Claude).is_err());
@@ -95,12 +98,14 @@ fn model_preferences_follow_gateway_roles_and_restore_the_previous_route_only() 
     let root: Value = serde_json::from_str(&rendered).unwrap();
     for role in ["primary", "haiku", "sonnet", "opus", "fable"] {
         assert_eq!(root["modelSettings"][format!("asb-claude-{role}")]["effortLevel"], "xhigh");
+        assert_eq!(root["modelSettings"][format!("asb-claude-{role}")]["maxEffortLevel"], "max");
     }
     assert_eq!(root["modelSettings"]["asb-claude-primary"]["autoCompactWindow"], 200000);
     assert_eq!(root["modelSettings"]["host.model"]["effortLevel"], "low");
     let restored = claude::restore_gateway_overlay(&rendered, &before).unwrap();
     let restored: Value = serde_json::from_str(&restored).unwrap();
     assert_eq!(restored["modelSettings"]["vendor.model/~v1"]["effortLevel"], "xhigh");
+    assert_eq!(restored["modelSettings"]["vendor.model/~v1"]["maxEffortLevel"], "max");
     assert!(restored["modelSettings"].get("asb-claude-primary").is_none());
     assert_eq!(restored["modelSettings"]["host.model"]["effortLevel"], "low");
     let automatic = SwitchPlan::direct(ProviderProfile { claude_fragment: Default::default(), ..native.profile }, native.client_settings);

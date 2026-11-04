@@ -2,7 +2,7 @@ use crate::contracts::{
     AppKind, CodexSubagentKey, CodexSubagentSettings, ConfigValue, SettingValue, SettingsValues,
     MAX_EXACT_CONFIG_INTEGER,
 };
-use crate::ownership::{setting_spec, setting_specs, SettingControl, SettingOwner, SettingSpec};
+use crate::ownership::{setting_spec, setting_specs, ChoiceControl, SettingControl, SettingOwner, SettingSpec};
 use crate::validate::error::ValidationError;
 
 /// Labels used by the sub-agent validation messages.
@@ -118,24 +118,25 @@ pub fn validate_setting_value(spec: &SettingSpec, value: &ConfigValue) -> Result
             }
             "true 或 false".to_string()
         }
-        SettingControl::Choice { .. } => {
+        SettingControl::Choice { presentation } => {
             let allowed: Vec<&str> = spec
                 .allowed_values
                 .iter()
                 .map(|option| option.value)
                 .collect();
-            if matches!(value, ConfigValue::Str(text) if allowed.contains(&text.as_str())) {
+            if matches!(value, ConfigValue::Str(text) if allowed.contains(&text.as_str())
+                || (presentation == ChoiceControl::Editable && valid_text(text))) {
                 return Ok(());
             }
             allowed.join("、")
         }
         SettingControl::Text | SettingControl::Directory => {
-            if matches!(value, ConfigValue::Str(text) if !text.trim().is_empty()
-                && !text.chars().any(char::is_control)
-                && (spec.control != SettingControl::Directory || absolute_directory(text))) {
+            if matches!(value, ConfigValue::Str(text) if valid_text(text)
+                && (spec.control != SettingControl::Directory || absolute_directory(text))
+                && (spec.key != "plansDirectory" || project_directory(text))) {
                 return Ok(());
             }
-            if spec.control == SettingControl::Directory { "绝对目录路径或 ~/ 开头的目录".into() } else { "非空文本".into() }
+            text_requirement(spec).into()
         }
         SettingControl::Integer { min, max } => {
             if matches!(value, ConfigValue::Number(number) if number.fract() == 0.0 && *number >= min as f64 && *number <= max as f64) {
@@ -149,11 +150,21 @@ pub fn validate_setting_value(spec: &SettingSpec, value: &ConfigValue) -> Result
             }
             format!("{min} 到 {max} 的整数字符串")
         }
-        SettingControl::Notifications => {
-            if matches!(value, ConfigValue::Bool(_)) || matches!(value, ConfigValue::Array(items) if items.iter().all(|item| matches!(item, ConfigValue::Str(text) if !text.trim().is_empty() && !text.chars().any(char::is_control)))) {
+        SettingControl::Notifications | SettingControl::StringList => {
+            if (spec.control == SettingControl::Notifications && matches!(value, ConfigValue::Bool(_)))
+                || matches!(value, ConfigValue::Array(items) if items.iter().all(|item| matches!(item, ConfigValue::Str(text) if valid_text(text)))) {
                 return Ok(());
             }
-            "布尔值或事件名数组".to_string()
+            if spec.control == SettingControl::Notifications { "布尔值或非空事件名数组".into() }
+            else { "非空字符串组成的数组".into() }
+        }
+        SettingControl::MultilineText => {
+            if matches!(value, ConfigValue::Str(text) if !text.chars().any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))) { return Ok(()); }
+            "文本（可以为空）".into()
+        }
+        SettingControl::ApprovalPolicy => {
+            if super::approval_policy::valid(value) { return Ok(()); }
+            "on-request、never 或含合法布尔字段的 granular 审批对象".into()
         }
         SettingControl::None => unreachable!("scope validation requires an editor control"),
     };
@@ -162,6 +173,30 @@ pub fn validate_setting_value(spec: &SettingSpec, value: &ConfigValue) -> Result
         value: value.display(),
         allowed,
     })
+}
+
+fn valid_text(text: &str) -> bool {
+    !text.trim().is_empty() && !text.chars().any(char::is_control)
+}
+
+fn text_requirement(spec: &SettingSpec) -> &'static str {
+    if spec.key == "plansDirectory" { "项目根目录内的相对路径" }
+    else if spec.control == SettingControl::Directory { "绝对目录路径或 ~/ 开头的目录" }
+    else { "非空文本" }
+}
+
+fn project_directory(text: &str) -> bool {
+    if text.starts_with(['/', '\\', '~']) || text.contains(':') { return false; }
+    let mut depth = 0;
+    for segment in text.split(['/', '\\']) {
+        match segment {
+            "" | "." => {},
+            ".." if depth == 0 => return false,
+            ".." => depth -= 1,
+            _ => depth += 1,
+        }
+    }
+    true
 }
 
 fn absolute_directory(text: &str) -> bool {

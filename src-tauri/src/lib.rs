@@ -1,7 +1,9 @@
 mod app_paths;
+mod app_update;
 mod ccswitch_source;
 mod changelog;
 mod client_config_watcher;
+mod client_software;
 mod claude_auth;
 mod claude_integration;
 mod cloud_backup;
@@ -27,6 +29,7 @@ mod gateway;
 mod local_state;
 mod model_usage;
 mod model_usage_cache;
+mod request_usage;
 mod official_login;
 mod outbound_proxy;
 mod probe;
@@ -47,6 +50,8 @@ mod usage_cache;
 mod usage_history;
 mod usage_query;
 mod workspace_visibility;
+#[cfg(windows)]
+mod webview_memory;
 mod xai_auth;
 
 pub use commands::local_config_paths;
@@ -144,6 +149,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(desktop_shortcut::DesktopSettingsState::default())
+        .manage(app_update::UpdateManager::default())
+        .manage(client_software::SoftwareManager::default())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -185,6 +192,9 @@ fn initialize_local_services(
         log::warn!("出站代理设置不可用，按直连处理：{error}");
     }
     app.manage(commands::ConfigWriteGate::default());
+    if let Err(error) = app.state::<client_software::SoftwareManager>().initialize(&local) {
+        log::error!("客户端更新记录需要处理：{error}");
+    }
     let write_gate = app.state::<commands::ConfigWriteGate>().inner().clone();
     // Startup can replay a pending port change before the controller
     // is published. Hold the same gate as every later client-config
@@ -217,6 +227,7 @@ fn initialize_local_services(
     app.manage(commands::provider_diagnostics::ProviderRepairPreparations::default());
     app.manage(codex_probe::ProbeRegistry::new());
     app.manage(resource_monitor::ResourceMonitor::default());
+    app.manage(model_usage_cache::ModelUsageManager::default());
     // A batch left running by an abrupt exit is closed as interrupted before
     // any command can read it; finished results and saved session usage stay.
     if let Err(error) = codex_probe::recover_interrupted(&local) {
@@ -346,6 +357,11 @@ fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
         return;
     }
     if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+        if client_software::blocks_exit() {
+            api.prevent_exit();
+            exit_recovery::show(app, exit_recovery::Destination::ClientManagement, "");
+            return;
+        }
         // A user-invoked desktop restart must never enter the
         // close-to-tray path. Tauri uses this dedicated code when it
         // relaunches the executable.

@@ -19,6 +19,9 @@ mod upstream_compat;
 mod usage;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[path = "tests/request_metrics.rs"]
+mod request_metrics;
 pub(crate) use upstream_compat::{prepare_upstream_request, NativeResponsesDialect};
 
 use serde_json::Value;
@@ -29,7 +32,7 @@ pub(crate) const CODEX_TOOL_SEARCH_NAME: &str = "tool_search";
 pub(crate) use claude_model::apply_claude_model_mapping;
 pub(crate) use reasoning::{Reasoning, ReasoningTransport};
 pub(crate) use request::convert_request;
-pub(crate) use response::{convert_error, convert_response};
+pub(crate) use response::{convert_error, convert_response, response_accounting_status};
 pub(crate) use stream::SseTranscoder;
 pub(crate) use usage::parse as parse_usage;
 

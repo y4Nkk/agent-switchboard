@@ -27,7 +27,6 @@ pub fn restore_gateway_overlay(current: &str, before: &str) -> Result<String, Ad
             None => remove(&mut current, spec.key)?,
         }
     }
-    remove(&mut current, "effortLevel")?;
     let rendered = serde_json::to_string_pretty(&current).map_err(|_| AdapterError {
         message: "无法生成 Claude 接管恢复配置".into(),
         line: None,

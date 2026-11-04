@@ -24,6 +24,7 @@ pub fn import_shared(text: &str) -> Result<SharedSnippet, String> {
         return Err("Claude 通用配置片段根节点必须是对象".into());
     }
     coerce_env_scalars(&mut root);
+    super::normalize_attribution(&mut root);
     let mut visual = BTreeMap::new();
     let mut rejected = Vec::new();
     for spec in setting_specs(AppKind::Claude) {
@@ -155,8 +156,8 @@ mod tests {
             serde_json::json!("1")
         );
         assert_eq!(
-            parsed.extra["permissions"],
-            serde_json::json!({"allow": ["Read"]})
+            parsed.visual.get("permissions.allow"),
+            Some(&ConfigValue::Array(vec![ConfigValue::Str("Read".into())]))
         );
         assert_eq!(
             parsed.extra["includeCoAuthoredBy"],

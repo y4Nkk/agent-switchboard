@@ -13,8 +13,8 @@ pub(super) async fn dispatch(
         "start_codex_probe" => as_json(codex_probe::start_codex_probe(
             app.clone(), argument(&request.args, "request")?,
         ).await),
-        "get_current_codex_probe" => as_json(
-            codex_probe::get_current_codex_probe(app.clone()).await,
+        "get_codex_probe_observation" => as_json(
+            codex_probe::get_codex_probe_observation(app.clone()).await,
         ),
         "cancel_codex_probe" => as_json(codex_probe::cancel_codex_probe(app.clone()).await),
         "retry_codex_probe_save" => as_json(

@@ -1,4 +1,4 @@
-import type { CodexProbeBatch, CodexProbeRunPhase } from "../api/client";
+import type { CodexProbeObservation, CodexProbeRunPhase } from "../api/client";
 import { useI18n, type MessageKey } from "../i18n";
 
 const PHASE_LABEL: Record<CodexProbeRunPhase, MessageKey> = {
@@ -15,7 +15,7 @@ export function probeTime(seconds: number): string {
 }
 
 /** Time is the last backend reading; only completed runs measure task progress. */
-export function ProbeTaskProgress({ batch, stale = false }: { batch: CodexProbeBatch; stale?: boolean }) {
+export function ProbeTaskProgress({ batch, stale = false }: { batch: CodexProbeObservation; stale?: boolean }) {
   const { t } = useI18n();
   if (batch.status !== "running" || batch.persistPending) return null;
   const progress = batch.progress;
@@ -30,7 +30,7 @@ export function ProbeTaskProgress({ batch, stale = false }: { batch: CodexProbeB
     <div className="asb-probe-task-top">
       <div>
         <p className="asb-codex-probe-meta">
-          {batch.question.label} · {t("codex.probe.runPosition", {
+          {batch.questionLabel} · {t("codex.probe.runPosition", {
             current: progress.seq, total: batch.plannedRuns,
           })}
         </p>

@@ -7,14 +7,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct ClaudeCandidate {
     pub event: UsageEvent,
-    stopped: bool,
-}
-
-pub(super) fn observe(value: &Value, session: &str, candidates: &mut HashMap<String, ClaudeCandidate>) -> Result<(), String> {
-    if value.get("type").and_then(Value::as_str) != Some("assistant") { return Ok(()); }
-    let Some(message) = value.get("message").filter(|message| message.get("usage").is_some()) else { return Ok(()); };
-    merge(candidates, candidate(message, value, session)?);
-    Ok(())
+    pub stopped: bool,
 }
 
 pub(super) fn merge(candidates: &mut HashMap<String, ClaudeCandidate>, mut candidate: ClaudeCandidate) {
@@ -25,7 +18,7 @@ pub(super) fn merge(candidates: &mut HashMap<String, ClaudeCandidate>, mut candi
     if preferred { candidates.insert(key, candidate); }
 }
 
-fn candidate(message: &Value, envelope: &Value, session: &str) -> Result<ClaudeCandidate, String> {
+pub(super) fn candidate(message: &Value, envelope: &Value, session: &str) -> Result<ClaudeCandidate, String> {
     let identity = message.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()).ok_or("缺少消息身份")?;
     let usage = message.get("usage").ok_or("缺少用量")?;
     let input = required(usage, "input_tokens")?;

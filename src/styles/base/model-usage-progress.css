@@ -1,0 +1,87 @@
+.asb-usage-progress {
+  width: 100%;
+  padding-block: var(--asb-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-usage-progress[data-initial="true"] {
+  width: min(100%, 38rem);
+  align-self: center;
+  margin-block: auto;
+  padding-block: var(--asb-space-6);
+}
+
+.asb-usage-progress-heading,
+.asb-usage-progress-detail {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  font: var(--asb-text-label);
+}
+
+.asb-usage-progress-percent { margin-left: auto; }
+.asb-usage-progress-detail { justify-content: space-between; flex-wrap: wrap; }
+.asb-usage-progress-detail,
+.asb-usage-progress-note { color: var(--asb-text-muted); }
+.asb-usage-progress-note { margin: 0; font: var(--asb-text-label); }
+
+.asb-usage-issues {
+  margin: 0;
+  padding-left: var(--asb-space-3);
+  max-height: 16rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-usage-spinner {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--asb-hairline);
+  border-top-color: var(--asb-action);
+  border-radius: 50%;
+  animation: asb-usage-spin 900ms linear infinite;
+}
+
+.asb-usage-ring { width: 1.25rem; height: 1.25rem; flex: none; transform: rotate(-90deg); }
+.asb-usage-ring circle { fill: none; stroke-width: 2.5; }
+.asb-usage-ring-track { stroke: var(--asb-hairline); }
+.asb-usage-ring-value { stroke: var(--asb-action); transition: stroke-dashoffset 160ms ease-out; }
+
+.asb-usage-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-hairline);
+}
+
+.asb-usage-progress-track > span {
+  display: block;
+  height: 100%;
+  background: var(--asb-action);
+  border-radius: inherit;
+  transition: width 160ms ease-out;
+}
+
+.asb-usage-progress-track[data-indeterminate="true"] > span {
+  width: 35%;
+  animation: asb-usage-travel 1.4s ease-in-out infinite;
+}
+
+@keyframes asb-usage-spin { to { transform: rotate(360deg); } }
+@keyframes asb-usage-travel {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(390%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-usage-spinner,
+  .asb-usage-progress-track[data-indeterminate="true"] > span { animation: none; }
+  .asb-usage-progress-track > span { transition: none; }
+  .asb-usage-ring-value { transition: none; }
+  .asb-usage-progress-track[data-indeterminate="true"] > span { width: 100%; opacity: .45; }
+}

@@ -17,6 +17,8 @@ Status: implemented
 
 ## 相邻决定
 
+- [前端运行时资源回收](2026-11-03-frontend-runtime-memory-lifecycle.md)拥有主窗口的 Low/Normal 目标和页面载荷回收；浮层仍只走本篇的五分钟闲置销毁，不引入第二条生命周期。
+
 - [托盘原生玻璃与两层读数布局](../../implemented/feature/2026-10-16-tray-glass-and-reading-layout.md) 拥有浮层材质与读数布局，不涉及窗口生命周期；本篇只增加闲置销毁，不替代其决定。
 - [编码进程资源监控](2026-10-23-native-process-resource-monitor.md) 通过 WebView2 Environment8 按当前存在的窗口关联界面进程；闲置销毁后浮层进程自然退出其观测范围，主窗关联不受影响。
 

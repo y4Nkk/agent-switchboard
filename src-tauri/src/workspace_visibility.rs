@@ -18,10 +18,17 @@ pub fn workspace_visible(app: AppHandle) -> Result<bool, CommandError> {
 pub fn publish(app: &AppHandle) {
     match visible(app) {
         Ok(visible) => {
-            if let Err(error) = app.emit("workspace-visibility-changed", visible) {
-                log::warn!("无法发布工作区可见状态：{error}");
-            }
+            #[cfg(windows)]
+            crate::webview_memory::synchronize(app, visible);
+            #[cfg(not(windows))]
+            emit(app, visible);
         }
         Err(error) => log::debug!("工作区可见状态尚不可用：{error}"),
+    }
+}
+
+pub(crate) fn emit(app: &AppHandle, visible: bool) {
+    if let Err(error) = app.emit("workspace-visibility-changed", visible) {
+        log::warn!("无法发布工作区可见状态：{error}");
     }
 }

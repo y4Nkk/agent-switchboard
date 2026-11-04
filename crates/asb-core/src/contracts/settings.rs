@@ -18,6 +18,7 @@ pub enum ConfigValue {
     Str(String),
     Number(f64),
     Array(Vec<ConfigValue>),
+    Object(BTreeMap<String, ConfigValue>),
 }
 
 impl ConfigValue {
@@ -35,6 +36,7 @@ impl ConfigValue {
                 }
             }
             ConfigValue::Array(items) => serde_json::to_string(items).expect("configuration array"),
+            ConfigValue::Object(items) => serde_json::to_string(items).expect("configuration object"),
         }
     }
 }

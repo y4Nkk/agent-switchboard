@@ -11,7 +11,7 @@ pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, Adapter
     if !plan.writes_client_settings() {
         return Ok(rendered);
     }
-    match plan.codex_common_fragment() {
+    let candidate = match plan.codex_common_fragment() {
         None => Ok(rendered),
         Some(fragment) => {
             // 存储层可能被手工改动，投影边界处再做一次 fail-closed 校验。
@@ -22,7 +22,9 @@ pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, Adapter
                 remove_applied_fragment(&rendered, &fragment.text)
             }
         }
-    }
+    }?;
+    super::permissions::validate_candidate(&parse(&candidate)?)?;
+    Ok(candidate)
 }
 
 pub(crate) fn render_gateway_base_url(
@@ -126,6 +128,7 @@ pub(crate) fn render_entries(
     entries: Vec<(String, OverlayEntry)>,
 ) -> Result<String, AdapterError> {
     let mut doc = parse(current)?;
+    let writes_permissions = entries.iter().any(|(key, _)| key == "sandbox_mode" || key.starts_with("sandbox_workspace_write."));
     for (key, entry) in entries {
         match entry {
             OverlayEntry::Set(value) => set_path(&mut doc, &key, value)?,
@@ -137,6 +140,10 @@ pub(crate) fn render_entries(
                 remove_empty_table_path(&mut doc, &key)?;
             }
         }
+    }
+    if writes_permissions {
+        remove_empty_table_path(&mut doc, "sandbox_workspace_write")?;
+        super::permissions::validate_candidate(&doc)?;
     }
     Ok(doc.to_string())
 }

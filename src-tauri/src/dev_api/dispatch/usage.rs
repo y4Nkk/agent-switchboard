@@ -20,12 +20,11 @@ pub(super) async fn usage(app: &AppHandle, request: &InvokeRequest) -> Result<Op
             argument(&request.args, "target")?,
             argument(&request.args, "profileId")?,
         )),
-        "get_model_usage_report" => {
-            command!(commands::model_usage::get_model_usage_report(
-                app.clone(),
-                argument::<ModelUsageRequest>(&request.args, "request")?,
-            ))
-        }
+        "read_model_usage_snapshot" => command!(commands::model_usage::read_model_usage_snapshot(app.clone())),
+        "refresh_model_usage" => command!(commands::model_usage::refresh_model_usage(app.clone())),
+        "read_model_usage_refresh" => command!(commands::model_usage::read_model_usage_refresh(app.clone(), argument(&request.args, "id")?)),
+        "read_request_usage" => command!(commands::request_usage::read_request_usage(
+            app.clone(), argument(&request.args, "query")?)),
         "get_usage_history" => command!(commands::usage_history::get_usage_history(
             app.clone(),
             argument::<UsageHistoryRequest>(&request.args, "request")?,

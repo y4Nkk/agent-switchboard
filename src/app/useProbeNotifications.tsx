@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { onCodexProbeChanged, type CodexProbeBatch } from "../api/client";
+import { onCodexProbeChanged, type CodexProbeObservation } from "../api/client";
 import { toast, toastMessage } from "../components/use-toast";
 import { CommandErrorLines } from "./notifications";
 import { advanceProbeNotification, type ProbeNotificationState } from "./probe-notifications";
@@ -12,7 +12,7 @@ export function notifyProbeError(stage: "read" | "watch" | "start" | "cancel" | 
     title: toastMessage(titles[stage]), description: <CommandErrorLines error={error} /> });
 }
 
-export function useProbeNotifications(status: CodexProbeBatch | null, synchronized: boolean) {
+export function useProbeNotifications(status: CodexProbeObservation | null, synchronized: boolean) {
   const state = useRef<ProbeNotificationState>({ watching: null, delivered: null });
   const dismiss = useRef<(() => void) | null>(null);
   const watch = useCallback((batchId: string) => { state.current.watching = batchId; }, []);

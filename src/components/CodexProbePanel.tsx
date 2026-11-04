@@ -16,6 +16,7 @@ import { ModuleHeader } from "./WorkspaceHeader";
 import { UsageIcon } from "./icons";
 import { StatCards } from "./charts/stat-cards";
 import type { useCodexProbe } from "../app/useCodexProbe";
+import { useCodexProbeDetail } from "./use-codex-probe-detail";
 
 /** The custom-question form lives with the panel because only a `custom`
  * selection needs it; the header keeps the action and the pickers. */
@@ -139,12 +140,14 @@ function ProbeResults({ status, probe }: {
   );
 }
 
-export function CodexProbePanel({ probe, form }: {
+export function CodexProbePanel({ probe, form, active }: {
   probe: ReturnType<typeof useCodexProbe>;
   form: CodexProbeFormState;
+  active: boolean;
 }) {
   const { t } = useI18n();
   const selected = probe.questions?.find((question) => question.id === form.questionId);
+  const detail = useCodexProbeDetail(active, probe.status?.batchId ?? null, probe.detailRevision, false);
   return (
     <section className="asb-panel asb-codex-probe" aria-label={t("codex.probe.title")}>
       <ModuleHeader title={t("codex.probe.title")} />
@@ -173,11 +176,16 @@ export function CodexProbePanel({ probe, form }: {
           {t("codex.probe.metaQuestion")}{selected.label} · {t("codex.probe.timeLimit", { time: probeTime(selected.timeoutSeconds) })}
         </p>
         <p className="asb-probe-question-text">{selected.text}</p>
-        {selected.referenceVisual && <ReferenceVisual answer={selected.referenceVisual} />}
+        {active && selected.referenceVisual && <ReferenceVisual answer={selected.referenceVisual} />}
         {selected.gradingVersion !== "1" &&
           <p className="asb-codex-probe-note">{t("codex.probe.visual.note")}</p>}
       </div>}
-      {probe.status ? <ProbeResults status={probe.status} probe={probe} /> : (
+      {detail.detailError && <p className="asb-warn-text" role="alert">
+        {detail.detailError}{" "}<Button variant="secondary" onClick={detail.refreshDetail}>{t("codex.probe.retryRead")}</Button>
+      </p>}
+      {active && detail.detailLoading && !detail.detail && <p className="asb-codex-probe-meta" role="status">
+        {t("codex.history.detailLoading")}</p>}
+      {active && detail.detail ? <ProbeResults status={detail.detail} probe={probe} /> : !probe.status && (
         <div className="asb-empty-state asb-codex-probe-empty">
           <span className="asb-empty-state-icon" aria-hidden="true"><UsageIcon /></span>
           <h3 className="asb-section-title" role="status">

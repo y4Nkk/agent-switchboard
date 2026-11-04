@@ -3,7 +3,8 @@ import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { SettingsFields } from "../SettingsFields";
 import type { useProviderParameters } from "./useProviderParameters";
-import { ClaudeModelEffortEditor, withoutModelEffort } from "./ClaudeModelEffortEditor";
+import { ClaudeModelPreferencesEditor } from "./ClaudeModelPreferencesEditor";
+import { withoutModelPreferences } from "./claude-model-preferences";
 
 interface Props {
   value: SettingsValues | null;
@@ -39,7 +40,7 @@ export function ProviderParametersPage({ value, onChange, parameters, busy, base
   const baseline = baselineValues ?? catalog.defaults.settings;
   const resetAll = () => {
     onChange({ settings: { ...catalog.defaults.settings } });
-    if (catalog.app === "claude") onFragmentChange?.(withoutModelEffort(claudeFragment ?? {}));
+    if (catalog.app === "claude") onFragmentChange?.(withoutModelPreferences(claudeFragment ?? {}));
   };
   const change = (key: string, next: SettingValue) =>
     onChange({ settings: { ...value.settings, [key]: next } });
@@ -48,8 +49,8 @@ export function ProviderParametersPage({ value, onChange, parameters, busy, base
       <p className="asb-field-help">{t("providers.parameters.help")}</p>
       <SettingsFields specs={catalog.specs} groups={catalog.groups} values={value.settings}
         baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />
-      {catalog.app === "claude" && onFragmentChange && <ClaudeModelEffortEditor fragment={claudeFragment ?? {}}
-        options={catalog.claudeEffortOptions} busy={busy} onChange={onFragmentChange} />}
+      {catalog.app === "claude" && catalog.claudeModelPreferences && onFragmentChange && <ClaudeModelPreferencesEditor fragment={claudeFragment ?? {}}
+        catalog={catalog.claudeModelPreferences} busy={busy} onChange={onFragmentChange} />}
       <div className="asb-settings-actions">
         <Button variant="secondary" disabled={busy} onClick={resetAll}>{t("providers.parameters.reset")}</Button>
       </div>

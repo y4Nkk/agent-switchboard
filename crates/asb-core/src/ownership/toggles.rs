@@ -4,6 +4,14 @@ use crate::ownership::spec::{SettingOwner, ToggleSpec};
 /// must stay inside the owned-key tables above.
 pub const CODEX_TOGGLES: &[ToggleSpec] = &[
     ToggleSpec {
+        key: "tui.auto_recap", owner: SettingOwner::Client,
+        label: "ownership.label.tuiAutoRecap", group: "ownership.group.terminalUi",
+    },
+    ToggleSpec {
+        key: "features.ultrafast_mode", owner: SettingOwner::Provider,
+        label: "ownership.label.ultrafastMode", group: "ownership.group.toolsAndFeatures",
+    },
+    ToggleSpec {
         key: "hide_agent_reasoning",
         owner: SettingOwner::Provider,
         label: "ownership.label.hide_agent_reasoning",
@@ -40,15 +48,15 @@ pub const CODEX_TOGGLES: &[ToggleSpec] = &[
         group: "ownership.group.terminalUi",
     },
     ToggleSpec {
-        key: "disable_paste_burst",
+        key: "tui.disable_paste_burst",
         owner: SettingOwner::Client,
-        label: "ownership.label.disable_paste_burst",
+        label: "ownership.label.tuiDisablePasteBurst",
         group: "ownership.group.terminalUi",
     },
     ToggleSpec {
-        key: "tools.view_image",
+        key: "features.view_image",
         owner: SettingOwner::Client,
-        label: "ownership.label.toolsView_image",
+        label: "ownership.label.featuresViewImage",
         group: "ownership.group.toolsAndFeatures",
     },
     ToggleSpec {
@@ -154,12 +162,6 @@ pub const CODEX_TOGGLES: &[ToggleSpec] = &[
         group: "ownership.group.toolsAndFeatures",
     },
     ToggleSpec {
-        key: "features.unified_exec",
-        owner: SettingOwner::Client,
-        label: "ownership.label.featuresUnified_exec",
-        group: "ownership.group.toolsAndFeatures",
-    },
-    ToggleSpec {
         key: "features.multi_agent",
         owner: SettingOwner::Client,
         label: "ownership.label.featuresMulti_agent",
@@ -175,12 +177,6 @@ pub const CODEX_TOGGLES: &[ToggleSpec] = &[
         key: "features.remote_plugin",
         owner: SettingOwner::Client,
         label: "ownership.label.featuresRemote_plugin",
-        group: "ownership.group.toolsAndFeatures",
-    },
-    ToggleSpec {
-        key: "features.personality",
-        owner: SettingOwner::Provider,
-        label: "ownership.label.featuresPersonality",
         group: "ownership.group.toolsAndFeatures",
     },
     ToggleSpec {
@@ -204,6 +200,26 @@ pub const CODEX_TOGGLES: &[ToggleSpec] = &[
 ];
 
 pub const CLAUDE_TOGGLES: &[ToggleSpec] = &[
+    ToggleSpec {
+        key: "prefersReducedMotion", owner: SettingOwner::Client,
+        label: "ownership.label.prefersReducedMotion", group: "ownership.group.interfaceAndInteraction",
+    },
+    ToggleSpec {
+        key: "sandbox.enabled", owner: SettingOwner::Client,
+        label: "ownership.label.sandboxEnabled", group: "ownership.group.sandbox",
+    },
+    ToggleSpec {
+        key: "sandbox.autoAllowBashIfSandboxed", owner: SettingOwner::Client,
+        label: "ownership.label.sandboxAutoAllow", group: "ownership.group.sandbox",
+    },
+    ToggleSpec {
+        key: "sandbox.allowUnsandboxedCommands", owner: SettingOwner::Client,
+        label: "ownership.label.sandboxAllowUnsandboxed", group: "ownership.group.sandbox",
+    },
+    ToggleSpec {
+        key: "sandbox.failIfUnavailable", owner: SettingOwner::Client,
+        label: "ownership.label.sandboxFailIfUnavailable", group: "ownership.group.sandbox",
+    },
     ToggleSpec {
         key: "fastMode",
         owner: SettingOwner::Provider,

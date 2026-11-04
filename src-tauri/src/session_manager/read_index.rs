@@ -6,13 +6,9 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, UNIX_EPOCH};
 pub(crate) mod prefix;
+mod schema;
 
 static SCHEMA_GATE: Mutex<()> = Mutex::new(());
-const SCHEMA: &str = "CREATE TABLE entries (
- kind TEXT NOT NULL, cache_key TEXT NOT NULL, revision TEXT NOT NULL, data TEXT NOT NULL,
- PRIMARY KEY(kind,cache_key)
-) STRICT";
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct FileRevision {
@@ -43,6 +39,8 @@ pub(crate) fn key(value: &impl Serialize) -> Result<String, String> {
 pub(crate) struct ReadIndex { connection: Connection }
 
 impl ReadIndex {
+    pub(crate) fn connection(&self) -> &Connection { &self.connection }
+
     pub(crate) fn open(root: &Path) -> Result<Self, String> {
         Self::open_observed(root, &|| Ok(()))
     }
@@ -57,19 +55,7 @@ impl ReadIndex {
         let _guard = super::read_observer::lock(&SCHEMA_GATE, checkpoint)?;
         let connection = Connection::open(&path).map_err(|error| format!("会话读取索引 {} 不可用：{error}", path.display()))?;
         connection.busy_timeout(Duration::from_secs(5)).map_err(error)?;
-        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).map_err(error)?;
-        if version == 0 {
-            let count: i64 = connection.query_row("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'", [], |row| row.get(0)).map_err(error)?;
-            if count != 0 { return Err("会话读取索引模式未知，已保留原件".into()); }
-            connection.execute_batch(&format!("BEGIN IMMEDIATE; {SCHEMA}; PRAGMA user_version=2; COMMIT;")).map_err(error)?;
-        } else if version != 1 && version != 2 { return Err("会话读取索引版本不受支持，已保留原件".into()); }
-        let schema: Option<String> = connection.query_row("SELECT sql FROM sqlite_master WHERE name='entries' AND type='table'", [], |row| row.get(0)).optional().map_err(error)?;
-        let objects: i64 = connection.query_row("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'", [], |row| row.get(0)).map_err(error)?;
-        if schema.as_deref() != Some(SCHEMA) || objects != 1 { return Err(format!("会话读取索引模式无效，已保留原件：{}", path.display())); }
-        if version == 1 {
-            connection.execute_batch("BEGIN IMMEDIATE; DELETE FROM entries; PRAGMA user_version=2; COMMIT;").map_err(error)?;
-            log::info!("已重建会话读取派生索引：{}", path.display());
-        }
+        schema::initialize(&connection)?;
         let mode: String = connection.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0)).map_err(error)?;
         if !mode.eq_ignore_ascii_case("wal") { return Err("会话读取索引未能启用并发读写".into()); }
         Ok(Self { connection })

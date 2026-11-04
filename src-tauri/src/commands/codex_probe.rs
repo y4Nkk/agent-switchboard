@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};
 
 use crate::codex_probe::{
-    self, ProbeBatchStatus, ProbeBatchView, ProbeHistoryPage, ProbeHistoryProfile,
+    self, ProbeBatchStatus, ProbeBatchView, ProbeHistoryPage, ProbeHistoryProfile, ProbeObservation,
     ProbeGrading, ProbeProfileFilter, ProbeRegistry, MAX_RUN_COUNT,
 };
 use crate::commands::error::{blocking, state, CommandError};
@@ -106,14 +106,13 @@ pub async fn start_codex_probe(
     Ok(batch_id)
 }
 
-/// The live-or-latest batch; the panel reconnects here after a refresh or
-/// restart without remembering any id.
+/// The live-or-latest status; no answer or configuration payload crosses IPC.
 #[tauri::command]
-pub async fn get_current_codex_probe(app: AppHandle) -> Result<Option<ProbeBatchView>, CommandError> {
+pub async fn get_codex_probe_observation(app: AppHandle) -> Result<Option<ProbeObservation>, CommandError> {
     let local = state(&app)?;
     let registry = app.state::<ProbeRegistry>().inner().clone();
     blocking(move || {
-        codex_probe::current_view(&local, &registry)
+        codex_probe::current_observation(&local, &registry)
             .map_err(|message| CommandError::new("codex-probe-read-failed", message))
     })
     .await
@@ -130,12 +129,12 @@ pub async fn retry_codex_probe_save(app: AppHandle) -> Result<(), CommandError> 
     let local = state(&app)?;
     let registry = app.state::<ProbeRegistry>().inner().clone();
     blocking(move || {
-        let batch = codex_probe::current_view(&local, &registry)
+        let batch = codex_probe::current_observation(&local, &registry)
             .map_err(|message| CommandError::new("codex-probe-read-failed", message))?;
         let result = codex_probe::retry_save(&local, &registry)
             .map_err(|message| CommandError::new("codex-probe-save-failed", message));
         if let Some(view) = batch.filter(|view| view.persist_pending) {
-            codex_probe::notify_changed(&app, &view.batch.id);
+            codex_probe::notify_changed(&app, &view.batch_id);
         }
         result
     })

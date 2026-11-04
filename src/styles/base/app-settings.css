@@ -73,6 +73,51 @@
   overflow-wrap: anywhere;
 }
 
+.asb-update-download {
+  display: grid;
+  gap: var(--asb-space-2);
+  padding-block: var(--asb-space-3);
+}
+.asb-update-download-heading,
+.asb-update-download-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+.asb-update-download-percent { font: var(--asb-text-label); font-weight: 600; color: var(--asb-text); }
+.asb-update-download > p { margin: 0; }
+.asb-update-download-meter {
+  height: var(--asb-space-2);
+  overflow: hidden;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-hairline);
+}
+.asb-update-download-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--asb-action);
+  transition: width var(--asb-motion-fast) linear;
+}
+.asb-update-download-meter[data-indeterminate="true"] > span {
+  width: 35%;
+  animation: asb-update-download-scan var(--asb-motion-ambient) linear infinite;
+}
+@keyframes asb-update-download-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asb-update-download-meter > span { animation: none; transition: none; }
+}
+:root[data-motion="reduce"] .asb-update-download-meter > span { animation: none; transition: none; }
+@container settings-content (max-width: 640px) {
+  .asb-update-summary { grid-template-columns: minmax(0, 1fr); }
+  .asb-update-summary > .asb-panel-actions { justify-content: flex-start; flex-wrap: wrap; }
+}
+
 .asb-recovery-panel {
   align-self: stretch;
 }

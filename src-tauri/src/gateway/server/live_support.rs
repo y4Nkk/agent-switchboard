@@ -6,7 +6,6 @@
 //! product actually renders. The provider credential reaches the gateway
 //! profile only; it is never rendered into a client configuration.
 
-use crate::codex_probe::codex_executable;
 use crate::gateway::{GatewayActivation, GatewayController, GatewayProjection};
 use crate::local_state::LocalState;
 use asb_core::contracts::{
@@ -20,7 +19,7 @@ use serde_json::{json, Value};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 use std::time::{Duration, Instant};
 
 pub(super) const MODEL: &str = "deepseek-flash";
@@ -93,7 +92,8 @@ impl LiveSandbox {
     pub(super) fn run_codex(&self, prompt: &str, timeout: Duration) -> Output {
         let auth = self.codex_home.join("auth.json");
         let auth_before = fs::read(&auth).expect("read isolated official login fixture");
-        let mut command = Command::new(codex_executable());
+        let installation = crate::client_software::discovery::resolve(asb_core::contracts::AppKind::Codex).expect("test Codex executable");
+        let mut command = crate::client_software::discovery::launch::command(&installation).expect("test Codex command");
         command.env_clear();
         for name in [
             "PATH",

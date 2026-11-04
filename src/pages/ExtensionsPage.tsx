@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ExtensionsDeps } from "../app/extensions/extension-ops";
 import { pickDirectory, pickFile } from "../api/client";
 import { useI18n } from "../i18n";
+import { useWorkspaceVisible } from "../hooks/use-workspace-visible";
 import { EXTENSION_SECTIONS } from "../app/navigation";
 import { Button } from "../components/Button";
 import { SkillSourceBrowser } from "../components/extensions/SkillSourceBrowser";
@@ -12,12 +13,13 @@ import { ExtensionWorkspaceDialogs } from "./extensions/ExtensionWorkspaceDialog
 import type { ExtensionNavigation } from "./extensions/useExtensionView";
 import { useExtensionWorkspace } from "./extensions/useExtensionWorkspace";
 
-type ExtensionsPageProps = ExtensionsDeps & ExtensionNavigation;
+type ExtensionsPageProps = ExtensionsDeps & ExtensionNavigation & { active: boolean };
 
 /** Keep the caller's source/search context behind full-page editors. */
 export function ExtensionsPage(props: ExtensionsPageProps) {
   const { t } = useI18n();
-  const workspace = useExtensionWorkspace(props);
+  const visible = useWorkspaceVisible(props.active);
+  const workspace = useExtensionWorkspace({ ...props, active: visible });
   const nav = workspace.nav;
   const [visited, setVisited] = useState({ discovery: false, sources: false });
   useEffect(() => {
@@ -38,6 +40,7 @@ export function ExtensionsPage(props: ExtensionsPageProps) {
       {(visited.discovery || discovery) && <ExtensionDiscoveryView workspace={workspace} notice={notice} />}</div>
     <div className="asb-editor-route" hidden={editing || !sources || discovery}>
       {(visited.sources || sources) && <SkillSourceBrowser busy={workspace.writeBlocked} items={workspace.items}
+        active={visible && sources && !discovery && !editing} retain={workspace.busy || nav.dialog !== null}
         onScanLocal={workspace.ext.scanLocal} onImport={workspace.importCandidate} onPickDirectory={pickDirectory}
         onPickZip={() => pickFile("ZIP archives", ["zip"])} onBack={() => nav.setSourceBrowser(false)} notice={notice} />}</div>
     <section className="asb-ext" aria-label={t("nav.page.extensions")} hidden={editing || discovery || sources}>
