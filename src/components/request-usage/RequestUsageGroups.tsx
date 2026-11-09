@@ -35,11 +35,10 @@ export function RequestUsageGroups({ report, providerName, onPage, onProvider }:
     { key: "cost", header: t("usagePerformance.cost"), align: "end", render: (row) => <>
       {cost(row.metrics.estimatedCostUsd, language)}<span className="asb-request-usage-caption">n={row.metrics.costSamples}</span></> },
   ];
-  return <section className="asb-request-usage-section">
-    <h3 className="asb-section-title">{t("usagePerformance.groups")}</h3>
+  return <div className="asb-request-usage-section">
     <Table columns={columns} rows={report.groups} ariaLabel={t("usagePerformance.groups")}
       rowKey={(row) => JSON.stringify([row.app, row.profileId, row.model, row.modelSource])} className="asb-request-usage-group-table" />
     <Pagination total={report.totalGroups} page={report.groupPage} pageSize={report.groupPageSize}
       onPageChange={onPage} label={t("usagePerformance.groupPages")} />
-  </section>;
+  </div>;
 }

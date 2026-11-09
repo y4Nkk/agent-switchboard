@@ -3,35 +3,49 @@ import type { RequestUsageReport } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { CollapsibleSection } from "../Collapsible";
+import { FactList } from "../FactList";
 import { Time } from "../Time";
 
 export function RequestUsageScope({ report }: { report: RequestUsageReport }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  return <div className="asb-request-usage-scope">
-    <p className="asb-scope-note">{t("usagePerformance.sourceNote")}</p>
-    <p className="asb-scope-note">{t("usagePerformance.window")}
-      <Time iso={new Date(report.startAtMs).toISOString()} precision="second" />
-      {" — "}<Time iso={new Date(report.endAtMs).toISOString()} precision="second" />
-      {" · "}{t("usagePerformance.bucket", { minutes: report.bucketMs / 60_000 })}
-    </p>
-    {report.sources.map((source) => <div key={source.app}>
-      <p className="asb-scope-note">{clientName(source.app)} · {t(source.error ? "usagePerformance.sourceVerified"
-        : "usagePerformance.rangeVerified", { count: source.verifiedRequests })}
-        {source.earliestAtMs !== null && <> · <Time iso={new Date(source.earliestAtMs).toISOString()} precision="second" />
-          {source.latestAtMs !== null && <> — <Time iso={new Date(source.latestAtMs).toISOString()} precision="second" /></>}</>}
-        {source.retentionLimit !== null && <> · {t("usagePerformance.retentionLimit", { count: source.retentionLimit })}</>}
-      </p>
-      {source.error && <p className="asb-model-usage-notice" role="alert">
-        {t("usagePerformance.sourceError", { client: clientName(source.app) })} {source.error}</p>}
-    </div>)}
-    {report.summary.speedSamples > 0 && report.summary.speedSamples < 20 &&
-      <p className="asb-scope-note">{t("usagePerformance.smallSample")}</p>}
-    <CollapsibleSection open={open} onOpenChange={setOpen} quiet label={t("usagePerformance.methodology")}>
+  return <CollapsibleSection open={open} onOpenChange={setOpen} quiet
+    className="asb-request-usage-scope" label={t("usagePerformance.methodology")}>
+    <div className="asb-request-usage-scope-body">
+      <p className="asb-scope-note">{t("usagePerformance.sourceNote")}</p>
+      <div className="asb-request-usage-source-groups">
+        <section className="asb-request-usage-facts">
+          <h4 className="asb-group-title">{t("usagePerformance.scopeFacts")}</h4>
+          <FactList rows={[
+            { label: t("usagePerformance.window"), value: <>
+              <Time iso={new Date(report.startAtMs).toISOString()} precision="second" />
+              {" — "}<Time iso={new Date(report.endAtMs).toISOString()} precision="second" /></> },
+            { label: t("usagePerformance.bucketLabel"), value: t("usagePerformance.bucket", { minutes: report.bucketMs / 60_000 }) },
+            { label: t("usagePerformance.refreshFrequency"), value: t("usagePerformance.polling") },
+          ]} />
+        </section>
+        {report.sources.map((source) => <SourceCoverage key={source.app} source={source} />)}
+      </div>
       <ul className="asb-request-usage-methodology">
         {(["speed", "first", "completion", "cache", "tokens", "cost", "comparison", "trends"] as const).map((key) =>
           <li key={key}>{t(`usagePerformance.method.${key}`)}</li>)}
       </ul>
-    </CollapsibleSection>
-  </div>;
+    </div>
+  </CollapsibleSection>;
+}
+
+function SourceCoverage({ source }: { source: RequestUsageReport["sources"][number] }) {
+  const { t } = useI18n();
+  return <section className="asb-request-usage-facts">
+    <h4 className="asb-group-title">{clientName(source.app)}</h4>
+    <FactList rows={[
+      { label: t("usagePerformance.requests"), value: source.verifiedRequests },
+      { label: t("usagePerformance.observedSpan"), value: source.earliestAtMs === null ? t("usagePerformance.notRecorded") : <>
+        <Time iso={new Date(source.earliestAtMs).toISOString()} precision="second" />
+        {source.latestAtMs !== null && <> — <Time iso={new Date(source.latestAtMs).toISOString()} precision="second" /></>}</> },
+      ...(source.retentionLimit === null ? [] : [{ label: t("usagePerformance.retentionLabel"),
+        value: t("usagePerformance.retentionLimit", { count: source.retentionLimit }) }]),
+      ...(source.error === null ? [] : [{ label: t("usagePerformance.sourceReadError"), value: source.error }]),
+    ]} />
+  </section>;
 }

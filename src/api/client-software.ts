@@ -1,5 +1,6 @@
 import { invoke } from "./client";
 import type { AppKind } from "./shared";
+import type { LocalizedMessage } from "./switching";
 
 export type SoftwareForm = "cli" | "desktop" | "extension" | "bundled";
 export type SoftwareManager = "native" | "npm" | "homebrew" | "winget" | "system" | "manual" | "host";
@@ -62,7 +63,7 @@ export interface ClientUpdateTask {
   actualVersion: string | null;
   cancellable: boolean;
   log: string[];
-  error: string | null;
+  error: LocalizedMessage | null;
   processId: number | null;
   processBirth: string | null;
 }

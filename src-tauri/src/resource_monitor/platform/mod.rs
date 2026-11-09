@@ -8,8 +8,8 @@ mod linux;
 #[cfg(target_os = "windows")]
 pub use windows::Reader;
 #[cfg(target_os = "windows")]
-pub use windows::process_key;
+pub use windows::{image_path, process_images, process_key};
 #[cfg(target_os = "macos")]
-pub use macos::Reader;
+pub use macos::{image_path, process_images, Reader};
 #[cfg(target_os = "linux")]
-pub use linux::Reader;
+pub use linux::{image_path, process_images, Reader};

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ClientUpdateTask } from "../../api/client-software";
 import { useI18n } from "../../i18n";
+import { localizedMessageText } from "../../i18n/errors";
 import { Button } from "../Button";
 import { CodePreview } from "../CodePreview";
 import { CollapsibleSection } from "../Collapsible";
@@ -23,7 +24,7 @@ export function UpdateTask({ task, busy, onCancel }: {
       { label: t("software.target"), value: `${task.plan.fromVersion} → ${task.plan.targetVersion}` },
       ...(task.actualVersion ? [{ label: t("software.actual"), value: task.actualVersion }] : []),
     ]} />
-    {task.error && <p role="alert" className="asb-warn-text">{task.error}</p>}
+    {task.error && <p role="alert" className="asb-warn-text">{localizedMessageText(task.error, t)}</p>}
     {task.cancellable && <Button variant="secondary" size="compact" disabled={busy} onClick={onCancel}>{t("software.cancel")}</Button>}
     {task.log.length > 0 && <CollapsibleSection quiet open={output} onOpenChange={setOutput} label={t("software.output")}>
       <CodePreview target={t("software.output")} content={task.log.join("\n")} />

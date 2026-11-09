@@ -10,7 +10,7 @@ export function useRequestUsage(active: boolean, query: RequestUsageQuery, refre
   const key = JSON.stringify(query);
   const scope = JSON.stringify([query.range, query.app, query.profileId, query.model]);
   const [saved, setSaved] = useState<{ scope: string; report: RequestUsageReport } | null>(null);
-  const [failure, setFailure] = useState<{ key: string; error: unknown } | null>(null);
+  const [failure, setFailure] = useState<{ scope: string; error: unknown } | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const flight = useRef<{ key: string; promise: Promise<RequestUsageReport> } | null>(null);
@@ -36,13 +36,13 @@ export function useRequestUsage(active: boolean, query: RequestUsageQuery, refre
       try {
         const report = await pending;
         if (!stopped) {
-          const issues = report.sources.flatMap((source) => source.error ? [`${clientName(source.app)}: ${source.error}`] : []);
+          const issues = sourceIssues(report);
           setSaved((previous) => issues.length > 0 && previous?.scope === scope
             && previous.report.sources.every((source) => source.error === null) ? previous : { scope, report });
-          setFailure(issues.length > 0 ? { key, error: issues.join(" · ") } : null);
+          setFailure(issues.length > 0 ? { scope, error: issues.join(" · ") } : null);
         }
       } catch (error) {
-        if (!stopped) setFailure({ key, error });
+        if (!stopped) setFailure({ scope, error });
       } finally {
         if (!stopped) { setBusyKey(null); timer = setTimeout(() => void read(), 30_000); }
       }
@@ -52,7 +52,12 @@ export function useRequestUsage(active: boolean, query: RequestUsageQuery, refre
   }, [active, key, scope, refreshToken, revision]);
 
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
-  return { report: saved?.scope === scope ? saved.report : null,
-    error: failure?.key === key ? errorText(failure.error, t) : null,
+  const report = saved?.scope === scope ? saved.report : null;
+  const readError = failure?.scope === scope ? errorText(failure.error, t) : null;
+  return { report, error: readError ?? (report ? sourceIssues(report).join(" · ") || null : null),
     loading: active && busyKey === key, refresh };
+}
+
+function sourceIssues(report: RequestUsageReport): string[] {
+  return report.sources.flatMap((source) => source.error ? [`${clientName(source.app)}: ${source.error}`] : []);
 }

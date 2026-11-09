@@ -91,6 +91,8 @@ export const messages = {
   "backup.action.cloudBackupRestored": ["已恢复云端备份", "Cloud backup restored"],
   "backup.action.sessionResumed": ["已恢复会话", "Session resumed"],
   "backup.action.sessionDeleted": ["已删除会话", "Session deleted"],
+  "backup.action.codexSessionProvidersTransferred": ["已统一 Codex 会话归属", "Codex session providers unified"],
+  "backup.action.codexSessionProvidersRestored": ["已恢复 Codex 会话归属", "Codex session providers restored"],
   "backup.action.ccSwitchProfilesImported": ["已导入本机档案", "Local profiles imported"],
   "backup.action.officialLoginCompleted": ["已完成官方登录", "Official sign-in completed"],
 

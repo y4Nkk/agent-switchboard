@@ -2,6 +2,23 @@ import { invoke } from "./client";
 import type { AppKind } from "./shared";
 import type { LocalizedMessage } from "./switching";
 
+export interface CodexSessionProviderPreview {
+  id: string; targetProvider: string; sessions: number; databaseRows: number; files: number; missingOriginals: number;
+  historyRoot: string; databasePath: string | null; externalFiles: string[];
+  providers: Array<{ provider: string | null; databaseRows: number; files: number }>;
+}
+export interface CodexSessionProviderOperation {
+  preview: CodexSessionProviderPreview;
+  phase: "applying" | "applied" | "restoring" | "restored";
+  backupDirectory: string;
+}
+export const previewCodexSessionProviderTransfer = (): Promise<CodexSessionProviderPreview> => invoke("preview_codex_session_provider_transfer");
+export const readCodexSessionProviderTransfer = (): Promise<CodexSessionProviderOperation | null> => invoke("read_codex_session_provider_transfer");
+export const applyCodexSessionProviderTransfer = (id: string, confirmWrite: boolean): Promise<CodexSessionProviderOperation> =>
+  invoke("apply_codex_session_provider_transfer", { id, confirmWrite });
+export const restoreCodexSessionProviderTransfer = (id: string, confirmWrite: boolean): Promise<CodexSessionProviderOperation> =>
+  invoke("restore_codex_session_provider_transfer", { id, confirmWrite });
+
 export interface StorageReclaimOutcome { removed: number; warning: string | null }
 
 /** Read-only local session metadata. The backend never exposes source paths. */

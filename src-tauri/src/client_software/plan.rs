@@ -1,4 +1,4 @@
-use super::{discovery, releases, types::{Comparison, Form, Installation, Manager, Owner, Policy, Software, UpdatePlan}};
+use super::{discovery, releases, SoftwareError, types::{Comparison, Form, Installation, Manager, Owner, Policy, Software, UpdatePlan}};
 use crate::{local_state::LocalState, outbound_proxy::OutboundProxySettings};
 use chrono::{Duration, Utc};
 mod identity;
@@ -39,8 +39,8 @@ pub fn within_policy(version: &str, policy: &Policy) -> bool {
     minimum.is_none_or(|v| version >= v) && maximum.is_none_or(|v| version <= v)
 }
 
-pub fn prepare(state: &LocalState, item: &Software) -> Result<Prepared, String> {
-    if let Some(reason) = allowed(item) { return Err(format!("Update unavailable: {reason}")); }
+pub fn prepare(state: &LocalState, item: &Software) -> Result<Prepared, SoftwareError> {
+    if let Some(reason) = allowed(item) { return Err(format!("Update unavailable: {reason}").into()); }
     let installation = item.installation.clone();
     crate::resource_monitor::client_processes::ensure_idle(&installation)?;
     let proxy = crate::outbound_proxy::read(state.root()).map_err(|e| e.to_string())?;
@@ -58,7 +58,7 @@ pub fn prepare(state: &LocalState, item: &Software) -> Result<Prepared, String> 
     Ok(Prepared { view, installation, policy_revision: item.policy.revision.clone(), identity_revision, proxy })
 }
 
-pub fn revalidate(state: &LocalState, prepared: &Prepared) -> Result<Installation, String> {
+pub fn revalidate(state: &LocalState, prepared: &Prepared) -> Result<Installation, SoftwareError> {
     let expiration = chrono::DateTime::parse_from_rfc3339(&prepared.view.expires_at).map_err(|e| e.to_string())?;
     if Utc::now() > expiration { return Err("Update preview expired; prepare it again".into()); }
     let mut now = discovery::inspect(prepared.view.app, &prepared.view.launcher)?;

@@ -45,7 +45,7 @@ Status: implemented
 - [按调用增量计量与真实刷新进度](../architecture/2026-11-04-incremental-usage-ledger.md)：部分重叠；统计仅读取本模块已经提交的版本和追加记录，不持有采集门禁、不重新核验保留历史。原件前缀验证、版本分配与完整保存仍由本篇拥有，统计不建立第二套原文来源。
 - [搜索取消、真实进度与全局警示](2026-10-23-session-search-lifecycle.md)：搜索取消进入保留同步的记录和附件分块边界；取消只回滚当前未发布文件，目录原件可用性在完成整目录扫描后原子发布，避免取消导致未检查的历史被误记为不可用。保留模式、完整快照及恢复身份继续由本篇拥有。
 
-- [完整本地会话与用量](../architecture/2026-10-16-complete-local-session-usage.md)：部分重叠；保留逻辑身份、共享读取器、真实消费去重及原生数据库只读约束。本篇接管 Claude 来源跨账号稳定性和完整正文保留，不推翻共享读取契约。
+- [完整本地会话与用量](../architecture/2026-10-16-complete-local-session-usage.md)：部分重叠；保留逻辑身份、共享读取器、真实消费去重及普通读取不写原生数据库的约束。本篇接管 Claude 来源跨账号稳定性和完整正文保留，不推翻共享读取契约。
 - [会话读取索引与增量真实用量](../architecture/2026-10-22-incremental-session-read-index.md)：部分重叠；保留库交付按修订校验的原始字节范围，消息位置、搜索命中和计量状态由派生索引拥有，不另设 Claude 原件直读路径。
 - [本地资源边界](../architecture/2026-10-14-bounded-local-resources.md)：部分重叠；继续逐记录有界读取、分页传输及显式维护，持久保留不能引入全量正文常驻内存。
 - [workflow 转换](../feature/2026-10-20-session-warning-conversion.md)：相邻但独立；journal 仍是执行事件，不能为覆盖数量虚构 sessionId，也不拿 workflow 副本代替主会话。恢复目录的 journal 也由同一显式转换入口解析。

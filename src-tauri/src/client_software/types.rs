@@ -1,4 +1,4 @@
-use asb_core::contracts::AppKind;
+use asb_core::contracts::{AppKind, LocalizedMessage};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -123,7 +123,7 @@ pub struct UpdateTask {
     pub actual_version: Option<String>,
     pub cancellable: bool,
     pub log: Vec<String>,
-    pub error: Option<String>,
+    pub error: Option<LocalizedMessage>,
     pub process_id: Option<u32>,
     pub process_birth: Option<String>,
 }

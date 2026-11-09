@@ -2,7 +2,7 @@ mod journal;
 mod output;
 mod spawn;
 #[cfg(test)] mod tests;
-use super::{gate, plan, process, updater, SoftwareManager, types::{Phase, UpdateTask}};
+use super::{gate, plan, process, updater, SoftwareError, SoftwareManager, types::{Phase, UpdateTask}};
 use crate::local_state::LocalState;
 use std::{sync::atomic::Ordering, time::Duration};
 
@@ -14,7 +14,7 @@ pub fn initialize(manager: &SoftwareManager, state: &LocalState) -> Result<(), S
         task.phase = Phase::Verifying;
         task.revision = task.revision.saturating_add(1);
         task.cancellable = false;
-        task.error = Some("ASB stopped during this operation. The updater was not restarted. Recheck the installation and its original manager.".into());
+        task.error = Some(SoftwareError::from("ASB stopped during this operation. The updater was not restarted. Recheck the installation and its original manager.").into_message());
         journal::save(state, task)?;
         let task = task.clone();
         let lease = gate::update(task.plan.app)?;
@@ -25,9 +25,9 @@ pub fn initialize(manager: &SoftwareManager, state: &LocalState) -> Result<(), S
     Ok(())
 }
 
-fn recover(manager: SoftwareManager, state: LocalState, task: UpdateTask, lease: gate::UpdateLease) {
+fn recover(manager: SoftwareManager, state: LocalState, task: UpdateTask, lease: gate::ExclusiveLease) {
     wait_for_updater(&manager, &state, &task);
-    let result = verify(&state, &task).map(Some);
+    let result = verify(&state, &task).map(Some).map_err(SoftwareError::from);
     updater::cleanup(&state, &task.plan.id);
     drop(lease);
     if let Err(error) = finish(&manager, &state, result) { log::error!("Cannot save recovered client update: {error}"); }
@@ -38,7 +38,7 @@ fn wait_for_updater(manager: &SoftwareManager, state: &LocalState, task: &Update
         match crate::resource_monitor::client_processes::birth(pid) {
             Ok(Some(birth)) if task.process_birth.as_ref().is_none_or(|expected| *expected == birth) => std::thread::sleep(Duration::from_secs(2)),
             Ok(_) => break,
-            Err(error) => { let _ = change(&manager, &state, |t| t.error = Some(error)); std::thread::sleep(Duration::from_secs(3)); }
+            Err(error) => { let _ = change(&manager, &state, |t| t.error = Some(SoftwareError::from(error).into_message())); std::thread::sleep(Duration::from_secs(3)); }
         }
     }
     #[cfg(windows)]
@@ -47,13 +47,13 @@ fn wait_for_updater(manager: &SoftwareManager, state: &LocalState, task: &Update
             match super::winget::installing(task.plan.app) {
                 Ok(false) => break,
                 Ok(true) => std::thread::sleep(Duration::from_secs(2)),
-                Err(error) => { let _ = change(&manager, &state, |t| t.error = Some(error)); std::thread::sleep(Duration::from_secs(3)); }
+                Err(error) => { let _ = change(&manager, &state, |t| t.error = Some(SoftwareError::from(error).into_message())); std::thread::sleep(Duration::from_secs(3)); }
             }
         }
     }
 }
 
-pub fn start(manager: &SoftwareManager, state: &LocalState, id: &str) -> Result<UpdateTask, String> {
+pub fn start(manager: &SoftwareManager, state: &LocalState, id: &str) -> Result<UpdateTask, SoftwareError> {
     let _refresh = manager.refreshing.lock().map_err(|_| "Client refresh unavailable")?;
     let prepared = manager.lock()?.prepared.clone().filter(|p| p.view.id == id).ok_or("Update preview is missing; prepare again")?;
     let lease = gate::update(prepared.view.app)?;
@@ -83,7 +83,7 @@ pub fn start(manager: &SoftwareManager, state: &LocalState, id: &str) -> Result<
     Ok(task)
 }
 
-fn run(manager: &SoftwareManager, state: &LocalState, prepared: &plan::Prepared) -> Result<Option<String>, String> {
+fn run(manager: &SoftwareManager, state: &LocalState, prepared: &plan::Prepared) -> Result<Option<String>, SoftwareError> {
     if manager.cancel.load(Ordering::SeqCst) { return Ok(None); }
     let updater = updater::prepare(state, prepared)?;
     if manager.cancel.load(Ordering::SeqCst) { return Ok(None); }
@@ -104,13 +104,16 @@ fn run(manager: &SoftwareManager, state: &LocalState, prepared: &plan::Prepared)
             #[cfg(not(windows))] { let _ = (id, scope, root); Err("WinGet is unavailable on this operating system".into()) }
         }
     };
-    change(manager, state, |task| { task.phase = Phase::Verifying; task.error = outcome.as_ref().err().cloned(); })?;
+    change(manager, state, |task| {
+        task.phase = Phase::Verifying;
+        task.error = outcome.as_ref().err().map(|error| SoftwareError::from(error.as_str()).into_message());
+    })?;
     let task = manager.task()?.ok_or("Update task missing")?;
     let verification = verify(state, &task);
     match (outcome, verification) {
-        (Ok(()), result) => result.map(Some),
-        (Err(error), Ok(version)) => { change(manager, state, |t| t.actual_version = Some(version))?; Err(error) }
-        (Err(error), Err(verification)) => Err(format!("{error}\n{verification}")),
+        (Ok(()), result) => result.map(Some).map_err(SoftwareError::from),
+        (Err(error), Ok(version)) => { change(manager, state, |t| t.actual_version = Some(version))?; Err(error.into()) }
+        (Err(error), Err(verification)) => Err(format!("{error}\n{verification}").into()),
     }
 }
 
@@ -126,7 +129,7 @@ fn run_process(manager: &SoftwareManager, state: &LocalState, prepared: &plan::P
         }
         let status = match child.try_wait() {
             Ok(status) => status,
-            Err(error) => { let _ = change(manager, state, |task| task.error = Some(error.to_string())); None }
+            Err(error) => { let _ = change(manager, state, |task| task.error = Some(SoftwareError::from(error.to_string()).into_message())); None }
         };
         if let Some(status) = status {
             let deadline = std::time::Instant::now() + Duration::from_millis(300);
@@ -158,12 +161,12 @@ fn verify(state: &LocalState, task: &UpdateTask) -> Result<String, String> {
     Ok(version)
 }
 
-fn finish(manager: &SoftwareManager, state: &LocalState, result: Result<Option<String>, String>) -> Result<(), String> {
+fn finish(manager: &SoftwareManager, state: &LocalState, result: Result<Option<String>, SoftwareError>) -> Result<(), String> {
     change(manager, state, |task| {
         match result {
             Ok(Some(version)) => { task.phase = Phase::Completed; task.actual_version = Some(version); task.error = None; }
             Ok(None) => { task.phase = Phase::Cancelled; task.error = None; }
-            Err(error) => { task.phase = if task.phase == Phase::Preparing { Phase::Failed } else { Phase::NeedsAttention }; task.error = Some(process::scrub(&error)); }
+            Err(error) => { task.phase = if task.phase == Phase::Preparing { Phase::Failed } else { Phase::NeedsAttention }; task.error = Some(error.into_message()); }
         }
         task.cancellable = false; task.finished_at = Some(chrono::Utc::now().to_rfc3339());
     })
@@ -175,7 +178,7 @@ fn change(manager: &SoftwareManager, state: &LocalState, mutate: impl FnOnce(&mu
     mutate(task);
     task.revision = task.revision.saturating_add(1);
     journal::save(state, task).inspect_err(|error| {
-        task.error = Some(format!("Cannot save update progress: {}", process::scrub(error)));
+        task.error = Some(SoftwareError::from(format!("Cannot save update progress: {}", process::scrub(error))).into_message());
     })
 }
 

@@ -19,6 +19,37 @@ use windows_sys::Win32::{
 struct Handle(HANDLE);
 impl Drop for Handle { fn drop(&mut self) { unsafe { CloseHandle(self.0); } } }
 
+/// Occupancy enumeration for the update guard: identity-free image names from
+/// the same ToolHelp snapshot the monitor reads. User scope stays the
+/// monitor's contract (users::enumerate); occupancy is a file fact.
+pub fn process_images() -> Result<Vec<(u32, String)>, String> {
+    let handle = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if handle == INVALID_HANDLE_VALUE { return Err(format!("无法枚举进程：{}", std::io::Error::last_os_error())); }
+    let snapshot = Handle(handle);
+    let mut entry = PROCESSENTRY32W { dwSize: size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+    let mut images = Vec::new();
+    let mut available = unsafe { Process32FirstW(snapshot.0, &mut entry) };
+    while available != 0 {
+        let end = entry.szExeFile.iter().position(|character| *character == 0).unwrap_or(entry.szExeFile.len());
+        images.push((entry.th32ProcessID, String::from_utf16_lossy(&entry.szExeFile[..end])));
+        available = unsafe { Process32NextW(snapshot.0, &mut entry) };
+    }
+    if unsafe { GetLastError() } != ERROR_NO_MORE_FILES {
+        return Err(format!("进程枚举未完成：{}", std::io::Error::last_os_error()));
+    }
+    Ok(images)
+}
+
+/// Query-limited access crosses integrity levels and users, but packaged
+/// (WindowsApps) and protected images refuse the name query. None is the
+/// guard's "cannot prove" skip signal, never an attribution.
+pub fn image_path(pid: u32) -> Option<PathBuf> {
+    let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if raw.is_null() { return None; }
+    let handle = Handle(raw);
+    executable_path(handle.0)
+}
+
 pub struct Reader { user_sid: Vec<u8>, memory: Result<HashMap<u32, u64>, Issue> }
 
 impl Reader {

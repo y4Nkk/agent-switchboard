@@ -34,8 +34,7 @@ export function RequestUsageRows({ report, providerName, onPage }: {
       open={expanded === row.id} contentId={`${id}-${row.id}`} label={t("usagePerformance.details")}
       onOpenChange={(open) => setExpanded(open ? row.id : null)} /> },
   ];
-  return <section className="asb-request-usage-section">
-    <h3 className="asb-section-title">{t("usagePerformance.records")}</h3>
+  return <div className="asb-request-usage-section">
     <Table columns={columns} rows={report.rows} rowKey={(row) => `${row.app}:${row.id}`}
       ariaLabel={t("usagePerformance.records")} className="asb-request-usage-row-table"
       renderExpansion={(row) => <Collapsible open={expanded === row.id} id={`${id}-${row.id}`}>
@@ -43,7 +42,7 @@ export function RequestUsageRows({ report, providerName, onPage }: {
       </Collapsible>} />
     <Pagination total={report.summary.requests} page={report.page} pageSize={report.pageSize}
       onPageChange={onPage} label={t("usagePerformance.recordPages")} />
-  </section>;
+  </div>;
 }
 
 function RequestDetails({ row, providerName }: { row: RequestUsageRow; providerName: ProviderName }) {

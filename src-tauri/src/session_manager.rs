@@ -5,11 +5,13 @@
 //! preserved in the application's session library before consumers read them.
 //! Explicit resume reconstructs a managed transcript and starts the fixed CLI
 //! with current credentials. Explicit deletion removes original and saved data.
-//! Codex's registered native history remains owned by Codex and read-only.
+//! Codex owns its native history; reads remain read-only. The explicit provider
+//! transfer is the sole metadata-write operation, with preview and recovery.
 //! Explicit workflow conversion saves complete application-owned copies; all
 //! consumers resolve the same local state root and shared message contract.
 
 pub(crate) mod codex_titles;
+pub(crate) mod provider_transfer;
 pub(crate) mod parser;
 pub(crate) mod records;
 pub(crate) mod record_file;

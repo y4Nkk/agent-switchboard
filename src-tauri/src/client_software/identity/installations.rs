@@ -32,8 +32,7 @@ impl Installations {
 
     pub fn classify(&self, path: &str) -> Option<Group> {
         let filename = path.rsplit('/').next()?;
-        if self.claude_versions.as_ref().and_then(|root| below(path, root))
-            .is_some_and(|suffix| version_name(suffix.strip_suffix(".exe").unwrap_or(suffix))) {
+        if self.claude_versions.as_ref().is_some_and(|root| claude_version_entry(path, root)) {
             return Some(Group::Claude);
         }
         let group = named_group(filename)?;
@@ -50,6 +49,10 @@ impl Installations {
             || (group == Group::Codex && self.codex_bins.iter().filter_map(|root| below(path, root)).any(|suffix| download_entry(suffix, false)))
             || (group == Group::Claude && self.claude_downloads.iter().filter_map(|root| below(path, root)).any(|suffix| download_entry(suffix, true)))
     }
+}
+
+pub fn claude_version_entry(path: &str, root: &str) -> bool {
+    below(path, root).is_some_and(|suffix| version_name(suffix.strip_suffix(".exe").unwrap_or(suffix)))
 }
 
 pub fn launcher_directories() -> Vec<PathBuf> {

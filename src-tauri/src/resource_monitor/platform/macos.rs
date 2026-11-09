@@ -3,6 +3,7 @@ use std::{mem::{size_of, MaybeUninit}, path::PathBuf, time::Instant};
 
 pub struct Reader { uid: libc::uid_t, timebase: libc::mach_timebase_info_data_t }
 const PROC_UID_ONLY: u32 = 4;
+const PROC_ALL_PIDS: u32 = 1;
 
 impl Reader {
     pub fn new() -> Result<Self, String> {
@@ -14,7 +15,7 @@ impl Reader {
     }
 
     pub fn entries(&self) -> Result<(Vec<Entry>, Vec<Issue>), String> {
-        let (pids, truncated) = list_pids(self.uid)?;
+        let (pids, truncated) = list_pids(PROC_UID_ONLY, self.uid)?;
         let mut entries = Vec::new();
         let mut issues = if truncated { vec![Issue::EnumerationRestricted] } else { Vec::new() };
         for pid in pids.into_iter().filter(|pid| *pid > 0) {
@@ -55,14 +56,30 @@ impl Reader {
     }
 }
 
-fn list_pids(uid: libc::uid_t) -> Result<(Vec<libc::pid_t>, bool), String> {
+/// Occupancy enumeration for the update guard: candidate names from all
+/// sessions, because occupancy is a file fact; images are proven per process.
+pub fn process_images() -> Result<Vec<(u32, String)>, String> {
+    let (pids, _) = list_pids(PROC_ALL_PIDS, 0)?;
+    Ok(pids.into_iter().filter(|pid| *pid > 0).filter_map(|pid| match bsd_info(pid) {
+        Ok(info) => Some((u32::try_from(info.pbi_pid).ok()?, process_name(&info))),
+        Err(_) => None,
+    }).collect())
+}
+
+/// proc_pidpath refuses images of processes the caller cannot read; None is
+/// the guard's "cannot prove" skip signal.
+pub fn image_path(pid: u32) -> Option<PathBuf> {
+    executable_path(libc::pid_t::try_from(pid).ok()?)
+}
+
+fn list_pids(kind: u32, flavor: u32) -> Result<(Vec<libc::pid_t>, bool), String> {
     for attempt in 0..3 {
-        let bytes = unsafe { libc::proc_listpids(PROC_UID_ONLY, uid, std::ptr::null_mut(), 0) };
+        let bytes = unsafe { libc::proc_listpids(kind, flavor, std::ptr::null_mut(), 0) };
         if bytes <= 0 { return Err(format!("进程枚举失败：{}", std::io::Error::last_os_error())); }
         let capacity = bytes as usize / size_of::<libc::pid_t>() + 128;
         let mut pids = vec![0; capacity];
         let buffer_bytes = i32::try_from(pids.len() * size_of::<libc::pid_t>()).map_err(|_| "进程表过大")?;
-        let read = unsafe { libc::proc_listpids(PROC_UID_ONLY, uid, pids.as_mut_ptr().cast(), buffer_bytes) };
+        let read = unsafe { libc::proc_listpids(kind, flavor, pids.as_mut_ptr().cast(), buffer_bytes) };
         if read <= 0 { return Err(format!("进程表读取失败：{}", std::io::Error::last_os_error())); }
         let full = read >= buffer_bytes;
         pids.truncate(read as usize / size_of::<libc::pid_t>());

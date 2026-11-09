@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { applyLanguagePreference, currentLanguage, subscribeLanguage, tr } from "../src/i18n/current.ts";
-import { commandErrorText, errorText, uiMessage } from "../src/i18n/errors.ts";
+import { commandErrorText, errorText, localizedMessageText, uiMessage } from "../src/i18n/errors.ts";
 import { messages } from "../src/i18n/messages.ts";
 import { resolveLanguage } from "../src/i18n/resolve.ts";
 import { officialQuotaReadings, officialQuotaWindowName } from "../src/lib/usage-format.ts";
@@ -103,6 +103,25 @@ test("official window display covers duration units without changing source iden
     applyLanguagePreference("zh-CN");
     assert.equal(officialQuotaReadings(quota)[0].planName, "5 小时");
   } finally { applyLanguagePreference("system"); }
+});
+
+test("client occupancy errors follow language changes in commands and retained update tasks", () => {
+  const previous = currentLanguage();
+  try {
+    for (const app of ["Codex", "Claude Code"]) {
+      const message = { key: "software.processInUse", params: { app, pid: 42 }, text: "original process diagnostic" };
+      const command = { code: "client-software-operation", messageKey: message.key, params: message.params, message: message.text };
+      applyLanguagePreference("zh-CN");
+      const chinese = `请先结束 ${app} 进程（PID：42），再重试更新。`;
+      assert.equal(errorText(command, tr), chinese);
+      assert.equal(localizedMessageText(message, tr), chinese);
+      applyLanguagePreference("en-US");
+      const english = `End the ${app} process (PID 42), then retry the update.`;
+      assert.equal(errorText(command, tr), english);
+      assert.equal(localizedMessageText(message, tr), english);
+      assert.equal(message.text, "original process diagnostic");
+    }
+  } finally { applyLanguagePreference(previous); }
 });
 
 test("every catalog entry has identical interpolation parameters in both languages", () => {

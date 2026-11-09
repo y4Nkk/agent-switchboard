@@ -91,18 +91,8 @@ fn npm_runtime(prefix: &Path) -> Option<(PathBuf, PathBuf)> {
 }
 
 fn native(item: &mut Installation) -> Result<bool, String> {
-    let home = crate::local_state::user_home_dir()?;
     if item.app == AppKind::Claude {
-        let versions = home.join(".local/share/claude/versions");
-        let standard = home.join(".local/bin").join(if cfg!(windows) { "claude.exe" } else { "claude" });
-        let in_versions = identity::normalize(&item.executable).starts_with(&format!("{}/", identity::canonical_root(&versions)));
-        if in_versions || (identity::normalize(&item.launcher) == identity::normalize(&standard) && identity::is_native(&item.executable).unwrap_or(false)) {
-            item.root = versions;
-            item.manager = Manager::Native;
-            native_owner(item);
-            return Ok(true);
-        }
-        return Ok(false);
+        return Ok(native_claude(item, &crate::local_state::user_home_dir()?));
     }
     let Some(root) = item.executable.ancestors().find(|path| path.file_name().is_some_and(|s| s == "standalone")
         && path.parent().and_then(Path::file_name).is_some_and(|s| s == "packages")) else { return Ok(false); };
@@ -113,10 +103,32 @@ fn native(item: &mut Installation) -> Result<bool, String> {
     Ok(true)
 }
 
+fn native_claude(item: &mut Installation, home: &Path) -> bool {
+    let versions = home.join(".local/share/claude/versions");
+    let root = identity::canonical_root(&versions);
+    let executable = identity::canonical_root(&item.executable);
+    let version_entry = identity::installations::claude_version_entry(&executable, &root);
+    if executable.starts_with(&format!("{root}/")) && !version_entry { return false; }
+    let standard = home.join(".local/bin").join(if cfg!(windows) { "claude.exe" } else { "claude" });
+    if !version_entry && identity::normalize(&item.launcher) != identity::normalize(&standard) { return false; }
+    if !identity::is_native(&item.executable).unwrap_or(false) { return false; }
+    item.root = versions;
+    item.manager = Manager::Native;
+    native_owner(item);
+    true
+}
+
 fn native_owner(item: &mut Installation) {
-    if identity::normalize(&item.launcher).starts_with(&format!("{}/", identity::normalize(&item.root))) {
+    let root = identity::canonical_root(&item.root);
+    // Resolve directory aliases without following the stable launcher's own link.
+    let payload = item.launcher.parent().is_none_or(|directory| {
+        let directory = identity::canonical_root(directory);
+        directory == root || directory.starts_with(&format!("{root}/"))
+    });
+    if payload {
+        item.owner = None;
         item.detail = Some("Select the stable installed launcher, not a version-specific package payload".into());
-    } else { item.owner = Some(Owner::Native); }
+    } else { item.owner = Some(Owner::Native); item.detail = None; }
 }
 
 fn brew(item: &mut Installation) -> Result<bool, String> {

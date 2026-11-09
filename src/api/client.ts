@@ -69,9 +69,9 @@ export function onTrayError(handler: (error: CommandError) => void): Promise<() 
   return listen<CommandError>("tray-error", (event) => handler(event.payload));
 }
 /** Native blocked exits reveal the exact workspace that can finish recovery. */
-export function onExitRecovery(handler: (destination: "radar" | "backups" | "clientManagement") => void): Promise<() => void> {
+export function onExitRecovery(handler: (destination: "radar" | "backups" | "clientManagement" | "sessions") => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
-  return listen<"radar" | "backups" | "clientManagement">("exit-recovery", (event) => handler(event.payload));
+  return listen<"radar" | "backups" | "clientManagement" | "sessions">("exit-recovery", (event) => handler(event.payload));
 }
 export function onDesktopSettingsError(handler: (error: CommandError) => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});

@@ -357,9 +357,9 @@ fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
         return;
     }
     if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
-        if client_software::blocks_exit() {
+        if let Some(destination) = exit_recovery::active_client_destination() {
             api.prevent_exit();
-            exit_recovery::show(app, exit_recovery::Destination::ClientManagement, "");
+            exit_recovery::show(app, destination, "");
             return;
         }
         // A user-invoked desktop restart must never enter the

@@ -110,6 +110,8 @@ pub enum RuntimeLogAction {
     CloudBackupRestored,
     SessionResumed,
     SessionDeleted,
+    CodexSessionProvidersTransferred,
+    CodexSessionProvidersRestored,
     CcSwitchProfilesImported,
     ProvidersSqlImported,
     OfficialLoginCompleted,

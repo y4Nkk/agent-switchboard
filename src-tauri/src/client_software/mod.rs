@@ -1,6 +1,7 @@
 pub(crate) mod discovery;
 pub(crate) mod gate;
 pub(crate) mod identity;
+mod error;
 mod plan;
 mod npm;
 mod process;
@@ -12,6 +13,7 @@ mod updater;
 
 use crate::{commands::error::CommandError, local_state::LocalState};
 use plan::Prepared;
+pub(crate) use error::SoftwareError;
 use types::{Form, Snapshot, Software, UpdatePlan, UpdateTask};
 use std::{collections::HashMap, sync::{Arc, Mutex, MutexGuard, atomic::AtomicBool}};
 
@@ -45,18 +47,18 @@ impl SoftwareManager {
             snapshot.task = self.lock()?.task.clone();
             return Ok(snapshot);
         }
-        if gate::updating() {
+        if gate::busy() {
             return Ok(Snapshot { revision: uuid::Uuid::new_v4().to_string(), installations: Vec::new(),
-                issues: vec!["Installation discovery is paused while software is being updated; refresh after it finishes".into()], task: self.task()? });
+                issues: vec!["Installation discovery is paused during an exclusive client operation; refresh after it finishes".into()], task: self.task()? });
         }
         self.refresh(state, false, false)
     }
 
     pub fn refresh(&self, state: &LocalState, network: bool, force: bool) -> Result<Snapshot, String> {
         self.initialize(state)?;
-        if gate::updating() { return Err("A software update is in progress; refresh after verification".into()); }
+        if gate::busy() { return Err("An exclusive client operation is in progress; refresh after it finishes".into()); }
         let _refresh = self.refreshing.lock().map_err(|_| "Client refresh unavailable")?;
-        if gate::updating() { return Err("A software update is in progress; refresh after verification".into()); }
+        if gate::busy() { return Err("An exclusive client operation is in progress; refresh after it finishes".into()); }
         let proxy = crate::outbound_proxy::read(state.root()).map_err(|e| e.to_string())?;
         {
             let mut data = self.lock()?;
@@ -124,7 +126,7 @@ impl SoftwareManager {
         errors
     }
 
-    pub fn prepare(&self, state: &LocalState, id: &str, revision: &str) -> Result<UpdatePlan, String> {
+    pub fn prepare(&self, state: &LocalState, id: &str, revision: &str) -> Result<UpdatePlan, SoftwareError> {
         let _refresh = self.refreshing.lock().map_err(|_| "Client refresh unavailable")?;
         let item = {
             let data = self.lock()?;
@@ -138,9 +140,9 @@ impl SoftwareManager {
         Ok(view)
     }
 
-    pub fn start(&self, state: &LocalState, id: &str) -> Result<UpdateTask, String> { task::start(self, state, id) }
+    pub fn start(&self, state: &LocalState, id: &str) -> Result<UpdateTask, SoftwareError> { task::start(self, state, id) }
     pub fn select(&self, state: &LocalState, app: asb_core::contracts::AppKind, path: std::path::PathBuf) -> Result<Snapshot, String> {
-        if gate::updating() { return Err("Wait for the current update to finish".into()); }
+        if gate::busy() { return Err("Wait for the current client operation to finish".into()); }
         discovery::validate_selected(app, &path)?;
         {
             let mut data = self.lock()?;
@@ -152,8 +154,8 @@ impl SoftwareManager {
     pub fn cancel(&self, id: &str) -> Result<UpdateTask, String> { task::cancel(self, id) }
 }
 
-pub(crate) fn error(detail: String) -> CommandError {
-    CommandError::localized("client-software-operation", "software.operationFailed", detail.clone(), serde_json::json!({ "detail": detail }))
+pub(crate) fn error(failure: impl Into<SoftwareError>) -> CommandError {
+    CommandError::from_localized("client-software-operation", failure.into().into_message())
 }
 
 pub(crate) fn blocks_exit() -> bool { gate::client_updating() }

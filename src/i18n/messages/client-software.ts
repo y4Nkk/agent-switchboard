@@ -81,5 +81,6 @@ export const messages = {
   "software.output": ["操作输出", "Operation output"],
   "software.actual": ["复验版本", "Verified version"],
   "software.issues": ["识别诊断", "Discovery diagnostics"],
+  "software.processInUse": ["请先结束 {app} 进程（PID：{pid}），再重试更新。", "End the {app} process (PID {pid}), then retry the update."],
   "software.operationFailed": ["客户端版本操作未完成：{detail}", "Client software operation could not finish: {detail}"],
 } as const;

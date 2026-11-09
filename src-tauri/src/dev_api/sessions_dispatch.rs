@@ -6,6 +6,10 @@ use tauri::AppHandle;
 pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result<Option<Value>, CommandError> {
     macro_rules! command { ($future:expr) => { as_json($future.await) }; }
     let result = match request.command.as_str() {
+        "preview_codex_session_provider_transfer" => command!(commands::session_provider_transfer::preview_codex_session_provider_transfer(app.clone())),
+        "read_codex_session_provider_transfer" => command!(commands::session_provider_transfer::read_codex_session_provider_transfer(app.clone())),
+        "apply_codex_session_provider_transfer" => command!(commands::session_provider_transfer::apply_codex_session_provider_transfer(app.clone(), argument(&request.args, "id")?, argument(&request.args, "confirmWrite")?)),
+        "restore_codex_session_provider_transfer" => command!(commands::session_provider_transfer::restore_codex_session_provider_transfer(app.clone(), argument(&request.args, "id")?, argument(&request.args, "confirmWrite")?)),
         "claude_session_sources" => command!(commands::claude_session_sources(app.clone())),
         "pick_claude_session_source" => command!(commands::pick_claude_session_source(app.clone())),
         "forget_claude_session_source" => command!(commands::forget_claude_session_source(app.clone(), argument(&request.args, "path")?)),

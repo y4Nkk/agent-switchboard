@@ -36,6 +36,85 @@ fn journal_replaces_atomically_and_rejects_foreign_or_invalid_records() {
 }
 
 #[test]
+fn obsolete_journals_are_rejected_without_changing_the_original_record() {
+    for (phase, diagnostic) in [(Phase::Preparing, None), (Phase::Failed, Some("historical update diagnostic")),
+        (Phase::NeedsAttention, Some("Cannot verify process 42: EnumerationRestricted"))] {
+        let directory = tempfile::tempdir().unwrap();
+        let state = LocalState::from_root(directory.path().into());
+        let mut expected = fixture();
+        expected.phase = phase;
+        expected.revision = 7;
+        expected.process_id = Some(42);
+        expected.process_birth = Some("123456789".into());
+        journal::save(&state, &expected).unwrap();
+        let path = directory.path().join("client-software/operation.json");
+        let mut old = serde_json::json!({ "version": 1, "operation": &expected });
+        old["operation"]["error"] = serde_json::json!(diagnostic);
+        std::fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(journal::read(&state).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn invalid_journal_error_shapes_are_rejected_without_overwriting_the_record() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().into());
+    let task = fixture();
+    journal::save(&state, &task).unwrap();
+    let path = directory.path().join("client-software/operation.json");
+    for (version, error) in [(1, serde_json::json!(42)), (1, serde_json::json!({})),
+        (2, serde_json::json!("obsolete text error"))] {
+        let mut value = serde_json::json!({ "version": version, "operation": &task });
+        value["operation"]["error"] = error;
+        let bytes = serde_json::to_vec(&value).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(journal::read(&state).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn a_background_occupancy_failure_is_preserved_as_a_structured_task_error() {
+    for app in [AppKind::Codex, AppKind::Claude] {
+        let directory = tempfile::tempdir().unwrap();
+        let state = LocalState::from_root(directory.path().into());
+        let manager = SoftwareManager::default();
+        let mut task = fixture();
+        task.plan.app = app;
+        manager.lock().unwrap().task = Some(task);
+        finish(&manager, &state, Err(SoftwareError::ProcessInUse { app, pid: 42 })).unwrap();
+        let restored = journal::read(&state).unwrap().unwrap();
+        assert_eq!(restored.plan.app, app);
+        assert_eq!(restored.phase, Phase::Failed);
+        assert!(!restored.cancellable);
+        assert!(restored.finished_at.is_some());
+        let error = restored.error.unwrap();
+        assert_eq!(error.key, "software.processInUse");
+        assert_eq!(error.params, Some(serde_json::json!({ "app": app.label(), "pid": 42 })));
+        let value: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(directory.path().join("client-software/operation.json")).unwrap()).unwrap();
+        assert_eq!(value["version"], 2);
+        assert!(value["operation"]["error"].is_object());
+    }
+}
+
+#[test]
+fn oversized_structured_records_never_replace_a_readable_journal() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().into());
+    let mut task = fixture();
+    journal::save(&state, &task).unwrap();
+    let path = directory.path().join("client-software/operation.json");
+    let saved = std::fs::read(&path).unwrap();
+    task.log = vec!["x".repeat(262_144)];
+    assert!(journal::save(&state, &task).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), saved);
+    assert!(journal::read(&state).unwrap().is_some());
+}
+
+#[test]
 fn cancellation_cannot_cross_the_installer_handoff_and_changes_advance_revisions() {
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().into());

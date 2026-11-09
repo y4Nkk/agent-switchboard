@@ -31,6 +31,18 @@ fn similarly_named_directories_and_helpers_are_not_engine_installations() {
 }
 
 #[test]
+fn native_claude_version_entries_require_a_direct_numeric_version_filename() {
+    let root = "/user/.local/share/claude/versions";
+    for version in ["2.1.310", "2.1.310.exe"] {
+        assert!(claude_version_entry(&format!("{root}/{version}"), root));
+    }
+    for path in [format!("{root}/not-a-version"), format!("{root}/nested/2.1.310"),
+        format!("{root}/2.1.310/claude"), format!("{root}-other/2.1.310")] {
+        assert!(!claude_version_entry(&path, root), "{path}");
+    }
+}
+
+#[test]
 fn application_shells_and_bundled_engines_have_different_scope() {
     let catalog = installations();
     for (app, group, engine) in [("Codex", Group::Codex, "codex"), ("Claude", Group::Claude, "claude")] {

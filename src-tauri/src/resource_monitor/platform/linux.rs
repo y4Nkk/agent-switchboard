@@ -62,6 +62,26 @@ impl Reader {
     }
 }
 
+/// Occupancy enumeration for the update guard: candidate names across the
+/// whole PID namespace, because occupancy is a file fact; images are proven
+/// per process.
+pub fn process_images() -> Result<Vec<(u32, String)>, String> {
+    let directories = fs::read_dir("/proc").map_err(|error| format!("无法枚举 /proc：{error}"))?;
+    let mut images = Vec::new();
+    for directory in directories {
+        let directory = directory.map_err(|error| format!("进程目录读取失败：{error}"))?;
+        let Some(pid) = directory.file_name().to_str().and_then(|name| name.parse::<u32>().ok()) else { continue; };
+        if let Ok(stat) = read_stat(pid) { images.push((pid, stat.name)); }
+    }
+    Ok(images)
+}
+
+/// The exe link requires read access to the process; foreign or kernel-thread
+/// images return None, the guard's "cannot prove" skip signal.
+pub fn image_path(pid: u32) -> Option<PathBuf> {
+    fs::read_link(format!("/proc/{pid}/exe")).ok()
+}
+
 fn io_issue(error: &std::io::Error) -> Issue {
     match error.kind() {
         std::io::ErrorKind::PermissionDenied => Issue::AccessDenied,

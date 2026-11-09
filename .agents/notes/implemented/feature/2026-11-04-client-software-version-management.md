@@ -19,7 +19,7 @@ src-tauri/src/client_software 是安装实例、发布快照、可更新性、�
 - discovery 从绝对 PATH、已知入口与用户通过原生文件选择器明确选择的位置识别安装。选择的额外位置仅在本次应用运行内保存，不改变默认启动入口。符号链接与 junction 解析后按客户端、形态和稳定安装根去重，保留多个实例及「ASB 当前调用」。这个标记不代表外部终端的 alias 或项目环境。
 - identity/packages 与 identity/installations 拥有共同的纯安装证据；resource_monitor/executables 只将这些证据投影到资源监控分组。原私有安装/包判断文件移至共同所有者，不保留两套匹配表。资源监控继续拥有进程用户、出生标识、拓扑、CPU 与内存。
 - Codex 原生安装核实当前 codex-package.json、layoutVersion 1、codex variant、bin 入口与 packages/standalone 根。自定义 CODEX_HOME 可通过实际布局识别。直接选择版本目录中的载荷只展示引导，更新必须使用稳定的外部入口。
-- Claude 原生安装区分用户版本目录、标准原生入口、npm 平台包、Homebrew 包与桌面下载缓存。桌面、扩展或专用内置引擎不会成为独立 CLI 的更新目标。
+- Claude 原生安装区分用户版本目录、标准原生入口、npm 平台包、Homebrew 包与桌面下载缓存。`identity/installations::claude_version_entry` 唯一拥有版本目录直接入口的数字版本文件名规则；更新归属额外要求原生文件证据，目录下的任意文件或嵌套路径不能被认领。稳定入口与版本载荷按启动入口的规范父目录区分，带 `..` 的路径也不能绕过直接选择载荷的限制。桌面、扩展或专用内置引擎不会成为独立 CLI 的更新目标。
 - npm 解析主包的真实 bin、声明的平台包、global prefix 与 Node/npm 配对。CLI 启动只使用已解析入口；查询版本仓库才通过同一 npm 读取 scoped/default registry。原有 registry 和认证处理留给该 npm，不改 .npmrc，不强制切公共源。已识别的 pnpm、Bun、Yarn 等其他管理器只引导，不用 npm 接管。
 - Homebrew 用实际 Caskroom、原 brew、精确 cask 和 .metadata/INSTALL_RECEIPT.json 的 tap/version 核实归属；只自动执行确认来自 homebrew/cask 的当前安装，不把未知 tap 当成官方渠道。
 - WinGet 使用官方部署 COM/WinRT API，不解析本地化表格。精确关联 OpenAI.Codex / Anthropic.ClaudeCode 的目录、当前用户范围和官方源的 portable 目录证据；仅有系统注册关联不构成接管资格。执行时再次核对目录与范围。
@@ -56,13 +56,13 @@ npm、Codex 原生与 WinGet 采用精确版本；Claude 原生和 Homebrew 跟�
 
 子进程代理使用仅本次进程的环境；Windows Codex 通过独立调用脚本设置 .NET 代理，下载的官方脚本保持原样。其手动 SOCKS 场景明确拒绝并给出 HTTP/官方指引。WinGet 的系统服务网络独立显示，不宣称受 ASB reqwest 代理控制。
 
-全应用同一时刻只有一个软件安装任务。更新相关客户端时阻止新的 ASB 雷达和会话启动；原生进程检查也覆盖 npm 的关联平台包。已有进程提示用户结束，不强杀用户会话；无法证明空闲时停止准备。ASB 发起的会话和雷达使用共同启动解析器，历史 cliVersion 仍是历史快照。
+全应用同一时刻只有一个软件安装任务。更新相关客户端时阻止新的 ASB 雷达和会话启动；原生进程检查也覆盖 npm 的关联平台包。已有进程提示用户结束，不强杀用户会话；占用只由候选进程可证实的运行映像裁决，读不到映像路径的进程不阻断，其漏拦风险不等于安装器必然报文件锁错误（见[更新占用守卫](../bug-fix/2026-11-09-update-occupancy-guard.md)）。ASB 发起的会话和雷达使用共同启动解析器，历史 cliVersion 仍是历史快照。
 
 状态为 preparing → runningUpdater → verifying → completed / failed / needsAttention，准备取消进入 cancelled。进入安装阶段前取消请求与提交通过同一锁协调；提交后不提供强杀取消，不伪造下载百分比或通用回滚。
 
 更新进程使用启动握手：包装器先等启动信号，父进程持久化 PID 与出生标识后才放行；父进程在放行前退出，输入 EOF 让包装器自行结束。更新不复用雷达的 kill-on-parent-exit JobObject，也不设安装强杀超时。正常退出被阻止；意外退出仍可能导致安装部分完成，必须实测恢复。
 
-唯一持久记录为 state/client-software/operation.json，采用当前 schema、原子替换与同步落盘，保留最后一个任务及有界、脱敏输出。任务 revision 跨操作递增，前端拒绝旧响应覆盖新结果。重启不重放命令，先等待原 PID/出生身份或 WinGet 安装任务结束，再检查同一入口、归属与真实版本；PID 复用不等于原任务仍在运行。进程退出码为零不能替代复验。
+唯一持久记录为 state/client-software/operation.json，采用 version 2 schema、原子替换与同步落盘，保留最后一个任务及有界、脱敏输出。error 为共享 LocalizedMessage 或 null，占用错误在预览、启动提交与安装前复验中保留同一客户端/PID 参数，随界面语言渲染。[操作日志当前契约](../architecture/2026-11-09-current-operation-journals.md)接管严格读取边界：旧版本、字符串错误及非法结构明确拒绝并保留原件，不在读取时转换或重写；读写共用 256 KiB 大小上限。任务 revision 跨操作递增，前端拒绝旧响应覆盖新结果。重启不重放命令，先等待原 PID/出生身份或 WinGet 安装任务结束，再检查同一入口、归属与真实版本；PID 复用不等于原任务仍在运行。进程退出码为零不能替代复验。
 
 ## Boundaries and interface
 

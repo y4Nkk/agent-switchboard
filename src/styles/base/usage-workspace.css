@@ -126,6 +126,13 @@
   font: var(--asb-text-label);
 }
 
+.asb-usage-stat-detail {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  overflow-wrap: anywhere;
+}
+
 /* Trend chart card. Two shapes only: the page showcase (with title) and the
    compact card embedded in provider panels. */
 .asb-usage-chart-card {

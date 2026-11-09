@@ -211,6 +211,10 @@ pub async fn resume_session(
     let local = state(&app_handle)?;
     observe(RuntimeLogAction::SessionResumed, async move {
         blocking(move || {
+            if app == AppKind::Codex {
+                crate::session_manager::provider_transfer::ensure_settled(local.root())
+                    .map_err(|error| super::session_provider_transfer::transfer_error(error, false))?;
+            }
             crate::session_manager::resume_session(local.root(), app, &session_id)
                 .map_err(|message| CommandError::localized(
                     "session-resume-failed",

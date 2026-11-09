@@ -45,6 +45,8 @@ const ACTION_LABEL: Record<RuntimeLogAction, MessageKey> = {
   cloudBackupRestored: "backup.action.cloudBackupRestored",
   sessionResumed: "backup.action.sessionResumed",
   sessionDeleted: "backup.action.sessionDeleted",
+  codexSessionProvidersTransferred: "backup.action.codexSessionProvidersTransferred",
+  codexSessionProvidersRestored: "backup.action.codexSessionProvidersRestored",
   ccSwitchProfilesImported: "backup.action.ccSwitchProfilesImported",
   officialLoginCompleted: "backup.action.officialLoginCompleted",
 };

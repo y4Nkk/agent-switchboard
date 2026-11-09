@@ -34,7 +34,7 @@ Status: implemented
 
 ### 身份与归属
 
-纯安装身份的文件布局、原生包和编辑器包证据由 `client_software/identity` 共享拥有；`resource_monitor/executables` 保留资源分组投影，更新占用检查复用原生进程用户和出生身份。边界见[客户端版本管理](../feature/2026-11-04-client-software-version-management.md)。该次提取未重跑自动化测试，历史验证结果不代表新增更新路径已验收。
+纯安装身份的文件布局、原生包和编辑器包证据由 `client_software/identity` 共享拥有；`resource_monitor/executables` 保留资源分组投影；更新占用检查只读候选映像名与可证实映像路径，不再复用用户范围与出生身份（见[更新占用守卫](../bug-fix/2026-11-09-update-occupancy-guard.md)）。边界见[客户端版本管理](../feature/2026-11-04-client-software-version-management.md)。该次提取未重跑自动化测试，历史验证结果不代表新增更新路径已验收。
 
 - 系统拓扑包含 PID、PPID、候选名称与用户范围证据。身份和资源只读取当前用户的候选编码程序、自身界面、必要的已确认后代及上轮记录，不读取全机命令行、环境或内存映射。其他用户不参与错误归属；尚未核实用户的候选保留枚举覆盖限制，不冒充已知属于某款软件。
 - 客户端根由实际运行映像与安装证据相互印证：规范 PATH 和固定原生入口、用户目录中的桌面下载、原生版本入口、编码 bundle，以及运行映像所属的 npm/编辑器包清单、Codex 原生发布清单与入口布局。包清单最多读取六级父目录、单文件 256 KiB，不依赖编辑器安装根或扩展版本号，也不扫描全部安装目录。Codex 原生清单只接受当前 layoutVersion 1、codex variant 与相符的 bin 入口，因此自定义原生发布安装根不依赖 PATH。当前 Claude npm 分发是原生程序，Codex npm 的 Node 启动外壳不向上并入编码引擎；未知映像仍明确报告无法核实。
