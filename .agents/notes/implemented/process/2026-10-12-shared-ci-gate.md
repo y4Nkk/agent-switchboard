@@ -12,6 +12,8 @@ GitHub 直接打包而 CNB 只跑 Rust 测试与前端构建，本地验证没�
 
 Windows MSIX 打包接受 SDK 标准变量 WindowsSdkVerBinPath；设置该变量时只使用其指向的 SDK，不存在则明确失败。未设置时使用既有系统 SDK 安装位置。开发机可用微软独立 SDK 构建工具，不要求改变系统安装。
 
+发布矩阵由 .github/workflows/package.yml 唯一拥有。macOS Apple Silicon 使用 macos-15，Intel 使用 macos-15-intel，遵循[GitHub 当前托管运行器标签](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。macos-14 ARM 配置已被服务端拒绝为不受支持，删除该标签，不保留旧运行器回退；构建机版本与应用最低系统版本分别由各自配置拥有。
+
 测试只要解析真实客户端路径（包括备份元数据的重复身份检查），就必须在整个用例持有 test_client_paths::redirect_client_paths 的现有全局锁。隔离锁自身的恢复断言在释放 guard 后重新持有同一把锁再读取，避免另一个并行用例介入；不将整个测试套件改为串行，也不放宽备份身份校验。
 
 成品凭据扫描继续阻断完整密钥形状，不按平台、偏移或命中值添加豁免。错误消息脱敏对独立 OpenAI 标记使用等价 ASCII 字节窗口判断，避免裸标记作为字符串常量与链接器相邻文本拼成伪密钥；输入识别、长度条件及字符限制保持一致。redact.rs 的前缀列表继续保留分隔空格。源代码测试中的完整假密钥仍只属于 cfg(test)，不进入正式载荷。
@@ -21,6 +23,7 @@ Windows MSIX 打包接受 SDK 标准变量 WindowsSdkVerBinPath；设置该变�
 ## Alternatives considered
 
 - 各流水线分别维护检查命令：平台调整直接方便，但容易再次遗漏测试，不能证明本地通过的检查就是远程执行的检查。
+- 使用浮动 macos-latest 能随官方镜像更新而减少人工调整；但会同时改变工具链和 SDK 基线，双架构固定在当前可用的 macOS 15 标签，使镜像升级保持显式。
 - 本地模拟 macOS 与 Linux 全部打包：覆盖面最完整，但 Windows 开发机不能替代 macOS 原生工具链；共用源码门禁和 Windows 打包在本地验证，其余原生包由远程矩阵验证。
 
 - 放宽扫描长度或增加单个平台的命中豁免：可以快速放行成品；但会同时放过相同形状的真实凭据，因此保留扫描规则，消除生产代码中可与邻接常量拼接的裸标记。
