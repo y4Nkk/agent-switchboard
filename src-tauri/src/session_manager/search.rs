@@ -68,6 +68,7 @@ fn search_sources_observed(
     let app = filters.request.app;
     let offset = filters.request.offset;
     sources.retain(|source| app.is_none_or(|app| source.meta.app == app));
+    sources.retain(|source| source.archived == filters.request.archived);
     issues.retain(|issue| app.is_none_or(|app| issue.app == app));
     let (projects, tags) = catalog(&sources);
     sources.retain(|source| filters.matches(&source.meta));

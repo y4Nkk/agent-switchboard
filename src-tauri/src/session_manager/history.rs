@@ -5,9 +5,7 @@ mod reading;
 mod resume;
 mod worker;
 mod deletion;
-mod purge;
-pub use purge::PurgePlan;
-pub(crate) use purge::{preview_purge, purge_cutoff, reclaim_space, stale_session_ids};
+
 mod packages;
 pub(crate) use worker::{spawn, flush_on_exit};
 
@@ -141,11 +139,11 @@ pub(crate) fn add_root(root: &Path, directory: &Path) -> Result<Vec<HistoryRoot>
 }
 
 pub(super) fn delete(
-    root: &Path, ids: &[String], cutoff: Option<chrono::DateTime<chrono::Utc>>,
+    root: &Path, ids: &[String],
 ) -> Result<(), String> {
     let _guard = GATE.lock().map_err(|_| "Claude 会话保留锁不可用")?;
     let mut connection = store::open(root)?;
-    if let Some(cutoff) = cutoff { purge::validate_deletion(&connection, ids, cutoff)?; }
+    deletion::verify_sources(&connection, ids)?;
     deletion::delete(&mut connection, root, ids)
 }
 
@@ -206,3 +204,9 @@ fn deleted(connection: &Connection, id: &str, parent: Option<&str>) -> Result<bo
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) fn reclaim_space(root: &Path) -> Result<(), String> {
+    let _guard = GATE.lock().map_err(|_| "Claude 会话保留锁不可用")?;
+    let connection = store::open(root)?;
+    connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;").map_err(db_error)
+}

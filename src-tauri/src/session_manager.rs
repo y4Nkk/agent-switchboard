@@ -20,6 +20,9 @@ mod content;
 mod images;
 mod native;
 mod codex_deletion;
+mod codex_client;
+mod archive;
+pub(crate) mod range;
 mod timeline;
 mod jsonl;
 mod layout;
@@ -48,7 +51,6 @@ pub use bookmarks::{delete_bookmark, load_bookmark_content, save_bookmark, searc
     BookmarkPage, BookmarkSearchRequest, BookmarkSummary};
 pub use messages::{load_content, load_page, ContentPage, MessageContentRequest, MessagePage, MessagePageRequest};
 pub use export::export_markdown;
-pub use history::PurgePlan;
 pub use search::{SessionSearchPage, SessionSearchRequest};
 #[cfg(test)]
 pub use search::search_sessions;
@@ -136,10 +138,15 @@ pub struct SessionDeleteOutcome {
 }
 
 
-pub fn load_metadata(root: &Path, app: AppKind, session_id: &str) -> Result<SessionMeta, String> {
-    let mut meta = resolve_session(root, app, session_id)?.meta;
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionLocation { pub session: SessionMeta, pub archived: bool }
+
+pub fn load_metadata(root: &Path, app: AppKind, session_id: &str) -> Result<SessionLocation, String> {
+    let source = resolve_session(root, app, session_id)?;
+    let mut meta = source.meta;
     organization::apply(&mut meta, &organization::load(root)?);
-    Ok(meta)
+    Ok(SessionLocation { session: meta, archived: source.archived })
 }
 
 /// Opens the selected local session in a new terminal window. The renderer
@@ -177,60 +184,7 @@ pub fn delete_sessions(
     requests: &[SessionDeleteRequest],
 ) -> Result<Vec<SessionDeleteOutcome>, String> {
     let (sources, issues) = scan_sources(root)?;
-    Ok(delete_resolved(root, &sources, &issues, requests, None))
-}
-
-/// One bulk session reclamation line: the sessions that went away and the
-/// reasons others stayed, never a silent skip.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionPurgeOutcome {
-    pub removed: u64,
-    pub warnings: Vec<asb_core::contracts::LocalizedMessage>,
-}
-
-/// Reclaims every Claude preservation session whose latest activity is older
-/// than the cutoff by running the regular per-session deletion path, then
-/// releases the freed file space. The cutoff is the whole contract: the
-/// selection is re-derived at execution time, so the preview numbers are
-/// advisory and a concurrent capture only shifts the boundary, never the
-/// semantics.
-pub fn purge_claude_sessions(root: &Path, cutoff: &str) -> Result<SessionPurgeOutcome, String> {
-    let date = history::purge_cutoff(cutoff)?;
-    let (sources, issues) = scan_sources(root)?;
-    purge_resolved(root, &sources, &issues, date)
-}
-
-fn purge_resolved(
-    root: &Path, sources: &[SessionSource], issues: &[SessionIssue], date: chrono::DateTime<chrono::Utc>,
-) -> Result<SessionPurgeOutcome, String> {
-    let ids = history::stale_session_ids(root, date)?;
-    if ids.is_empty() { return Ok(SessionPurgeOutcome { removed: 0, warnings: Vec::new() }); }
-    let requests: Vec<SessionDeleteRequest> = ids.into_iter()
-        .map(|session_id| SessionDeleteRequest { app: AppKind::Claude, session_id }).collect();
-    let mut warnings: Vec<asb_core::contracts::LocalizedMessage> = Vec::new();
-    let mut removed = 0_u64;
-    for outcome in delete_resolved(root, sources, issues, &requests, Some(date)) {
-        if outcome.deleted { removed += 1; }
-        else if let Some(error) = outcome.error {
-            let detail = format!("{}：{error}", outcome.session_id);
-            warnings.push(asb_core::contracts::LocalizedMessage::new(
-                "sessions.purge.partialFailed", serde_json::json!({"detail": detail}),
-                format!("部分会话回收未完成：{detail}"),
-            ));
-        }
-    }
-    if let Err(error) = history::reclaim_space(root) { warnings.push(asb_core::contracts::LocalizedMessage::new(
-        "sessions.purge.compactFailed", serde_json::json!({"detail": error.clone()}),
-        format!("已删除会话记录，但保留库空间压缩未完成：{error}"),
-    )); }
-    Ok(SessionPurgeOutcome { removed, warnings })
-}
-
-/// Preview for `purge_claude_sessions`: how many preserved sessions and how
-/// much preservation bytes the cutoff would reclaim right now.
-pub fn preview_session_purge(root: &Path, cutoff: &str) -> Result<history::PurgePlan, String> {
-    history::preview_purge(root, cutoff)
+    Ok(delete_resolved(root, &sources, &issues, requests))
 }
 
 fn delete_resolved(
@@ -238,7 +192,6 @@ fn delete_resolved(
     sources: &[SessionSource],
     issues: &[SessionIssue],
     requests: &[SessionDeleteRequest],
-    cutoff: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Vec<SessionDeleteOutcome> {
     let mut seen = HashSet::new();
     let mut outcomes: Vec<SessionDeleteOutcome> = Vec::with_capacity(requests.len());
@@ -247,7 +200,7 @@ fn delete_resolved(
             continue;
         }
         let result = locate(sources, issues, request.app, &request.session_id)
-            .and_then(|source| delete_source(root, source, sources, cutoff));
+            .and_then(|source| delete_source(root, source, sources));
         let resolved = result.unwrap_or_else(|error| vec![SessionDeleteOutcome {
             app: request.app, session_id: request.session_id.clone(), deleted: false, error: Some(error),
         }]);
@@ -266,20 +219,23 @@ fn delete_resolved(
 
 fn delete_source(
     root: &Path, source: &SessionSource, sources: &[SessionSource],
-    cutoff: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<Vec<SessionDeleteOutcome>, String> {
     if !source.meta.can_delete {
         return Err("无法核实会话的原生登记或删除身份，请修复读取问题并刷新后重试".into());
     }
     if source.meta.app == AppKind::Codex {
-        if cutoff.is_some() { return Err("Codex 会话不属于 Claude 保留库清理范围".into()); }
         return codex_deletion::remove(root, source, sources);
     }
     let ids = removed_claude_ids(source, sources);
     let result = organization::delete_with_sources(root, AppKind::Claude, &ids,
-        || remove_claude_source(root, source, &ids, cutoff));
+        || remove_claude_source(root, source, &ids));
     let deleted = result.is_ok() || source.converted.as_ref().is_some_and(|path| matches!(path.try_exists(), Ok(false)));
-    Ok(vec![SessionDeleteOutcome { app: AppKind::Claude, session_id: source.meta.session_id.clone(), deleted, error: result.err() }])
+    let mut error = result.err();
+    if deleted { if let Err(cause) = archive::forget(root, AppKind::Claude, &ids) { error = Some(cause); } }
+    let ids = if deleted { ids } else { vec![source.meta.session_id.clone()] };
+    Ok(ids.into_iter().map(|session_id| SessionDeleteOutcome {
+        app: AppKind::Claude, session_id, deleted, error: error.clone(),
+    }).collect())
 }
 
 fn removed_claude_ids(source: &SessionSource, sources: &[SessionSource]) -> Vec<String> {
@@ -300,14 +256,10 @@ fn removed_claude_ids(source: &SessionSource, sources: &[SessionSource]) -> Vec<
 }
 
 fn remove_claude_source(
-    root: &Path, source: &SessionSource, ids: &[String], cutoff: Option<chrono::DateTime<chrono::Utc>>,
+    root: &Path, source: &SessionSource, ids: &[String],
 ) -> Result<(), String> {
-    if cutoff.is_some() && (source.meta.app != AppKind::Claude
-        || source.retained.is_empty() || source.converted.is_some()) {
-        return Err("会话来源已变化，不再属于本次保留库清理范围".into());
-    }
     if let Some(path) = &source.converted { return conversion::remove(root, path, &source.meta.session_id); }
-    if !source.retained.is_empty() { return history::delete(root, ids, cutoff); }
+    if !source.retained.is_empty() { return history::delete(root, ids); }
     Err("Claude 会话必须通过本机保留库管理删除".into())
 }
 
@@ -356,6 +308,7 @@ pub(crate) fn scan_filtered_sources_observed(root: &Path, app: Option<AppKind>, 
     checkpoint()?;
     sources.retain(|source| app.is_none_or(|app| source.meta.app == app)
         && session.is_none_or(|id| source.meta.session_id == id));
+    archive::apply(root, &mut sources)?;
     if session.is_none() {
         let area = match app { Some(AppKind::Codex) => "Codex 会话来源", Some(AppKind::Claude) => "Claude 会话来源", None => "会话来源" };
         diagnostics::report(root, area, issues.iter().map(|issue| format!("{}: {}", issue.app.label(), issue.message)));
@@ -397,7 +350,7 @@ fn scan_session_source_roots(
 
 #[cfg(test)]
 pub(crate) fn fixture_source(path: &Path, app: AppKind, id: &str) -> SessionSource {
-    SessionSource { paths: vec![path.to_path_buf()], native_database: None, native_history: None, converted: None, retained: Vec::new(),
+    SessionSource { paths: vec![path.to_path_buf()], native_database: None, spawn_parent: None, archived: false, native_history: None, converted: None, retained: Vec::new(),
         index_root: path.parent().unwrap_or(Path::new(".")).join(".asb-read-index"),
         meta: SessionMeta { app, session_id: id.into(), title: id.into(), summary: String::new(),
             project_dir: None, created_at: None, last_active_at: None,

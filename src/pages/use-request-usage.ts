@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { readRequestUsage, type RequestUsageQuery, type RequestUsageReport } from "../api/client";
 import { useI18n } from "../i18n";
 import { errorText } from "../i18n/errors";
-import { clientName } from "../lib/client-name";
 
 /** One visible query owns polling. Late responses never replace a different filter's report. */
 export function useRequestUsage(active: boolean, query: RequestUsageQuery, refreshToken: number) {
   const { t } = useI18n();
   const key = JSON.stringify(query);
-  const scope = JSON.stringify([query.range, query.app, query.profileId, query.model]);
+  const scope = JSON.stringify([query.range, query.app, query.scope, query.model]);
   const [saved, setSaved] = useState<{ scope: string; report: RequestUsageReport } | null>(null);
   const [failure, setFailure] = useState<{ scope: string; error: unknown } | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -36,10 +35,8 @@ export function useRequestUsage(active: boolean, query: RequestUsageQuery, refre
       try {
         const report = await pending;
         if (!stopped) {
-          const issues = sourceIssues(report);
-          setSaved((previous) => issues.length > 0 && previous?.scope === scope
-            && previous.report.sources.every((source) => source.error === null) ? previous : { scope, report });
-          setFailure(issues.length > 0 ? { scope, error: issues.join(" · ") } : null);
+          setSaved({ scope, report });
+          setFailure(null);
         }
       } catch (error) {
         if (!stopped) setFailure({ scope, error });
@@ -54,10 +51,6 @@ export function useRequestUsage(active: boolean, query: RequestUsageQuery, refre
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   const report = saved?.scope === scope ? saved.report : null;
   const readError = failure?.scope === scope ? errorText(failure.error, t) : null;
-  return { report, error: readError ?? (report ? sourceIssues(report).join(" · ") || null : null),
+  return { report, error: readError,
     loading: active && busyKey === key, refresh };
-}
-
-function sourceIssues(report: RequestUsageReport): string[] {
-  return report.sources.flatMap((source) => source.error ? [`${clientName(source.app)}: ${source.error}`] : []);
 }

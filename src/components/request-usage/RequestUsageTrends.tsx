@@ -5,7 +5,8 @@ import { UsageTrendChart } from "../charts/UsageTrendChart";
 
 const METRICS = {
   speedP50: { label: "usagePerformance.trend.speed", title: "usagePerformance.speedTrend", unit: "tok/s", scale: 1, kind: "generic" },
-  firstOutputP50Ms: { label: "usagePerformance.trend.first", title: "usagePerformance.firstTrend", unit: "s", scale: 0.001, kind: "generic" },
+  firstTokenP50Ms: { label: "usagePerformance.trend.first", title: "usagePerformance.firstTrend", unit: "s", scale: 0.001, kind: "generic" },
+  durationP50Ms: { label: "usagePerformance.trend.duration", title: "usagePerformance.durationTrend", unit: "s", scale: 0.001, kind: "generic" },
   failureRate: { label: "usagePerformance.trend.failures", title: "usagePerformance.failureTrend", unit: "%", scale: 1, kind: "percentage" },
 } as const;
 export type RequestUsageTrend = keyof typeof METRICS;
@@ -23,7 +24,8 @@ export function RequestUsageTrends({ report, metric, onMetricChange }: {
   return <div className="asb-request-usage-trends">
     <div className="asb-request-usage-trend-controls">
       <Select value={metric} ariaLabel={t("usagePerformance.trendMetric")}
-        options={Object.entries(METRICS).map(([value, entry]) => ({ value, label: t(entry.label) }))}
+        options={Object.entries(METRICS).filter(([value]) => report.scope === "generation"
+          || value === "durationP50Ms" || value === "failureRate").map(([value, entry]) => ({ value, label: t(entry.label) }))}
         onChange={(next) => onMetricChange(next as RequestUsageTrend)} />
       <p className="asb-scope-note">{t("usagePerformance.bucket", { minutes: report.bucketMs / 60_000 })}</p>
     </div>

@@ -34,7 +34,7 @@ pub async fn get_session_metadata(
     app_handle: AppHandle,
     app: AppKind,
     session_id: String,
-) -> Result<session_manager::SessionMeta, CommandError> {
+) -> Result<session_manager::SessionLocation, CommandError> {
     let local = state(&app_handle)?;
     blocking(move || {
         session_manager::load_metadata(local.root(), app, &session_id)
@@ -269,31 +269,4 @@ pub async fn update_session_organization(
                 serde_json::json!({ "detail": message }),
             ))
     }).await
-}
-
-#[tauri::command]
-pub async fn preview_session_cleanup(app: AppHandle, cutoff: String) -> Result<session_manager::PurgePlan, CommandError> {
-    let local = state(&app)?;
-    blocking(move || session_manager::preview_session_purge(local.root(), &cutoff)
-        .map_err(purge_error)).await
-}
-
-#[tauri::command]
-pub async fn cleanup_sessions(app: AppHandle, cutoff: String) -> Result<session_manager::SessionPurgeOutcome, CommandError> {
-    let local = state(&app)?;
-    blocking(move || {
-        let result = session_manager::purge_claude_sessions(local.root(), &cutoff);
-        let action = crate::runtime_log::RuntimeLogAction::StorageSessionsCleaned;
-        match &result {
-            Ok(outcome) if outcome.warnings.is_empty() => crate::runtime_log::record_success(action),
-            Ok(_) => crate::runtime_log::record_failure(action, "storage-session-reclamation-incomplete"),
-            Err(_) => crate::runtime_log::record_failure(action, "storage-session-cleanup-failed"),
-        }
-        result.map_err(purge_error)
-    }).await
-}
-
-fn purge_error(message: String) -> CommandError {
-    CommandError::localized("sessions-purge-failed", "sessions.purge.failed",
-        message.clone(), serde_json::json!({ "detail": message }))
 }

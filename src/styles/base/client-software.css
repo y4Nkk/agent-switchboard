@@ -6,8 +6,7 @@
 
 .asb-software-task,
 .asb-software-details,
-.asb-software-identity,
-.asb-software-status {
+.asb-software-detail-section {
   display: grid;
   gap: var(--asb-space-3);
   min-width: 0;
@@ -32,11 +31,6 @@
   font: var(--asb-text-caption);
 }
 
-.asb-software-state {
-  font: var(--asb-text-label);
-  font-weight: 600;
-}
-
 .asb-software-table p,
 .asb-software-task p,
 .asb-software-details p {
@@ -50,15 +44,21 @@
 }
 
 .asb-software-table {
-  min-width: 70rem;
+  min-width: 52rem;
 }
 
-.asb-software-status {
-  min-width: 14rem;
+.asb-software-table > tbody > tr:not(.asb-table-expansion-row) > td {
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .asb-software-table .asb-software-actions {
-  min-width: 10rem;
+  min-width: max-content;
+  flex-wrap: nowrap;
+}
+
+.asb-software-table .asb-software-actions > .asb-btn {
+  white-space: nowrap;
 }
 
 .asb-software-table .asb-table-expansion-row > td {
@@ -71,6 +71,17 @@
 
 .asb-software-table .asb-software-details {
   padding: var(--asb-space-3);
+}
+
+.asb-software-detail-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-software-detail-section {
+  align-content: start;
 }
 
 .asb-software-issues {

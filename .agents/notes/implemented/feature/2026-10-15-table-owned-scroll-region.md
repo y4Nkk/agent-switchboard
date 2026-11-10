@@ -9,6 +9,7 @@ Status: implemented
 ## Decision
 
 - `Table` 组件以 `.asb-table-scroll` 组合共享 `ScrollArea`，原生视口拥有 `tabIndex={0}`、横向平移和返回顶部。纵向归属由[工作面滚动契约](../architecture/2026-10-16-table-scroll-ownership.md)拥有：默认自然展开；主列表显式选择 viewport，由共享层统一设置有界滚动、稳定槽位与固定表头。
+- 表格边框、圆角与裁切由组件的固定 `.asb-table-scroll` 框统一拥有；内部 table 只承载内容并在视口内平移，横向溢出时右侧边框仍保持可见。删除单元格四角的重复圆角规则，表头、展开行与悬停底色统一由外框裁切。网关请求表已有的无边框语义在同一框上声明，不增加模块私有滚动壳。
 - `Table` 契约补上可选行内展开行 `renderExpansion`：返回节点即在该行下方发出占满整行的 `.asb-table-expansion-row`，hover 保持中性（吸收原 `.asb-backup-diff-row` 规则）。备份历史迁移到共享 `Table` + `renderExpansion`，裸 `<table>` 镜像与 `Fragment`/`cx` 复制路径删除；分页边距只保留 `.asb-table-scroll + .asb-pagination` 一条路径。全库数据表格只剩 Table.tsx 一处 `<table>` 标记（DatePicker 日历网格是其原语自有语法，DESIGN.md §90，不属数据表格契约）。
 - 删除全部模块级滚动壳及其规则：四个 `-table-wrap`/网关 div、扩展管理 9 处 `asb-ext-table-scroll`（CSS 规则整条删除）、重置面板 `asb-codex-reset-daily-data`。检测结果的 aria-live/aria-busy 播报使用无样式的纯语义 div（不承担滚动与布局）；日额度只保留相邻间距，不再限制表格高度。用量统计随页面展开，无私有 flex / sticky 规则；网关类名位于表格元素上。
 - 模块级 `min-width`（runtime-log 680px、gateway 56rem、扩展管理 600px、用量/雷达 max-content）原样保留在表格元素上：宽度约束是模块事实，滚动与展开行是组件契约，两者分层。
@@ -28,6 +29,7 @@ Status: implemented
 - **保留扩展/重置外层壳承载播报与高度语义**——最强论据：改动面最小，行为零风险。否（用户定调：底层无兼容、无过渡、无技术债）：它们与组件包裹层构成双滚动层与双 tab 停靠点，`overflow-x` 已成死规则；语义与滚动拆开后各归其位（纯 aria div、`:has` 高度规则），壳没有存在理由。
 - **备份历史维持裸表格**——最强论据：展开行是共享渲染器不发出的结构，镜像标记是既成事实。否：唯一的 DOM 契约里不该有第二份表格标记；正确动作是把展开行纳入契约（`renderExpansion`），而不是为备份养永久旁路。
 - **只改用量页**——改动最小。否（用户当场纠正）：这是全局表格契约的缺陷而非单页问题，十余处无滚动的调用点是同源问题。
+- **继续由横向滚动的 table 绘制边框**——无需调整既有标记与视觉归属；但宽表的右边框会与末列一起移出视口，无法表达当前可视区域的边界，因此由共享固定框拥有边框和圆角。
 
 ## Consequences
 
@@ -36,3 +38,5 @@ Status: implemented
 ## Verification
 
 2026-10-15 的静态核对确认旧滚动壳、备份裸表格和重复分页选择器已移除，当时 `npm run verify-notes` 通过；未运行编译、类型检查与自动化测试。其后纵向归属变更的验证范围与运行时缺口由工作面滚动契约记录，原日额度高度裁剪与用量内部 sticky 不再是当前行为。
+
+2026-11-10 使用实际 SoftwareTable、Table 和共享样式的独立示例页手动核对中文、英文、常规及窄容器、125% 缩放、横向平移与详情展开。窄容器平移前后固定框左右边界不变；详情展开前后外框宽度与内容宽度不变。viewport 模式实际纵向滚动约 290px 后，表头相对外框的位置保持不变；网关请求表继续显示无边框样式。证据保存在 `.tmp/software-table-layout-20261110-27b1`。本轮未运行生产构建、类型检查或自动化测试。

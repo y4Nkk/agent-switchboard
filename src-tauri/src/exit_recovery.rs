@@ -22,8 +22,8 @@ pub(crate) fn show(app: &AppHandle, destination: Destination, error: &str) {
         LanguagePreference::System => system_chinese(),
     };
     let copy = match (destination, chinese) {
-        (Destination::Sessions, true) => "Codex 会话归属正在划转或恢复，已取消退出。请在会话记录中等待操作完成。",
-        (Destination::Sessions, false) => "Codex session providers are being transferred or restored. Wait for the operation to finish in Sessions before quitting.",
+        (Destination::Sessions, true) => "会话操作正在执行，已取消退出。请在会话记录中等待操作完成。",
+        (Destination::Sessions, false) => "A session operation is still running. Wait for it to finish in Sessions before quitting.",
         (Destination::ClientManagement, true) => "客户端正在更新或复验，已取消退出。请在设置的客户端管理中等待操作完成。",
         (Destination::ClientManagement, false) => "A client update or verification is still running. Wait for it to finish in Settings → Client management before quitting.",
         (Destination::Radar, true) => "检测未能安全结束，已取消退出。请在降智雷达中重试保存后退出。",

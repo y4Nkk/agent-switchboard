@@ -62,10 +62,6 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
   const [historyOpen, setHistoryOpen] = useState(false);
   const [range, setRange] = useState<ModelUsageRange>("last7Days");
   const [performanceRefresh, setPerformanceRefresh] = useState(0);
-  const performanceProviders = useMemo(() => [
-    ...codexRecords.map((record) => ({ app: "codex" as const, id: record.profile.id, name: record.profile.name })),
-    ...claudeRecords.map((record) => ({ app: "claude" as const, id: record.profile.id, name: record.profile.name })),
-  ], [codexRecords, claudeRecords]);
   useEffect(() => { if (section === "radar") setRadarOpened(true); }, [section]);
   const consumptionActive = visible && section === "consumption";
   const usage = useModelUsageReport(consumptionActive, range);
@@ -94,7 +90,7 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
         <div id={`${id}-consumption-panel`} role="tabpanel" aria-labelledby={`${id}-consumption-tab`} hidden={section !== "consumption"}>
           <div className="asb-page-stack">
             {consumptionActive && <UsagePage usage={usage} />}
-            <RequestUsagePanel active={consumptionActive} providers={performanceProviders} refreshToken={performanceRefresh} />
+            <RequestUsagePanel active={consumptionActive} refreshToken={performanceRefresh} />
           </div>
         </div>
         <div id={`${id}-quota-panel`} role="tabpanel" aria-labelledby={`${id}-quota-tab`} hidden={section !== "quota"}>

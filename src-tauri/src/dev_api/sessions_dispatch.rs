@@ -6,6 +6,10 @@ use tauri::AppHandle;
 pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result<Option<Value>, CommandError> {
     macro_rules! command { ($future:expr) => { as_json($future.await) }; }
     let result = match request.command.as_str() {
+        "preview_session_range" => command!(commands::session_range::preview_session_range(app.clone(), argument(&request.args, "request")?, argument(&request.args, "action")?)),
+        "discard_session_range" => command!(commands::session_range::discard_session_range(app.clone(), argument(&request.args, "id")?)),
+        "execute_session_range" => command!(commands::session_range::execute_session_range(app.clone(), argument(&request.args, "id")?, argument(&request.args, "confirmed")?)),
+        "read_session_range_progress" => command!(commands::session_range::read_session_range_progress(app.clone(), argument(&request.args, "id")?)),
         "preview_codex_session_provider_transfer" => command!(commands::session_provider_transfer::preview_codex_session_provider_transfer(app.clone())),
         "read_codex_session_provider_transfer" => command!(commands::session_provider_transfer::read_codex_session_provider_transfer(app.clone())),
         "apply_codex_session_provider_transfer" => command!(commands::session_provider_transfer::apply_codex_session_provider_transfer(app.clone(), argument(&request.args, "id")?, argument(&request.args, "confirmWrite")?)),
@@ -33,8 +37,6 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
             argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "resume_session" => command!(commands::resume_session(app.clone(), argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "delete_sessions" => command!(commands::delete_sessions(app.clone(), argument(&request.args, "requests")?)),
-        "preview_session_cleanup" => command!(commands::preview_session_cleanup(app.clone(), argument(&request.args, "cutoff")?)),
-        "cleanup_sessions" => command!(commands::cleanup_sessions(app.clone(), argument(&request.args, "cutoff")?)),
         _ => return Ok(None),
     };
     result.map(Some)

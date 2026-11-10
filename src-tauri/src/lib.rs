@@ -29,6 +29,7 @@ mod gateway;
 mod local_state;
 mod model_usage;
 mod model_usage_cache;
+mod native_telemetry;
 mod request_usage;
 mod official_login;
 mod outbound_proxy;
@@ -151,6 +152,7 @@ pub fn run() {
         .manage(desktop_shortcut::DesktopSettingsState::default())
         .manage(app_update::UpdateManager::default())
         .manage(client_software::SoftwareManager::default())
+        .manage(std::sync::Arc::new(session_manager::range::Operations::default()))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -228,6 +230,7 @@ fn initialize_local_services(
     app.manage(codex_probe::ProbeRegistry::new());
     app.manage(resource_monitor::ResourceMonitor::default());
     app.manage(model_usage_cache::ModelUsageManager::default());
+    app.manage(native_telemetry::NativeTelemetry::start(local.root().to_path_buf()));
     // A batch left running by an abrupt exit is closed as interrupted before
     // any command can read it; finished results and saved session usage stay.
     if let Err(error) = codex_probe::recover_interrupted(&local) {
@@ -357,6 +360,15 @@ fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
         return;
     }
     if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+        match app.state::<std::sync::Arc<session_manager::range::Operations>>().progress() {
+            Ok(progress) if progress.running => {
+                api.prevent_exit(); exit_recovery::show(app, exit_recovery::Destination::Sessions, ""); return;
+            }
+            Err(error) => {
+                api.prevent_exit(); exit_recovery::show(app, exit_recovery::Destination::Sessions, &error); return;
+            }
+            _ => {}
+        }
         if let Some(destination) = exit_recovery::active_client_destination() {
             api.prevent_exit();
             exit_recovery::show(app, destination, "");

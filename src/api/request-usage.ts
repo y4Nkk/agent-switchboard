@@ -1,13 +1,13 @@
 import { invoke } from "./client";
-import type { AppKind, UpstreamProtocol } from "./shared";
+import type { AppKind } from "./shared";
 
 export type RequestUsageRange = "last15Minutes" | "lastHour" | "last24Hours" | "last7Days" | "last30Days" | "all";
-export type RequestOutcome = "completed" | "failed" | "disconnected";
-export type RequestModelSource = "response" | "mapped" | "request" | "unknown";
+export type MeasurementScope = "generation" | "transport";
+export type RequestOutcome = "succeeded" | "failed" | "unknown";
 export interface RequestUsageQuery {
   range: RequestUsageRange;
   app: AppKind | null;
-  profileId: string | null;
+  scope: MeasurementScope;
   model: string | null;
   page: number;
   groupPage: number;
@@ -15,18 +15,20 @@ export interface RequestUsageQuery {
 export interface RequestUsageRow {
   id: string;
   atMs: number;
+  timeSource: "event" | "observed" | "spanEnd";
   app: AppKind;
-  profileId: string;
+  scope: MeasurementScope;
+  eventName: string;
+  eventKind: string | null;
   model: string | null;
-  modelSource: RequestModelSource;
-  requestModel: string | null;
-  mappedModel: string | null;
-  responseModel: string | null;
-  upstreamProtocol: UpstreamProtocol | null;
+  sessionId: string | null;
+  requestId: string | null;
   outcome: RequestOutcome;
   status: number | null;
-  durationMs: number;
-  firstOutputMs: number | null;
+  errorType: string | null;
+  durationMs: number | null;
+  firstTokenMs: number | null;
+  firstContentMs: number | null;
   outputTokensPerSecond: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -34,61 +36,60 @@ export interface RequestUsageRow {
   cacheCreationTokens: number | null;
   reasoningTokens: number | null;
   estimatedCostUsd: string | null;
-  pricingError: string | null;
-  attempts: Array<{ profileId: string; status: number | null }>;
+  attemptCount: number | null;
 }
 export interface RequestUsageMetrics {
-  requests: number;
-  completed: number;
+  records: number;
+  succeeded: number;
   failed: number;
-  disconnected: number;
-  incomplete: number;
-  completionRate: number | null;
+  unknown: number;
+  mixedMeasurements: boolean;
+  successRatio: number | null;
   outputRateP50: number | null;
   outputRateP10: number | null;
   speedSamples: number;
-  firstOutputP50Ms: number | null;
-  firstOutputP95Ms: number | null;
-  firstOutputSamples: number;
+  firstTokenP50Ms: number | null;
+  firstTokenP95Ms: number | null;
+  firstTokenSamples: number;
+  firstContentP50Ms: number | null;
+  firstContentSamples: number;
   durationP50Ms: number | null;
   durationP95Ms: number | null;
   durationSamples: number;
   cacheHitRate: number | null;
   cacheSamples: number;
-  retryRequests: number;
+  retryRecords: number;
   retries: number;
   attemptSamples: number;
-  recoveredRequests: number;
+  recoveredRecords: number;
   rateLimited: number;
   upstreamErrors: number;
   unclassifiedFailures: number;
   estimatedCostUsd: string | null;
   costSamples: number;
-  pricingErrors: number;
   tokens: Array<{ kind: "input" | "cacheRead" | "cacheCreation" | "output" | "reasoning"; tokens: number | null; samples: number }>;
 }
 export interface RequestUsageGroup {
   app: AppKind;
-  profileId: string;
   model: string | null;
-  modelSource: RequestModelSource;
+  eventName: string;
   metrics: RequestUsageMetrics;
 }
-/** Independent gateway ledger coverage; never added to session consumption totals. */
+/** Native observations only. Generation and transport scopes never share a denominator. */
 export interface RequestUsageReport {
   generatedAtMs: number;
   startAtMs: number;
   endAtMs: number;
   bucketMs: number;
+  scope: MeasurementScope;
   summary: RequestUsageMetrics;
-  sources: Array<{ app: AppKind; verifiedRequests: number; earliestAtMs: number | null;
-    latestAtMs: number | null; retentionLimit: number | null; error: string | null }>;
+  sources: Array<{ app: AppKind; verifiedRecords: number; earliestAtMs: number | null; latestAtMs: number | null }>;
   groups: RequestUsageGroup[];
   totalGroups: number;
   groupPage: number;
   groupPageSize: number;
-  trend: Array<{ atMs: number; requests: number; speedP50: number | null;
-    firstOutputP50Ms: number | null; failureRate: number | null }>;
+  trend: Array<{ atMs: number; speedP50: number | null; firstTokenP50Ms: number | null;
+    durationP50Ms: number | null; failureRate: number | null }>;
   rows: RequestUsageRow[];
   page: number;
   pageSize: number;

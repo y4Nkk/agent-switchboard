@@ -22,6 +22,7 @@ pub struct SessionSearchRequest {
     pub pinned_only: bool,
     pub active_after: Option<String>,
     pub active_before: Option<String>,
+    pub archived: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

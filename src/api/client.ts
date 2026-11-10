@@ -142,6 +142,7 @@ export * from "./usage";
 export * from "./codex-probe";
 export * from "./model-usage";
 export * from "./request-usage";
+export * from "./native-telemetry";
 export * from "./resource-usage";
 export * from "./providers";
 export * from "./provider-request";

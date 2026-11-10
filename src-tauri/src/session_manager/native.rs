@@ -11,6 +11,7 @@ pub(super) struct NativeThread {
     pub rollout: PathBuf,
     pub history: PathBuf,
     pub database: PathBuf,
+    pub archived: bool,
 }
 
 pub(super) fn open(path: &Path) -> Result<Connection, String> {
@@ -41,7 +42,7 @@ pub(super) fn threads_matching(root: &Path, session: Option<&str>, checkpoint: &
         .collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?.iter().any(|name| name == "name");
     let title_expression = if has_name { "COALESCE(NULLIF(name,''),title)" } else { "title" };
     let predicate = if session.is_some() { "WHERE id=?1" } else { "" };
-    let query = format!("SELECT id,rollout_path,COALESCE(created_at_ms,created_at*1000),COALESCE(updated_at_ms,updated_at*1000),{title_expression},cwd,first_user_message,source FROM threads {predicate} ORDER BY created_at,id");
+    let query = format!("SELECT id,rollout_path,COALESCE(created_at_ms,created_at*1000),COALESCE(updated_at_ms,updated_at*1000),{title_expression},cwd,first_user_message,source,archived FROM threads {predicate} ORDER BY created_at,id");
     let mut statement = connection.prepare(
         &query).map_err(|error| error.to_string())?;
     let history = database.with_file_name("thread_history_1.sqlite");
@@ -59,7 +60,7 @@ pub(super) fn threads_matching(root: &Path, session: Option<&str>, checkpoint: &
             project_dir: Some(row.get(5)?), created_at: at(row.get(2)?), last_active_at: at(row.get(3)?),
             alias: None, pinned: false, tags: Vec::new(), parent_session_id: parent,
             can_delete, preservation: None };
-        Ok(NativeThread { meta, rollout: PathBuf::from(row.get::<_, String>(1)?), history: history.clone(), database: database.clone() })
+        Ok(NativeThread { meta, rollout: PathBuf::from(row.get::<_, String>(1)?), history: history.clone(), database: database.clone(), archived: row.get(8)? })
     }).map_err(|error| error.to_string())?;
     let mut threads = Vec::new();
     let mut issues = Vec::new();

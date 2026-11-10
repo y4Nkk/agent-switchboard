@@ -19,6 +19,7 @@ fn registered(root: &Path, id: &str, parent: Option<&str>) -> SessionSource {
     let mut source = fixture_source(&path, AppKind::Codex, id);
     source.native_database = Some(database);
     source.meta.parent_session_id = parent.map(str::to_string);
+    source.spawn_parent = parent.map(str::to_string);
     source
 }
 
@@ -100,7 +101,7 @@ fn invalid_codex_identity_never_uses_direct_file_deletion_even_when_unregistered
     fs::write(&path, b"original transcript").unwrap();
     let source = fixture_source(&path, AppKind::Codex, "not-a-native-uuid");
     let request = super::super::SessionDeleteRequest { app: AppKind::Codex, session_id: source.meta.session_id.clone() };
-    let outcomes = super::super::delete_resolved(directory.path(), &[source], &[], &[request], None);
+    let outcomes = super::super::delete_resolved(directory.path(), &[source], &[], &[request]);
     assert!(!outcomes[0].deleted);
     assert!(outcomes[0].error.as_ref().unwrap().contains("UUID"));
     assert_eq!(fs::read(path).unwrap(), b"original transcript");
@@ -130,7 +131,8 @@ fn completion_reports_removed_descendants_and_keeps_an_independent_fork() {
     let parent = registered(directory.path(), PARENT, None);
     let child = registered(directory.path(), CHILD, Some(PARENT));
     let grandchild = registered(directory.path(), GRANDCHILD, Some(CHILD));
-    let fork = registered(directory.path(), FORK, Some(PARENT));
+    let mut fork = registered(directory.path(), FORK, Some(PARENT));
+    fork.spawn_parent = None;
     for source in [&parent, &child, &grandchild] { erase_native_record(source); }
     let sources = vec![grandchild, child, fork.clone()];
     let outcomes = complete(directory.path(), &parent, &sources, &scope(directory.path()), None).unwrap();
@@ -146,6 +148,7 @@ fn related_sessions_are_transitive_without_including_siblings_or_other_clients()
     let source = |app, id: &str, parent: Option<&str>| {
         let mut source = fixture_source(&directory.path().join(id), app, id);
         source.meta.parent_session_id = parent.map(str::to_string);
+        source.spawn_parent = parent.map(str::to_string);
         source
     };
     let root = source(AppKind::Codex, "parent", None);

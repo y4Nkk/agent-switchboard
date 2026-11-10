@@ -282,7 +282,6 @@ fn batch_deletion_deduplicates_requests_and_preserves_records_on_invalid_identit
             request(AppKind::Claude, "codex-two"),
             request(AppKind::Codex, "bad id;"),
         ],
-        None,
     );
 
     assert_eq!(outcomes.len(), 4, "重复请求只回答一次");

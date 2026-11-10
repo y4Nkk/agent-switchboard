@@ -14,6 +14,9 @@ pub(crate) struct SessionSource {
     pub meta: SessionMeta,
     pub paths: Vec<PathBuf>,
     pub native_database: Option<PathBuf>,
+    pub archived: bool,
+    // Native spawn links drive cascading operations; forks remain independent.
+    pub spawn_parent: Option<String>,
     pub native_history: Option<PathBuf>,
     pub converted: Option<PathBuf>,
     pub index_root: PathBuf,
@@ -140,7 +143,8 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
                     }
                 };
                 indexed.insert((AppKind::Codex, thread.meta.session_id.clone()), SessionSource {
-                    meta: thread.meta, paths, native_database: Some(thread.database), native_history: history,
+                    spawn_parent: thread.meta.parent_session_id.clone(),
+                    meta: thread.meta, paths, native_database: Some(thread.database), archived: thread.archived, native_history: history,
                     converted: None, retained: Vec::new(), index_root: root.into() });
             }
         },
@@ -170,6 +174,7 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
             if source.native_database.is_none() {
                 if let Some(title) = titles.get(&source.meta.session_id) { source.meta.title = parser::clamp_title(title); }
                 source.meta.can_delete = !native_unavailable && uuid::Uuid::parse_str(&source.meta.session_id).is_ok();
+                source.archived = !source.paths.is_empty() && source.paths.iter().all(|path| path.starts_with(codex_root.join("archived_sessions")));
             }
         }
     }
@@ -232,6 +237,10 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
         return Err(format!("{} 不含可识别的会话身份", path.display()));
     };
     let id = identity.id;
+    let spawn_parent = if app == AppKind::Codex && identity.parent.is_some() {
+        index.file_prefix("codex-spawn-parent", &path, checkpoint,
+            |reader| parser::spawn_parent_reader(&path, reader, checkpoint).map_err(|error| error.to_string()))?
+    } else { None };
     let child = app == AppKind::Claude && path.components().any(|component| component.as_os_str() == "subagents");
     let key_id = if child { format!("{id}-{}", path.file_stem().and_then(|name| name.to_str()).ok_or("子代理文件名无效")?) } else { id.clone() };
     if session.is_some_and(|requested| requested != key_id) { return Ok(issues); }
@@ -243,6 +252,7 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
         }
         if source.paths.contains(&path) { return Ok(issues); }
         if source.native_database.is_none() {
+            if source.spawn_parent.is_none() { source.spawn_parent = spawn_parent; }
             let (next, warnings) = index.file_prefix(&format!("metadata-{}", app.label()), &path, checkpoint, |reader| parser::parse_session_reader(app, &path, reader, checkpoint).map_err(|error| error.to_string()))?;
             if next.session_id != id { return Err("会话身份在发现期间被替换，已跳过本次来源".into()); }
             issues.extend(warnings);
@@ -262,7 +272,7 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
     if meta.session_id != id { return Err("会话身份在发现期间被替换，已跳过本次来源".into()); }
     issues.extend(warnings);
     if child { meta.parent_session_id = Some(id); meta.session_id = key_id.clone(); }
-    indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_database: None,
+    indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_database: None, archived: false, spawn_parent,
         native_history: None, converted: None, retained: Vec::new(), index_root: root.into() });
     Ok(issues)
 }

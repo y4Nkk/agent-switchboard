@@ -101,17 +101,6 @@ impl ClaudeRequestLedger {
         Self { path }
     }
 
-    pub(crate) fn visit_requests(
-        &self,
-        mut visit: impl FnMut(usize, ClaudeRequestRecord),
-    ) -> Result<(), String> {
-        let _guard = mutation_lock().lock().map_err(|_| "Claude 请求账本读取锁不可用")?;
-        if let Some(ledger) = self.load()? {
-            for (index, record) in ledger.entries.into_iter().enumerate() { visit(index, record); }
-        }
-        Ok(())
-    }
-
     pub(crate) fn append(&self, mut record: ClaudeRequestRecord) -> Result<(), String> {
         validate_record(&record)?;
         record.at = DateTime::<FixedOffset>::parse_from_rfc3339(&record.at)

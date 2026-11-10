@@ -1,59 +1,19 @@
 use super::{native, organization, SessionDeleteOutcome, SessionSource};
+use super::codex_client::{self, Scope};
 use asb_core::contracts::AppKind;
 use rusqlite::{Connection, OptionalExtension};
-use std::{collections::HashSet, path::{Path, PathBuf}, process::Command, time::Duration};
-
-struct Scope { home: PathBuf, database: PathBuf }
-
-impl Scope {
-    fn resolve(source: &SessionSource) -> Result<Self, String> {
-        let home = super::codex_root()?.canonicalize().map_err(|error| error.to_string())?;
-        let database = crate::local_state::codex_paths::sqlite_root(&home)?.join("state_5.sqlite");
-        if let Some(observed) = &source.native_database {
-            if observed.canonicalize().map_err(|error| error.to_string())?
-                != database.canonicalize().map_err(|error| error.to_string())? {
-                return Err("Codex 原生登记位置已变化，请刷新后重试".into());
-            }
-        } else {
-            let roots = crate::local_state::codex_paths::session_roots(&home);
-            if source.paths.is_empty() { return Err("Codex 会话缺少可核实的原始位置".into()); }
-            for path in &source.paths {
-                let path = path.canonicalize().map_err(|error| error.to_string())?;
-                if !roots.iter().any(|root| path.starts_with(root)) {
-                    return Err("Codex 会话原始位置已变化，请刷新后重试".into());
-                }
-            }
-        }
-        Ok(Self { home, database })
-    }
-}
+use std::{collections::HashSet, path::Path, time::Duration};
+#[cfg(test)] use std::path::PathBuf;
 
 pub(super) fn remove(state: &Path, source: &SessionSource, sources: &[SessionSource]) -> Result<Vec<SessionDeleteOutcome>, String> {
     let id = uuid::Uuid::parse_str(&source.meta.session_id).map_err(|_| "Codex 原生删除需要有效的会话 UUID")?;
     let _lease = crate::client_software::gate::launch(AppKind::Codex)?;
     super::provider_transfer::ensure_settled(state).map_err(|error| error.to_string())?;
     let scope = Scope::resolve(source)?;
-    let mut command = command(&scope, &id)?;
+    let mut command = codex_client::command(&scope, &id, "delete")?;
     let error = crate::client_software::output(&mut command, Duration::from_secs(120)).err()
         .map(|error| format!("Codex 原生删除未完成，请确认本机 CLI 支持 delete 并处理以下错误：{error}"));
     complete(state, source, sources, &scope, error)
-}
-
-fn command(scope: &Scope, id: &uuid::Uuid) -> Result<Command, String> {
-    let sqlite = scope.database.parent().ok_or("Codex 原生登记目录无效")?;
-    let home = crate::client_software::command_path(&scope.home);
-    let sqlite = crate::client_software::command_path(sqlite);
-    let sqlite_text = sqlite.to_str().ok_or("Codex 原生登记目录无法传递给客户端")?;
-    let installation = crate::client_software::discovery::resolve(AppKind::Codex)?;
-    let mut command = crate::client_software::discovery::launch::command(&installation)?;
-    command.args(["delete", "--force", &id.to_string(), "-c", &format!("sqlite_home={}", toml_edit::Value::from(sqlite_text))])
-        .env("CODEX_HOME", &home).env("CODEX_SQLITE_HOME", &sqlite).current_dir(home);
-    for key in ["CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL",
-        "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_CHATGPT_ACCOUNT_ID",
-        "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"] {
-        command.env_remove(key);
-    }
-    Ok(command)
 }
 
 struct Verification { state: Option<Connection>, history: Option<Connection> }
@@ -127,13 +87,13 @@ fn join_error(previous: Option<String>, detail: String) -> String {
     match previous { Some(previous) => format!("{previous}；{detail}"), None => detail }
 }
 
-fn related_sources<'a>(source: &'a SessionSource, sources: &'a [SessionSource]) -> Vec<&'a SessionSource> {
+pub(super) fn related_sources<'a>(source: &'a SessionSource, sources: &'a [SessionSource]) -> Vec<&'a SessionSource> {
     let mut related = vec![source];
     let mut seen = HashSet::from([source.meta.session_id.clone()]);
     let mut position = 0;
     while position < related.len() {
         for candidate in sources.iter().filter(|candidate| candidate.meta.app == AppKind::Codex) {
-            if candidate.meta.parent_session_id.as_deref() == Some(related[position].meta.session_id.as_str())
+            if candidate.spawn_parent.as_deref() == Some(related[position].meta.session_id.as_str())
                 && seen.insert(candidate.meta.session_id.clone()) {
                 related.push(candidate);
             }

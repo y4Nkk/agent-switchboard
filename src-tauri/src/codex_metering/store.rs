@@ -100,28 +100,6 @@ impl CodexRequestLedger {
         initialize(&mut connection)?;
         Ok(Some(connection))
     }
-    pub(crate) fn visit_gateway_requests(
-        &self,
-        start_at_ms: u64,
-        end_at_ms: u64,
-        mut visit: impl FnMut(CodexRequestRecord),
-    ) -> Result<(), String> {
-        let Some(connection) = self.open_read()? else { return Ok(()); };
-        let mut statement = connection.prepare(
-            "SELECT payload FROM codex_requests WHERE origin='proxy' AND at_ms>=?1 AND at_ms<=?2
-             ORDER BY at_ms DESC, id DESC",
-        ).map_err(db_error)?;
-        let mut rows = statement.query(params![start_at_ms, end_at_ms]).map_err(db_error)?;
-        while let Some(row) = rows.next().map_err(db_error)? {
-            let payload: String = row.get(0).map_err(db_error)?;
-            let record: CodexRequestRecord = serde_json::from_str(&payload)
-                .map_err(|error| format!("Codex 请求记录不可读：{error}"))?;
-            record.validate()?;
-            if record.origin == super::CodexUsageOrigin::Proxy { visit(record); }
-        }
-        Ok(())
-    }
-
     pub(crate) fn append(&self, record: &CodexRequestRecord) -> Result<(), String> {
         record.validate()?;
         let payload = serde_json::to_string(record).map_err(|error| error.to_string())?;

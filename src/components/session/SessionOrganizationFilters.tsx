@@ -3,15 +3,7 @@ import { Select } from "../Select";
 import { DatePicker } from "../DatePicker";
 import type { SessionSearch } from "./use-session-search";
 
-/** Values come from the date picker, so they are always valid `YYYY-MM-DD`;
- * the only guard is the +1-day overflow of a 9999-12-31 through date. */
-function dateBoundary(value: string, nextDay: boolean) {
-  if (!value) return null;
-  const date = new Date(`${value}T00:00:00`);
-  if (nextDay) date.setDate(date.getDate() + 1);
-  if (date.getFullYear() > 9999) return null;
-  return date.toISOString();
-}
+import { dateBoundary } from "./session-dates";
 
 function SessionTimeFilter({ search, disabled }: { search: SessionSearch; disabled: boolean }) {
   const { t } = useI18n();

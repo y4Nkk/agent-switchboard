@@ -1,6 +1,7 @@
 # Agent Note: 用量监控的网关请求性能与来源边界
 
 Status: implemented
+Archived: 2026-11-10
 
 ## Problem
 

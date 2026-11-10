@@ -8,13 +8,13 @@ Status: implemented
 
 ## Decision
 
-SessionManager 持有视图、筛选和唯一的 SessionAction 弹窗状态，移除三个可同时为真的打开标记。SessionPageActions 按历史页签与客户端筛选共同渲染操作入口，通过一个类型化动作回调选择来源、清理或归属：Claude 仅显示来源和清理，Codex 仅显示归属，全部及收藏不显示客户端专属操作。客户端筛选与刷新继续使用原位置。
+SessionManager 通过 useSessionWorkspace 持有视图、筛选和唯一的 SessionAction 弹窗状态，移除三个可同时为真的打开标记。SessionPageActions 按历史页签与客户端筛选共同渲染操作入口，通过一个类型化动作回调选择来源、日期区间或归属：Claude 仅显示来源，Codex 仅显示归属，全部及收藏不显示客户端专属操作。会话和已归档共用的日期区间入口由[日期区间操作](2026-11-10-session-date-range-actions.md)接管原清理流程。客户端筛选与刷新继续使用原位置。
 
 切换历史客户端筛选时同时清空详情、待确认项与批量选择，避免 Claude 页保留 Codex 详情或跨客户端删除目标；再次点击当前筛选保持上下文。从收藏打开原会话时，如当前历史客户端筛选不包含该会话，则先切到该会话的客户端。
 
 所有 Codex 会话统一通过当前已验证的本机 Codex CLI 执行 `delete --force <UUID>`，不按是否登记保留直接删除文件的分支；原生登记、正文、文件及子代理清理由 Codex 拥有，应用不维护另一套 SQLite 删除 SQL。前端单条及批量删除共同使用 delete_sessions，移除没有产品消费者的 delete_session / deleteSession 命令链。前端仍只提交客户端与会话 ID，现有确认弹窗先说明不可恢复及 Codex 子代理的连带删除。应用持有现有客户端启动租约，拒绝未恢复的供应商整理；命令固定本次读取的 CODEX_HOME 和 sqlite_home，在本地配置目录启动，并移除 exec-server URL 与 Noise 环境地址及凭据覆盖，不传远程入口。
 
-SessionSource 的 native_database 表示原生元信息来源及读取时的登记位置，不决定删除执行方式。codex_deletion 唯一拥有命令范围、执行、结果核验及已删除会话的整理数据清理；执行前核对登记位置，未登记原件必须仍位于当前 Codex 的活动或归档目录，来源变更先刷新。每次执行后只核验一次登记、分页正文和已发现原件，结果直接交给批量协调器，不再用 source_removed 的布尔推断或 unwrap_or(false) 隐藏核验错误。已知关联会话只在确认移除后清理整理数据、移出详情和批量选择，仍存在的独立分叉保留；收藏不级联。启动进程仍复用 client_software 的路径及有界输出函数，只向其他模块暴露实际需要的函数。
+SessionSource 的 native_database 表示原生元信息来源及读取时的登记位置，不决定删除执行方式。codex_deletion 唯一拥有删除执行、结果核验及已删除会话的整理数据清理，共用命令范围与进程创建由 codex_client 拥有；执行前核对登记位置，未登记原件必须仍位于当前 Codex 的活动或归档目录，来源变更先刷新。每次执行后只核验一次登记、分页正文和已发现原件，结果直接交给批量协调器，不再用 source_removed 的布尔推断或 unwrap_or(false) 隐藏核验错误。已知关联会话只在确认移除后清理整理数据、移出详情和批量选择，仍存在的独立分叉保留；收藏不级联。启动进程仍复用 client_software 的路径及有界输出函数，只向其他模块暴露实际需要的函数。
 
 原生命令契约对照 [Codex CLI](https://github.com/openai/codex/blob/rust-v0.155.0/codex-rs/cli/src/main.rs)及[会话删除命令实现](https://github.com/openai/codex/blob/rust-v0.155.0/codex-rs/tui/src/session_archive_commands.rs)：--force 只接受 UUID，原生子代理随主会话删除。应用确认替代原生命令的交互确认，不新增 CLI 参数或数据库删除契约。
 

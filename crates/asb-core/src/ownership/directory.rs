@@ -7,6 +7,13 @@ use crate::ownership::spec::{OfficialSettingDisposition, OfficialSettingEntry};
 /// official surface from silently becoming an accidental "unknown key".
 pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
     OfficialSettingEntry {
+        title: "ownership.directory.nativeTelemetry.title",
+        path: "otel.exporter",
+        related_paths: &["otel.log_user_prompt"],
+        disposition: OfficialSettingDisposition::SeparateModule,
+        detail: "ownership.directory.nativeTelemetry.detail",
+    },
+    OfficialSettingEntry {
         title: "ownership.directory.agentsMd.title",
         path: "$CODEX_HOME/AGENTS.md",
         related_paths: &[],
@@ -116,6 +123,14 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
 ];
 
 pub(super) const CLAUDE_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
+    OfficialSettingEntry {
+        title: "ownership.directory.nativeTelemetry.title",
+        path: "env.OTEL_LOGS_EXPORTER",
+        related_paths: &["env.OTEL_TRACES_EXPORTER", "env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+            "env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "env.CLAUDE_CODE_ENABLE_TELEMETRY"],
+        disposition: OfficialSettingDisposition::SeparateModule,
+        detail: "ownership.directory.nativeTelemetry.detail",
+    },
     OfficialSettingEntry {
         title: "ownership.directory.claudeMd.title",
         path: "~/.claude/CLAUDE.md",

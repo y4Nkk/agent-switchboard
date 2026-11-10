@@ -11,6 +11,9 @@
   min-width: 0;
 }
 
+.asb-native-telemetry-setup { display: flex; flex-direction: column; gap: var(--asb-space-2); min-width: 0; }
+.asb-native-telemetry-setup > .asb-field-error { margin: 0; overflow-wrap: anywhere; }
+
 .asb-request-usage > .asb-module-header { margin-bottom: 0; }
 
 .asb-request-usage-controls {
@@ -95,7 +98,7 @@
 
 .asb-request-outcome { color: var(--asb-text); }
 .asb-request-outcome.is-failed { color: var(--asb-danger); }
-.asb-request-outcome.is-disconnected { color: var(--asb-text-muted); }
+.asb-request-outcome.is-unknown { color: var(--asb-text-muted); }
 
 .asb-request-usage-methodology {
   display: flex;

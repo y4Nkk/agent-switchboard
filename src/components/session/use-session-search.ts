@@ -5,7 +5,7 @@ import type { ClientFilterValue } from "../ClientFilter";
 
 export const SESSION_PAGE_SIZE = 50;
 
-export function useSessionSearch(active: boolean) {
+export function useSessionSearch(active: boolean, archived: boolean) {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ClientFilterValue>("all");
@@ -18,7 +18,7 @@ export function useSessionSearch(active: boolean) {
   const [tags, setTags] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
-  const identity = JSON.stringify([query, filter, page, project, tag, pinnedOnly, dates]);
+  const identity = JSON.stringify([query, filter, page, project, tag, pinnedOnly, dates, archived]);
   const [snapshot, setSnapshot] = useState<{ identity: string; value: SessionSearchPage } | null>(null);
   const result = snapshot?.identity === identity ? snapshot.value : null;
   const [busy, setBusy] = useState(false);
@@ -34,7 +34,7 @@ export function useSessionSearch(active: boolean) {
     const run = async () => {
       try {
         const next = await searchSessions({ query, app: filter === "all" ? null : filter,
-          offset: (page - 1) * SESSION_PAGE_SIZE, project, tag, pinnedOnly, ...dates }, controller.signal,
+          offset: (page - 1) * SESSION_PAGE_SIZE, project, tag, pinnedOnly, archived, ...dates }, controller.signal,
           (nextProgress) => { if (!controller.signal.aborted) setProgress(nextProgress); });
         if (controller.signal.aborted) return;
         setProjects(next.projects); setTags(next.tags);
@@ -49,7 +49,7 @@ export function useSessionSearch(active: boolean) {
     };
     void run();
     return () => controller.abort();
-  }, [active, query, filter, page, revision, project, tag, pinnedOnly, dates, identity, setError]);
+  }, [active, query, filter, page, revision, project, tag, pinnedOnly, dates, archived, identity, setError]);
 
   const changeDraft = (value: string) => {
     setDraft(value);

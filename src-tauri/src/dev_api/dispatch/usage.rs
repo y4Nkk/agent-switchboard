@@ -25,6 +25,12 @@ pub(super) async fn usage(app: &AppHandle, request: &InvokeRequest) -> Result<Op
         "read_model_usage_refresh" => command!(commands::model_usage::read_model_usage_refresh(app.clone(), argument(&request.args, "id")?)),
         "read_request_usage" => command!(commands::request_usage::read_request_usage(
             app.clone(), argument(&request.args, "query")?)),
+        "read_native_telemetry" => command!(commands::native_telemetry::read_native_telemetry(app.clone())),
+        "retry_native_telemetry" => command!(commands::native_telemetry::retry_native_telemetry(app.clone())),
+        "preview_native_telemetry" => command!(commands::native_telemetry::preview_native_telemetry(
+            app.clone(), argument(&request.args, "target")?, argument(&request.args, "enabled")?)),
+        "commit_native_telemetry" => command!(commands::native_telemetry::commit_native_telemetry(
+            app.clone(), argument(&request.args, "request")?, argument(&request.args, "confirmWrite")?)),
         "get_usage_history" => command!(commands::usage_history::get_usage_history(
             app.clone(),
             argument::<UsageHistoryRequest>(&request.args, "request")?,

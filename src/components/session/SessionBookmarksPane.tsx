@@ -17,7 +17,7 @@ function BookmarkDetail({ item, offset, scrollTop, onOffsetChange, busy, onRemov
   item: SessionBookmarkSummary; busy: boolean; onRemove: () => void;
   offset: number; onOffsetChange: (id: string, offset: number) => void;
   scrollTop: { current: number };
-  onOpen: (session: SessionMeta, messageId: string, contentOffset: number) => void;
+  onOpen: (session: SessionMeta, messageId: string, contentOffset: number, archived: boolean) => void;
 }) {
   const { t } = useI18n();
   const [opening, setOpening] = useState(false);
@@ -32,7 +32,7 @@ function BookmarkDetail({ item, offset, scrollTop, onOffsetChange, busy, onRemov
     try {
       const source = await getSessionMetadata(item.app, item.sessionId);
       if (!mounted.current) return;
-      onOpen(source, item.messageId, offset);
+      onOpen(source.session, item.messageId, offset, source.archived);
     } catch (caught) { if (mounted.current) setError(caught); }
     finally { if (mounted.current) setOpening(false); }
   };
@@ -61,7 +61,7 @@ function BookmarkDetail({ item, offset, scrollTop, onOffsetChange, busy, onRemov
 }
 
 export function SessionBookmarksPane({ bookmarks, onOpen }: {
-  bookmarks: SessionBookmarks; onOpen: (session: SessionMeta, messageId: string, contentOffset: number) => void;
+  bookmarks: SessionBookmarks; onOpen: (session: SessionMeta, messageId: string, contentOffset: number, archived: boolean) => void;
 }) {
   const { t } = useI18n();
   const [reading, setReading] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });

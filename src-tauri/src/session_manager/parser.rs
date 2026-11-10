@@ -81,10 +81,25 @@ pub(super) fn session_identity_observed(path: &Path, checkpoint: &dyn Fn() -> Re
 
 pub(super) fn session_identity_reader(path: &Path, reader: impl BufRead,
     checkpoint: &dyn Fn() -> Result<(), String>) -> io::Result<Option<SessionIdentity>> {
+    Ok(session_header_reader(path, reader, checkpoint)?.and_then(|value| session_id_from(&value).map(|id| SessionIdentity {
+        id, parent: parent_from(value.get("payload").unwrap_or(&value)), created_at: timestamp_from(&value),
+    })))
+}
+
+pub(super) fn spawn_parent_reader(path: &Path, reader: impl BufRead,
+    checkpoint: &dyn Fn() -> Result<(), String>) -> io::Result<Option<String>> {
+    Ok(session_header_reader(path, reader, checkpoint)?.and_then(|value| {
+        let payload = value.get("payload").unwrap_or(&value);
+        payload.pointer("/source/subagent/thread_spawn/parent_thread_id").and_then(Value::as_str)
+            .filter(|id| valid_session_id(id)).map(str::to_string)
+    }))
+}
+
+fn session_header_reader(path: &Path, reader: impl BufRead,
+    checkpoint: &dyn Fn() -> Result<(), String>) -> io::Result<Option<Value>> {
     let mut found = None;
     super::records::scan_reader(&path.display().to_string(), 0, 0, reader, checkpoint, |_, _, value| {
-        found = session_id_from(&value).filter(|id| valid_session_id(id)).map(|id| SessionIdentity {
-            id, parent: parent_from(value.get("payload").unwrap_or(&value)), created_at: timestamp_from(&value) });
+        if session_id_from(&value).is_some_and(|id| valid_session_id(&id)) { found = Some(value); }
         Ok(if found.is_some() { ControlFlow::Break(()) } else { ControlFlow::Continue(()) })
     }).map_err(io::Error::other)?;
     Ok(found)

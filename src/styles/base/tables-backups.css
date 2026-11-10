@@ -2,9 +2,9 @@
    treatment replicates the Frosted Relay data table (user-directed
    2026-09-02): a full-width muted label band, then airy borderless rows
    carried by spacing alone. Numeric columns align right; hover stays neutral.
-   The table carries its own hairline border and control-radius corner frame
-   (2026-09-02 user directive); the band and the last row's hover surface
-   clip to those corners. The scroll region is the component's own wrap
+   The fixed component frame carries the hairline border and control-radius
+   corners; content and row surfaces clip there while the table scrolls.
+   The scroll region is the component's own wrap
    (2026-10-15): wide tables pan horizontally there, no module rolls its
    own overflow wrapper. Modules tune width with min-width on the table;
    Table's explicit viewport mode owns bounded height and pinned headers. */
@@ -12,8 +12,6 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
   background: var(--asb-content);
   font: var(--asb-text-body);
 }
@@ -24,6 +22,9 @@
   flex: none;
   min-width: 0;
   max-width: 100%;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  overflow: hidden;
 }
 
 .asb-table-scroll > .asb-scroll-viewport {
@@ -82,22 +83,6 @@
 
 .asb-table tbody tr:hover {
   background: var(--asb-row-hover);
-}
-
-.asb-table th:first-child {
-  border-top-left-radius: calc(var(--asb-radius) - 1px);
-}
-
-.asb-table th:last-child {
-  border-top-right-radius: calc(var(--asb-radius) - 1px);
-}
-
-.asb-table tbody tr:last-child td:first-child {
-  border-bottom-left-radius: calc(var(--asb-radius) - 1px);
-}
-
-.asb-table tbody tr:last-child td:last-child {
-  border-bottom-right-radius: calc(var(--asb-radius) - 1px);
 }
 
 .asb-table .asb-btn-secondary {

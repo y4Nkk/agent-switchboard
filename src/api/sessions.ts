@@ -102,7 +102,7 @@ export interface SessionSearchPage {
 export interface SessionProject {
   app: AppKind;
   projectDir: string | null;
-  /** Unique sessions in this project, scoped only by the selected client. */
+  /** Unique sessions scoped by the selected client and archive state. */
   count: number;
 }
 
@@ -117,6 +117,7 @@ export interface SessionSearchRequest {
   activeAfter: string | null;
   /** Exclusive RFC3339 upper bound for lastActiveAt. */
   activeBefore: string | null;
+  archived: boolean;
 }
 
 export type SessionOrganizationChange =
@@ -175,7 +176,7 @@ export function deleteSessionBookmark(id: string): Promise<StorageReclaimOutcome
   return invoke("delete_session_bookmark", { id });
 }
 
-export function getSessionMetadata(app: AppKind, sessionId: string): Promise<SessionMeta> {
+export function getSessionMetadata(app: AppKind, sessionId: string): Promise<{ session: SessionMeta; archived: boolean }> {
   return invoke("get_session_metadata", { app, sessionId });
 }
 
@@ -208,20 +209,7 @@ export interface SessionDeleteOutcome {
   error: string | null;
 }
 
-/** Reports each deletion, including known subagents removed by native Codex deletion. */
+/** Reports each deletion, including known subagents removed with their parent. */
 export function deleteSessions(requests: SessionDeleteRequest[]): Promise<SessionDeleteOutcome[]> {
   return invoke<SessionDeleteOutcome[]>("delete_sessions", { requests });
-}
-
-export interface SessionCleanupPlan { cutoff: string; sessions: number; bytes: number }
-export interface SessionCleanupOutcome { removed: number; warnings: LocalizedMessage[] }
-
-/** Previews how many preserved Claude sessions fall before the cutoff. */
-export function previewSessionCleanup(cutoff: string): Promise<SessionCleanupPlan> {
-  return invoke("preview_session_cleanup", { cutoff });
-}
-
-/** Purges preserved sessions older than the cutoff, including the raw client records. */
-export function cleanupSessions(cutoff: string): Promise<SessionCleanupOutcome> {
-  return invoke("cleanup_sessions", { cutoff });
 }

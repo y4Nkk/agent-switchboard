@@ -158,15 +158,15 @@
 
 /* The table belongs to the page surface; only row separators remain. The
    horizontal overflow lives in the shared Table wrap. */
-.asb-table.asb-gateway-recent-table {
-  min-width: 56rem;
+.asb-table-scroll:has(> .asb-scroll-viewport > .asb-gateway-recent-table) {
   border: 0;
   border-radius: 0;
-  background: transparent;
 }
 
-.asb-gateway-recent-table th,
-.asb-gateway-recent-table td { border-radius: 0; }
+.asb-table.asb-gateway-recent-table {
+  min-width: 56rem;
+  background: transparent;
+}
 
 .asb-gateway-request-app,
 .asb-gateway-request-result { white-space: nowrap; }

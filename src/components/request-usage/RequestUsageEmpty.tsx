@@ -5,7 +5,6 @@ import { UsageIcon } from "../icons";
 const COPY = {
   loading: "usagePerformance.loadingTitle",
   empty: "usagePerformance.emptyTitle",
-  partial: "usagePerformance.partialTitle",
   unavailable: "usagePerformance.unavailableTitle",
 } as const;
 
