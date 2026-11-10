@@ -1,11 +1,12 @@
 import { useId, type ReactNode } from "react";
 import type { InterfaceScale, ThemePreference } from "../../api/client";
+import appIcon from "../../assets/app-icon.svg";
 
-const PREVIEW_SIZE = { width: 160, height: 104 } as const;
+const PREVIEW_SIZE = { width: 400, height: 248 } as const;
 
 // Preview colors describe the pictured theme, independently of the host theme.
 export const LIGHT = {
-  surface: "#fafafa", rail: "#eceef1", stroke: "rgba(20,22,27,0.18)",
+  surface: "#ffffff", rail: "#f0f1f4", stroke: "rgba(20,22,27,0.12)",
   text: "#14161b", muted: "rgba(20,22,27,0.56)", faint: "rgba(20,22,27,0.24)",
   accent: "#0a84ff", danger: "#d70015", warning: "#b25000",
   sidebarStart: "var(--asb-sidebar-light-start)",
@@ -28,7 +29,33 @@ export function PreviewCanvas({ children }: { children: ReactNode }) {
     aria-hidden="true" focusable="false">{children}</svg>;
 }
 
-export function WindowFrame({ palette, zoom = 1, active = 0, children }: {
+export function AppMark({ x, y, size }: { x: number; y: number; size: number }) {
+  return <image href={appIcon} x={x} y={y} width={size} height={size} />;
+}
+
+export function DetailPanel({ x, y, width, height, children }: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  children: ReactNode;
+}) {
+  const shadow = useId();
+  return (
+    <g>
+      <defs>
+        <filter id={shadow} x="-30%" y="-50%" width="160%" height="200%" colorInterpolationFilters="sRGB">
+          <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor={LIGHT.text} floodOpacity="0.07" />
+        </filter>
+      </defs>
+      <rect x={x} y={y} width={width} height={height} rx="18" fill={LIGHT.surface}
+        stroke={LIGHT.stroke} filter={`url(#${shadow})`} />
+      {children}
+    </g>
+  );
+}
+
+export function WindowFrame({ palette, zoom = 1, active = null, children }: {
   palette: typeof LIGHT;
   zoom?: number;
   active?: number | null;
@@ -43,20 +70,21 @@ export function WindowFrame({ palette, zoom = 1, active = 0, children }: {
           <stop offset="1" stopColor={palette.sidebarEnd} />
         </linearGradient>
       </defs>
-      <rect x="4" y="4" width="152" height="96" rx="10" fill={palette.rail} stroke={palette.stroke} />
-      <rect x="12" y="10" width="6" height="6" rx="2" fill={palette.accent} />
-      <rect x="24" y="12" width="32" height="3" rx="1.5" fill={palette.muted} />
-      <path d="M120 14h5 M134 11h5v5h-5z M146 11l5 5m0-5-5 5"
-        fill="none" stroke={palette.muted} strokeLinecap="round" />
-      <rect x="30" y="22" width="122" height="74" rx="8" fill={palette.surface} />
-      {[32, 48, 64].map((cy, index) => (
-        <g key={cy}>
-          {index === active && <rect x="8" y={cy - 7} width="14" height="14" rx="5"
+      <rect x="40" y="32" width="320" height="234" rx="18" fill={palette.rail} stroke={palette.stroke} />
+      {[58, 68, 78].map((cx) => <circle key={cx} cx={cx} cy="49" r="2.5" fill={palette.faint} />)}
+      <rect x="102" y="47" width="64" height="4" rx="2" fill={palette.faint} />
+      <rect x="86" y="65" width="262" height="195" rx="14" fill={palette.surface} />
+      {[91, 126, 161].map((cy, index) => (
+        <g key={cy} transform={`translate(63 ${cy})`}>
+          {index === active && <rect x="-14" y="-14" width="28" height="28" rx="10"
             fill={`url(#${selectedGradient})`} />}
-          <circle cx="15" cy={cy} r={2.5 * zoom} fill={index === active ? palette.sidebarIcon : palette.muted} />
+          <g transform={`scale(${zoom})`} fill="none" stroke={index === active ? palette.sidebarIcon : palette.muted}
+            strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            {index === 0 ? <path d="M-6-3H6m-3-3 3 3-3 3 M6 4H-6m3-3-3 3 3 3" />
+              : <path d="M-4-3h8M-4 2h8" opacity="0.45" />}
+          </g>
         </g>
       ))}
-      <circle cx="15" cy="86" r="2.5" fill="none" stroke={palette.muted} />
       {children}
     </>
   );
@@ -64,22 +92,19 @@ export function WindowFrame({ palette, zoom = 1, active = 0, children }: {
 
 export function WindowContent({ palette, zoom = 1 }: { palette: typeof LIGHT; zoom?: number }) {
   return (
-    <g transform={`translate(40 30) scale(${zoom})`}>
-      <text x="0" y="13" fill={palette.text} fontFamily="var(--asb-font-ui)" fontSize="15" fontWeight="600">Aa</text>
-      <rect x="28" y="3" width="40" height="4" rx="2" fill={palette.text} />
-      <rect x="28" y="11" width="28" height="3" rx="1.5" fill={palette.muted} />
-      <rect y="22" width="82" height="12" rx="4" fill={palette.rail} />
-      <circle cx="7" cy="28" r="2" fill={palette.accent} />
-      <rect x="15" y="26.5" width="38" height="3" rx="1.5" fill={palette.muted} />
-      <rect x="67" y="25" width="9" height="6" rx="3" fill={palette.faint} />
-      <rect y="40" width="30" height="9" rx="4.5" fill={palette.accent} />
-      <rect x="36" y="40" width="26" height="9" rx="4.5" fill="none" stroke={palette.stroke} />
+    <g transform={`translate(108 86) scale(${zoom})`}>
+      <text y="30" fill={palette.text} fontFamily="var(--asb-font-ui)" fontSize="30" fontWeight="500">Aa</text>
+      <rect x="54" y="12" width="88" height="5" rx="2.5" fill={palette.muted} />
+      <rect x="54" y="25" width="56" height="4" rx="2" fill={palette.faint} />
+      <rect y="58" width="174" height="30" rx="10" fill={palette.rail} />
+      <circle cx="14" cy="73" r="3" fill={palette.accent} />
+      <rect x="28" y="71" width="106" height="4" rx="2" fill={palette.muted} />
+      <rect y="108" width="64" height="16" rx="8" fill={palette.accent} />
+      <rect x="74" y="108" width="44" height="16" rx="8" fill={palette.rail} />
     </g>
   );
 }
 
-// Only theme previews split the scene; scale previews keep the same frame and
-// reserve enough room for the complete content at 125%.
 export function WindowScene({ theme, scale = 100 }: {
   theme: ThemePreference;
   scale?: InterfaceScale;

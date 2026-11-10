@@ -111,24 +111,21 @@ function InformationPanel({ id, messages, onClose }: {
       </div>
     </div>
     <ScrollArea className="asb-information-list" aria-label={t("shell.information.aria")}>
-      {messages.length ? messages.map((message) =>
-        <InformationRow key={message.id} message={message} onBeforeDismiss={focusClose} />)
-        : <p className="asb-information-empty" role="status">{t("shell.information.empty")}</p>}
+      {messages.map((message) =>
+        <InformationRow key={message.id} message={message} onBeforeDismiss={focusClose} />)}
     </ScrollArea>
   </Dialog>;
 }
 
-/** The titlebar owns the only global feedback surface; source state stays with its owners. */
-export function GlobalInformation(props: Props) {
+function InformationContent({ primary, messages, toasts, pause, resume }: ReturnType<typeof useInformationMessages> & {
+  primary: InformationMessage;
+}) {
   const { t } = useI18n();
-  const { messages, toasts, pause, resume } = useInformationMessages(props);
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
-  const primary: InformationMessage = messages[0]
-    ?? { id: "empty", kind: "info", title: t("shell.information.empty") };
   const visibleToastId = primary.toastId;
 
   useEffect(() => {
@@ -145,16 +142,14 @@ export function GlobalInformation(props: Props) {
   }, [toasts, visibleToastId, open, hovered, focused, pause, resume]);
 
   return (
-    <div className="asb-global-information" data-tauri-drag-region
-      onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}
-      onFocus={() => setFocused(true)} onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
-      }}>
+    <>
       <Button variant="unstyled" ref={triggerRef} className="asb-information-trigger"
         aria-label={t("shell.information.show", { count: messages.length })}
         aria-describedby={`${panelId}-summary`}
         aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined}
-        onClick={() => setOpen(!open)}>
+        onClick={() => setOpen(!open)}
+        onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
         <ToastStatusIcon kind={primary.kind} />
         <div id={`${panelId}-summary`} className="asb-information-summary" role={primary.kind === "error" ? "alert" : "status"}
           aria-atomic="true" key={primary.id}>
@@ -166,6 +161,17 @@ export function GlobalInformation(props: Props) {
         className="asb-information-popover" offset={8}>
         <InformationPanel id={panelId} messages={messages} onClose={() => setOpen(false)} />
       </Popover>
+    </>
+  );
+}
+
+/** The titlebar owns the only global feedback surface; source state stays with its owners. */
+export function GlobalInformation(props: Props) {
+  const information = useInformationMessages(props);
+  const primary = information.messages[0];
+  return (
+    <div className="asb-global-information" data-tauri-drag-region>
+      {primary && <InformationContent {...information} primary={primary} />}
     </div>
   );
 }

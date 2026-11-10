@@ -173,7 +173,6 @@ macro_rules! handler {
             crate::commands::get_session_message_content,
             crate::commands::get_session_copy_text,
             crate::commands::resume_session,
-            crate::commands::delete_session,
             crate::commands::delete_sessions,
             crate::commands::scan_ccswitch,
             crate::commands::import_ccswitch_claude_profiles,

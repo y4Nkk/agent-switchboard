@@ -1,4 +1,4 @@
-use super::super::types::{Installation, Manager, Owner};
+use super::super::{process, types::{Installation, Manager, Owner}};
 use std::{path::Path, process::Command};
 
 pub fn command(item: &Installation) -> Result<Command, String> {
@@ -6,11 +6,7 @@ pub fn command(item: &Installation) -> Result<Command, String> {
         if item.executable.extension().is_some_and(|extension| extension == "js" || extension == "cjs") {
             let Some(Owner::Npm { node, .. }) = &item.owner else { return Err("The owning Node runtime is unavailable".into()); };
             let mut command = Command::new(node);
-            // Node's module loader cannot resolve verbatim Windows script paths.
-            #[cfg(windows)]
-            command.arg(display(&item.executable));
-            #[cfg(not(windows))]
-            command.arg(&item.executable);
+            command.arg(process::command_path(&item.executable));
             return Ok(command);
         }
         return Ok(Command::new(&item.executable));
@@ -23,14 +19,6 @@ pub fn command(item: &Installation) -> Result<Command, String> {
 
 pub fn arguments(item: &Installation) -> Result<Vec<String>, String> {
     let command = command(item)?;
-    Ok(std::iter::once(command.get_program()).chain(command.get_args()).map(|arg| display(Path::new(arg))).collect())
-}
-
-fn display(path: &Path) -> String {
-    let path = path.to_string_lossy();
-    #[cfg(windows)] {
-        if let Some(path) = path.strip_prefix(r"\\?\UNC\") { return format!(r"\\{path}"); }
-        if let Some(path) = path.strip_prefix(r"\\?\") { return path.into(); }
-    }
-    path.into_owned()
+    Ok(std::iter::once(command.get_program()).chain(command.get_args())
+        .map(|arg| process::command_path(Path::new(arg)).to_string_lossy().into_owned()).collect())
 }

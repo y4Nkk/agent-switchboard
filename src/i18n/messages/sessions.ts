@@ -18,7 +18,7 @@ export const messages = {
   "sessions.message.expandImages": ["展开消息与 {count} 张图片", "Expand message and {count} images"],
   "sessions.message.imageAlt": ["会话图片 {index}", "Session image {index}"],
   "sessions.message.imageUnavailable": ["图片 {index} 无法解码，原始内容仍可复制或导出。", "Image {index} cannot be decoded. The original content can still be copied or exported."],
-  "sessions.nativeHistoryManaged": ["请在 Codex 中删除原生会话；无法确认原生登记时也不执行删除。阅读、搜索、收藏和导出仍可使用，供应商标识可通过“Codex 会话归属”显式统一。", "Delete native sessions in Codex. Deletion is also disabled when registration cannot be verified. Reading, search, bookmarks and export remain available; use Codex session providers to explicitly unify provider IDs."],
+  "sessions.delete.unavailable": ["无法核实此会话的原生登记或删除身份，请修复读取问题并刷新后重试。", "The native registration or deletion identity could not be verified. Resolve the read issue and refresh before retrying."],
   "sessions.role.reasoning": ["推理", "Reasoning"],
   "sessions.message.copyPreview": ["复制摘要", "Copy preview"],
   "sessions.message.copyFull": ["复制完整消息", "Copy full message"],
@@ -84,7 +84,8 @@ export const messages = {
 
   "sessions.delete.title": ["删除会话", "Delete session"],
   "sessions.delete.confirm": ["确认删除", "Delete session"],
-  "sessions.delete.detail": ["删除原始会话和本机保留副本，之后不会再次导入同一会话；片段收藏不受影响。此操作不可恢复，未完成的清理会显示具体结果。", "Deletes original records and locally saved copies and prevents reimporting the same session. Saved snippets remain. This cannot be undone; incomplete cleanup is reported."],
+  "sessions.delete.detail": ["删除此会话的本地记录，此操作不可恢复；未完成的清理会显示具体结果。", "Deletes this session's local records. This cannot be undone; incomplete cleanup is reported."],
+  "sessions.delete.codexDetail": ["Codex 会话由本机 Codex CLI 删除，包含原生登记、消息记录及关联子代理。需要已安装支持删除的 Codex CLI；被占用或仍有历史引用时会显示具体错误。", "Codex sessions are deleted by the local Codex CLI, including their registration, messages, and associated subagents. A Codex CLI supporting deletion is required; active use or history references are reported as errors."],
   "sessions.actions.more": ["更多", "More"],
   "sessions.actions.moreAria": ["更多会话操作", "More session actions"],
 

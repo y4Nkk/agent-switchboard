@@ -171,3 +171,67 @@ fn failed_identity_commit_never_starts_the_installer() {
     assert!(result.is_err());
     assert!(!marker.exists());
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_updater_preserves_arguments_streams_and_exit_status() {
+    let script = r#"
+        if ($null -ne [Console]::In.ReadLine()) { exit 99 }
+        [Console]::Out.WriteLine('stdout: two "quotes" C:\path with spaces\')
+        [Console]::Error.WriteLine('stderr: installer diagnostic')
+        [IO.File]::WriteAllText($env:ASB_TEST_MARKER, 'started')
+        $status = [int]$env:ASB_TEST_EXIT
+        exit $status
+    "#;
+    let system = std::env::var_os("SystemRoot").unwrap();
+    for status in [0, 23] {
+        let directory = tempfile::tempdir().unwrap();
+        let marker = directory.path().join("installer started.txt");
+        let mut command = std::process::Command::new(std::path::PathBuf::from(&system)
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe"));
+        command.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script])
+            .env("ASB_TEST_MARKER", &marker).env("ASB_TEST_EXIT", status.to_string());
+        let mut recorded = false;
+        let child = spawn::recorded(&mut command, |_, _| { recorded = true; Ok(()) }).unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(recorded);
+        assert_eq!(output.status.code(), Some(status));
+        assert_eq!(std::fs::read_to_string(marker).unwrap(), "started");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("stdout: two \"quotes\" C:\\path with spaces\\"));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("stderr: installer diagnostic"));
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_updater_finishes_after_its_output_receiver_disconnects() {
+    let directory = tempfile::tempdir().unwrap();
+    let marker = directory.path().join("installer finished.txt");
+    let system = std::env::var_os("SystemRoot").unwrap();
+    let mut command = std::process::Command::new(std::path::PathBuf::from(system)
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe"));
+    let script = r#"
+        $chunk = 'x' * 8192
+        for ($index = 0; $index -lt 64; $index++) {
+            [Console]::Out.WriteLine($chunk)
+            [Console]::Error.WriteLine($chunk)
+        }
+        [IO.File]::WriteAllText($env:ASB_TEST_MARKER, 'finished')
+        exit 23
+    "#;
+    command.args(["-NoProfile", "-NonInteractive", "-Command", script]).env("ASB_TEST_MARKER", &marker);
+    let mut child = spawn::recorded(&mut command, |_, _| Ok(())).unwrap();
+    drop(child.stdout.take());
+    drop(child.stderr.take());
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() { break status; }
+        if std::time::Instant::now() >= deadline {
+            crate::process_control::terminate_process_tree(&mut child);
+            panic!("fixture installer blocked after output receiver disconnected");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(status.code(), Some(23));
+    assert_eq!(std::fs::read_to_string(marker).unwrap(), "finished");
+}

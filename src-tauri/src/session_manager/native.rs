@@ -10,6 +10,7 @@ pub(super) struct NativeThread {
     pub meta: SessionMeta,
     pub rollout: PathBuf,
     pub history: PathBuf,
+    pub database: PathBuf,
 }
 
 pub(super) fn open(path: &Path) -> Result<Connection, String> {
@@ -51,12 +52,14 @@ pub(super) fn threads_matching(root: &Path, session: Option<&str>, checkpoint: &
         let source: String = row.get(7)?;
         let parent = serde_json::from_str::<Value>(&source).ok()
             .and_then(|value| parser::parent_from(&serde_json::json!({"source":value})));
+        let can_delete = uuid::Uuid::parse_str(&id).is_ok();
         let meta = SessionMeta { app: AppKind::Codex,
             resume_command: Some(super::resume::resume_command(AppKind::Codex, &id)), session_id: id,
             title: parser::clamp_title(&title), summary: parser::clamp_text(&parser::prompt(&first).unwrap_or_else(|| title.clone()), 180),
             project_dir: Some(row.get(5)?), created_at: at(row.get(2)?), last_active_at: at(row.get(3)?),
-            alias: None, pinned: false, tags: Vec::new(), parent_session_id: parent, can_delete: false, preservation: None };
-        Ok(NativeThread { meta, rollout: PathBuf::from(row.get::<_, String>(1)?), history: history.clone() })
+            alias: None, pinned: false, tags: Vec::new(), parent_session_id: parent,
+            can_delete, preservation: None };
+        Ok(NativeThread { meta, rollout: PathBuf::from(row.get::<_, String>(1)?), history: history.clone(), database: database.clone() })
     }).map_err(|error| error.to_string())?;
     let mut threads = Vec::new();
     let mut issues = Vec::new();

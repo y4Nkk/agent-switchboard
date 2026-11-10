@@ -1,5 +1,5 @@
 use super::*;
-use serde_json::{json, Value};
+use serde_json::json;
 
 fn fixture(root: &Path) -> (PathBuf, PathBuf) {
     let mut values = vec![json!({"type":"session_meta","payload":{"id":"compressed-session"}})];

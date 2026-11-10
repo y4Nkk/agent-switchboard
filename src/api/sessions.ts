@@ -195,11 +195,6 @@ export function resumeSession(app: AppKind, sessionId: string): Promise<SessionR
   return invoke<SessionResume>("resume_session", { app, sessionId });
 }
 
-/** Permanently removes the local session record the backend resolves itself. */
-export function deleteSession(app: AppKind, sessionId: string): Promise<void> {
-  return invoke<void>("delete_session", { app, sessionId });
-}
-
 export interface SessionDeleteRequest {
   app: AppKind;
   sessionId: string;
@@ -213,7 +208,7 @@ export interface SessionDeleteOutcome {
   error: string | null;
 }
 
-/** Deletes several records against one backend scan; each item reports its own outcome. */
+/** Reports each deletion, including known subagents removed by native Codex deletion. */
 export function deleteSessions(requests: SessionDeleteRequest[]): Promise<SessionDeleteOutcome[]> {
   return invoke<SessionDeleteOutcome[]>("delete_sessions", { requests });
 }

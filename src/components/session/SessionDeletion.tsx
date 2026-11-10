@@ -71,6 +71,7 @@ export function SessionDeletion({ state, disabled = false }: { state: SessionDel
         {state.pending.slice(0, 3).map((item) => <li key={sessionKey(item)}>{sessionTitle(item)}</li>)}
         {state.pending.length > 3 && <li>{t("sessions.batchDelete.detail.more", { count: state.pending.length - 3 })}</li>}
         <li>{t(state.pending.length === 1 ? "sessions.delete.detail" : "sessions.batchDelete.detail.individual")}</li>
+        {state.pending.some((item) => item.app === "codex") && <li>{t("sessions.delete.codexDetail")}</li>}
         <li>{t("sessions.bookmarks.retained")}</li>
       </ul>
     </ConfirmSheet>}

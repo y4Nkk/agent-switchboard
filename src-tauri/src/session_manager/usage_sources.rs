@@ -67,6 +67,6 @@ fn unregistered(root: &Path, identity: &parser::SessionIdentity) -> SessionSourc
         title: identity.id.clone(), summary: String::new(), project_dir: None,
         created_at: identity.created_at.clone(), last_active_at: None, resume_command: None,
         alias: None, pinned: false, tags: Vec::new(), parent_session_id: identity.parent.clone(),
-        can_delete: false, preservation: None }, paths: Vec::<PathBuf>::new(), native_history: None,
+        can_delete: false, preservation: None }, paths: Vec::<PathBuf>::new(), native_database: None, native_history: None,
         converted: None, retained: Vec::new(), index_root: root.into() }
 }

@@ -2,6 +2,7 @@ mod journal;
 mod output;
 mod spawn;
 #[cfg(test)] mod tests;
+#[cfg(all(test, windows))] mod live_tests;
 use super::{gate, plan, process, updater, SoftwareError, SoftwareManager, types::{Phase, UpdateTask}};
 use crate::local_state::LocalState;
 use std::{sync::atomic::Ordering, time::Duration};

@@ -4,7 +4,7 @@ use std::{path::Path, process::Command, time::Duration};
 
 fn runtime(node: &Path, npm: &Path, prefix: &Path, proxy: &OutboundProxySettings) -> Result<Command, String> {
     let mut command = Command::new(node);
-    command.arg(npm).arg("--global").arg("--prefix").arg(prefix)
+    command.arg(process::command_path(npm)).arg("--global").arg("--prefix").arg(process::command_path(prefix))
         .current_dir(crate::local_state::user_home_dir()?);
     let mut paths = vec![node.parent().ok_or("Node directory unavailable")?.to_path_buf()];
     paths.extend(std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect::<Vec<_>>()).unwrap_or_default());

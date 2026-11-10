@@ -4,15 +4,15 @@
   min-width: 0;
 }
 
-.asb-software-installation,
 .asb-software-task,
-.asb-software-details {
+.asb-software-details,
+.asb-software-identity,
+.asb-software-status {
   display: grid;
   gap: var(--asb-space-3);
   min-width: 0;
 }
 
-.asb-software-installation,
 .asb-software-task {
   padding: var(--asb-space-4);
   background: var(--asb-content-muted);
@@ -37,16 +37,40 @@
   font-weight: 600;
 }
 
-.asb-software-installation p,
+.asb-software-table p,
 .asb-software-task p,
 .asb-software-details p {
   margin: 0;
 }
 
-.asb-software-installation code,
+.asb-software-table code,
 .asb-software-task code {
   font: var(--asb-text-code);
   overflow-wrap: anywhere;
+}
+
+.asb-software-table {
+  min-width: 70rem;
+}
+
+.asb-software-status {
+  min-width: 14rem;
+}
+
+.asb-software-table .asb-software-actions {
+  min-width: 10rem;
+}
+
+.asb-software-table .asb-table-expansion-row > td {
+  padding: 0;
+}
+
+.asb-software-table .asb-table-expansion-row:has(> td:empty) {
+  display: none;
+}
+
+.asb-software-table .asb-software-details {
+  padding: var(--asb-space-3);
 }
 
 .asb-software-issues {

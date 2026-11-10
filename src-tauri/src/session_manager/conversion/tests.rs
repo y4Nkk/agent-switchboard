@@ -184,7 +184,8 @@ fn converted_material_is_excluded_from_usage_and_deletion_only_removes_the_copy(
     assert_eq!(report.coverage.scanned_files, 0);
     assert!(report.groups.is_empty());
     assert!(report.issues.is_empty());
-    super::super::remove_source(&temp.path().join("state"), &source, &[source.meta.session_id.clone()], None).unwrap();
+    let outcomes = super::super::delete_source(&temp.path().join("state"), &source, std::slice::from_ref(&source), None).unwrap();
+    assert!(outcomes[0].deleted && outcomes[0].error.is_none());
     assert!(path.is_file());
     assert!(!source.converted.unwrap().exists());
     let mut sources = Vec::new();

@@ -112,7 +112,7 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
         <SessionFacts session={session} copy={actions.copy} />
         {session.preservation && <p className="asb-scope-note">{t("sessions.preservation.resume")}</p>}
         {session.preservation && !session.preservation.sourceAvailable && <p className="asb-scope-note">{t("sessions.preservation.sourceMissing")}</p>}
-        {!session.canDelete && <p className="asb-scope-note">{t("sessions.nativeHistoryManaged")}</p>}
+        {!session.canDelete && <p className="asb-scope-note">{t("sessions.delete.unavailable")}</p>}
       </div>
     </CollapsibleSection>
     {session.preservation?.needsAttention && <p className="asb-warn-text" role="status">{t("sessions.preservation.attention")}</p>}

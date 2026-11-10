@@ -32,8 +32,6 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "export_session_markdown" => command!(commands::export_session_markdown(app.clone(),
             argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "resume_session" => command!(commands::resume_session(app.clone(), argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
-        "delete_session" => command!(commands::delete_session(app.clone(),
-            argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "delete_sessions" => command!(commands::delete_sessions(app.clone(), argument(&request.args, "requests")?)),
         "preview_session_cleanup" => command!(commands::preview_session_cleanup(app.clone(), argument(&request.args, "cutoff")?)),
         "cleanup_sessions" => command!(commands::cleanup_sessions(app.clone(), argument(&request.args, "cutoff")?)),

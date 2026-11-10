@@ -9,7 +9,7 @@ import { Tabs } from "./Tabs";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { SessionBookmarksPane } from "./session/SessionBookmarksPane";
 import { SessionDeletion, useSessionDeletion } from "./session/SessionDeletion";
-import { SessionPageActions, SessionSearchControls } from "./session/SessionSearchControls";
+import { SessionPageActions, SessionSearchControls, type SessionAction } from "./session/SessionSearchControls";
 import { SessionHistory } from "./session/SessionHistory";
 import { useSessionOrganization } from "./session/use-session-organization";
 import { sessionKey } from "./session/session-content";
@@ -23,9 +23,7 @@ import { CodexSessionProviderTransfer } from "./session/CodexSessionProviderTran
 export function SessionManager({ active }: { active: boolean }) {
   const { t } = useI18n();
   const [view, setView] = useState<"history" | "bookmarks">("history");
-  const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [purgeOpen, setPurgeOpen] = useState(false);
-  const [transferOpen, setTransferOpen] = useState(false);
+  const [action, setAction] = useState<SessionAction | null>(null);
   const [bookmarkQuery, setBookmarkQuery] = useState("");
   const [bookmarkFilter, setBookmarkFilter] = useState<ClientFilterValue>("all");
   const current = useWorkspaceVisible(active);
@@ -41,6 +39,7 @@ export function SessionManager({ active }: { active: boolean }) {
   });
   const busy = deletion.busy || organization.busy;
   const open = (session: SessionMeta, messageId: string | null = null, contentOffset = 0) => {
+    if (search.filter !== "all" && search.filter !== session.app) search.changeFilter(session.app);
     setView("history");
     detail.select(session, messageId, contentOffset);
   };
@@ -55,28 +54,31 @@ export function SessionManager({ active }: { active: boolean }) {
     }
     setView(next);
   };
+  const changeHistoryFilter = (next: ClientFilterValue) => {
+    if (next === search.filter) return;
+    detail.clear(); deletion.setPending([]);
+    if (deletion.selecting) deletion.toggleMode();
+    search.changeFilter(next);
+  };
   return <div className="asb-sessions">
     <WorkspaceHeader title={t("nav.page.sessions")} primary={
       <Tabs value={view} onChange={changeView} scope="sessions" label={t("sessions.views")} tabs={[
         { value: "history", label: t("sessions.list.heading"), controls: "sessions-history-panel", disabled: busy },
         { value: "bookmarks", label: t("sessions.bookmarks.title"), controls: "sessions-bookmarks-panel", disabled: busy },
       ]} />
-    } primaryActions={<><Button variant="secondary" disabled={busy} onClick={() => setSourcesOpen(true)}>{t("sessions.sources.title")}</Button>
-      {view === "history" && search.filter !== "claude" && <Button variant="secondary" disabled={busy}
-        onClick={() => setTransferOpen(true)}>{t("sessions.transfer.title")}</Button>}
-      <Button variant="secondary" disabled={busy} onClick={() => setPurgeOpen(true)}>{t("sessions.purge.title")}</Button>
-      <SessionPageActions filter={view === "history" ? search.filter : bookmarkFilter}
-      onFilterChange={view === "history" ? search.changeFilter : setBookmarkFilter}
+    } primaryActions={<SessionPageActions filter={view === "history" ? search.filter : bookmarkFilter}
+      history={view === "history"} onAction={setAction}
+      onFilterChange={view === "history" ? changeHistoryFilter : setBookmarkFilter}
       refresh={view === "history" ? refresh : bookmarks.refresh}
       refreshKey={view === "history" ? "sessions.refresh" : "sessions.bookmarks.refresh"}
-      busy={view === "history" ? search.busy || busy : bookmarks.loading || bookmarks.busy} /></>}
+      busy={view === "history" ? search.busy || busy : bookmarks.loading || bookmarks.busy} />}
       secondary={view === "history" ? <SessionSearchControls search={search} disabled={busy} />
         : <div className="asb-session-bookmark-search"><Input type="search" value={bookmarkQuery}
           onChange={(event) => setBookmarkQuery(event.target.value)} aria-label={t("sessions.bookmarks.search")}
           placeholder={t("sessions.bookmarks.search")} /></div>} />
-    {sourcesOpen && <SessionSourcesDialog onClose={() => setSourcesOpen(false)} onChanged={refresh} />}
-    {purgeOpen && <SessionPurgeDialog onClose={() => setPurgeOpen(false)} onChanged={refresh} />}
-    {transferOpen && <CodexSessionProviderTransfer onClose={() => setTransferOpen(false)} onChanged={refresh} />}
+    {action === "sources" && <SessionSourcesDialog onClose={() => setAction(null)} onChanged={refresh} />}
+    {action === "purge" && <SessionPurgeDialog onClose={() => setAction(null)} onChanged={refresh} />}
+    {action === "transfer" && <CodexSessionProviderTransfer onClose={() => setAction(null)} onChanged={refresh} />}
     {bookmarks.error && <div className="asb-session-bookmark-error" role="alert">
       <p className="asb-warn-text">{bookmarks.error}</p>
       <Button variant="secondary" disabled={bookmarks.loading || bookmarks.busy}

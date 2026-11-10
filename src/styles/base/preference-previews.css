@@ -1,15 +1,12 @@
-/* Preview rows stack: the copy column leads, the visual cards flow below at
-   full width (ChatGPT-appearance pattern). */
 .asb-app-setting-row-preview {
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* Native radio state owns the ring and check; the art and descriptions stay
-   readable without relying on the selection color. */
 .asb-preview-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 186px), 186px));
-  gap: var(--asb-space-2);
+  grid-template-columns: repeat(var(--asb-preview-columns), minmax(0, 1fr));
+  gap: var(--asb-space-4);
+  width: min(100%, 720px);
 }
 
 .asb-preview-card {
@@ -18,22 +15,22 @@
   flex-direction: column;
   min-width: 0;
   align-items: stretch;
-  gap: var(--asb-space-1);
-  padding: var(--asb-space-2);
-  border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-medium);
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--asb-radius-group);
   background: var(--asb-content);
   cursor: pointer;
-  transition: border-color var(--asb-motion-press) var(--asb-easing), box-shadow var(--asb-motion-press) var(--asb-easing);
+  transition: border-color var(--asb-motion-press) var(--asb-easing);
 }
 
-.asb-preview-card:has(input:not(:disabled)):hover {
-  border-color: var(--asb-action);
+.asb-preview-card:has(input:not(:disabled):not(:checked)):hover {
+  border-color: var(--asb-hairline-strong);
 }
 
-.asb-preview-card:has(input:checked) {
+.asb-preview-card:has(input:checked),
+.asb-preview-card:has(input:not(:disabled)):active {
   border-color: var(--asb-action);
-  box-shadow: 0 0 0 1px var(--asb-action);
 }
 
 .asb-preview-card:has(input:disabled) {
@@ -43,7 +40,7 @@
 
 .asb-preview-card:has(input:focus-visible) {
   outline: 2px solid var(--asb-action);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 .asb-preview-card input {
@@ -59,6 +56,7 @@
 .asb-preview-card-art {
   display: block;
   width: 100%;
+  overflow: hidden;
 }
 
 .asb-preview-card-art > svg {
@@ -67,17 +65,20 @@
   height: auto;
 }
 
-.asb-preview-card-heading {
+.asb-preview-card-caption {
+  flex: 1;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--asb-space-1);
+  flex-direction: column;
+  align-items: center;
+  gap: var(--asb-space-unit);
+  padding: var(--asb-space-3) var(--asb-space-4);
+  text-align: center;
 }
 
 .asb-preview-card-name {
   min-width: 0;
   color: var(--asb-text);
-  font: var(--asb-text-label);
+  font: var(--asb-text-body);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -89,9 +90,11 @@
 }
 
 .asb-preview-card-check {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
+  position: absolute;
+  top: var(--asb-space-3);
+  right: var(--asb-space-3);
+  width: calc(var(--asb-space-unit) * 5);
+  height: calc(var(--asb-space-unit) * 5);
   color: var(--asb-action);
   visibility: hidden;
 }
@@ -100,8 +103,17 @@
   visibility: visible;
 }
 
-.asb-preview-card:has(input:checked) .asb-preview-card-name {
-  color: var(--asb-link);
+@container settings-content (max-width: 760px) {
+  .asb-preview-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container settings-content (max-width: 560px) {
+  .asb-preview-cards {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(100%, 360px);
+  }
 }
 
 /* The motion preview is the app's one deliberate looping demo: the loop is

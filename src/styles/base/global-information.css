@@ -94,13 +94,6 @@
   z-index: 71;
 }
 
-.asb-information-empty {
-  margin: 0;
-  padding: var(--asb-space-3);
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
 .asb-information-row {
   display: flex;
   align-items: flex-start;

@@ -111,7 +111,8 @@ fn read_and_delete(root: &Path, state: &Path) {
     assert!(copied.contains("account A") && copied.contains(PNG));
     export_markdown(state, AppKind::Claude, A, &root.join("after-loss.md")).unwrap();
     assert!(export_markdown(state, AppKind::Claude, A, &state.join("sessions/claude.sqlite3")).is_err());
-    delete_session(state, AppKind::Claude, A).unwrap();
+    let outcome = delete_sessions(state, &[SessionDeleteRequest { app: AppKind::Claude, session_id: A.into() }]).unwrap();
+    assert!(outcome[0].deleted && outcome[0].error.is_none());
     let requests = [SessionDeleteRequest { app: AppKind::Claude, session_id: B.into() },
         SessionDeleteRequest { app: AppKind::Claude, session_id: B.into() }];
     let outcomes = delete_sessions(state, &requests).unwrap();

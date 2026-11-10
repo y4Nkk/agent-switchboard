@@ -34,11 +34,26 @@ fn npm_shim_uses_its_canonical_package_and_original_runtime_without_executing_th
         let mut installation = item(app, launcher, executable);
         assert!(npm(&mut installation).unwrap());
         assert_eq!(installation.root, fs::canonicalize(&root).unwrap());
-        let Some(Owner::Npm { node: resolved, prefix: actual, package: owned, registry, .. }) = &installation.owner else { panic!("npm owner missing"); };
+        let Some(Owner::Npm { node: resolved, npm: resolved_npm, prefix: actual, package: owned, registry }) = &installation.owner else { panic!("npm owner missing"); };
         assert_eq!(resolved, &fs::canonicalize(node).unwrap());
         assert_eq!(actual, &fs::canonicalize(prefix).unwrap());
         assert_eq!(owned, package);
         assert!(registry.is_none());
+        let owner = Owner::Npm { node: resolved.clone(), npm: resolved_npm.clone(), prefix: actual.clone(),
+            package: owned.clone(), registry: Some("https://registry.invalid/".into()) };
+        let command = crate::client_software::npm::command(&owner, &Default::default()).unwrap();
+        let args: Vec<_> = command.get_args().collect();
+        let npm_entry = crate::client_software::process::command_path(resolved_npm);
+        let command_prefix = crate::client_software::process::command_path(actual);
+        assert_eq!(command.get_program(), resolved.as_os_str());
+        assert_eq!(Path::new(args[0]), npm_entry.as_path());
+        assert_eq!(Path::new(args[3]), command_prefix.as_path());
+        if app == AppKind::Codex {
+            let command = crate::client_software::discovery::launch::command(&installation).unwrap();
+            let entry = crate::client_software::process::command_path(&installation.executable);
+            assert_eq!(command.get_program(), resolved.as_os_str());
+            assert_eq!(Path::new(command.get_args().next().unwrap()), entry.as_path());
+        }
         let payloads = [root.join("node_modules").join(platform_package), modules.join(platform_package)];
         for payload in &payloads { fs::create_dir_all(payload).unwrap(); }
         let roots = crate::client_software::discovery::process_roots(&installation).unwrap();

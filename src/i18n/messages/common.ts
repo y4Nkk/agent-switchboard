@@ -43,7 +43,6 @@ export const messages = {
   "shell.information.close": ["收起全局信息", "Close global information"],
   "shell.information.delete": ["删除通知", "Delete notification"],
   "shell.information.clear": ["清空通知", "Clear notifications"],
-  "shell.information.empty": ["暂无通知", "No notifications"],
   "shell.banner.repairData": ["一键智能修复", "Repair application data"],
   "shell.banner.settingsUnavailable": ["应用设置不可用：{detail}", "App settings unavailable: {detail}"],
   "shell.banner.repair": ["一键修复", "Quick repair"],

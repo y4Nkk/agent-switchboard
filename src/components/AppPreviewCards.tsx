@@ -1,6 +1,6 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
 import type { CloseBehavior, MotionPreference, RuntimeLogLevel, RuntimeLogSeverity, StartupPage } from "../api/client";
-import { DARK, LIGHT, PreviewCanvas, WindowContent, WindowFrame } from "./preference-preview/WindowScene";
+import { AppMark, DetailPanel, LIGHT, PreviewCanvas, WindowFrame } from "./preference-preview/WindowScene";
 
 export function AppPreviewSetting<T extends string | number>({ label, detail, value, options, renderPreview, busy, onChange }: {
   label: string;
@@ -19,6 +19,7 @@ export function AppPreviewSetting<T extends string | number>({ label, detail, va
         {detail && <span id={`${id}-detail`} className="asb-app-setting-detail">{detail}</span>}
       </div>
       <div className="asb-preview-cards" role="radiogroup" aria-labelledby={`${id}-label`}
+        style={{ "--asb-preview-columns": options.length === 4 ? 2 : Math.min(options.length, 3) } as CSSProperties}
         aria-describedby={detail ? `${id}-detail` : undefined}>
         {options.map((option, index) => (
           <label key={option.value} className="asb-preview-card">
@@ -26,15 +27,15 @@ export function AppPreviewSetting<T extends string | number>({ label, detail, va
               aria-labelledby={`${id}-${index}-name`} aria-describedby={`${id}-${index}-description`}
               onChange={() => onChange(option.value)} />
             <span className="asb-preview-card-art" aria-hidden="true">{renderPreview(option.value)}</span>
-            <span className="asb-preview-card-heading">
+            <span className="asb-preview-card-caption">
               <span id={`${id}-${index}-name`} className="asb-preview-card-name">{option.label}</span>
-              <svg className="asb-preview-card-check" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <circle cx="8" cy="8" r="7" fill="currentColor" />
-                <path d="m4.5 8 2.2 2.2 4.8-4.6" fill="none" stroke="var(--asb-text-on-action)"
-                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <span id={`${id}-${index}-description`} className="asb-preview-card-description">{option.description}</span>
             </span>
-            <span id={`${id}-${index}-description`} className="asb-preview-card-description">{option.description}</span>
+            <svg className="asb-preview-card-check" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="11" fill="currentColor" stroke="var(--asb-content)" strokeWidth="2" />
+              <path d="m7 12 3.2 3.2 6.8-6.6" fill="none" stroke="var(--asb-text-on-action)"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </label>
         ))}
       </div>
@@ -46,22 +47,27 @@ export function CloseBehaviorPreview({ behavior }: { behavior: CloseBehavior }) 
   const exit = behavior === "exit";
   return (
     <PreviewCanvas>
-      <g transform="translate(2 0) scale(0.78)" opacity="0.38">
-        <WindowFrame palette={LIGHT}><WindowContent palette={LIGHT} /></WindowFrame>
+      <g opacity={exit ? 0.3 : 0.55}>
+        <WindowFrame palette={LIGHT}>
+          <rect x="108" y="94" width="108" height="5" rx="2.5" fill={LIGHT.faint} />
+          <rect x="108" y="108" width="72" height="4" rx="2" fill={LIGHT.faint} />
+        </WindowFrame>
       </g>
-      <rect x="8" y="83" width="144" height="17" rx="5" fill={LIGHT.rail} stroke={LIGHT.stroke} />
-      <path d="M17 90h5m-5 4h5 M123 91h3m4 0h3" stroke={LIGHT.muted} strokeWidth="1.5" strokeLinecap="round" />
+      <path d="m331 45 7 7m0-7-7 7" stroke={LIGHT.muted} strokeWidth="1.3" strokeLinecap="round" />
       {exit ? (
-        <g fill="none" stroke={LIGHT.text} strokeWidth="3" strokeLinecap="round">
-          <circle cx="103" cy="56" r="21" fill={LIGHT.surface} stroke={LIGHT.stroke} strokeWidth="1" />
-          <path d="M103 42v13 M95 47a12 12 0 1 0 16 0" />
-        </g>
+        <DetailPanel x={140} y={100} width={120} height={88}>
+          <path d="M200 116v19 M186 122a22 22 0 1 0 28 0" fill="none"
+            stroke={LIGHT.muted} strokeWidth="2.5" strokeLinecap="round" />
+        </DetailPanel>
       ) : (
         <>
-          <path d="M100 59c24 0 24 17 37 17v8m-4-4 4 4 4-4" fill="none"
-            stroke={LIGHT.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <rect x="136" y="87" width="10" height="10" rx="3" fill={LIGHT.accent} />
-          <path d="m139 92 2 2 3-4" fill="none" stroke={LIGHT.surface} strokeWidth="1.2" />
+          <path d="M334 64v25c0 25-72 25-72 54v9m-4-4 4 4 4-4" fill="none"
+            stroke={LIGHT.faint} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <DetailPanel x={134} y={160} width={132} height={48}>
+            <AppMark x={152} y={172} size={24} />
+            <rect x="190" y="175" width="48" height="4" rx="2" fill={LIGHT.muted} />
+            <rect x="190" y="185" width="30" height="3" rx="1.5" fill={LIGHT.faint} />
+          </DetailPanel>
         </>
       )}
     </PreviewCanvas>
@@ -70,65 +76,65 @@ export function CloseBehaviorPreview({ behavior }: { behavior: CloseBehavior }) 
 
 export function MotionPreview({ mode }: { mode: MotionPreference }) {
   const resting = mode === "reduce";
-  const track = { start: 49, end: 109, y: 66 };
+  const track = { start: 110, end: 254, y: 144 };
   const travelStyle: CSSProperties & { "--asb-preview-travel": string } = {
     "--asb-preview-travel": `${track.end - track.start}px`,
   };
   return (
     <PreviewCanvas>
-      <WindowFrame palette={LIGHT} active={null}>
-        <rect x="42" y="32" width="38" height="4" rx="2" fill={LIGHT.muted} />
-        <rect x="42" y="41" width="62" height="3" rx="1.5" fill={LIGHT.faint} />
-        <rect x={track.start - 3} y={track.y - 3} width={track.end - track.start + 6} height="6" rx="3" fill={LIGHT.faint} />
-        <circle cx={track.start} cy={track.y} r="6" fill={LIGHT.accent} style={travelStyle}
+      <WindowFrame palette={LIGHT}>
+        <rect x="108" y="94" width="108" height="5" rx="2.5" fill={LIGHT.faint} />
+      </WindowFrame>
+      <DetailPanel x={80} y={112} width={240} height={64}>
+        <rect x={track.start} y={track.y - 2} width={track.end - track.start} height="4" rx="2" fill={LIGHT.rail} />
+        <circle cx={track.end} cy={track.y} r="7" fill={LIGHT.surface} stroke={LIGHT.stroke} />
+        <circle cx={track.start} cy={track.y} r="7" fill={LIGHT.accent} style={travelStyle}
           className={resting ? undefined : "asb-motion-demo-dot"} />
         {resting ? (
-          <path d="M128 60v12m6-12v12" stroke={LIGHT.muted} strokeWidth="3" strokeLinecap="round" />
+          <path d="M287 138v12m6-12v12" stroke={LIGHT.muted} strokeWidth="2" strokeLinecap="round" />
         ) : (
-          <g fill="none" stroke={LIGHT.muted} strokeWidth="1.5" strokeLinecap="round">
-            <rect x="122" y="59" width="16" height="11" rx="2" />
-            <path d="M130 70v4m-5 0h10" />
+          <g fill="none" stroke={LIGHT.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m287 138 6 6-6 6" />
           </g>
         )}
-      </WindowFrame>
+      </DetailPanel>
     </PreviewCanvas>
   );
 }
 
 const LOG_LADDER = [
-  { level: "debug", bar: 72 }, { level: "info", bar: 58 },
-  { level: "warn", bar: 64 }, { level: "error", bar: 48 },
+  { level: "debug", bar: 144 }, { level: "info", bar: 118 },
+  { level: "warn", bar: 132 }, { level: "error", bar: 98 },
 ] as const satisfies ReadonlyArray<{ level: RuntimeLogSeverity; bar: number }>;
 
 const LOG_RANK: Record<RuntimeLogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
 const LOG_COLORS: Record<RuntimeLogSeverity, string> = {
-  debug: DARK.accent, info: DARK.muted, warn: DARK.warning, error: DARK.danger,
+  debug: LIGHT.accent, info: LIGHT.muted, warn: LIGHT.warning, error: LIGHT.danger,
 };
 
 export function LogLevelPreview({ level }: { level: RuntimeLogLevel }) {
   const rank = LOG_RANK[level];
   return (
     <PreviewCanvas>
-      <rect x="4" y="4" width="152" height="96" rx="10" fill={DARK.surface} stroke={DARK.stroke} />
-      <path d="m14 13 4 3-4 3m9 0h6" fill="none" stroke={DARK.muted} strokeWidth="1.5" strokeLinecap="round" />
-      <rect x="121" y="13" width="23" height="4" rx="2" fill={DARK.faint} />
-      {level !== "silent" ? LOG_LADDER.map((line, index) => {
-        if (LOG_RANK[line.level] < rank) return null;
-        const y = 29 + index * 17;
-        const color = LOG_COLORS[line.level];
-        return (
-          <g key={line.level}>
-            <circle cx="17" cy={y + 4} r="2" fill={color} />
-            <rect x="25" y={y} width="20" height="8" rx="3" fill={color} />
-            <rect x="53" y={y + 2} width={line.bar} height="4" rx="2" fill={DARK.muted} />
+      <WindowFrame palette={LIGHT}>
+        {level !== "silent" ? LOG_LADDER.map((line, index) => {
+          if (LOG_RANK[line.level] < rank) return null;
+          const y = 106 + index * 28;
+          const color = LOG_COLORS[line.level];
+          return (
+            <g key={line.level}>
+              <circle cx="108" cy={y} r="2.5" fill={color} />
+              <text x="120" y={y + 4} fill={color} fontFamily="var(--asb-font-code)" fontSize="11">{line.level}</text>
+              <rect x="176" y={y - 2} width={line.bar} height="4" rx="2" fill={LIGHT.faint} />
+            </g>
+          );
+        }) : (
+          <g fill="none" stroke={LIGHT.muted} strokeWidth="1.5" strokeLinecap="round">
+            <circle cx="216" cy="144" r="20" />
+            <path d="m202 158 28-28 M191 188h50" />
           </g>
-        );
-      }) : (
-        <g fill="none" stroke={DARK.muted} strokeWidth="1.5" strokeLinecap="round">
-          <circle cx="80" cy="53" r="12" />
-          <path d="m72 61 16-16 M60 77h40" />
-        </g>
-      )}
+        )}
+      </WindowFrame>
     </PreviewCanvas>
   );
 }
@@ -140,23 +146,24 @@ export function StartupPagePreview({ page }: { page: StartupPage }) {
       <WindowFrame palette={LIGHT} active={providers ? 0 : null}>
         {providers ? (
           <>
-            <rect x="40" y="32" width="38" height="4" rx="2" fill={LIGHT.text} />
-            {[46, 67].map((y, index) => (
+            <rect x="108" y="89" width="88" height="5" rx="2.5" fill={LIGHT.muted} />
+            {[114, 174].map((y, index) => (
               <g key={y}>
-                <rect x="40" y={y} width="102" height="17" rx="5" fill={LIGHT.rail} />
-                <circle cx="49" cy={y + 8.5} r="3" fill={index === 0 ? LIGHT.accent : LIGHT.muted} />
-                <rect x="58" y={y + 5} width={index === 0 ? 40 : 30} height="3" rx="1.5" fill={LIGHT.muted} />
-                <rect x="58" y={y + 11} width="22" height="2" rx="1" fill={LIGHT.faint} />
+                <rect x="104" y={y} width="226" height="42" rx="10" fill={LIGHT.rail} />
+                <circle cx="128" cy={y + 21} r="5" fill={LIGHT.faint} />
+                <text x="148" y={y + 18} fill={LIGHT.muted} fontFamily="var(--asb-font-ui)" fontSize="12" fontWeight="500">
+                  {index === 0 ? "Codex" : "Claude Code"}
+                </text>
+                <rect x="148" y={y + 28} width={index === 0 ? 102 : 74} height="3" rx="1.5" fill={LIGHT.faint} />
               </g>
             ))}
           </>
         ) : (
           <>
-            <path d="M64 46v-9l-9 9 9 9v-9h14a15 15 0 1 1-11 25" fill="none"
-              stroke={LIGHT.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="113" cy="62" r="13" fill={LIGHT.surface} stroke={LIGHT.muted} strokeWidth="1.5" />
-            <path d="M113 54v8l5 3" fill="none" stroke={LIGHT.text} strokeWidth="1.5" strokeLinecap="round" />
-            <rect x="62" y="86" width="58" height="3" rx="1.5" fill={LIGHT.faint} />
+            <path d="M190 124v-10l-10 10 10 10v-10h8" fill="none" stroke={LIGHT.faint}
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="224" cy="148" r="25" fill="none" stroke={LIGHT.muted} strokeWidth="1.5" />
+            <path d="M224 134v14l10 6" fill="none" stroke={LIGHT.accent} strokeWidth="2" strokeLinecap="round" />
           </>
         )}
       </WindowFrame>

@@ -123,7 +123,8 @@ pub(super) fn include_observed(root: &Path, sources: &mut Vec<SessionSource>, is
         }
         completed.insert(format!("{}:{}", header.source_key, header.revision));
         sources.push(SessionSource {
-            meta: header.meta, paths: Vec::new(), native_history: None, converted: Some(path), retained: Vec::new(), index_root: root.into() });
+            meta: header.meta, paths: Vec::new(), native_database: None, native_history: None,
+            converted: Some(path), retained: Vec::new(), index_root: root.into() });
     }
     issues.retain(|issue| issue.conversion_id.as_ref().is_none_or(|id| !completed.contains(id)));
     issues.extend(failures.into_iter().map(|message| SessionIssue::new(AppKind::Claude, message)));

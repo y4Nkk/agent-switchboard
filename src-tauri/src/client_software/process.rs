@@ -1,4 +1,14 @@
-use std::{io::Read, process::{Child, Command, Stdio}, sync::mpsc, time::{Duration, Instant}};
+use std::{io::Read, path::{Path, PathBuf}, process::{Child, Command, Stdio}, sync::mpsc, time::{Duration, Instant}};
+
+/// Node/npm path arguments need ordinary paths; installation identity stays canonical.
+pub fn command_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    if let Some(path) = path.to_str() {
+        if let Some(path) = path.strip_prefix(r"\\?\UNC\") { return PathBuf::from(format!(r"\\{path}")); }
+        if let Some(path) = path.strip_prefix(r"\\?\") { return PathBuf::from(path); }
+    }
+    path.to_path_buf()
+}
 
 pub fn quiet(command: &mut Command) -> &mut Command {
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -130,4 +140,29 @@ pub fn version(text: &str) -> Option<String> {
         let candidate = word.trim_start_matches('v');
         semver::Version::parse(candidate).ok().map(|v| v.to_string())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn node_paths_project_drives_and_unc_without_changing_regular_paths() {
+        for (source, expected) in [
+            (r"\\?\C:\安装 目录\npm-cli.js", r"C:\安装 目录\npm-cli.js"),
+            (r"\\?\UNC\server\share\codex.js", r"\\server\share\codex.js"),
+            (r"C:\node\npm-cli.js", r"C:\node\npm-cli.js"),
+            (r"\\?\C:\npm prefix", r"C:\npm prefix"),
+            (r"\\?\UNC\server\npm prefix", r"\\server\npm prefix"),
+        ] { assert_eq!(command_path(Path::new(source)), PathBuf::from(expected)); }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_paths_preserve_unix_path_bytes() {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        let path = Path::new(OsStr::from_bytes(b"/node/\xff/npm-cli.js"));
+        assert_eq!(command_path(path).as_os_str().as_bytes(), path.as_os_str().as_bytes());
+    }
 }

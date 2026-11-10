@@ -8,7 +8,7 @@ Codex 原生会话列表默认按当前 model_provider 筛选。旧工具创建�
 
 ## Decision
 
-会话记录的历史页签在全部或 Codex 范围提供「Codex 会话归属」：先关闭 Codex 桌面与 CLI，预览所有活动、归档及原生登记记录中非 openai 的供应商分组、会话数、原始文件数及数据库行数，再显式确认。该操作只改 threads.model_provider 和原始 JSONL / JSONL.ZST 首条 session_meta 的 model_provider，不改账号、连接、正文、模型、会话身份、时间或归档状态；不使第三方历史成为官方云端会话。
+会话记录的历史页签在 Codex 筛选范围提供「Codex 会话归属」：先关闭 Codex 桌面与 CLI，预览所有活动、归档及原生登记记录中非 openai 的供应商分组、会话数、原始文件数及数据库行数，再显式确认。该操作只改 threads.model_provider 和原始 JSONL / JSONL.ZST 首条 session_meta 的 model_provider，不改账号、连接、正文、模型、会话身份、时间或归档状态；不使第三方历史成为官方云端会话。入口按[客户端操作归属](2026-11-10-session-context-actions-and-native-delete.md)收窄到明确的 Codex 视图。
 
 session_manager/provider_transfer 唯一拥有预览、作用域、文件前后哈希、备份与恢复日志。后端解析 CODEX_HOME、sqlite_home 与 CODEX_SQLITE_HOME；前端只提交操作 ID 和确认标志，不能传路径、供应商 ID、SQL 或会话文件内容。预览展示实际数据与索引位置，并列出活动、归档目录之外的登记文件路径。目标身份直接使用既有供应商配置所有者的 CODEX_PROVIDER_ID，不维护另一份常量。原生登记库与可读日志同步处理；原件缺失时明确计数，仅整理已有登记，不重建消息。登记的外部日志需经原生 ID 与元信息核实，目录链接及身份冲突拒绝写入。
 

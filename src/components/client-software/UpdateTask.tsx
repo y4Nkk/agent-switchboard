@@ -12,7 +12,8 @@ export function UpdateTask({ task, busy, onCancel }: {
   task: ClientUpdateTask; busy: boolean; onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const [output, setOutput] = useState(false);
+  const [output, setOutput] = useState<boolean | null>(null);
+  const failed = task.phase === "failed" || task.phase === "needsAttention";
   return <section className="asb-software-task" aria-label={t("software.task")}>
     <div className="asb-software-heading">
       <strong>{task.plan.app === "codex" ? "Codex" : "Claude Code"}</strong>
@@ -26,7 +27,7 @@ export function UpdateTask({ task, busy, onCancel }: {
     ]} />
     {task.error && <p role="alert" className="asb-warn-text">{localizedMessageText(task.error, t)}</p>}
     {task.cancellable && <Button variant="secondary" size="compact" disabled={busy} onClick={onCancel}>{t("software.cancel")}</Button>}
-    {task.log.length > 0 && <CollapsibleSection quiet open={output} onOpenChange={setOutput} label={t("software.output")}>
+    {task.log.length > 0 && <CollapsibleSection quiet open={output ?? failed} onOpenChange={setOutput} label={t("software.output")}>
       <CodePreview target={t("software.output")} content={task.log.join("\n")} />
     </CollapsibleSection>}
   </section>;

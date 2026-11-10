@@ -10,7 +10,7 @@ fn search(sources: Vec<SessionSource>, issues: Vec<SessionIssue>, query: &str, a
 }
 
 fn source(path: &Path, id: &str) -> SessionSource {
-    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None, retained: Vec::new(),
+    SessionSource { paths: vec![path.to_path_buf()], native_database: None, native_history: None, converted: None, retained: Vec::new(),
         index_root: path.parent().unwrap().join(".asb-read-index"), meta: SessionMeta {
         app: AppKind::Codex, session_id: id.into(), title: "metadata title".into(),
         summary: "summary".into(), project_dir: Some("/projects/example".into()),

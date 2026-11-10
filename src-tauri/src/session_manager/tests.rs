@@ -249,43 +249,11 @@ fn deleting_claude_sidecars_cleans_only_metadata_whose_entire_source_is_removed(
     let mut copied = fixture_source(&temp.path().join("main/subagents/agent-two.jsonl"), AppKind::Claude, "main-agent-two");
     copied.paths.push(temp.path().join("retained/subagents/agent-two.jsonl"));
     let sources = vec![main.clone(), inside, copied];
-    assert_eq!(removed_organization_ids(&main, &sources), ["main", "main-agent-one"]);
+    assert_eq!(removed_claude_ids(&main, &sources), ["main", "main-agent-one"]);
 }
 
 #[test]
-fn removes_only_the_resolved_codex_record_without_touching_siblings() {
-    let temp = tempdir().expect("temp");
-    let record = temp.path().join("session-1.jsonl");
-    let sidecar = temp.path().join("session-1");
-    write(&record, "{\"type\":\"user\"}\n");
-    fs::create_dir_all(sidecar.join("parts")).expect("create sidecar");
-    write(&sidecar.join("parts").join("chunk.bin"), "payload");
-    let unrelated = temp.path().join("session-2.jsonl");
-    write(&unrelated, "{\"type\":\"user\"}\n");
-
-    remove_session_source(&record).expect("delete raw record");
-    assert!(!record.exists(), "会话记录应被删除");
-    assert!(sidecar.exists(), "原生 Codex 附属目录由客户端拥有");
-    assert!(unrelated.exists(), "无关记录必须保留");
-
-    let codex_record = temp.path().join("rollout-1.jsonl");
-    let codex_sidecar = temp.path().join("rollout-1");
-    write(&codex_record, "{\"type\":\"session_meta\"}\n");
-    fs::create_dir_all(&codex_sidecar).expect("create codex sidecar");
-
-    remove_session_source(&codex_record).expect("delete codex record");
-    assert!(!codex_record.exists(), "会话记录应被删除");
-    assert!(codex_sidecar.exists(), "Codex 不清理同名目录");
-}
-
-#[test]
-fn a_resolved_record_that_is_already_absent_can_finish_metadata_cleanup() {
-    let temp = tempdir().expect("temp");
-    remove_session_source(&temp.path().join("gone.jsonl")).unwrap();
-}
-
-#[test]
-fn batch_deletion_reports_each_request_and_removes_only_resolved_records() {
+fn batch_deletion_deduplicates_requests_and_preserves_records_on_invalid_identity() {
     let temp = tempdir().expect("temp");
     let root = temp.path().join("codex").join("sessions");
     for (file, id) in [("one.jsonl", "codex-one"), ("two.jsonl", "codex-two")] {
@@ -318,7 +286,7 @@ fn batch_deletion_reports_each_request_and_removes_only_resolved_records() {
     );
 
     assert_eq!(outcomes.len(), 4, "重复请求只回答一次");
-    assert!(outcomes[0].deleted && outcomes[0].error.is_none());
+    assert!(!outcomes[0].deleted && outcomes[0].error.as_deref().unwrap().contains("UUID"));
     assert!(!outcomes[1].deleted);
     assert!(outcomes[1]
         .error
@@ -330,7 +298,7 @@ fn batch_deletion_reports_each_request_and_removes_only_resolved_records() {
         "同一 ID 属于另一客户端时不得跨客户端删除"
     );
     assert_eq!(outcomes[3].error.as_deref(), Some("会话 ID 无效"));
-    assert!(!root.join("one.jsonl").exists());
+    assert!(root.join("one.jsonl").exists(), "原生命令拒绝的身份不能退回文件删除");
     assert!(
         root.join("two.jsonl").exists(),
         "未解析到的请求不得影响其他记录"

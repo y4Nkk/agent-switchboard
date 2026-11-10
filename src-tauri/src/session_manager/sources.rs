@@ -13,6 +13,7 @@ static DISCOVERY_GATE: Mutex<()> = Mutex::new(());
 pub(crate) struct SessionSource {
     pub meta: SessionMeta,
     pub paths: Vec<PathBuf>,
+    pub native_database: Option<PathBuf>,
     pub native_history: Option<PathBuf>,
     pub converted: Option<PathBuf>,
     pub index_root: PathBuf,
@@ -110,9 +111,10 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
     let codex_root = super::codex_root()?;
     let mut indexed = HashMap::new();
     let mut issues = Vec::new();
-    let mut native_unavailable = false;
+    let native_unavailable;
     match if app == Some(AppKind::Claude) { Ok((Vec::new(), Vec::new())) } else { native::threads_matching(&codex_root, session, checkpoint) } {
         Ok((threads, warnings)) => {
+            native_unavailable = !warnings.is_empty();
             issues.extend(warnings.into_iter().map(|message| SessionIssue::new(AppKind::Codex, message)));
             for thread in threads {
                 checkpoint()?;
@@ -138,7 +140,8 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
                     }
                 };
                 indexed.insert((AppKind::Codex, thread.meta.session_id.clone()), SessionSource {
-                    meta: thread.meta, paths, native_history: history, converted: None, retained: Vec::new(), index_root: root.into() });
+                    meta: thread.meta, paths, native_database: Some(thread.database), native_history: history,
+                    converted: None, retained: Vec::new(), index_root: root.into() });
             }
         },
         Err(message) => { native_unavailable = true; issues.push(SessionIssue::new(AppKind::Codex, message)); },
@@ -157,15 +160,17 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
         }
     }
     checkpoint()?;
-    let (titles, warnings) = if indexed.values().any(|source| source.meta.app == AppKind::Codex && source.meta.can_delete) {
+    let (titles, warnings) = if indexed.values().any(|source| source.meta.app == AppKind::Codex && source.native_database.is_none()) {
         codex_titles::load(&codex_root)
     } else { (HashMap::new(), Vec::new()) };
     issues.extend(warnings.into_iter().map(|message| SessionIssue::new(AppKind::Codex, message)));
     for source in indexed.values_mut() {
         source.paths.sort();
-        if source.meta.app == AppKind::Codex && source.meta.can_delete {
-            if let Some(title) = titles.get(&source.meta.session_id) { source.meta.title = parser::clamp_title(title); }
-            if native_unavailable { source.meta.can_delete = false; }
+        if source.meta.app == AppKind::Codex {
+            if source.native_database.is_none() {
+                if let Some(title) = titles.get(&source.meta.session_id) { source.meta.title = parser::clamp_title(title); }
+                source.meta.can_delete = !native_unavailable && uuid::Uuid::parse_str(&source.meta.session_id).is_ok();
+            }
         }
     }
     Ok((indexed.into_values().collect(), issues))
@@ -237,7 +242,7 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
             if source.meta.created_at.is_none() { source.meta.created_at = identity.created_at; }
         }
         if source.paths.contains(&path) { return Ok(issues); }
-        if source.meta.can_delete {
+        if source.native_database.is_none() {
             let (next, warnings) = index.file_prefix(&format!("metadata-{}", app.label()), &path, checkpoint, |reader| parser::parse_session_reader(app, &path, reader, checkpoint).map_err(|error| error.to_string()))?;
             if next.session_id != id { return Err("会话身份在发现期间被替换，已跳过本次来源".into()); }
             issues.extend(warnings);
@@ -257,7 +262,8 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
     if meta.session_id != id { return Err("会话身份在发现期间被替换，已跳过本次来源".into()); }
     issues.extend(warnings);
     if child { meta.parent_session_id = Some(id); meta.session_id = key_id.clone(); }
-    indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_history: None, converted: None, retained: Vec::new(), index_root: root.into() });
+    indexed.insert((app, key_id), SessionSource { meta, paths: vec![path], native_database: None,
+        native_history: None, converted: None, retained: Vec::new(), index_root: root.into() });
     Ok(issues)
 }
 

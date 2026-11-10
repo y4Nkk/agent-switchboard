@@ -228,28 +228,7 @@ pub async fn resume_session(
     .await
 }
 
-/// Permanently removes the one local session record the backend resolves from
-/// the approved roots. Irreversible by contract; the confirmation sheet in
-/// the renderer is the only gate.
-#[tauri::command]
-pub async fn delete_session(app_handle: AppHandle, app: AppKind, session_id: String) -> Result<(), CommandError> {
-    let local = state(&app_handle)?;
-    observe(RuntimeLogAction::SessionDeleted, async move {
-        blocking(move || {
-            crate::session_manager::delete_session(local.root(), app, &session_id)
-                .map_err(|message| CommandError::localized(
-                    "session-delete-failed",
-                    "errors.sessions.deleteFailed",
-                    message.clone(),
-                    serde_json::json!({ "detail": message }),
-                ))
-        })
-        .await
-    })
-    .await
-}
-
-/// Batch counterpart of `delete_session`: one scan resolves every requested
+/// The session deletion entry point: one scan resolves every requested
 /// record and each item reports its own outcome, so an unresolved or
 /// undeletable id never blocks the rest. Only an unreadable root set fails
 /// the whole call.

@@ -44,7 +44,7 @@ pub(super) fn sources_observed(connection: &Connection, database: &Path, checkpo
             source.retained.push(transcript);
         } else {
             sources.insert(meta.session_id.clone(), SessionSource { meta, paths: vec![origin],
-                native_history: None, converted: None, retained: vec![transcript],
+                native_database: None, native_history: None, converted: None, retained: vec![transcript],
                 index_root: database.parent().and_then(Path::parent).ok_or("保留库目录无效")?.into() });
         }
     }

@@ -7,7 +7,7 @@ import { useMessageState } from "../../i18n/use-message-state";
 import { Button } from "../Button";
 import { CollapsibleSection } from "../Collapsible";
 import { ClientManagementModule } from "../client-management/ClientManagementModule";
-import { SoftwareCard } from "./SoftwareCard";
+import { SoftwareTable } from "./SoftwareTable";
 import { UpdateReview } from "./UpdateReview";
 import { UpdateTask } from "./UpdateTask";
 import { useClientSoftware } from "./useClientSoftware";
@@ -30,9 +30,9 @@ export function ClientSoftwarePanel({ client, active }: { client: AppKind; activ
       <p className="asb-scope-note">{t(software.snapshot.issues.length ? "software.discoveryIncomplete" : "software.notInstalled")}</p>
       <Button variant="secondary" size="compact" onClick={() => void openUrl(url).catch(setLinkError)}>{t("software.installGuide")}</Button>
     </div>}
-    {software.task && <UpdateTask task={software.task} busy={software.busy} onCancel={() => void software.cancel()} />}
-    {items.map((item) => <SoftwareCard key={item.id} item={item} disabled={software.busy || software.updating}
-      onUpdate={() => void software.prepare(item.id)} />)}
+    {software.task && <UpdateTask key={software.task.id} task={software.task} busy={software.busy} onCancel={() => void software.cancel()} />}
+    {items.length > 0 && <SoftwareTable key={client} items={items} disabled={software.busy || software.updating}
+      onUpdate={(id) => void software.prepare(id)} />}
     {!!software.snapshot?.issues.length && <CollapsibleSection quiet open={issues} onOpenChange={setIssues} label={t("software.issues")}>
       <ul className="asb-software-issues">{software.snapshot.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
     </CollapsibleSection>}

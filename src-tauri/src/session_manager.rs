@@ -5,8 +5,8 @@
 //! preserved in the application's session library before consumers read them.
 //! Explicit resume reconstructs a managed transcript and starts the fixed CLI
 //! with current credentials. Explicit deletion removes original and saved data.
-//! Codex owns its native history; reads remain read-only. The explicit provider
-//! transfer is the sole metadata-write operation, with preview and recovery.
+//! Codex owns its native history; reads remain read-only. Explicit deletion
+//! delegates to Codex; provider transfer changes metadata with preview and recovery.
 //! Explicit workflow conversion saves complete application-owned copies; all
 //! consumers resolve the same local state root and shared message contract.
 
@@ -19,6 +19,7 @@ pub(crate) mod diagnostics;
 mod content;
 mod images;
 mod native;
+mod codex_deletion;
 mod timeline;
 mod jsonl;
 mod layout;
@@ -56,12 +57,12 @@ pub use organization::{update_session_organization, SessionOrganizationChange};
 use asb_core::contracts::AppKind;
 #[cfg(test)]
 use parser::collect_messages;
-use resume::resume_command;
-#[cfg(test)] use resume::resume_arguments;
+#[cfg(test)] use resume::{resume_arguments, resume_command};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 #[cfg(test)]
 use std::collections::HashMap;
+#[cfg(test)]
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -167,20 +168,9 @@ pub fn resume_session(root: &Path, app: AppKind, session_id: &str) -> Result<Ses
     })
 }
 
-/// Permanently removes the local session record resolved from the approved
-/// roots. The renderer supplies only the supported client plus a validated
-/// session id; the resolved path never crosses the IPC boundary. Claude Code
-/// keeps an optional directory named after the transcript stem beside the
-/// record; it belongs to this session's identity and is removed with it.
-pub fn delete_session(root: &Path, app: AppKind, session_id: &str) -> Result<(), String> {
-    let (sources, issues) = scan_sources(root)?;
-    let source = locate(&sources, &issues, app, session_id)?;
-    let ids = removed_organization_ids(source, &sources);
-    organization::delete_with_sources(root, app, &ids, || remove_source(root, source, &ids, None))
-}
-
 /// Deletes several records against one scan. Each request resolves and
 /// fails on its own line; a repeated (client, id) pair is answered once.
+/// Known subagents removed by Codex also receive outcomes for UI cleanup.
 /// Only an unreadable root set aborts the batch before anything is removed.
 pub fn delete_sessions(
     root: &Path,
@@ -251,41 +241,49 @@ fn delete_resolved(
     cutoff: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Vec<SessionDeleteOutcome> {
     let mut seen = HashSet::new();
-    let mut outcomes = Vec::with_capacity(requests.len());
+    let mut outcomes: Vec<SessionDeleteOutcome> = Vec::with_capacity(requests.len());
     for request in requests {
         if !seen.insert((request.app, request.session_id.clone())) {
             continue;
         }
-        let source = locate(sources, issues, request.app, &request.session_id);
-        let result = source.as_ref().map_err(|error| error.clone()).and_then(|source| {
-            let ids = removed_organization_ids(source, sources);
-            organization::delete_with_sources(root, request.app, &ids,
-                || remove_source(root, source, &ids, cutoff))
-        });
-        let deleted = result.is_ok() || source.is_ok_and(|source| source.retained.is_empty() && source.meta.can_delete
-            && ((!source.paths.is_empty() && source.paths.iter().all(|path| matches!(path.try_exists(), Ok(false))))
-                || source.converted.as_ref().is_some_and(|path| matches!(path.try_exists(), Ok(false)))));
-        outcomes.push(SessionDeleteOutcome {
-            app: request.app,
-            session_id: request.session_id.clone(),
-            deleted,
-            error: result.err(),
-        });
+        let result = locate(sources, issues, request.app, &request.session_id)
+            .and_then(|source| delete_source(root, source, sources, cutoff));
+        let resolved = result.unwrap_or_else(|error| vec![SessionDeleteOutcome {
+            app: request.app, session_id: request.session_id.clone(), deleted: false, error: Some(error),
+        }]);
+        for outcome in resolved {
+            if outcome.deleted { seen.insert((outcome.app, outcome.session_id.clone())); }
+            if let Some(previous) = outcomes.iter_mut().find(|previous|
+                previous.app == outcome.app && previous.session_id == outcome.session_id) {
+                *previous = outcome;
+            } else {
+                outcomes.push(outcome);
+            }
+        }
     }
     outcomes
 }
 
-fn remove_session_source(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("无法删除会话记录 {}: {error}", path.display())),
+fn delete_source(
+    root: &Path, source: &SessionSource, sources: &[SessionSource],
+    cutoff: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<Vec<SessionDeleteOutcome>, String> {
+    if !source.meta.can_delete {
+        return Err("无法核实会话的原生登记或删除身份，请修复读取问题并刷新后重试".into());
     }
+    if source.meta.app == AppKind::Codex {
+        if cutoff.is_some() { return Err("Codex 会话不属于 Claude 保留库清理范围".into()); }
+        return codex_deletion::remove(root, source, sources);
+    }
+    let ids = removed_claude_ids(source, sources);
+    let result = organization::delete_with_sources(root, AppKind::Claude, &ids,
+        || remove_claude_source(root, source, &ids, cutoff));
+    let deleted = result.is_ok() || source.converted.as_ref().is_some_and(|path| matches!(path.try_exists(), Ok(false)));
+    Ok(vec![SessionDeleteOutcome { app: AppKind::Claude, session_id: source.meta.session_id.clone(), deleted, error: result.err() }])
 }
 
-fn removed_organization_ids(source: &SessionSource, sources: &[SessionSource]) -> Vec<String> {
+fn removed_claude_ids(source: &SessionSource, sources: &[SessionSource]) -> Vec<String> {
     let mut ids = vec![source.meta.session_id.clone()];
-    if source.meta.app != AppKind::Claude { return ids; }
     let directories: Vec<_> = source.paths.iter().filter_map(|path| path.file_stem().map(|stem| path.with_file_name(stem))).collect();
     for candidate in sources {
         if candidate.meta.app == AppKind::Claude && candidate.converted.is_none()
@@ -301,7 +299,7 @@ fn removed_organization_ids(source: &SessionSource, sources: &[SessionSource]) -
     ids
 }
 
-fn remove_source(
+fn remove_claude_source(
     root: &Path, source: &SessionSource, ids: &[String], cutoff: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), String> {
     if cutoff.is_some() && (source.meta.app != AppKind::Claude
@@ -310,12 +308,7 @@ fn remove_source(
     }
     if let Some(path) = &source.converted { return conversion::remove(root, path, &source.meta.session_id); }
     if !source.retained.is_empty() { return history::delete(root, ids, cutoff); }
-    if !source.meta.can_delete {
-        return Err("Codex 原生历史由 Codex 管理，请在 Codex 中删除此会话；本应用只读原生历史库".into());
-    }
-    if source.meta.app == AppKind::Claude { return Err("Claude 会话必须通过本机保留库管理删除".into()); }
-    for path in &source.paths { remove_session_source(path)?; }
-    Ok(())
+    Err("Claude 会话必须通过本机保留库管理删除".into())
 }
 
 pub(crate) fn resolve_session(root: &Path, app: AppKind, session_id: &str) -> Result<SessionSource, String> {
@@ -404,7 +397,7 @@ fn scan_session_source_roots(
 
 #[cfg(test)]
 pub(crate) fn fixture_source(path: &Path, app: AppKind, id: &str) -> SessionSource {
-    SessionSource { paths: vec![path.to_path_buf()], native_history: None, converted: None, retained: Vec::new(),
+    SessionSource { paths: vec![path.to_path_buf()], native_database: None, native_history: None, converted: None, retained: Vec::new(),
         index_root: path.parent().unwrap_or(Path::new(".")).join(".asb-read-index"),
         meta: SessionMeta { app, session_id: id.into(), title: id.into(), summary: String::new(),
             project_dir: None, created_at: None, last_active_at: None,

@@ -14,6 +14,7 @@ mod updater;
 use crate::{commands::error::CommandError, local_state::LocalState};
 use plan::Prepared;
 pub(crate) use error::SoftwareError;
+pub(crate) use process::{command_path, output};
 use types::{Form, Snapshot, Software, UpdatePlan, UpdateTask};
 use std::{collections::HashMap, sync::{Arc, Mutex, MutexGuard, atomic::AtomicBool}};
 
