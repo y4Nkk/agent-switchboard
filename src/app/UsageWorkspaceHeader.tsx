@@ -4,6 +4,7 @@ import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import type { CodexProbeFormState } from "../components/CodexProbePanel";
 import { RadioOption } from "../components/RadioOption";
+import { RequestUsageFilters } from "../components/request-usage/RequestUsageFilters";
 import { Select } from "../components/Select";
 import { Tabs } from "../components/Tabs";
 import { Time } from "../components/Time";
@@ -13,6 +14,7 @@ import type { MessageKey } from "../i18n/messages";
 import type { useCodexOfficialReset, useCodexResetSignal } from "../components/quota-reads";
 import type { useCodexProbe } from "./useCodexProbe";
 import type { useModelUsageReport } from "../pages/use-model-usage-report";
+import type { useRequestUsage } from "../pages/use-request-usage";
 import type { useResourceUsage } from "../pages/use-resource-usage";
 import type { useProviderQuotaRefresh } from "../pages/use-provider-quota-refresh";
 import { USAGE_SECTIONS, type UsageSection } from "./navigation";
@@ -89,6 +91,7 @@ interface HeaderProps {
     onRangeChange: (range: ModelUsageRange) => void;
     usage: ReturnType<typeof useModelUsageReport>;
   };
+  performance: ReturnType<typeof useRequestUsage>;
   officialReset: ReturnType<typeof useCodexOfficialReset>;
   resetSignal: ReturnType<typeof useCodexResetSignal>;
   radar: RadarControlsProps;
@@ -128,20 +131,34 @@ function resetSourceFreshness(
   );
 }
 
-export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption,
+export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption, performance,
   officialReset, resetSignal, radar, resources, providerQuota }: HeaderProps) {
   const { t } = useI18n();
-  const { usage } = consumption;
-  const report = usage.read?.report;
   let actions: ReactNode;
   let status: ReactNode;
+  let secondary: ReactNode;
   if (section === "consumption") {
+    const { usage } = consumption;
+    const report = usage.read?.report;
     actions = <ConsumptionControls {...consumption} />;
     status = <>
       {report ? <>{t(usage.loading || usage.error || usage.read?.freshness === "cached"
         ? "usage.status.snapshot" : "usage.status.current")}<Time iso={report.generatedAt} /></>
         : !usage.loading ? t("usage.status.noSummary") : null}
       {usage.loading ? t(report ? "usage.status.updatingSaved" : "usage.loading") : null}
+    </>;
+  } else if (section === "requestPerformance") {
+    const { active, loading, error, report, refresh, query, model, setModel, updateFilters } = performance;
+    actions = <Button variant="secondary" aria-busy={loading} disabled={loading || !active} onClick={refresh}>
+      {t(loading ? "usage.action.refreshing" : "usage.action.refresh")}
+    </Button>;
+    secondary = active && <>
+      <RequestUsageFilters query={query} model={model} onModelChange={setModel} onChange={updateFilters} />
+      {report && <p className="asb-request-usage-status" role="status">
+        <span>{t(error || loading ? "usagePerformance.previous" : "usagePerformance.updated")}
+          <Time iso={new Date(report.generatedAtMs).toISOString()} mode="relative" /></span>
+        <span>{t("usagePerformance.verifiedCount", { count: report.summary.records })}</span>
+      </p>}
     </>;
   } else if (section === "quota") {
     actions = <>
@@ -171,12 +188,14 @@ export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption
     status = resources.read ? <span className="asb-resource-sampled-at">
       {t("resources.sampledAt")}<Time iso={resources.read.sampledAt} precision="second" />
     </span> : t("resources.noReadings");
-  } else {
+  } else if (section === "radar") {
     actions = <RadarControls {...radar} />;
     status = t("usage.radar.statusNote");
   }
   return <WorkspaceHeader title={t("nav.page.usage")} primary={
     <Tabs value={section} onChange={onSectionChange} scope={id} label={t("usage.tabs.aria")}
       tabs={USAGE_SECTIONS.map((tab) => ({ value: tab.value, label: t(tab.labelKey), controls: `${id}-${tab.value}-panel` }))} />
-  } primaryActions={actions} secondary={<p className="asb-header-status" role={section === "resources" ? undefined : "status"}>{status}</p>} />;
+  } primaryActions={actions} secondary={secondary ?? (
+    <p className="asb-header-status" role={section === "resources" ? undefined : "status"}>{status}</p>
+  )} />;
 }

@@ -22,6 +22,7 @@ export const messages = {
   "nav.section.about": ["关于", "About"],
 
   "nav.section.consumption": ["消耗统计", "Consumption"],
+  "nav.section.requestPerformance": ["请求性能", "Request performance"],
   "nav.section.quota": ["额度与重置", "Quota & Resets"],
   "nav.section.resources": ["资源占用", "Resources"],
   "nav.section.radar": ["降智雷达", "Degradation Radar"],
@@ -43,9 +44,7 @@ export const messages = {
   "shell.information.close": ["收起全局信息", "Close global information"],
   "shell.information.delete": ["删除通知", "Delete notification"],
   "shell.information.clear": ["清空通知", "Clear notifications"],
-  "shell.banner.repairData": ["一键智能修复", "Repair application data"],
   "shell.banner.settingsUnavailable": ["应用设置不可用：{detail}", "App settings unavailable: {detail}"],
-  "shell.banner.repair": ["一键修复", "Quick repair"],
 
   "shell.workspaceRestoring.aria": ["正在恢复工作区", "Restoring workspace"],
   "shell.startupPageReading": ["正在读取启动页面", "Reading startup page"],

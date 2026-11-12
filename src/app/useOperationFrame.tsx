@@ -1,12 +1,12 @@
 import { useCallback, useState } from "react";
 import type { CommandError } from "../api/client";
-import { canRepairApplicationData } from "../api/data-repair";
+import { isApplicationDataError } from "../api/application-preparation";
 import { toast, toastMessage } from "../components/use-toast";
 import { CommandErrorLines } from "./notifications";
 
 /**
  * The cross-domain operation frame: one busy flag and the error gate.
- * Persistent provider/egress data errors keep the actionable repair banner; other
+ * Persistent application-data errors keep their diagnostics; other
  * failure becomes a transient global toast (longer 10s error dwell).
  * Toast copy resolves at render time, so a visible toast follows a language
  * switch; the scrubbed backend message stays as the diagnostic detail line.
@@ -16,7 +16,8 @@ export function useOperationFrame() {
   const [error, setError] = useState<CommandError | null>(null);
 
   const reportError = useCallback((caught: CommandError) => {
-    if (canRepairApplicationData(caught)) {
+    if (caught.code === "application-preparing") return;
+    if (isApplicationDataError(caught)) {
       setError(caught);
       return;
     }

@@ -51,7 +51,7 @@ impl Default for OutboundProxySettings {
 /// text is the scrubbed diagnostic detail; `parts` carries the renderer
 /// translation coordinates.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum OutboundProxyError {
+pub enum OutboundProxyError {
     #[error("无法读取出站代理设置：{0}")]
     Read(String),
     #[error("出站代理设置文件无效")]
@@ -146,85 +146,69 @@ impl OutboundProxySettings {
 }
 
 pub(crate) fn read(state_root: &Path) -> Result<OutboundProxySettings, OutboundProxyError> {
-    let path = settings_path(state_root);
-    let bytes = match std::fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(OutboundProxySettings::default());
-        }
-        Err(error) => return Err(OutboundProxyError::Read(error.to_string())),
-    };
-    let settings: OutboundProxySettings =
-        serde_json::from_slice(&bytes).map_err(|_| OutboundProxyError::Unreadable)?;
+    let bytes = crate::application_data_io::read(&settings_path(state_root)).map_err(OutboundProxyError::Read)?;
+    decode(bytes.as_deref())
+}
+
+fn decode(bytes: Option<&[u8]>) -> Result<OutboundProxySettings, OutboundProxyError> {
+    let Some(bytes) = bytes else { return Ok(OutboundProxySettings::default()); };
+    let settings: OutboundProxySettings = serde_json::from_slice(bytes).map_err(|_| OutboundProxyError::Unreadable)?;
     settings.validate()?;
     Ok(settings)
 }
 
-pub(crate) fn save(
-    state_root: &Path,
-    settings: OutboundProxySettings,
-    expected_revision: &str,
-) -> Result<OutboundProxySettings, OutboundProxyError> {
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct OutboundProxyDraft {
+    pub mode: OutboundProxyMode,
+    pub url: Option<String>,
+}
+
+pub(crate) struct SettingsView {
+    pub settings: Option<OutboundProxySettings>,
+    pub revision: String,
+    pub issue: Option<OutboundProxyError>,
+}
+
+pub(crate) fn view(state_root: &Path) -> Result<SettingsView, OutboundProxyError> {
+    let bytes = crate::application_data_io::read(&settings_path(state_root)).map_err(OutboundProxyError::Read)?;
+    let revision = bytes.as_deref().map(crate::application_data_io::digest).unwrap_or_else(|| "missing".into());
+    match decode(bytes.as_deref()) {
+        Ok(settings) => Ok(SettingsView { settings: Some(settings), revision, issue: None }),
+        Err(error) => Ok(SettingsView { settings: None, revision, issue: Some(error) }),
+    }
+}
+
+pub(crate) fn save(state_root: &Path, draft: OutboundProxyDraft, expected_revision: &str)
+    -> Result<SettingsView, OutboundProxyError> {
+    let settings = OutboundProxySettings { mode: draft.mode, url: draft.url,
+        revision: uuid::Uuid::new_v4().to_string(), ..Default::default() };
     settings.validate()?;
     let _guard = MUTATIONS.lock().map_err(|_| OutboundProxyError::Write("出口设置写入锁不可用".into()))?;
-    let current = read(state_root)?;
-    if current.revision != expected_revision {
-        return Err(OutboundProxyError::RevisionConflict);
-    }
-    if current == settings && current.mode != OutboundProxyMode::System {
-        return Ok(current);
-    }
-    let mut saved = settings;
-    saved.revision = uuid::Uuid::new_v4().to_string();
+    let current = view(state_root)?;
+    if current.revision != expected_revision { return Err(OutboundProxyError::RevisionConflict); }
     let path = settings_path(state_root);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| OutboundProxyError::Write(error.to_string()))?;
+    std::fs::create_dir_all(state_root).map_err(|error| OutboundProxyError::Write(error.to_string()))?;
+    if current.issue.is_some() {
+        let bytes = crate::application_data_io::read(&path).map_err(OutboundProxyError::Read)?.ok_or(OutboundProxyError::RevisionConflict)?;
+        let backup = state_root.join(format!("outbound-proxy-backup-{}.json", uuid::Uuid::new_v4()));
+        crate::application_data_io::write_new(&backup, &bytes).map_err(OutboundProxyError::Write)?;
+        log::info!("原出站设置保留在 {}", backup.display());
     }
-    let temporary = path.with_extension("tmp");
-    std::fs::write(
-        &temporary,
-        serde_json::to_vec_pretty(&saved).map_err(|_| OutboundProxyError::Write("编码失败".into()))?,
-    )
-    .map_err(|error| OutboundProxyError::Write(error.to_string()))?;
-    std::fs::rename(&temporary, &path)
-        .map_err(|error| OutboundProxyError::Write(error.to_string()))?;
-    runtime::update(&saved);
-    Ok(saved)
+    if view(state_root)?.revision != expected_revision { return Err(OutboundProxyError::RevisionConflict); }
+    let bytes = serde_json::to_vec_pretty(&settings).map_err(|error| OutboundProxyError::Write(error.to_string()))?;
+    crate::application_data_io::replace(&path, &bytes).map_err(OutboundProxyError::Write)?;
+    runtime::update(&settings);
+    view(state_root)
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OutboundProxyRepairReport {
-    pub settings: OutboundProxySettings,
-    pub backup_path: Option<String>,
-}
-
-/// Rechecks before repair: valid settings survive, unreadable files are
-/// reported, and invalid bytes are retained before returning to direct mode.
-pub(crate) fn repair(state_root: &Path) -> Result<OutboundProxyRepairReport, OutboundProxyError> {
-    let _guard = MUTATIONS.lock().map_err(|_| OutboundProxyError::Write("出口设置写入锁不可用".into()))?;
+/// Publishes only a validated policy; a failed read also invalidates cached clients.
+pub(crate) fn load(state_root: &Path) -> Result<(), OutboundProxyError> {
+    let _guard = MUTATIONS.lock().map_err(|_| OutboundProxyError::Read("出口设置锁不可用".into()))?;
     match read(state_root) {
-        Ok(settings) => {
-            runtime::update(&settings);
-            return Ok(OutboundProxyRepairReport { settings, backup_path: None });
-        }
-        Err(error) if error.is_io() && error != OutboundProxyError::Unreadable => return Err(error),
-        Err(_) => {}
+        Ok(settings) => { runtime::update(&settings); Ok(()) }
+        Err(error) => { runtime::unavailable(error.clone()); Err(error) }
     }
-    let backup = state_root.join(format!("outbound-proxy-repair-backup-{}.json", uuid::Uuid::new_v4()));
-    std::fs::rename(settings_path(state_root), &backup)
-        .map_err(|error| OutboundProxyError::Write(error.to_string()))?;
-    let settings = OutboundProxySettings::default();
-    runtime::update(&settings);
-    Ok(OutboundProxyRepairReport { settings, backup_path: Some(backup.display().to_string()) })
-}
-
-/// The only startup projection of persisted egress settings.
-pub(crate) fn load(state_root: &Path) -> Result<(), String> {
-    let settings = read(state_root).map_err(|error| error.to_string())?;
-    runtime::update(&settings);
-    Ok(())
 }
 
 fn settings_path(state_root: &Path) -> PathBuf {

@@ -19,6 +19,7 @@ import { codexLoginBlocker } from "../api/official-login";
 import type { ActiveProfileRef } from "../lib/current-provider-name";
 
 interface SnapshotDeps {
+  revision: number;
   onError: (error: CommandError) => void;
 }
 
@@ -33,7 +34,7 @@ export interface ProviderInventory {
  * locks, plus the target profile id. One versioned `refresh` keeps late
  * responses from overwriting newer ones.
  */
-export function useConfigSnapshot({ onError }: SnapshotDeps) {
+export function useConfigSnapshot({ onError, revision }: SnapshotDeps) {
   const [statuses, setStatuses] = useState<ConfigFileStatus[] | null>(null);
   const [records, setRecords] = useState<ProviderRecord[]>([]);
   const [codexOfficialRecords, setCodexOfficialRecords] = useState<ProviderRecord[]>([]);
@@ -107,7 +108,7 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, revision]);
 
   useEffect(() => {
     const onFocus = () => void refresh();

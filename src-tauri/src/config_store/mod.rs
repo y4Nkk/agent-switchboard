@@ -27,6 +27,7 @@ mod saved_provider;
 pub mod snapshot;
 pub(crate) use saved_provider::SavedProvider;
 
+pub(crate) const REPAIR_JOURNAL_FILE: &str = "configuration-repair.json";
 pub(crate) const SWITCH_INTENT_FILE: &str = "switch-intent.json";
 pub(crate) const PROFILE_PREIMAGE_FILE: &str = "save-before.json";
 const RETIRED_UPGRADE_JOURNAL_FILE: &str = "configuration-upgrade.json";
@@ -50,7 +51,7 @@ impl std::fmt::Display for ProfileStoreError {
         match self {
             Self::Unreadable => formatter.write_str("配置存储不可读"),
             Self::Unsupported => formatter
-                .write_str("配置存储格式无效或来自已不受支持的旧版本；请使用智能修复查看原因"),
+                .write_str("配置存储格式无效或不受支持；原件已保留，请查看应用数据检查详情"),
         }
     }
 }
@@ -193,6 +194,10 @@ impl ConfigStore {
 
     /// Startup and runtime readers accept only the current layout.
     pub fn ensure_layout(&self) -> Result<(), ProfileStoreError> {
+        let recovery = self.state_root.join(REPAIR_JOURNAL_FILE);
+        if recovery.is_symlink() || recovery.try_exists().map_err(|_| ProfileStoreError::Unreadable)? {
+            return Err(ProfileStoreError::Unsupported);
+        }
         if self.retired_layout_markers().into_iter().any(|path| path.exists())
             || (self.client_dir("client-settings").exists()
                 && !self.client_dir("client-settings").is_dir())

@@ -2,6 +2,8 @@
 macro_rules! handler {
     () => {
         tauri::generate_handler![
+            crate::application_preparation::get_application_preparation,
+            crate::application_preparation::recheck_application_data,
             crate::commands::client_software::read_client_software,
             crate::commands::client_software::select_client_software,
             crate::commands::client_software::refresh_client_software,
@@ -68,7 +70,6 @@ macro_rules! handler {
             crate::commands::create_codex_profile,
             crate::commands::delete_codex_profile,
             crate::commands::reorder_codex_profiles,
-            crate::commands::repair_application_data,
             crate::commands::switching::prepare_profile_save,
             crate::commands::switching::commit_profile_save,
             crate::commands::switching::prepare_codex_profile_save,
@@ -201,10 +202,8 @@ macro_rules! handler {
             changelog::changelog_section,
             crate::commands::get_app_settings,
             crate::commands::set_app_settings,
-            crate::commands::repair_app_settings,
             crate::commands::get_outbound_proxy_settings,
             crate::commands::set_outbound_proxy_settings,
-            crate::commands::repair_outbound_proxy_settings,
             crate::commands::workspace::get_startup_page,
             crate::commands::workspace::remember_workspace_page,
             crate::commands::workspace::get_sidebar_collapsed,

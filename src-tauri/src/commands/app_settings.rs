@@ -89,44 +89,6 @@ pub async fn set_app_settings(
     Ok(saved)
 }
 
-/// One-click repair for an invalid app-settings file: replaces it with
-/// validated defaults. Persisting runs before the live desktop settings are
-/// applied so a repair is never lost to a window-state failure.
-#[tauri::command]
-pub async fn repair_app_settings(app: tauri::AppHandle) -> Result<AppSettingsSnapshot, CommandError> {
-    let desktop = app.state::<DesktopSettingsState>();
-    let _guard = desktop.gate.lock().await;
-    let app_for_apply = app.clone();
-    let repair_app = app.clone();
-    let repaired = observe(RuntimeLogAction::AppSettingsRepaired, async move {
-        let state = state(&repair_app)?;
-        blocking(move || {
-            state
-                .repair_app_settings()
-                .map_err(|error| {
-                    CommandError::localized(
-                        "app-settings-repair-failed",
-                        "errors.settings.repairFailed",
-                        error.clone(),
-                        serde_json::json!({ "detail": error }),
-                    )
-                })
-        })
-        .await
-    })
-    .await?;
-    match apply_desktop_settings(&app_for_apply, &repaired) {
-        Ok(()) => desktop.set_error(None),
-        Err(error) => {
-            log::error!("设置文件已修复，但桌面偏好应用失败：{}", error.message);
-            desktop.set_error(Some(error));
-        }
-    }
-    crate::runtime_log::set_level(repaired.runtime_log_level);
-    crate::tray::refresh(&app_for_apply);
-    Ok(AppSettingsSnapshot { settings: repaired, desktop_error: desktop.error()? })
-}
-
 fn restore_desktop_settings(app: &tauri::AppHandle, previous: &AppSettings, error: CommandError) -> CommandError {
     let error = match apply_desktop_settings(app, previous) {
         Ok(()) => error,

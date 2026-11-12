@@ -17,6 +17,7 @@ import { RequestUsagePanel } from "../components/request-usage/RequestUsagePanel
 import { ResourceUsagePage } from "../pages/ResourceUsagePage";
 import { useResourceUsage } from "../pages/use-resource-usage";
 import { useModelUsageReport } from "../pages/use-model-usage-report";
+import { useRequestUsage } from "../pages/use-request-usage";
 import { UsageWorkspaceHeader } from "./UsageWorkspaceHeader";
 import type { UsageSection } from "./navigation";
 
@@ -61,10 +62,10 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [range, setRange] = useState<ModelUsageRange>("last7Days");
-  const [performanceRefresh, setPerformanceRefresh] = useState(0);
   useEffect(() => { if (section === "radar") setRadarOpened(true); }, [section]);
   const consumptionActive = visible && section === "consumption";
   const usage = useModelUsageReport(consumptionActive, range);
+  const performance = useRequestUsage(visible && section === "requestPerformance");
   const resourcesActive = visible && section === "resources";
   const resources = useResourceUsage(resourcesActive);
   const showResources = section === "resources" || resources.read !== null || resources.error !== null;
@@ -80,18 +81,18 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
     <section className="asb-page-stack" aria-label={t("usage.workspace.aria")}>
       <div hidden={showHistory}>
         <UsageWorkspaceHeader id={id} section={section} onSectionChange={onSectionChange}
-          consumption={{ active: consumptionActive, range, onRangeChange: setRange,
-            usage: { ...usage, refresh: () => { usage.refresh(); setPerformanceRefresh((value) => value + 1); } } }}
+          consumption={{ active: consumptionActive, range, onRangeChange: setRange, usage }}
+          performance={performance}
           resources={{ ...resources, active: resourcesActive }}
           officialReset={officialReset} resetSignal={resetSignal} providerQuota={providerQuota}
           radar={{ active: radarActive, probe, form, onQuestionChange: setQuestionId,
             runCount, onRunCountChange: setRunCount,
             onOpenHistory: () => { setHistoryOpened(true); setHistoryOpen(true); } }} />
         <div id={`${id}-consumption-panel`} role="tabpanel" aria-labelledby={`${id}-consumption-tab`} hidden={section !== "consumption"}>
-          <div className="asb-page-stack">
-            {consumptionActive && <UsagePage usage={usage} />}
-            <RequestUsagePanel active={consumptionActive} refreshToken={performanceRefresh} />
-          </div>
+          {consumptionActive && <UsagePage usage={usage} />}
+        </div>
+        <div id={`${id}-requestPerformance-panel`} role="tabpanel" aria-labelledby={`${id}-requestPerformance-tab`} hidden={section !== "requestPerformance"}>
+          {performance.active && <RequestUsagePanel performance={performance} />}
         </div>
         <div id={`${id}-quota-panel`} role="tabpanel" aria-labelledby={`${id}-quota-tab`} hidden={section !== "quota"}>
           {quotaActive && <div className="asb-page-stack">

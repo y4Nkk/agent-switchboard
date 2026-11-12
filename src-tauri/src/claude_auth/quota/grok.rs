@@ -6,7 +6,7 @@ pub(super) const ENDPOINT: &str =
     "https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig";
 
 pub(super) fn fetch(url: &str, token: &str, now: i64) -> Result<ClaudeQuotaWindow, String> {
-    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder())
+    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder()).map_err(|error| error.to_string())?
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(20))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SessionManager } from "../components/SessionManager";
 import { ScrollArea } from "../components/ScrollArea";
 import { useI18n } from "../i18n";
@@ -30,13 +30,13 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
   return (
     <ScrollArea as="main" className="asb-main" aria-label={pageName}>
       <div hidden={page !== "providers"} className="asb-page-stack">
-        <ProvidersWorkspace model={model} active={page === "providers"} />
+        <ConfigurationSurface ready={model.preparation.configurationReady}><ProvidersWorkspace model={model} active={page === "providers"} /></ConfigurationSurface>
       </div>
       {visited("gateway") && <div hidden={page !== "gateway"} className="asb-page-stack">
-        <GatewayWorkspace model={model} active={page === "gateway"} />
+        <ConfigurationSurface ready={model.preparation.configurationReady}><GatewayWorkspace model={model} active={page === "gateway"} /></ConfigurationSurface>
       </div>}
       {visited("clientConfiguration") && <div hidden={page !== "clientConfiguration"} className="asb-page-stack">
-        <ClientConfigurationWorkspace model={model} active={page === "clientConfiguration"} />
+        <ConfigurationSurface ready={model.preparation.configurationReady}><ClientConfigurationWorkspace model={model} active={page === "clientConfiguration"} /></ConfigurationSurface>
       </div>}
       {visited("extensions") && <div hidden={page !== "extensions"} className="asb-page-stack">
         <ExtensionsWorkspace model={model} active={page === "extensions"} />
@@ -53,4 +53,12 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
       </div>}
     </ScrollArea>
   );
+}
+
+function ConfigurationSurface({ ready, children }: { ready: boolean; children: ReactNode }) {
+  const { t } = useI18n();
+  return <>
+    {!ready && <p className="asb-field-error" role="alert">{t("preparation.configurationUnavailable")}</p>}
+    <div className="asb-page-stack" inert={!ready} aria-disabled={!ready}>{children}</div>
+  </>;
 }

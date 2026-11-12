@@ -1,10 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readRequestUsage, type RequestUsageQuery, type RequestUsageReport } from "../api/client";
+import type { RequestUsageAnalysisSelection } from "../components/request-usage/RequestUsageAnalysis";
 import { useI18n } from "../i18n";
 import { errorText } from "../i18n/errors";
 
+const INITIAL_QUERY: RequestUsageQuery = { range: "last24Hours", app: null, scope: "generation", model: null, page: 1, groupPage: 1 };
+const INITIAL_ANALYSIS: RequestUsageAnalysisSelection = { view: "trend", trend: null, models: null, requests: null };
+
+export function useRequestUsage(active: boolean) {
+  const [query, setQuery] = useState(INITIAL_QUERY);
+  const [model, setModel] = useState("");
+  const [analysis, setAnalysis] = useState(INITIAL_ANALYSIS);
+  const read = useRequestUsageReport(active, query);
+
+  useEffect(() => {
+    const filter = model.trim() || null;
+    const timer = setTimeout(() => setQuery((current) => current.model === filter ? current
+      : { ...current, model: filter, page: 1, groupPage: 1 }), 350);
+    return () => clearTimeout(timer);
+  }, [model]);
+
+  const updateFilters = (patch: Partial<RequestUsageQuery>) => {
+    if (patch.scope && patch.scope !== query.scope) setAnalysis((current) => ({ ...INITIAL_ANALYSIS, view: current.view }));
+    setQuery((current) => ({ ...current, ...patch, page: 1, groupPage: 1 }));
+  };
+  const filtered = query.range !== "all" || query.app !== null || query.model !== null || model.trim() !== "";
+  const showAll = filtered ? () => {
+    setModel("");
+    setQuery({ ...INITIAL_QUERY, scope: query.scope, range: "all" });
+  } : undefined;
+
+  return {
+    ...read, active, query, model, setModel, updateFilters, analysis, setAnalysis, showAll,
+    setPage: (page: number) => setQuery((current) => ({ ...current, page })),
+    setGroupPage: (groupPage: number) => setQuery((current) => ({ ...current, groupPage })),
+  };
+}
+
 /** One visible query owns polling. Late responses never replace a different filter's report. */
-export function useRequestUsage(active: boolean, query: RequestUsageQuery, refreshToken: number) {
+function useRequestUsageReport(active: boolean, query: RequestUsageQuery) {
   const { t } = useI18n();
   const key = JSON.stringify(query);
   const scope = JSON.stringify([query.range, query.app, query.scope, query.model]);
@@ -46,7 +80,7 @@ export function useRequestUsage(active: boolean, query: RequestUsageQuery, refre
     };
     void read();
     return () => { stopped = true; if (timer) clearTimeout(timer); };
-  }, [active, key, scope, refreshToken, revision]);
+  }, [active, key, scope, revision]);
 
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   const report = saved?.scope === scope ? saved.report : null;

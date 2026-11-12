@@ -22,7 +22,7 @@ pub(super) fn json_response(
     headers: &[(&str, &str)],
     body: Vec<u8>,
 ) -> Result<(u16, Value), String> {
-    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder())
+    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder()).map_err(|error| error.to_string())?
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(20))

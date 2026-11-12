@@ -81,7 +81,8 @@ pub(crate) fn send_with_timeouts(
     }
     crate::upstream_overrides::apply_header_overrides(&mut headers, &route.connection);
     let request = client
-        .client()
+        .client().map_err(|error| ProviderDiagnostic::new(
+            ProviderFailureKind::Network, url, &error.to_string()))?
         .request(method, url)
         .headers(headers)
         .body(body);

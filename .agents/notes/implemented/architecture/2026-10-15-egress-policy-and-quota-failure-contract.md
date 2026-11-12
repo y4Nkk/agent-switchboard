@@ -8,11 +8,13 @@ Status: implemented
 
 ## Decision
 
-网络客户端都经 `outbound_proxy` 应用策略，包含模型列表、Claude 托管认证/额度、扩展来源与 HTTP 检测。短生命周期请求直接应用策略，长期连接缓存使用策略修订；缓存构建和标签使用同一个不可变快照。System 模式再次保存即产生新修订并重建后续连接，卡片允许未改变值时保存 System。读取失败清除旧设置、保留具体错误并提供重新读取与修复；请求代次禁止旧读取覆盖新操作。
+网络客户端都经 `outbound_proxy` 应用策略，包括模型列表、Claude 认证/额度、扩展来源和 HTTP 检测。短生命周期请求直接应用策略，长期缓存按同一个不可变快照的修订重建。System 模式再次保存产生新修订，同值保存仍可刷新系统代理发现。
 
-出口修复只重置重新检查后仍无效的文件；有效文件保持原样，不可读取的文件明确拒绝。无效原文件先重命名为同目录 UUID 备份，再恢复默认直连。全局 `repair_application_data` 编排供应商存储与出口设置的现有所有者，逐域报告修复文件、全部备份路径与失败项，单域失败不掩盖另一域已完成的结果。旧的 `repair_profile_store` 命令和前端入口删除。坏 JSON 使用无参数专属错误键，不再把空参数传给需要 `{detail}` 的模板。
+[启动准备与自动修复](../feature/2026-11-11-automatic-application-data-preparation.md)部分取代无效文件重置直连的决定。原手动重置的最强理由是完整备份且能迅速恢复可用性；自动场景不能据此证明改变出口正确，因此无效文件原样保留，策略构建器与缓存明确拒绝请求。当前只有读取视图和显式保存，没有手动修复 IPC 或默认直连回退。
 
-出口策略仍是单一契约，owner 仍是 `outbound_proxy` 与 `state/outbound-proxy.json`；本批补全其缺失的写路径。`get_outbound_proxy_settings` / `set_outbound_proxy_settings` / `repair_outbound_proxy_settings` 三个命令暴露读取、保存（revision 乐观并发）与一键重置，保存与重置分别记录 `OutboundProxySaved` / `OutboundProxyRepaired` 运行日志动作；`save` 的 dead_code 标记由命令调用方移除，无任何调用方的 `mask_url` 直接删除；校验错误从裸 `String` 改为类型化枚举，经 `CommandError::localized` 携带 `errors.outboundProxy.*` message key。设置 UI 在应用设置分区新增自含式出口代理卡片（模式三选 + 代理地址 + 保存），读取失败时卡片提供重置入口。修复对无效文件先保留完整备份再回到缺省直连策略，覆盖另一版本写入的旧格式与损坏文件；有效文件保持不变，不可读取的文件报错。默认模式维持直连不变：静默继承环境代理意味着供应商凭据流量可能被环境代理截收，直连是诚实的默认，缺陷在缺失的写路径而非默认值。`outbound-proxy.json` 保持独立文件不并入 `AppSettings`：手动代理 URL 可含凭据，桌面设置是更宽的暴露面，独立文件与独立 revision 是既有正确边界。System 模式的已知边界保持现状：代理客户端在系统内开关时 revision 不变，缓存客户端不热感知，需显式再次保存 System 设置或重启生效；同值保存也刷新修订，写进卡片说明，不加侦听机制。
+`state/outbound-proxy.json` 继续独立拥有网络策略，不并入桌面偏好或云备份。视图返回有效设置或结构化错误及同一份原始字节的摘要修订；编辑器在文件无效但可读取时仍可明确保存有效连接，写入前复核修订并保留无效原件。不可读取的文件拒绝覆盖。内部 UUID 修订继续控制连接缓存，原始字节摘要控制编辑并发，两者不形成第二份配置事实。
+
+缺失文件仍有明确的直连初始契约，不静默继承环境代理。代理 URL 可含凭据，独立文件限制暴露面。System 模式仍不监听系统代理开关，需同值保存或重启按原规则重新发现。
 
 传输分类上移为跨边界契约：`asb-core::contracts` 新增 `CodexTransportClass`（dns/timeout/connect/tls/other），`probe::FailureKind` 删除并由它取代；`http_request`/`http_get` 及两个 `_with_options` 变体的错误类型由 `RequestFailure` 拥有，语法错误保留指导文案、传输错误携带 `TransportFailure { class }`（`Display` 与 `From<RequestFailure> for String` 保持调用方的错误传播）。`ProbeResult.error: Option<String>` 改为 `error_class: Option<CodexTransportClass>`，探测结果文案归 i18n。`failure_message` 后端文案删除，额度与探测两个表面的文本 owner 统一为 i18n（`errors.transport.*`）。
 
@@ -34,8 +36,8 @@ Status: implemented
 
 ## Consequences
 
-不可达出口环境可以在应用内修复：手动模式填 `http://127.0.0.1:7890`（HTTP CONNECT 与 socks5h 都由代理解析域名，绕开 DNS 污染；纯 socks5 仍本地解析，污染环境下依旧失败——失败分类现在能区分并指出）。任何一次额度失败都显示具体原因（域名解析失败/连接超时/连接被拒绝/TLS 握手失败/网络请求失败/HTTP 状态/响应无效），不再只有「请重试」。设置文件在版本升级后无法解析时，卡片修复与全局修复共用同一重新校验、备份与默认策略投影；入口只在读取失败后出现，执行时仍重新验证，有效设置不被重置。本次契约的其余落盘数据不受升级影响：usage-history 与重置基线都存自有扁平结构、不序列化 `CodexOfficialQuota`，`failure` 字段只存在于进程内与命令边界。代价：`http_request` 错误类型变更波及 9 个调用方（多数经 `From<String>` 零改动）；探测结果前端消费方从字符串改为分类渲染；i18n 新增三组键、删除一个键；`outbound-proxy.json` 可能含代理凭据，它只落本机状态目录（云备份仅覆盖供应商档案库，已核实不波及）。System 模式的热感知边界如上，不新增机制。
+不可达出口环境可以在应用内修复：手动模式填 `http://127.0.0.1:7890`（HTTP CONNECT 与 socks5h 都由代理解析域名，绕开 DNS 污染；纯 socks5 仍本地解析，污染环境下依旧失败——失败分类现在能区分并指出）。任何一次额度失败都显示具体原因（域名解析失败/连接超时/连接被拒绝/TLS 握手失败/网络请求失败/HTTP 状态/响应无效），不再只有「请重试」。出口文件无法解析时，原生准备报告具体原因并阻止相关请求；明确连接编辑先保留原件，再通过同一严格校验和原子发布写入，不保留第二套重置投影。本次契约的其余落盘数据不受升级影响：usage-history 与重置基线都存自有扁平结构、不序列化 `CodexOfficialQuota`，`failure` 字段只存在于进程内与命令边界。代价：`http_request` 错误类型变更波及 9 个调用方（多数经 `From<String>` 零改动）；探测结果前端消费方从字符串改为分类渲染；i18n 新增三组键、删除一个键；`outbound-proxy.json` 可能含代理凭据，它只落本机状态目录（云备份仅覆盖供应商档案库，已核实不波及）。System 模式的热感知边界如上，不新增机制。
 
 ## Verification
 
-传输分类构造、quota_from_http_response 三分与 retain_last_success 的 failure 传递以源码内联测试覆盖；前端静态复核确认 OfficialQuotaSummary、ProbeFeedback 只消费分类键、`errorUnavailable` 与 `ProbeResult.error` 全局无残留引用。本批未运行编译、类型检查、自动化测试和真实网络写入；仅核对调用链、桌面及浏览器入口、前端状态和旧路径；`npm run verify-notes` 校验笔记结构。真实网络读取与代理写入未验收，需在桌面运行中确认：停代理刷新额度显示具体原因，配置手动代理后恢复 Available；手工写入坏 JSON 的 `outbound-proxy.json` 后卡片读取报错并可一键重置回直连。
+传输分类构造、quota_from_http_response 三分与 retain_last_success 的 failure 传递以源码内联测试覆盖；前端静态复核确认 OfficialQuotaSummary、ProbeFeedback 只消费分类键、`errorUnavailable` 与 `ProbeResult.error` 全局无残留引用。原始传输分类工作当时只核对调用链与字段，没有真实网络写入验收。[自动准备](../feature/2026-11-11-automatic-application-data-preparation.md)补充当前隔离证据：无效出口不重置、客户端拒绝、显式编辑、原件保留和修订冲突已验证；真实网络与真实代理配置不在本次验收范围。

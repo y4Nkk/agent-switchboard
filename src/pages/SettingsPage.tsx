@@ -25,8 +25,6 @@ interface SettingsPageProps {
   desktopError: string | null;
   /** Re-runs the settings load after a failure. */
   onRetryLoad: () => void;
-  /** Replaces an invalid settings file with defaults. */
-  onRepair: () => void;
   busy: boolean;
   /** Saves one field of the currently loaded settings. */
   onPatch: (patch: Partial<AppSettings>) => Promise<boolean>;
@@ -68,9 +66,7 @@ function ApplicationSettings(props: SettingsPageProps) {
               <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>{t("settings.retry")}</Button>
             </div>
           </div>
-          <div className="asb-app-settings-danger-zone">
-            <Button variant="danger" disabled={busy} onClick={props.onRepair}>{t("shell.banner.repair")}</Button>
-          </div>
+
         </>
       ) : <div className="asb-settings-skeleton" role="status" aria-label={t("settings.page.loading")}>
         <div className="asb-skeleton" />

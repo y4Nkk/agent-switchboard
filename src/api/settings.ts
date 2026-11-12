@@ -392,11 +392,6 @@ export function setAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("set_app_settings", { settings });
 }
 
-/** Replaces an invalid settings file with defaults; a readable file refuses. */
-export function repairAppSettings(): Promise<AppSettingsSnapshot> {
-  return invoke<AppSettingsSnapshot>("repair_app_settings");
-}
-
 export function getCloudBackupSettings(): Promise<CloudBackupSettings | null> {
   return invoke<CloudBackupSettings | null>("get_cloud_backup_settings");
 }

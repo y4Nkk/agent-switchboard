@@ -9,7 +9,7 @@ export const messages = {
   "settings.page.loading": ["正在读取设置", "Reading settings"],
 
   "settings.loadFailed": ["设置加载失败：{detail}", "Failed to load settings: {detail}"],
-  "settings.loadFailedDetail": ["读取失败期间，外观与关闭行为使用默认值", "While loading fails, appearance and close behavior use defaults"],
+  "settings.loadFailedDetail": ["原始偏好已保留，请查看具体原因后重新读取", "Original preferences are retained. Review the cause before reloading"],
   "settings.retry": ["重试", "Retry"],
 
   "settings.about.tagline": ["Codex 与 Claude Code 的本地配置控制台。", "A local configuration console for Codex and Claude Code."],
@@ -104,6 +104,4 @@ export const messages = {
   "settings.egress.save": ["保存出口代理", "Save egress proxy"],
   "settings.egress.saved": ["出口代理设置已保存。", "Egress proxy settings saved."],
   "settings.egress.reload": ["重新读取", "Reload settings"],
-  "settings.egress.repair": ["备份并修复设置", "Back up and repair settings"],
-  "settings.egress.repaired": ["无效出口设置已备份，已恢复默认直连。", "Invalid egress settings were backed up; direct mode has been restored."],
 } as const satisfies Record<string, MessageEntry>;

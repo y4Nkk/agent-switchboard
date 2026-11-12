@@ -6,7 +6,6 @@ import { duration, number, percent } from "./format";
 export function RequestUsageSummary({ metrics: m, scope }: { metrics: RequestUsageMetrics; scope: MeasurementScope }) {
   const { t, language } = useI18n();
   return <div className="asb-request-usage-summary">
-    {m.mixedMeasurements && <p className="asb-scope-note">{t("usagePerformance.mixedMeasurements")}</p>}
     <StatCards stats={[
       ...(scope === "generation" ? [{ label: t("usagePerformance.speed"), value: number(m.outputRateP50, language), unit: "tok/s",
         detail: m.speedSamples > 0 ? t("usagePerformance.speedDetail", {
@@ -24,6 +23,5 @@ export function RequestUsageSummary({ metrics: m, scope }: { metrics: RequestUsa
         detail: m.cacheSamples > 0 ? t("usagePerformance.samples", { count: m.cacheSamples }) : t("usagePerformance.notRecorded") }
         : { label: t("usagePerformance.recordsCount"), value: number(m.records, language) },
     ]} />
-    {m.speedSamples > 0 && m.speedSamples < 20 && <p className="asb-scope-note">{t("usagePerformance.smallSample")}</p>}
   </div>;
 }

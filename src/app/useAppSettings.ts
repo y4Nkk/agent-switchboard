@@ -1,7 +1,7 @@
 import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getAppSettings, onDesktopSettingsError, repairAppSettings, restartApplication, setAppSettings,
+  getAppSettings, onDesktopSettingsError, restartApplication, setAppSettings,
   type AppSettings, type AppSettingsSnapshot, type CommandError,
 } from "../api/client";
 import { applyAppAppearance } from "../lib/app-appearance";
@@ -15,7 +15,7 @@ interface AppSettingsDeps {
   setBusy: (busy: boolean) => void;
 }
 
-function useLoadedAppSettings(onError: AppSettingsDeps["onError"]) {
+function useLoadedAppSettings(onError: AppSettingsDeps["onError"], revision: number) {
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
   const [loadError, setLoadError] = useMessageState();
   const [desktopError, setDesktopError] = useMessageState();
@@ -35,7 +35,7 @@ function useLoadedAppSettings(onError: AppSettingsDeps["onError"]) {
       if (!disposed) { onError(caught); setLoadError(caught); }
     });
     return () => { disposed = true; };
-  }, [onError, reload, acceptSnapshot]);
+  }, [onError, reload, revision, acceptSnapshot]);
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
@@ -61,15 +61,7 @@ function useLoadedAppSettings(onError: AppSettingsDeps["onError"]) {
   return { appSettings, loadError, desktopError, setAppSettingsState, setDesktopError, acceptSnapshot, retryLoad };
 }
 
-function useSettingsRecovery({ busy, onError, clearError, setBusy }: AppSettingsDeps, onRepaired: (snapshot: AppSettingsSnapshot) => void) {
-  const repairSettings = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    clearError();
-    try { onRepaired(await repairAppSettings()); }
-    catch (caught) { onError(caught as CommandError); }
-    finally { setBusy(false); }
-  }, [busy, clearError, onError, setBusy, onRepaired]);
+function useSettingsRestart({ busy, onError, clearError, setBusy }: AppSettingsDeps) {
   const restart = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -78,15 +70,15 @@ function useSettingsRecovery({ busy, onError, clearError, setBusy }: AppSettings
     catch (caught) { onError(caught as CommandError); }
     finally { setBusy(false); }
   }, [busy, clearError, onError, setBusy]);
-  return { repairSettings, restart };
+  return { restart };
 }
 
 /** Owns the complete app preference snapshot and its one native save path. */
-export function useAppSettings(deps: AppSettingsDeps) {
+export function useAppSettings(deps: AppSettingsDeps, revision: number) {
   const { busy, onError, clearError, setBusy } = deps;
-  const loaded = useLoadedAppSettings(onError);
+  const loaded = useLoadedAppSettings(onError, revision);
   const { appSettings, setAppSettingsState, setDesktopError } = loaded;
-  const recovery = useSettingsRecovery(deps, loaded.acceptSnapshot);
+  const recovery = useSettingsRestart(deps);
   const saving = useRef(false);
   const saveAppSettings = useCallback(async (next: AppSettings) => {
     if (busy || saving.current) return false;

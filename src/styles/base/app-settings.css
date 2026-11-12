@@ -59,13 +59,6 @@
   .asb-app-setting-row .asb-segments { max-width: 100%; flex-wrap: wrap; }
 }
 
-/* Destructive action row: the .asb-app-settings gap owns the separation; the
-   hairline marks the boundary. */
-.asb-app-settings-danger-zone {
-  padding-top: var(--asb-space-3);
-  border-top: 1px solid var(--asb-hairline);
-}
-
 /* Changelog body: layout only; element styling comes from .asb-markdown. */
 .asb-update-notes {
   margin-top: var(--asb-space-2);

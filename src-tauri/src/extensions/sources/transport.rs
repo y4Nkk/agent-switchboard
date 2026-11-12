@@ -28,7 +28,7 @@ pub fn http_fetch(url: &str) -> Result<(u16, Vec<u8>), String> {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("static source HTTP configuration")
-    });
+    }).map_err(|error| error.to_string())?;
     let timeout = Duration::from_secs(if service == "skills.sh" { 10 } else { 45 });
     let response = client
         .get(parsed)

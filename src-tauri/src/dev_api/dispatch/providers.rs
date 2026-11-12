@@ -10,7 +10,6 @@ pub(super) async fn profiles(app: &AppHandle, request: &InvokeRequest) -> Result
             app.clone(), argument(&request.args, "source")?, argument(&request.args, "preparationId")?,
         )),
         "list_profiles" => command!(commands::list_profiles(app.clone())),
-        "repair_application_data" => command!(commands::repair_application_data(app.clone())),
         "prepare_profile_save" => command!(commands::switching::prepare_profile_save(
             app.clone(),
             argument::<Option<String>>(&request.args, "profileId")?,

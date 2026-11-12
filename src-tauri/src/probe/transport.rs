@@ -77,12 +77,14 @@ impl std::error::Error for TransportFailure {}
 pub enum RequestFailure {
     Malformed(&'static str),
     Transport(TransportFailure),
+    Policy(crate::outbound_proxy::OutboundProxyError),
 }
 
 impl fmt::Display for RequestFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Malformed(message) => f.write_str(message),
+            Self::Policy(error) => error.fmt(f),
             Self::Transport(failure) => failure.fmt(f),
         }
     }
@@ -97,7 +99,7 @@ impl From<RequestFailure> for String {
 /// The process-wide transport. The connect budget mirrors the native stack;
 /// the per-attempt and per-request total budgets are applied where the calls
 /// are made (see [`probe`] and [`http_request`]).
-fn client() -> reqwest::blocking::Client {
+fn client() -> Result<reqwest::blocking::Client, crate::outbound_proxy::OutboundProxyError> {
     crate::outbound_proxy::cached_blocking_client("probe", |builder| {
         builder
             .user_agent("Agent Switchboard")
@@ -256,7 +258,7 @@ fn request_url(parsed: &ParsedUrl) -> String {
 /// model request and carries no credential, so it never validates
 /// authentication or model configuration. The response body is never read.
 pub fn probe(url: &str) -> Result<ProbeResult, String> {
-    probe_with_client(url, &client())
+    probe_with_client(url, &client().map_err(|error| error.to_string())?)
 }
 
 /// Probes one URL the way an endpoint race measures it: one untimed warm-up
@@ -270,7 +272,7 @@ pub fn probe(url: &str) -> Result<ProbeResult, String> {
 /// a host that fails both still surfaces exactly one classified error.
 #[expect(dead_code)] // reserved: warmed probe surface
 pub fn probe_warmed(url: &str, attempt_timeout: Duration) -> Result<ProbeResult, String> {
-    measure(url, &client(), attempt_timeout, true)
+    measure(url, &client().map_err(|error| error.to_string())?, attempt_timeout, true)
 }
 
 pub(super) fn probe_with_client(
@@ -381,7 +383,7 @@ pub fn http_request_with_options(
     let mut headers = header_map(headers)?;
     crate::upstream_overrides::apply_header_overrides(&mut headers, connection);
 
-    let mut request = client()
+    let mut request = client().map_err(RequestFailure::Policy)?
         .request(method, request_url(&parsed))
         .timeout(REQUEST_TIMEOUT)
         .headers(headers);

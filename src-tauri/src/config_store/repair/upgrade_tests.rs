@@ -1,7 +1,8 @@
 use super::*;
+use uuid::Uuid;
 use asb_core::contracts::{
     CodexCatalogEntry, CodexEndpoint, CodexProviderFile, CodexProviderProfile, CodexRouteMode,
-    CodexUpstream, ProviderConnectionOptions, ProviderEndpoint, ProviderProfile,
+    CodexUpstream, ProviderConnectionOptions, ProviderProfile,
     ResponsesRequestMode, CODEX_PROVIDER_SCHEMA_VERSION, DEFAULT_CODEX_CAPABILITIES,
 };
 use serde_json::json;
@@ -102,53 +103,34 @@ fn arbitrary_unknown_automatic_keys_are_never_discarded() {
 }
 
 #[test]
-fn version_prefixed_anthropic_bases_and_endpoint_candidates_are_repaired() {
+fn version_prefixed_anthropic_base_is_repaired_with_original_preserved() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let mut prefixed_base = serde_json::to_value(provider(100)).unwrap();
-    prefixed_base["baseUrl"] = json!("https://relay.example/v1");
-    let (base_path, base_original) = write_provider(&store, &prefixed_base);
-    let mut prefixed_endpoint = serde_json::to_value(provider(200)).unwrap();
-    prefixed_endpoint["connection"]["customEndpoints"]["https://mirror.example/compatible-mode/v1"] =
-        json!({"url": "https://mirror.example/compatible-mode/v1", "addedAt": 1});
-    prefixed_endpoint["connection"]["customEndpoints"]["https://healthy.example/proxy"] =
-        json!({"url": "https://healthy.example/proxy", "addedAt": 2, "lastUsed": 7});
-    let (endpoint_path, endpoint_original) = write_provider(&store, &prefixed_endpoint);
-    assert!(store.list_providers().is_err());
-
+    let mut value = serde_json::to_value(provider(100)).unwrap();
+    value["baseUrl"] = json!("https://relay.example/v1");
+    let (path, original) = write_provider(&store, &value);
     let report = store.repair().unwrap();
+    assert_eq!(report.repaired_files.len(), 1);
+    assert_eq!(store.list_providers().unwrap()[0].profile.base_url.as_deref(), Some("https://relay.example/"));
+    let relative = path.strip_prefix(store.configuration_dir()).unwrap();
+    assert_eq!(fs::read_to_string(PathBuf::from(report.backup_path.unwrap()).join(relative)).unwrap(), original);
+    assert!(store.repair().unwrap().repaired_files.is_empty());
+}
 
-    assert_eq!(report.repaired_files.len(), 2);
-    let records = store.list_providers().unwrap();
-    assert_eq!(records.len(), 2);
-    let base_record = records
-        .iter()
-        .find(|record| Some(record.profile.id.as_str()) == prefixed_base["id"].as_str())
-        .unwrap();
-    assert_eq!(base_record.profile.base_url.as_deref(), Some("https://relay.example/"));
-    let endpoint_record = records
-        .iter()
-        .find(|record| Some(record.profile.id.as_str()) == prefixed_endpoint["id"].as_str())
-        .unwrap();
-    assert_eq!(endpoint_record.profile.base_url.as_deref(), Some("https://relay.example"));
-    let kept = &endpoint_record.profile.connection.custom_endpoints;
-    assert_eq!(kept.len(), 1);
-    assert_eq!(
-        kept["https://healthy.example/proxy"],
-        ProviderEndpoint {
-            url: "https://healthy.example/proxy".to_string(),
-            added_at: 2,
-            last_used: Some(7),
-        }
-    );
-    let backup = PathBuf::from(report.backup_path.unwrap());
-    for (path, original) in [(base_path, base_original), (endpoint_path, endpoint_original)] {
-        let relative = path.strip_prefix(store.configuration_dir()).unwrap();
-        assert_eq!(fs::read_to_string(backup.join(relative)).unwrap(), original);
-    }
-    let repeated = store.repair().unwrap();
-    assert!(repeated.repaired_files.is_empty());
-    assert!(repeated.backup_path.is_none());
+#[test]
+fn ambiguous_anthropic_candidates_reject_the_entire_repair_without_deleting_them() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(directory.path().join("state"));
+    let mut value = serde_json::to_value(provider(100)).unwrap();
+    value["baseUrl"] = json!("https://relay.example/v1");
+    value["connection"]["customEndpoints"]["https://mirror.example/v1"] =
+        json!({"url": "https://mirror.example/v1", "addedAt": 1});
+    let (path, original) = write_provider(&store, &value);
+    let error = store.repair().unwrap_err();
+    assert!(error.contains("自定义端点"));
+    assert!(error.contains(&path.strip_prefix(store.configuration_dir()).unwrap().display().to_string()));
+    assert_eq!(fs::read_to_string(path).unwrap(), original);
+    assert_eq!(fs::read_dir(store.state_root()).unwrap().count(), 1);
 }
 
 #[test]
@@ -250,19 +232,7 @@ fn codex_anthropic_version_prefixes_are_repaired() {
             endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
             api_key: "sk-isolated".to_string(),
             authentication: None,
-            connection: ProviderConnectionOptions {
-                custom_endpoints: [(
-                    "https://mirror.example/compatible-mode/v1".to_string(),
-                    ProviderEndpoint {
-                        url: "https://mirror.example/compatible-mode/v1".to_string(),
-                        added_at: 1,
-                        last_used: None,
-                    },
-                )]
-                .into_iter()
-                .collect(),
-                ..Default::default()
-            },
+            connection: ProviderConnectionOptions::default(),
             upstream: CodexUpstream::AnthropicMessages,
             request_mode: ResponsesRequestMode::Standard,
             default_model: "claude-relay".to_string(),

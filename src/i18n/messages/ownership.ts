@@ -297,7 +297,7 @@ export const messages = {
     "Plugin caches and marketplace registrations belong to the client; preserved for now and not written.",
   ],
   "ownership.directory.nativeTelemetry.title": ["本机性能采集", "Local performance collection"],
-  "ownership.directory.nativeTelemetry.detail": ["在「用量监控 → 请求性能 → 客户端采集设置」预览和应用官方 OpenTelemetry 的本机导出配置，沿用备份恢复。", "Preview and apply local official OpenTelemetry exports in Usage → Request performance → Client collection settings, with backup recovery."],
+  "ownership.directory.nativeTelemetry.detail": ["在「用量监控 → 请求性能 → 采集设置」预览和应用官方 OpenTelemetry 的本机导出配置，沿用备份恢复。", "Preview and apply local official OpenTelemetry exports in Usage → Request performance → Collection settings, with backup recovery."],
   "ownership.directory.voice.title": ["语音与外部凭据脚本", "Voice and external credential scripts"],
   "ownership.directory.voice.detail": [
     "语音对象和会执行外部命令的凭据/遥测脚本需要独立契约；当前保留但不写入。",

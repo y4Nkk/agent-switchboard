@@ -22,7 +22,7 @@ impl UpstreamClient {
     pub(crate) fn new(runtime: tokio::runtime::Handle) -> Self {
         Self { runtime }
     }
-    pub(super) fn client(&self) -> reqwest::Client {
+    pub(super) fn client(&self) -> Result<reqwest::Client, crate::outbound_proxy::OutboundProxyError> {
         crate::outbound_proxy::cached_client("gateway-upstream", |builder| {
             builder
                 .redirect(reqwest::redirect::Policy::none())

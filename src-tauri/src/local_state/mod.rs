@@ -9,6 +9,8 @@ pub(crate) mod codex_paths;
 mod paths;
 mod settings;
 mod settings_upgrade;
+mod settings_recovery;
+pub(crate) use settings_recovery::SettingsPreparation;
 mod sidebar;
 mod workspace;
 
@@ -51,6 +53,7 @@ impl LocalState {
     #[allow(dead_code)] // verification harness
     pub(crate) fn initialize_schemas(&self) -> Result<(), String> {
         self.initialize_configuration_store()?;
+        self.initialize_session_storage()?;
         self.initialize_extension_schema()
     }
 
@@ -58,6 +61,10 @@ impl LocalState {
         self.configuration()
             .initialize_current_layout()
             .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub(crate) fn initialize_session_storage(&self) -> Result<(), String> {
         crate::session_manager::initialize_storage(self.root())?;
         if let Err(error) = crate::session_manager::history::initialize(self.root()) {
             log::warn!("Claude 会话保留暂不可用，原库已保留：{error}");

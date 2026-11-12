@@ -8,6 +8,10 @@ use uuid::Uuid;
 
 impl LocalState {
     pub fn get_app_settings(&self) -> Result<AppSettings, String> {
+        let recovery = self.root.join("settings-recovery.json");
+        if recovery.is_symlink() || recovery.try_exists().map_err(|error| error.to_string())? {
+            return Err("应用偏好恢复尚未完成，原件与恢复记录已保留".into());
+        }
         match fs::read_to_string(self.settings_path()) {
             Ok(text) => {
                 let settings = serde_json::from_str::<AppSettings>(&text)
@@ -37,19 +41,6 @@ impl LocalState {
             return Err(format!("无法原子保存应用设置：{error}"));
         }
         Ok(())
-    }
-
-    /// One-click repair for an unreadable settings file: replaces it with
-    /// validated defaults through the same atomic write as a normal save. A
-    /// readable settings file is refused, so repair can never silently
-    /// discard healthy preferences.
-    pub fn repair_app_settings(&self) -> Result<AppSettings, String> {
-        if self.get_app_settings().is_ok() {
-            return Err("应用设置当前可读，无需修复".to_string());
-        }
-        let defaults = AppSettings::default();
-        self.set_app_settings(&defaults)?;
-        Ok(defaults)
     }
 
     /// The cloud destination is optional. Reading an absent file never

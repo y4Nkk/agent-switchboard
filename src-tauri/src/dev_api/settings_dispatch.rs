@@ -10,7 +10,6 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "set_outbound_proxy_settings" => as_json(commands::set_outbound_proxy_settings(
             app.clone(), argument(&request.args, "settings")?, argument(&request.args, "expectedRevision")?,
         ).await),
-        "repair_outbound_proxy_settings" => as_json(commands::repair_outbound_proxy_settings(app.clone()).await),
         "storage_usage" => as_json(commands::storage::storage_usage(app.clone()).await),
         "clear_webview_cache" => as_json(commands::storage::clear_webview_cache(app.clone()).await),
         "preview_history_archive" => as_json(commands::storage::preview_history_archive(app.clone(), argument(&request.args, "cutoff")?).await),
@@ -21,7 +20,6 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "set_app_settings" => as_json(commands::set_app_settings(
             app.clone(), argument::<AppSettings>(&request.args, "settings")?,
         ).await),
-        "repair_app_settings" => as_json(commands::repair_app_settings(app.clone()).await),
         "list_system_fonts" => as_json(commands::list_system_fonts().await),
         "get_startup_page" => as_json(workspace::get_startup_page(app.clone()).await),
         "remember_workspace_page" => as_json(workspace::remember_workspace_page(

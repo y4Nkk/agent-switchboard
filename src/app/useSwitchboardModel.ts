@@ -1,19 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { onTrayError, openBackupDir, type AppKind, type CommandError } from "../api/client";
+import { useConfigurationModel } from "./useConfigurationModel";
 import { useAppSettings } from "./useAppSettings";
-import { useApplicationDataRepair } from "./useApplicationDataRepair";
-import { useCcImport } from "./useCcImport";
+import type { ApplicationPreparation } from "../api/application-preparation";
 import { useCloudBackup } from "./useCloudBackup";
 import { useClientSettings } from "./useClientSettings";
 import { useCodexSubagentSettings } from "./useCodexSubagentSettings";
-import { useConfigSnapshot } from "./useConfigSnapshot";
-import { useDiscovery } from "./useDiscovery";
 import { useOperationFrame } from "./useOperationFrame";
 import { usePromptDocuments } from "./usePromptDocuments";
-import { useProviders } from "./useProviders";
-import { useSqlImport } from "./useSqlImport";
-import { latestOverall, useSwitchOperations } from "./useSwitchOperations";
-import { useProviderSwitchFlow } from "./useProviderSwitchFlow";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 import { useSidebarState } from "./useSidebarState";
@@ -33,14 +27,16 @@ function useTrayEvents(reportError: (error: CommandError) => void) {
 }
 
 /** Composes domain hooks; each domain owns its state and typed operations. */
-export function useSwitchboardModel() {
+export function useSwitchboardModel(preparation: ApplicationPreparation, dataRevision: number) {
   const probe = useCodexProbe();
   const [appFilter, setAppFilter] = useState<AppKind>("codex");
   const frame = useOperationFrame();
-  const { busy, reportError, clearError, setBusy } = frame;
+  const { reportError, clearError, setBusy } = frame;
+  const busy = frame.busy || preparation.status === "running" || preparation.status === "blocked";
   useTrayEvents(reportError);
   const operationContext = { busy, onError: reportError, clearError, setBusy };
-  const appSettingsState = useAppSettings(operationContext);
+  useEffect(clearError, [dataRevision, clearError]);
+  const appSettingsState = useAppSettings(operationContext, dataRevision);
   const sidebar = useSidebarState(reportError);
   const navigation = useWorkspaceNavigation(
     appSettingsState.appSettings !== null || appSettingsState.loadError !== null,
@@ -48,16 +44,12 @@ export function useSwitchboardModel() {
   );
   const { page, setPage } = navigation;
   const modelRoutes = useModelRouteNavigation(navigation.setPage);
-  const snapshot = useConfigSnapshot({ onError: reportError });
-  const { targetProfileId, setTargetProfileId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
-  const refresh = useCallback(async () => { await refreshSnapshot(); }, [refreshSnapshot]);
-  const providerSwitch = useProviderSwitchFlow({
-    busy,
-    onError: reportError,
-    clearError,
-    onTargetProfileChange: setTargetProfileId,
+  const configuration = useConfigurationModel({
+    operationContext: { ...operationContext, busy: busy || !preparation.configurationReady },
+    appFilter, setAppFilter, page, setPage, preparation, dataRevision,
   });
-  const { invalidateCandidates, setTargetProfile } = providerSwitch;
+  const { providerSwitch, refresh } = configuration;
+  const { invalidateCandidates } = providerSwitch;
   const clientSettings = useClientSettings({
     app: appFilter,
     busy,
@@ -73,36 +65,12 @@ export function useSwitchboardModel() {
   });
   const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });
   const updateCheck = useUpdateCheck({ onError: reportError });
-  const discoveryState = useDiscovery({
-    ...operationContext, app: appFilter, invalidateCandidates, refresh: refreshSnapshot, setTargetProfile, setAppFilter, setPage,
-  });
-  const ccImport = useCcImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
-    records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, setTargetProfile, setAppFilter });
-  const sqlImport = useSqlImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
-    records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, setTargetProfile, setAppFilter });
-  const targetRecord = records.find((record) => record.profile.id === targetProfileId) ?? null;
-  const targetProfile = targetRecord?.profile ?? null;
-  const operations = useSwitchOperations({
-    ...operationContext, activationCandidate: providerSwitch.activationCandidate, clearCandidates: providerSwitch.clearCandidates,
-    invalidateCandidates, setTargetProfile, targetProfileId, targetProfile, refresh,
-    refreshDiscoveryOrAppend: discoveryState.refreshDiscoveryOrAppend,
-  });
-  const providers = useProviders({
-    ...operationContext, active: page === "providers", appFilter, setAppFilter, records,
-    codexOfficialRecords: snapshot.codexOfficialRecords, targetProfileId,
-    invalidateCandidates, clearCandidates: providerSwitch.clearCandidates, refresh, setTargetProfile,
-    setTargetProfileId,
-  });
-  const dataRepair = useApplicationDataRepair({ ...operationContext, invalidateCandidates, refresh,
-    onProvidersRepaired: providers.closeEditor });
-  const lastSwitchOverall = useMemo(() => latestOverall(snapshot.statuses ?? []), [snapshot.statuses]);
   const openBackupFolder = useCallback(
     () => openBackupDir().catch((caught) => reportError(caught as CommandError)), [reportError],
   );
 
-  return { ...navigation, sidebar, appFilter, ...frame, snapshot, activeProfileId, providerSwitch, modelRoutes,
-    clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
-    ccImport, sqlImport, targetProfile, operations, providers, dataRepair, lastSwitchOverall, openBackupFolder, probe };
+  return { ...navigation, sidebar, appFilter, ...frame, busy, preparation, dataRevision, ...configuration, modelRoutes,
+    clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, openBackupFolder, probe };
 }
 
 export type SwitchboardModel = ReturnType<typeof useSwitchboardModel>;

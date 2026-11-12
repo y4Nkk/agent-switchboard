@@ -320,10 +320,6 @@ export const messages = {
 		"该 Codex 供应商正在被本机协议网关使用；请先切换到官方登录后再删除",
 		"This Codex provider is in use by the local protocol gateway; switch to official login before deleting.",
 	],
-	"errors.sw.profileStoreRepairFailed": [
-		"供应商存储无法安全修复：{detail}",
-		"Provider storage could not be repaired safely: {detail}",
-	],
 	"errors.sw.gatewayActiveDelete": [
 		"该供应商正在被本机协议网关使用；请先切换到直连或官方登录后再删除",
 		"This provider is in use by the local protocol gateway; switch to direct connection or official login before deleting.",

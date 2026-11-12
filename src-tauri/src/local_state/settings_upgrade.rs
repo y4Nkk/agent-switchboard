@@ -1,27 +1,27 @@
-use super::{AppSettings, LocalState};
+use super::AppSettings;
+#[cfg(test)]
+use super::LocalState;
 use super::settings::{CloseBehavior, ThemePreference, MotionPreference, StartupPage, LanguagePreference};
 use crate::runtime_log::RuntimeLogLevel;
-use std::{fs, io::ErrorKind};
+#[cfg(test)]
+use std::fs;
 
-impl LocalState {
-    /// The startup-only language upgrade preserves the exact legacy preference
-    /// set. Runtime reads remain strict and a failed rewrite reports failure.
-    pub(crate) fn upgrade_app_settings(&self) -> Result<(), String> {
-        let text = match fs::read_to_string(self.settings_path()) {
-            Ok(text) => text,
-            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(error.to_string()),
-        };
-        match serde_json::from_str::<AppSettings>(&text) {
-            Ok(settings) => settings.validate().map_err(|error| error.to_string()),
-            Err(current_error) => {
-                let settings = serde_json::from_str::<LegacyAppSettings>(&text)
-                    .map(|legacy| legacy.upgrade())
-                    .map_err(|_| current_error.to_string())?;
-                self.set_app_settings(&settings)
-            }
-        }
+pub(super) fn candidate(bytes: &[u8]) -> Result<(AppSettings, bool), String> {
+    let source = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
+    let value: serde_json::Value = match serde_json::from_slice(source) {
+        Ok(value) => value,
+        Err(_) => return Ok((AppSettings::default(), true)),
+    };
+    if let Ok(settings) = serde_json::from_value::<AppSettings>(value.clone()) {
+        settings.validate().map_err(|error| error.to_string())?;
+        return Ok((settings, false));
     }
+    if let Ok(previous) = serde_json::from_value::<LegacyAppSettings>(value) {
+        let settings = previous.upgrade();
+        settings.validate().map_err(|error| error.to_string())?;
+        return Ok((settings, false));
+    }
+    Err("应用偏好不是当前契约或明确支持的升级结构，原件已保留".into())
 }
 
 /// The complete shipped v0.2 preference structure without the language
@@ -85,7 +85,7 @@ mod tests {
             let original = serde_json::to_vec(&previous).unwrap();
             fs::write(state.settings_path(), &original).unwrap();
             assert!(state.get_app_settings().is_err());
-            assert!(state.upgrade_app_settings().is_err());
+            assert!(state.prepare_app_settings().is_err());
             assert_eq!(fs::read(state.settings_path()).unwrap(), original);
             assert!(!root.path().join("sidebar-collapsed.json").exists());
         }
@@ -131,7 +131,7 @@ mod tests {
         invalid["interfaceScale"] = json!(95);
         let original = serde_json::to_vec(&invalid).unwrap();
         fs::write(state.settings_path(), &original).unwrap();
-        assert!(state.upgrade_app_settings().is_err());
+        assert!(state.prepare_app_settings().is_err());
         assert_eq!(fs::read(state.settings_path()).unwrap(), original);
         assert!(state.get_app_settings().is_err());
     }
@@ -142,7 +142,7 @@ mod tests {
         let state = LocalState::from_root(root.path().to_path_buf());
         let original = serde_json::to_vec(&AppSettings::default()).unwrap();
         fs::write(state.settings_path(), &original).unwrap();
-        state.upgrade_app_settings().unwrap();
+        state.prepare_app_settings().unwrap();
         assert_eq!(fs::read(state.settings_path()).unwrap(), original);
     }
 }

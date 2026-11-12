@@ -176,7 +176,7 @@ pub(super) fn fetch(auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
 pub(crate) fn transport_class(failure: &crate::probe::RequestFailure) -> CodexTransportClass {
     match failure {
         crate::probe::RequestFailure::Transport(transport) => transport.class,
-        crate::probe::RequestFailure::Malformed(_) => CodexTransportClass::Other,
+        crate::probe::RequestFailure::Malformed(_) | crate::probe::RequestFailure::Policy(_) => CodexTransportClass::Other,
     }
 }
 

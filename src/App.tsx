@@ -5,17 +5,22 @@ import { useDevtoolsShortcut, useKeyboardFocusMarker, useScrollActivityMarker } 
 import { OperationConfirmSheets } from "./app/OperationConfirmSheets";
 import { useSwitchboardModel } from "./app/useSwitchboardModel";
 
-/** The shell composes the domain model, workspaces and operation confirmations.
- * The whole tree waits for the settings snapshot (or its load failure) so the
- * saved language is known before the first label renders — no wrong-language
- * flash. The rail also restores before mounting the shell. Accepted snapshots
- * publish the language before the UI state. */
+import { ApplicationPreparation as PreparationScreen } from "./components/ApplicationPreparation";
+import { useApplicationPreparation } from "./app/useApplicationPreparation";
+
 export default function App() {
-  const model = useSwitchboardModel();
-  const { page, setPage, error, busy, providers, operations, appSettingsState, updateCheck } = model;
+  const preparation = useApplicationPreparation();
   useDevtoolsShortcut();
   useKeyboardFocusMarker();
   useScrollActivityMarker();
+  if (!preparation.activated) return <PreparationScreen snapshot={preparation.snapshot} error={preparation.error}
+    onRecheck={() => void preparation.recheck()} />;
+  return <PreparedApp preparation={preparation} />;
+}
+
+function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplicationPreparation> }) {
+  const model = useSwitchboardModel(preparation.snapshot!, preparation.completedRevision);
+  const { page, setPage, error, busy, providers, operations, appSettingsState, updateCheck } = model;
   const settingsReady = appSettingsState.appSettings !== null || appSettingsState.loadError !== null;
   if (!settingsReady || !model.sidebar.ready) {
     return (
@@ -26,12 +31,13 @@ export default function App() {
       </main>
     );
   }
+  const suspended = preparation.snapshot?.status === "running" || preparation.snapshot?.status === "blocked" || !!preparation.error;
   return (
     <>
+      <div className="asb-prepared-app" inert={suspended}>
       <AppShell page={page} onPageChange={setPage} error={error} busy={busy}
         sidebar={model.sidebar}
-        onRepairData={() => void model.dataRepair.run()}
-        settingsError={appSettingsState.loadError} onRepairSettings={() => void appSettingsState.repairSettings()}
+        preparation={preparation.snapshot!} settingsError={appSettingsState.loadError}
         pin={appSettingsState.pin} update={{
           checking: updateCheck.checking,
           latestVersion: updateCheck.updateCheck?.latestVersion ?? null,
@@ -45,6 +51,10 @@ export default function App() {
         <AppErrorBoundary><AppWorkspace model={model} /></AppErrorBoundary>
       </AppShell>
       <OperationConfirmSheets operations={operations} providers={providers} busy={busy} />
+      </div>
+      {suspended &&
+        <PreparationScreen snapshot={preparation.snapshot} error={preparation.error} overlay
+          onRecheck={() => void preparation.recheck()} />}
     </>
   );
 }

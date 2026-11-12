@@ -123,12 +123,6 @@
   color: var(--asb-text-muted);
 }
 
-.asb-information-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--asb-space-2);
-  margin-top: var(--asb-space-2);
-}
 
 .asb-toast-icon {
   flex: none;

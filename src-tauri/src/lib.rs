@@ -1,4 +1,7 @@
 mod app_paths;
+mod application_data_io;
+mod application_preparation;
+mod startup;
 mod app_update;
 mod ccswitch_source;
 mod changelog;
@@ -56,6 +59,7 @@ mod webview_memory;
 mod xai_auth;
 
 pub use commands::local_config_paths;
+use tauri::Manager;
 
 /// Hardware acceleration is a WebView2 (Windows) creation-time concept; other
 /// platforms keep their webview engine defaults.
@@ -121,7 +125,7 @@ fn initialize_window_preferences(app: &tauri::AppHandle, local: &local_state::Lo
 /// The main window is created hidden so startup owns its visibility in one
 /// place. It stays hidden only for an explicit start-minimized preference; a
 /// settings read failure also reveals it, keeping the recovery shell reachable.
-fn reveal_main_window(app: &tauri::AppHandle) {
+pub(crate) fn reveal_main_window(app: &tauri::AppHandle) {
     use tauri::Manager;
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -137,6 +141,7 @@ pub fn run() {
     #[cfg(windows)]
     let startup_windows = app_paths::prepare_windows(&mut context);
 
+    let command_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = crate::command_registry::handler!();
     tauri::Builder::default()
         // Registered first so a duplicate launch exits during plugin init,
         // before the gateway, tray, or any window state is created. The
@@ -159,170 +164,56 @@ pub fn run() {
             None,
         ))
         .setup(move |app| {
-            let local = local_state::LocalState::from_app(app.handle())
-                .map_err(std::io::Error::other)?;
-            // Upgrade after the single-instance guard, before creating Windows WebViews
-            // or reading any saved startup preference.
-            if let Err(error) = local.upgrade_app_settings() {
-                log::error!("应用设置升级失败，已保留原始文件：{error}");
-            }
             #[cfg(windows)]
-            initialize_window_preferences(app.handle(), &local);
-            #[cfg(windows)]
-            app_paths::build_windows(app.handle(), &startup_windows)
-                .map_err(std::io::Error::other)?;
-            let local = initialize_local_services(app, local)?;
-            apply_startup_settings(app);
-            start_background_services(app, &local)
+            return start_application(app, &startup_windows);
+            #[cfg(not(windows))]
+            start_application(app)
         })
         .on_window_event(handle_window_event)
-        .invoke_handler(crate::command_registry::handler!())
+        .invoke_handler(move |invoke| {
+            if let Err(error) = application_preparation::authorize(invoke.message.webview_ref().app_handle(), invoke.message.command()) {
+                invoke.resolver.reject(error); return true;
+            }
+            command_handler(invoke)
+        })
         .build(context)
         .expect("Agent Switchboard 启动失败")
         .run(handle_run_event);
 }
 
-fn initialize_local_services(
-    app: &mut tauri::App,
-    local: local_state::LocalState,
-) -> Result<local_state::LocalState, Box<dyn std::error::Error>> {
-    use tauri::Manager;
-    // Outbound proxy settings gate every gateway-side HTTP client;
-    // load them before any client is built. A malformed file defaults
-    // to direct egress instead of blocking startup.
-    if let Err(error) = outbound_proxy::load(local.root()) {
-        log::warn!("出站代理设置不可用，按直连处理：{error}");
-    }
-    app.manage(commands::ConfigWriteGate::default());
-    if let Err(error) = app.state::<client_software::SoftwareManager>().initialize(&local) {
-        log::error!("客户端更新记录需要处理：{error}");
-    }
-    let write_gate = app.state::<commands::ConfigWriteGate>().inner().clone();
-    // Startup can replay a pending port change before the controller
-    // is published. Hold the same gate as every later client-config
-    // transaction so that recovery has one write boundary.
-    let _write_guard = write_gate.lock().map_err(std::io::Error::other)?;
-    // Invalid application configuration leaves the shell alive so the
-    // repair entry can explain the failure without touching client files.
-    let configuration_ready = match local.initialize_configuration_store() {
-        Ok(()) => true,
-        Err(error) => {
-            log::error!("供应商存储不可用，已进入修复状态: {error}");
-            false
-        }
-    };
-    local
-        .initialize_extension_schema()
+fn start_application(app: &mut tauri::App,
+    #[cfg(windows)] windows: &[tauri::utils::config::WindowConfig]) -> Result<(), Box<dyn std::error::Error>> {
+    let local = local_state::LocalState::from_app(app.handle())
         .map_err(std::io::Error::other)?;
-    // The gateway controller always exists; a failed port bind or an
-    // unusable state file becomes a visible runtime state instead of
-    // refusing the window.
-    app.manage(gateway::GatewayController::start_with_write_lock(
-        &local,
-        write_gate.shared(),
-    ));
-    app.manage(gateway::PortChangePreparations::default());
-    app.manage(commands::switching::ProfileSavePreparations::default());
-    app.manage(commands::switching::CodexProfileSavePreparations::default());
-    app.manage(commands::switching::CodexPolicyPreparations::default());
-    app.manage(provider_request::ProviderRequests::default());
-    app.manage(commands::provider_diagnostics::ProviderRepairPreparations::default());
-    app.manage(codex_probe::ProbeRegistry::new());
-    app.manage(resource_monitor::ResourceMonitor::default());
-    app.manage(model_usage_cache::ModelUsageManager::default());
-    app.manage(native_telemetry::NativeTelemetry::start(local.root().to_path_buf()));
-    // A batch left running by an abrupt exit is closed as interrupted before
-    // any command can read it; finished results and saved session usage stay.
-    if let Err(error) = codex_probe::recover_interrupted(&local) {
-        log::warn!("降智检测历史恢复失败：{error}");
-    }
-    if configuration_ready {
-        if let Err(error) = commands::switching::recover_pending_profile_save(app.handle()) {
-            log::error!("配置事务需要恢复，已保留事务和备份：{error}");
-        }
-    }
-    if let Err(error) = commands::switching::codex_policy::recover_on_startup(
-        &local, app.state::<gateway::GatewayController>().inner()) {
-        log::error!("Codex 网关策略需要恢复，已保留原始事务：{error}");
-    }
-    Ok(local)
-}
-
-fn apply_startup_settings(app: &tauri::App) {
+    let preferences = local.prepare_app_settings();
+    let initial_settings = preferences.as_ref().ok().map(|prepared| prepared.settings.clone());
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     use tauri::Manager;
-    if let Err(error) = app.handle().plugin(desktop_shortcut::plugin()) {
-        log::error!("全局快捷键服务初始化失败：{error}");
-        app.state::<desktop_shortcut::DesktopSettingsState>()
-            .set_error(Some(commands::error::CommandError::localized(
-                "shortcut-service-unavailable", "errors.shortcut.serviceUnavailable",
-                error.to_string(), serde_json::Value::Null,
-            )));
+    app.manage(local.clone());
+    app.manage(commands::ConfigWriteGate::default());
+    app.manage(application_preparation::Preparation::new(initial_settings.clone(), sender.clone()));
+    #[cfg(windows)]
+    initialize_window_preferences(app.handle(), &local);
+    #[cfg(windows)]
+    app_paths::build_windows(app.handle(), windows).map_err(std::io::Error::other)?;
+    if initial_settings.as_ref().is_none_or(|settings| !settings.start_minimized) {
+        reveal_main_window(app.handle());
     }
-    // A malformed settings file is rejected by the typed settings
-    // surface, but must never prevent the tray/window recovery shell
-    // from starting. Default native window behavior remains usable.
-    match local_state::LocalState::from_app(app.handle())
-        .and_then(|state| state.get_app_settings())
-    {
-        Ok(settings) => {
-            runtime_log::set_level(settings.runtime_log_level);
-            let applied = commands::apply_desktop_settings(app.handle(), &settings);
-            if let Err(error) = &applied {
-                log::error!("桌面偏好应用失败：{}", error.message);
-                app.state::<desktop_shortcut::DesktopSettingsState>().set_error(Some(error.clone()));
-            }
-            if !settings.start_minimized || applied.is_err() {
-                reveal_main_window(app.handle());
-            }
-        }
-        Err(_) => reveal_main_window(app.handle()),
-    }
-}
-
-fn start_background_services(app: &mut tauri::App, local: &local_state::LocalState) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri::Manager;
-    let watcher = client_config_watcher::ClientConfigWatcher::start(
-        app.handle().clone(),
-        [
-            local.target(asb_core::AppKind::Codex).map_err(std::io::Error::other)?,
-            local.target(asb_core::AppKind::Claude).map_err(std::io::Error::other)?,
-        ],
-    )
-    .map_err(std::io::Error::other)?;
-    app.manage(watcher);
-    if let Err(error) = tray::setup(app.handle()) {
-        tray::recover_main(app.handle(), &error);
-    }
-    // The tray panel is a persistent surface; its usage data must
-    // refresh even while the main window is hidden, closed to the
-    // tray, or on another page. The scheduler thread owns that
-    // cadence, so no renderer lifecycle can stop it.
-    usage_query::scheduler::spawn(app.handle().clone());
-    storage::spawn(app.handle().clone());
-    session_manager::history::spawn(app.handle(), local.root().to_path_buf());
-    update_temp_sweep::spawn(app.handle().clone());
-    runtime_log::record_started();
     #[cfg(debug_assertions)]
-    {
-        let web_development = std::env::var_os("ASB_WEB_DEVELOPMENT");
-        if web_development_enabled(web_development.as_deref()) {
-            let development_origin = app
-                .config()
-                .build
-                .dev_url
-                .as_ref()
-                .map(|url| url.origin().ascii_serialization())
-                .ok_or_else(|| std::io::Error::other("缺少浏览器开发地址"))?;
-            dev_api::start(app.handle().clone(), development_origin)
-                .map_err(std::io::Error::other)?;
-            // The persistent Vite process owns the one-shot browser launch;
-            // Tauri restarts this process for every backend hot reload.
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.hide();
-                workspace_visibility::publish(app.handle());
-            }
-        }
-    }
+    start_development_api(app.handle()).map_err(std::io::Error::other)?;
+    application_preparation::start(app.handle().clone(), local, preferences, sender, receiver);
+    Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn start_development_api(app: &tauri::AppHandle) -> Result<(), String> {
+    if !web_development_enabled(std::env::var_os("ASB_WEB_DEVELOPMENT").as_deref()) { return Ok(()); }
+    let origin = app.config().build.dev_url.as_ref().map(|url| url.origin().ascii_serialization())
+        .ok_or("缺少浏览器开发地址")?;
+    dev_api::start(app.clone(), origin)?;
+    use tauri::Manager;
+    if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); }
+    workspace_visibility::publish(app);
     Ok(())
 }
 
@@ -354,71 +245,70 @@ fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 }
 
 fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
-    use tauri::Manager;
     if matches!(&event, tauri::RunEvent::Exit) {
-        session_manager::history::flush_on_exit(app);
+        if app.try_state::<application_preparation::Preparation>().is_some_and(|state| state.require_ready().is_ok()) {
+            session_manager::history::flush_on_exit(app);
+        }
         return;
     }
     if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
-        match app.state::<std::sync::Arc<session_manager::range::Operations>>().progress() {
-            Ok(progress) if progress.running => {
-                api.prevent_exit(); exit_recovery::show(app, exit_recovery::Destination::Sessions, ""); return;
-            }
-            Err(error) => {
-                api.prevent_exit(); exit_recovery::show(app, exit_recovery::Destination::Sessions, &error); return;
-            }
-            _ => {}
+        if app.try_state::<application_preparation::Preparation>().is_some_and(|state| state.defer_exit(code)) {
+            api.prevent_exit(); return;
         }
-        if let Some(destination) = exit_recovery::active_client_destination() {
-            api.prevent_exit();
-            exit_recovery::show(app, destination, "");
-            return;
-        }
-        // A user-invoked desktop restart must never enter the
-        // close-to-tray path. Tauri uses this dedicated code when it
-        // relaunches the executable.
+        if exit_blocked_by_operations(app) { api.prevent_exit(); resume_preparation(app); return; }
         if code == Some(tauri::RESTART_EXIT_CODE) {
-            // Restart is a normal exit: stop the in-flight probe call and
-            // record the cancellation before the process is replaced.
-            if let Err(error) = codex_probe::shutdown_on_exit(app) {
-                api.prevent_exit();
-                log::error!("检测未能安全结束，已取消退出：{error}");
-                exit_recovery::show(app, exit_recovery::Destination::Radar, &error.to_string());
-                return;
-            }
+            if defer_final_preparation_exit(app, code) || !stop_probe_for_exit(app) { api.prevent_exit(); }
             return;
         }
-        // Explicit quit and the configured close-to-exit action end
-        // the process; implicit exits remain recoverable via the tray.
         if !tray::take_explicit_exit() && tray::should_absorb(app) {
             api.prevent_exit();
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.hide();
-                workspace_visibility::publish(app);
-            }
+            if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); workspace_visibility::publish(app); }
         } else {
-            // Terminate any probe subprocess first so no detection call
-            // outlives the shell and keeps spending quota.
-            if let Err(error) = codex_probe::shutdown_on_exit(app) {
-                api.prevent_exit();
-                log::error!("检测未能安全结束，已取消退出：{error}");
-                exit_recovery::show(app, exit_recovery::Destination::Radar, &error.to_string());
-                return;
-            }
+            if defer_final_preparation_exit(app, code) || !stop_probe_for_exit(app) { api.prevent_exit(); return; }
             if let Some(gateway) = app.try_state::<gateway::GatewayController>() {
                 if let Err(error) = commands::switching::claude_gateway::restore_on_exit(app) {
-                    api.prevent_exit();
+                    api.prevent_exit(); resume_preparation(app);
                     app.state::<codex_probe::ProbeRegistry>().resume_after_blocked_exit();
                     log::error!("Claude 接管恢复失败，已取消退出：{error}");
                     exit_recovery::show(app, exit_recovery::Destination::Backups, &error.to_string());
-                } else {
-                    gateway.shutdown();
-                }
+                } else { gateway.shutdown(); }
             }
         }
     }
 }
 
+fn exit_blocked_by_operations(app: &tauri::AppHandle) -> bool {
+    match app.state::<std::sync::Arc<session_manager::range::Operations>>().progress() {
+        Ok(progress) if progress.running => { exit_recovery::show(app, exit_recovery::Destination::Sessions, ""); return true; }
+        Err(error) => { exit_recovery::show(app, exit_recovery::Destination::Sessions, &error); return true; }
+        _ => {}
+    }
+    if let Some(destination) = exit_recovery::active_client_destination() {
+        exit_recovery::show(app, destination, ""); return true;
+    }
+    false
+}
+
+fn stop_probe_for_exit(app: &tauri::AppHandle) -> bool {
+    if app.try_state::<codex_probe::ProbeRegistry>().is_none() { return true; }
+    if let Err(error) = codex_probe::shutdown_on_exit(app) {
+        resume_preparation(app);
+        log::error!("检测未能安全结束，已取消退出：{error}");
+        exit_recovery::show(app, exit_recovery::Destination::Radar, &error.to_string());
+        return false;
+    }
+    true
+}
+
+fn defer_final_preparation_exit(app: &tauri::AppHandle, code: Option<i32>) -> bool {
+    let pending = app.try_state::<application_preparation::Preparation>().is_some_and(|state| state.prepare_exit(code));
+    if pending { tray::request_explicit_exit(); }
+    pending
+}
+
+fn resume_preparation(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<application_preparation::Preparation>() { state.resume_after_blocked_exit(); }
+}
 
 #[cfg(test)]
 mod tests {

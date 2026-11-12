@@ -1,18 +1,24 @@
 //! Immutable runtime policy and revision-bound HTTP clients.
-use super::{OutboundProxyMode, OutboundProxySettings};
+use super::{OutboundProxyError, OutboundProxyMode, OutboundProxySettings};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
 pub(super) fn update(settings: &OutboundProxySettings) {
     store_snapshot(Arc::new(Snapshot {
-        revision: settings.revision.clone(), mode: settings.mode, url: settings.url.clone(),
+        revision: settings.revision.clone(), mode: settings.mode, url: settings.url.clone(), error: None,
     }));
+}
+
+pub(super) fn unavailable(error: OutboundProxyError) {
+    store_snapshot(Arc::new(Snapshot { revision: uuid::Uuid::new_v4().to_string(),
+        mode: OutboundProxyMode::None, url: None, error: Some(error) }));
 }
 
 struct Snapshot {
     revision: String,
     mode: OutboundProxyMode,
     url: Option<String>,
+    error: Option<OutboundProxyError>,
 }
 
 fn cell() -> &'static RwLock<Arc<Snapshot>> {
@@ -22,6 +28,7 @@ fn cell() -> &'static RwLock<Arc<Snapshot>> {
             revision: OutboundProxySettings::default().revision,
             mode: OutboundProxyMode::None,
             url: None,
+            error: None,
         }))
     })
 }
@@ -105,8 +112,14 @@ fn decision_for(current: &Snapshot) -> EgressDecision {
 /// egress; `System` keeps reqwest's environment handling unless the detected
 /// proxy is this gateway itself (a request loop); `Manual` routes everything
 /// through the configured proxy.
-pub(crate) fn apply(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
-    apply_snapshot(builder, &snapshot())
+pub(crate) fn apply(builder: reqwest::ClientBuilder) -> Result<reqwest::ClientBuilder, OutboundProxyError> {
+    let current = snapshot();
+    require_available(&current)?;
+    Ok(apply_snapshot(builder, &current))
+}
+
+fn require_available(current: &Snapshot) -> Result<(), OutboundProxyError> {
+    current.error.clone().map_or(Ok(()), Err)
 }
 
 fn apply_snapshot(builder: reqwest::ClientBuilder, current: &Snapshot) -> reqwest::ClientBuilder {
@@ -122,8 +135,10 @@ fn apply_snapshot(builder: reqwest::ClientBuilder, current: &Snapshot) -> reqwes
 /// Blocking twin of [`apply`] for the probe transport.
 pub(crate) fn apply_blocking(
     builder: reqwest::blocking::ClientBuilder,
-) -> reqwest::blocking::ClientBuilder {
-    apply_blocking_snapshot(builder, &snapshot())
+) -> Result<reqwest::blocking::ClientBuilder, OutboundProxyError> {
+    let current = snapshot();
+    require_available(&current)?;
+    Ok(apply_blocking_snapshot(builder, &current))
 }
 
 fn apply_blocking_snapshot(
@@ -144,32 +159,34 @@ fn apply_blocking_snapshot(
 pub(crate) fn cached_blocking_client(
     key: &'static str,
     build: impl FnOnce(reqwest::blocking::ClientBuilder) -> reqwest::blocking::Client,
-) -> reqwest::blocking::Client {
+) -> Result<reqwest::blocking::Client, OutboundProxyError> {
     static CLIENTS: OnceLock<RwLock<HashMap<&'static str, (String, reqwest::blocking::Client)>>> = OnceLock::new();
     let cell = CLIENTS.get_or_init(|| RwLock::new(HashMap::new()));
     let mut clients = cell.write().unwrap_or_else(|poisoned| poisoned.into_inner());
     let current = snapshot();
+    require_available(&current)?;
     if let Some((revision, client)) = clients.get(key) {
-        if revision == &current.revision { return client.clone(); }
+        if revision == &current.revision { return Ok(client.clone()); }
     }
     let client = build(apply_blocking_snapshot(reqwest::blocking::ClientBuilder::new(), &current));
     clients.insert(key, (current.revision.clone(), client.clone()));
-    client
+    Ok(client)
 }
 
 /// Each client is built and labelled from the same immutable policy snapshot.
 pub(crate) fn cached_client(
     key: &'static str,
     build: impl FnOnce(reqwest::ClientBuilder) -> reqwest::Client,
-) -> reqwest::Client {
+) -> Result<reqwest::Client, OutboundProxyError> {
     static CLIENTS: OnceLock<RwLock<HashMap<&'static str, (String, reqwest::Client)>>> = OnceLock::new();
     let cell = CLIENTS.get_or_init(|| RwLock::new(HashMap::new()));
     let mut clients = cell.write().unwrap_or_else(|poisoned| poisoned.into_inner());
     let current = snapshot();
+    require_available(&current)?;
     if let Some((revision, client)) = clients.get(key) {
-        if revision == &current.revision { return client.clone(); }
+        if revision == &current.revision { return Ok(client.clone()); }
     }
     let client = build(apply_snapshot(reqwest::Client::builder(), &current));
     clients.insert(key, (current.revision.clone(), client.clone()));
-    client
+    Ok(client)
 }

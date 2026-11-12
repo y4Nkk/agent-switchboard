@@ -68,6 +68,10 @@ export function onTrayError(handler: (error: CommandError) => void): Promise<() 
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen<CommandError>("tray-error", (event) => handler(event.payload));
 }
+export function onApplicationPreparationChanged(handler: () => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  return listen("application-preparation-changed", handler);
+}
 /** Native blocked exits reveal the exact workspace that can finish recovery. */
 export function onExitRecovery(handler: (destination: "radar" | "backups" | "clientManagement" | "sessions") => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});

@@ -19,14 +19,14 @@ pub(super) const MAX_RESPONSE_BYTES: usize = 64 * 1_024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 
 pub(super) fn client() -> Result<reqwest::Client, CommandError> {
-    Ok(crate::outbound_proxy::cached_client(
+    crate::outbound_proxy::cached_client(
         "provider-request",
         |builder| {
             client_builder(builder)
                 .build()
                 .expect("先前已验证的请求客户端配置不会失效")
         },
-    ))
+    ).map_err(crate::commands::outbound_proxy_settings::settings_error)
 }
 
 fn client_builder(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {

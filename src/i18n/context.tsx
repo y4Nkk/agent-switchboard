@@ -14,7 +14,7 @@ export interface I18n {
 
 /** Components and plain formatters read the same committed language snapshot. */
 export function useI18n(): I18n {
-  const language = useSyncExternalStore(subscribeLanguage, currentLanguage);
+  const language = useSyncExternalStore(subscribeLanguage, currentLanguage, currentLanguage);
   return useMemo(() => ({
     language,
     t: <K extends MessageKey>(key: K, ...args: TemplateArgs<K>) =>

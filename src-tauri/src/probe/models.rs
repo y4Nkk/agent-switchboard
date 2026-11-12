@@ -47,7 +47,7 @@ pub fn fetch_models(
         return super::claude_gemini::fetch(base_url, api_key, authentication, connection);
     }
     let url = asb_core::endpoint::models_endpoint_for_connection(base_url, protocol, connection)?;
-    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder())
+    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder()).map_err(|error| error.to_string())?
         .user_agent("Agent Switchboard")
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(15))

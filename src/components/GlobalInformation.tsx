@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Dialog, Popover } from "react-aria-components";
 import type { CommandError } from "../api/client";
-import { canRepairApplicationData } from "../api/data-repair";
+import type { ApplicationPreparation } from "../api/application-preparation";
+import { PreparationDetails } from "./ApplicationPreparation";
 import { useI18n } from "../i18n";
 import { commandErrorText } from "../i18n/errors";
 import { Button } from "./Button";
@@ -16,8 +17,7 @@ interface Props {
   error: CommandError | null;
   settingsError: string | null;
   busy: boolean;
-  onRepairData: () => void;
-  onRepairSettings: () => void;
+  preparation: ApplicationPreparation;
 }
 
 interface InformationMessage {
@@ -25,7 +25,6 @@ interface InformationMessage {
   kind: ToastKind;
   title: ToastContent;
   description?: ToastContent;
-  action?: ReactNode;
   onDismiss?: () => void;
   toastId?: string;
 }
@@ -43,7 +42,6 @@ function InformationRow({ message, onBeforeDismiss }: {
         {message.description && (
           <div className="asb-information-description"><ToastText content={message.description} /></div>
         )}
-        {message.action && <div className="asb-information-actions">{message.action}</div>}
       </div>
       {message.onDismiss && (
         <Tooltip label={t("shell.information.delete")} className="asb-information-tooltip">
@@ -59,21 +57,24 @@ function InformationRow({ message, onBeforeDismiss }: {
   );
 }
 
-function useInformationMessages({ error, settingsError, busy, onRepairData, onRepairSettings }: Props) {
+function useInformationMessages({ error, settingsError, busy, preparation }: Props) {
   const { t } = useI18n();
   const queue = useToast();
   const messages: InformationMessage[] = [];
 
   if (settingsError) messages.push({
     id: "settings-error", kind: "error", title: t("shell.banner.settingsUnavailable", { detail: settingsError }),
-    action: <Button variant="secondary" disabled={busy} onClick={onRepairSettings}>{t("shell.banner.repair")}</Button>,
   });
   if (error) messages.push({
     id: "operation-error", kind: "error", title: commandErrorText(error, t),
-    action: canRepairApplicationData(error)
-      ? <Button variant="secondary" disabled={busy} onClick={onRepairData}>{t("shell.banner.repairData")}</Button>
-      : undefined,
+
   });
+  if (preparation.status !== "running" && (preparation.issues.length || preparation.repairedFiles.length)) {
+    messages.push({ id: `preparation-${preparation.sessionId}-${preparation.runId}`, kind: preparation.issues.length ? "warning" : "info",
+      title: preparation.issues.length ? t("preparation.partial")
+        : t("preparation.repaired", { count: preparation.repairedFiles.length }),
+      description: <PreparationDetails snapshot={preparation} /> });
+  }
   const toastMessages = queue.toasts.map((toast): InformationMessage => ({
     id: `toast-${toast.id}`, toastId: toast.id, kind: toast.kind,
     title: toast.title || toast.description, description: toast.title ? toast.description : undefined,

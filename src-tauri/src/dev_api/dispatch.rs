@@ -14,6 +14,12 @@ mod usage;
 mod configuration;
 
 pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandError> {
+    crate::application_preparation::authorize(app, &request.command)?;
+    match request.command.as_str() {
+        "get_application_preparation" => return as_json(crate::application_preparation::get_application_preparation(app.clone())),
+        "recheck_application_data" => return as_json(crate::application_preparation::recheck_application_data(app.clone())),
+        _ => {}
+    }
     tauri::async_runtime::block_on(async {
         if let Some(result) = client_software::dispatch(app, &request).await? { return Ok(result); }
         if let Some(result) = super::settings_dispatch::dispatch(app, &request).await? {

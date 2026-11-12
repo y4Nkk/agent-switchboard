@@ -80,7 +80,7 @@ fn reads_all_event_severities_except_silent() {
     let warn = entry(
         "2026-08-31T02:03:04.000Z",
         RuntimeLogSeverity::Warn,
-        RuntimeLogAction::ProfileStoreRepaired,
+        RuntimeLogAction::ApplicationDataRepaired,
     );
     fs::write(
         directory.path().join("agent-switchboard.log"),

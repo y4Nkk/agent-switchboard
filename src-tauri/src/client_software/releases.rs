@@ -114,7 +114,7 @@ pub fn sources(item: &Installation) -> (Source, Option<Source>) {
 
 pub fn download(source: &str, limit: u64) -> Result<Vec<u8>, String> {
     let url = source.split('#').next().unwrap_or(source);
-    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder())
+    let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder()).map_err(|error| error.to_string())?
         .timeout(Duration::from_secs(20)).connect_timeout(Duration::from_secs(8))
         .user_agent(concat!("AgentSwitchboard/", env!("CARGO_PKG_VERSION")))
         .redirect(reqwest::redirect::Policy::limited(4)).build().map_err(|e| process::scrub(&e.to_string()))?;

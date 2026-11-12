@@ -5,6 +5,7 @@
  * from this object: translating an unknown key is a type error, and each
  * domain owns a reserved key prefix so names cannot collide silently.
  */
+import { messages as preparation } from "./messages/preparation.ts";
 import { messages as backup } from "./messages/backup.ts";
 import { messages as clientConfig } from "./messages/clientConfig.ts";
 import { messages as clientSoftware } from "./messages/client-software.ts";
@@ -43,6 +44,7 @@ import { messages as resources } from "./messages/resources.ts";
 import { messages as modelRoutes } from "./messages/modelRoutes.ts";
 
 export const messages = Object.freeze({
+  ...preparation,
   ...modelRoutes,
   ...backup,
   ...clientConfig,

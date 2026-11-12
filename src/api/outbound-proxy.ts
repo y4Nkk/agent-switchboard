@@ -12,24 +12,18 @@ export interface OutboundProxySettings {
   revision: string;
 }
 
-export function getOutboundProxySettings(): Promise<OutboundProxySettings> {
-  return invoke<OutboundProxySettings>("get_outbound_proxy_settings", {});
+export interface OutboundProxyView {
+  settings: OutboundProxySettings | null;
+  revision: string;
+  issue: import("./shared").CommandError | null;
 }
 
-/** Saves with optimistic concurrency; a stale revision is rejected. */
+export function getOutboundProxySettings(): Promise<OutboundProxyView> {
+  return invoke("get_outbound_proxy_settings");
+}
+
 export function setOutboundProxySettings(
-  settings: OutboundProxySettings,
-  expectedRevision: string,
-): Promise<OutboundProxySettings> {
-  return invoke<OutboundProxySettings>("set_outbound_proxy_settings", { settings, expectedRevision });
-}
-
-export interface OutboundProxyRepairReport {
-  settings: OutboundProxySettings;
-  backupPath: string | null;
-}
-
-/** Rechecks the file and preserves invalid bytes before restoring defaults. */
-export function repairOutboundProxySettings(): Promise<OutboundProxyRepairReport> {
-  return invoke<OutboundProxyRepairReport>("repair_outbound_proxy_settings", {});
+  settings: { mode: OutboundProxyMode; url: string | null }, expectedRevision: string,
+): Promise<OutboundProxyView> {
+  return invoke("set_outbound_proxy_settings", { settings, expectedRevision });
 }

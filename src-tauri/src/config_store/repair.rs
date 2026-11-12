@@ -4,7 +4,11 @@
 mod settings;
 use settings::{fill_automatic, repair_claude_provider};
 
-use super::snapshot::activation::{activate_staged, Activation};
+mod files;
+mod transaction;
+use files::{copy_tree, json_files, relative};
+#[cfg(test)]
+use files::file_tree;
 use super::{history, write_json_atomic, ConfigStore, PROFILE_PREIMAGE_FILE, SWITCH_INTENT_FILE};
 use asb_core::contracts::{
     AppKind, CodexProviderFile, ProviderConnectionOptions, ProviderFile, RouteMode,
@@ -15,10 +19,10 @@ use asb_core::endpoint::strip_anthropic_version_prefix;
 use asb_core::{contracts::SettingValue, ownership::{default_client_settings, default_provider_parameters}};
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
-use uuid::Uuid;
+use std::path::Path;
+#[cfg(test)]
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,49 +42,34 @@ impl ConfigStore {
     /// Repairs only files whose meaning is unambiguous, then validates the
     /// complete staged store. The original directory is retained on success.
     pub fn repair(&self) -> Result<RepairReport, String> {
+        if let Some(report) = self.recover_pending_repair()? { return Ok(report); }
         reject_legacy_and_pending(self)?;
-        let live = self.configuration_dir();
-        let original = file_tree(&live)?;
-        let id = Uuid::new_v4().simple();
-        let stage_root = self.state_root.join(format!("repair-stage-{id}"));
-        let staged = stage_root.join("configuration");
-        if let Err(error) = copy_tree(&live, &staged) {
-            let _ = fs::remove_dir_all(&stage_root);
-            return Err(error);
+        if let Ok(snapshot) = super::snapshot::read_configuration_snapshot(self) {
+            if super::snapshot::validate_snapshot(&snapshot).is_ok() {
+                return Ok(RepairReport { repaired_files: Vec::new(), backup_path: None });
+            }
         }
-        let mut preserve_stage = false;
-        let result = (|| {
-            let repaired_files = repair_stage(&staged)?;
-            let probe = ConfigStore::new(stage_root.clone());
+        let mut transaction = transaction::Transaction::begin(self)?;
+        let staged = transaction.staged();
+        let prepared = (|| {
+            copy_tree(&self.configuration_dir(), &staged)?;
+            let repaired = repair_stage(&staged)?;
+            let probe = ConfigStore::new(transaction.stage_root());
             let snapshot = super::snapshot::read_configuration_snapshot(&probe)
                 .map_err(|error| format!("修复后的配置仍未通过校验：{error}"))?;
-            super::snapshot::validate_snapshot(&snapshot)
-                .map_err(|error| format!("修复后的配置仍未通过校验：{error}"))?;
-            if file_tree(&live)? != original {
-                return Err("修复期间配置被外部修改；原数据未变，请重试".to_string());
-            }
-            if repaired_files.is_empty() {
-                return Ok((repaired_files, None));
-            }
-            let backup = self.state_root.join(format!("repair-backup-{id}"));
-            let mut rename = |from: &Path, to: &Path| fs::rename(from, to);
-            match activate_staged(&live, &staged, &backup, &mut rename) {
-                Activation::Enabled { retired } => Ok((repaired_files, retired)),
-                Activation::Restored(error) => Err(error),
-                Activation::RecoveryRequired(error) => {
-                    preserve_stage = true;
-                    Err(error)
-                }
-            }
+            super::snapshot::validate_snapshot(&snapshot)?;
+            if repaired.is_empty() { return Err("配置无法通过当前修复规则恢复，原件已保留".into()); }
+            Ok(repaired)
         })();
-        // A failed rollback leaves both paths in place for manual recovery.
-        if !preserve_stage {
-            let _ = fs::remove_dir_all(&stage_root);
-        }
-        result.map(|(repaired_files, backup_path)| RepairReport {
-            repaired_files,
-            backup_path: backup_path.map(|path| path.display().to_string()),
-        })
+        let repaired = match prepared {
+            Ok(files) => files,
+            Err(error) => {
+                transaction.discard().map_err(|cleanup| format!("{error}；暂存清理失败：{cleanup}"))?;
+                return Err(error);
+            }
+        };
+        transaction.prepare(repaired)?;
+        transaction.commit()
     }
 }
 
@@ -144,7 +133,7 @@ fn repair_file(root: &Path, path: &Path, kind: FileKind) -> Result<bool, String>
     let mut value: Value = serde_json::from_str(source)
         .map_err(|error| format!("{label} 的 JSON 无效：{error}"))?;
     let mut changed = if provider {
-        repair_provider_urls(kind, &mut value)?
+        repair_provider_urls(kind, &mut value).map_err(|error| format!("{label}：{error}"))?
     } else {
         false
     };
@@ -175,8 +164,8 @@ fn repair_file(root: &Path, path: &Path, kind: FileKind) -> Result<bool, String>
 }
 
 /// Repairs a terminal Anthropic version prefix using the endpoint owner's
-/// source and result validation. Matching candidates are removed instead of
-/// redirected; the repair backup preserves them. Full-URL mode and other
+/// source and result validation. Ambiguous candidates reject the transaction.
+/// Full-URL mode and other
 /// protocols keep their declared targets. Typed files retain serde as the
 /// routing fields' owner; unrepairable inputs fail in `inspect_provider`.
 fn repair_provider_urls(kind: FileKind, value: &mut Value) -> Result<bool, String> {
@@ -196,7 +185,7 @@ fn repair_provider_urls(kind: FileKind, value: &mut Value) -> Result<bool, Strin
                 file.profile.endpoint.0 = root;
                 changed = true;
             }
-            changed |= drop_version_prefixed_candidates(&mut file.profile.connection);
+            reject_version_prefixed_candidates(&file.profile.connection)?;
             write_back_if_repaired(value, &file, changed)
         }
         FileKind::GenericProvider(_) => {
@@ -218,24 +207,17 @@ fn repair_provider_urls(kind: FileKind, value: &mut Value) -> Result<bool, Strin
                 file.base_url = Some(root);
                 changed = true;
             }
-            changed |= drop_version_prefixed_candidates(&mut file.connection);
+            reject_version_prefixed_candidates(&file.connection)?;
             write_back_if_repaired(value, &file, changed)
         }
     }
 }
 
-fn drop_version_prefixed_candidates(connection: &mut ProviderConnectionOptions) -> bool {
-    let prefixed = connection
-        .custom_endpoints
-        .keys()
-        .filter(|url| strip_anthropic_version_prefix(url).is_some())
-        .cloned()
-        .collect::<Vec<_>>();
-    let changed = !prefixed.is_empty();
-    for url in prefixed {
-        connection.custom_endpoints.remove(&url);
+fn reject_version_prefixed_candidates(connection: &ProviderConnectionOptions) -> Result<(), String> {
+    if connection.custom_endpoints.keys().any(|url| strip_anthropic_version_prefix(url).is_some()) {
+        return Err("自定义端点的目标含义无法确定，已保留全部候选和原始配置；请明确修改连接设置".into());
     }
-    changed
+    Ok(())
 }
 
 fn write_back_if_repaired<T: Serialize>(
@@ -294,66 +276,6 @@ fn repair_history(root: &Path, path: &Path, app: AppKind) -> Result<bool, String
         return Ok(true);
     }
     Ok(false)
-}
-
-fn json_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(format!("{} 不可读：{error}", dir.display())),
-    };
-    let mut files = Vec::new();
-    for entry in entries {
-        let path = entry.map_err(|error| error.to_string())?.path();
-        if path.extension().and_then(|value| value.to_str()) == Some("json") {
-            files.push(path);
-        }
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn relative(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root).unwrap_or(path).display().to_string()
-}
-
-fn file_tree(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> {
-    let mut files = BTreeMap::new();
-    collect_files(root, root, &mut files)?;
-    Ok(files)
-}
-
-fn collect_files(root: &Path, dir: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) -> Result<(), String> {
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound && dir == root => return Ok(()),
-        Err(error) => return Err(format!("{} 不可读：{error}", dir.display())),
-    };
-    for entry in entries {
-        let path = entry.map_err(|error| error.to_string())?.path();
-        let kind = fs::symlink_metadata(&path).map_err(|error| error.to_string())?.file_type();
-        if kind.is_symlink() { return Err(format!("配置目录含符号链接，无法安全修复：{}", path.display())); }
-        if kind.is_dir() { collect_files(root, &path, files)?; }
-        else if kind.is_file() {
-            files.insert(path.strip_prefix(root).map_err(|error| error.to_string())?.to_path_buf(),
-                fs::read(&path).map_err(|error| error.to_string())?);
-        } else { return Err(format!("配置目录含不支持的条目：{}", path.display())); }
-    }
-    Ok(())
-}
-
-fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
-    fs::create_dir_all(target).map_err(|error| error.to_string())?;
-    if !source.exists() { return Ok(()); }
-    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
-        let path = entry.map_err(|error| error.to_string())?.path();
-        let destination = target.join(path.file_name().ok_or("无效配置文件名")?);
-        let kind = fs::symlink_metadata(&path).map_err(|error| error.to_string())?.file_type();
-        if kind.is_dir() { copy_tree(&path, &destination)?; }
-        else if kind.is_file() { fs::copy(&path, &destination).map_err(|error| error.to_string())?; }
-        else { return Err(format!("配置目录含不支持的条目：{}", path.display())); }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

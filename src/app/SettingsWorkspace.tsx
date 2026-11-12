@@ -12,7 +12,7 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
     <SettingsPage section={model.settingsSection} onSectionChange={model.setSettingsSection}
       onReturnToProviders={model.settingsReturnToProviders ? model.returnToProviders : undefined}
       egress={<OutboundProxySettings active={active && model.settingsSection === "application"} busy={busy}
-        revision={model.dataRepair.revision} onBusy={model.setBusy} onError={model.reportError}
+        revision={model.dataRevision} onBusy={model.setBusy} onError={model.reportError}
         onRecovered={model.clearOutboundProxyError} />}
       storage={<StorageSettings active={active && model.settingsSection === "storage"} busy={busy}
         onArchived={() => { void snapshot.refresh(); }} />}
@@ -29,7 +29,7 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         logLevel={settings.appSettings?.runtimeLogLevel ?? null}
         onLogLevelChange={(runtimeLogLevel) => settings.saveSettingsPatch({ runtimeLogLevel })} />}
       settings={settings.appSettings} loadError={settings.loadError} desktopError={settings.desktopError} onRetryLoad={settings.retryLoad}
-      onRepair={() => void settings.repairSettings()} busy={busy} onPatch={settings.saveSettingsPatch}
+      busy={busy} onPatch={settings.saveSettingsPatch}
       onRestart={() => void settings.restart()} updateCheck={update.updateCheck} updateChannel={update.updateChannel}
       appVersion={update.appVersion} updateChecking={update.checking} updateInstalling={update.installing}
       updateDownload={update} updateCheckedAt={update.lastCheckedAt}

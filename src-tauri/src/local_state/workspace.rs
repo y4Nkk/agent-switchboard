@@ -49,7 +49,7 @@ mod tests {
         fs::write(state.settings_path(), &original).unwrap();
         assert!(state.get_app_settings().is_err());
         assert_eq!(fs::read(state.settings_path()).unwrap(), original);
-        state.upgrade_app_settings().unwrap();
+        state.prepare_app_settings().unwrap();
         let expected = AppSettings { language: LanguagePreference::ZhCn, ..AppSettings::default() };
         assert_eq!(state.get_app_settings().unwrap(), expected);
         // The upgrade rewrote the file into the current contract, so the next
@@ -87,7 +87,7 @@ mod tests {
     }
 
     #[test]
-    fn older_preferences_are_preserved_until_explicit_repair() {
+    fn unsupported_preferences_are_preserved_without_guessing() {
         let root = tempfile::tempdir().unwrap();
         let state = LocalState::from_root(root.path().to_path_buf());
         let mut older = serde_json::to_value(AppSettings::default()).unwrap();
@@ -96,7 +96,7 @@ mod tests {
         fs::write(state.settings_path(), &original).unwrap();
         assert!(state.get_app_settings().is_err());
         assert_eq!(fs::read(state.settings_path()).unwrap(), original);
-        assert_eq!(state.repair_app_settings().unwrap(), AppSettings::default());
-        assert_eq!(state.get_app_settings().unwrap(), AppSettings::default());
+        assert!(state.prepare_app_settings().is_err());
+        assert_eq!(fs::read(state.settings_path()).unwrap(), original);
     }
 }
