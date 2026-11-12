@@ -3,6 +3,7 @@ import type { MessageEntry } from "../types";
 /** Domain dictionary for operations (zh-CN / en-US pairs). Keys are prefixed with
  * "operations." and must never collide with another domain file. */
 export const messages = {
+  "operations.save.retryRelease": ["旧预览撤销失败，已保留待撤销记录。下次预览或保存会先重试撤销，成功前不会创建新预览；旧预览不能提交。", "The old preview could not be canceled and remains queued for release. Your next preview or save retries cancellation first and proceeds only after success. The old preview cannot be submitted."],
   // Save-and-apply confirmation sheet.
   "operations.save.title": ["确认保存并应用", "Confirm save and apply"],
   "operations.save.writesTarget": ["将写入 {target}", "Writes to {target}"],

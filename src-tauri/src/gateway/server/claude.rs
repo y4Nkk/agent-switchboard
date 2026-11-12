@@ -5,6 +5,7 @@ mod attempt;
 mod query;
 mod response;
 use super::*;
+use crate::gateway::GatewayController;
 use crate::gateway::failover::{self, ClaudeFailoverPolicy};
 use crate::gateway::provider_health::RequestPermit;
 use crate::gateway::request_ledger::{ClaudeFailoverAttempt, ClaudeFailoverOutcome};
@@ -21,7 +22,7 @@ pub(super) fn forward_claude_request(
     body: Vec<u8>,
 ) {
     let input = read_input(&inner, protocol, &body);
-    let (policy, model) = match input {
+    let (mut policy, model) = match input {
         Ok(input) => input,
         Err((status, error)) => {
             span.finish(Some(status), 0);
@@ -29,6 +30,21 @@ pub(super) fn forward_claude_request(
             return;
         }
     };
+    let controller = GatewayController { inner: inner.clone() };
+    let (candidates, body, fixed) = match controller.resolve_claude_target(candidates, body) {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            span.finish(Some(422), 0);
+            respond_error(request, Some(protocol), 422, &error);
+            return;
+        }
+    };
+    if fixed { policy.enabled = false; }
+    if let Err(error) = crate::gateway::claude_targets::validate_candidate_roles(&candidates) {
+        span.finish(Some(422), 0);
+        respond_error(request, Some(protocol), 422, &error);
+        return;
+    }
     span.note_request_model(model);
     Forwarding {
         request,

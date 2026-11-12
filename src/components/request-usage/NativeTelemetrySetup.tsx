@@ -45,7 +45,7 @@ export function NativeTelemetrySetup({ active, onApplied }: { active: boolean; o
       <div className="asb-native-telemetry-content">
         {state.data && <ExportClients clients={state.data.clients} busy={state.busy}
           listening={Boolean(listening)} onPreview={(app, enabled) => void state.preview(app, enabled)} />}
-        {receiver && <p className="asb-request-usage-extra-status">
+        {receiver && <p className="asb-request-usage-status">
           <code>{receiver.endpoint}</code>
           <span>{t("usagePerformance.acceptedRecords")} {receiver.acceptedRecords}</span>
           <span>{t("usagePerformance.ignoredRecords")} {receiver.ignoredRecords}</span>

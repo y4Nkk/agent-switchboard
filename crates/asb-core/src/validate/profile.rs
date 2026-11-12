@@ -163,6 +163,13 @@ fn validate_custom_route(fields: &ProfileFields<'_>) -> Result<(), ValidationErr
     if fields.official_quota_refresh_interval.is_some() {
         return Err(ValidationError::QuotaIntervalRequiresOfficialCodex);
     }
+    if fields.connection.claude_native.is_some()
+        && matches!(fields.model_options, Some(ModelOptions::Claude(settings)) if settings.has_provider_routes())
+    {
+        return Err(ValidationError::ClaudeProviderOptions(
+            "原生云 SDK 档案不能使用跨供应商用途路由".into(),
+        ));
+    }
     if let Some(native) = &fields.connection.claude_native {
         return super::claude::validate_native(
             fields.app,
@@ -347,21 +354,28 @@ fn validate_claude_settings(
     settings: &ClaudeModelSettings,
     primary_model: Option<&str>,
 ) -> Result<(), ValidationError> {
-    validate_model_identifier(settings.haiku_model.as_deref(), "Haiku 档")?;
-    validate_model_identifier(settings.sonnet_model.as_deref(), "Sonnet 档")?;
-    validate_model_identifier(settings.opus_model.as_deref(), "Opus 档")?;
-    validate_model_identifier(settings.fable_model.as_deref(), "Fable 档")?;
-    validate_model_identifier(settings.subagent_model.as_deref(), "子 agent 模型")?;
-    validate_one_m_enabled(
-        settings.fable_one_m,
-        settings.fable_model.as_deref(),
-        "Fable 档",
-    )?;
-    validate_one_m_enabled(
-        settings.subagent_one_m,
-        settings.subagent_model.as_deref(),
-        "子 agent 模型",
-    )?;
+    for role in crate::contracts::ClaudeModelRole::ALL {
+        if let Some(route) = settings.route(role) {
+            validate_model_identifier(Some(route.model()), "Claude 用途模型")?;
+            if route.model().trim().is_empty() {
+                return Err(ValidationError::ClaudeProviderOptions(
+                    "Claude 用途模型不能为空".into(),
+                ));
+            }
+            if let Some(id) = route.profile_id() {
+                if !(crate::contracts::CodexSubagentRoute {
+                    profile_id: id.to_string(),
+                    model: route.model().to_string(),
+                })
+                .has_canonical_profile_id()
+                {
+                    return Err(ValidationError::ClaudeProviderOptions(
+                        "Claude 目标供应商标识必须是标准 UUID".into(),
+                    ));
+                }
+            }
+        }
+    }
     if let Some(names) = &settings.display_names {
         for value in [&names.haiku, &names.sonnet, &names.opus, &names.fable]
             .into_iter()
@@ -372,22 +386,7 @@ fn validate_claude_settings(
             }
         }
     }
-    validate_one_m_enabled(
-        settings.haiku_one_m,
-        settings.haiku_model.as_deref(),
-        "Haiku 档",
-    )?;
     validate_one_m_enabled(settings.primary_one_m, primary_model, "主模型")?;
-    validate_one_m_enabled(
-        settings.sonnet_one_m,
-        settings.sonnet_model.as_deref(),
-        "Sonnet 档",
-    )?;
-    validate_one_m_enabled(
-        settings.opus_one_m,
-        settings.opus_model.as_deref(),
-        "Opus 档",
-    )?;
     if let Some(models) = settings.available_models.as_deref() {
         for model in models {
             if model.trim().is_empty() {

@@ -149,3 +149,51 @@ fn ownership_handoff_removes_the_old_profile_before_applying_shared_preferences(
     assert_eq!(root["modelSettings"]["vendor.model/~v1"]["effortLevel"], "xhigh");
     assert!(root["env"].get(claude_common::PROFILE_MANIFEST).is_none());
 }
+
+fn assert_fixed_target_preferences(inherited: bool) {
+    let mut profile = profile();
+    let mut settings = ClaudeModelSettings::default();
+    let destination = Some(ClaudeModelRoute::Provider {
+        profile_id: "01234567-89ab-cdef-0123-456789abcdef".into(),
+        model: "vendor.model/~v1".into(), one_m: true,
+    });
+    if inherited { settings.routes.opus = destination; } else { settings.routes.fable = destination; }
+    profile.model_options = Some(ModelOptions::Claude(settings));
+    profile.claude_fragment.get_mut("modelSettings").unwrap().as_object_mut().unwrap()
+        .insert("asb-claude-fable".into(),json!({"effortLevel":"low"}));
+    let plan = SwitchPlan::through_gateway(profile,ownership::default_client_settings(AppKind::Claude),
+        "http://127.0.0.1:47821".into(),"local-token".into());
+    let rendered: Value = serde_json::from_str(&render("{}",&plan).unwrap()).unwrap();
+    assert_eq!(rendered["modelSettings"]["asb-claude-fable"]["effortLevel"],"low");
+    assert_eq!(rendered["modelSettings"]["asb-claude-primary"]["effortLevel"],"xhigh");
+    assert_eq!(rendered["env"]["ANTHROPIC_DEFAULT_FABLE_MODEL"],if inherited { "asb-claude-fable" } else { "asb-claude-fable[1m]" });
+}
+
+#[test]
+fn fixed_target_preferences_do_not_inherit_same_named_source_model_preferences() {
+    assert_fixed_target_preferences(false);
+    assert_fixed_target_preferences(true);
+}
+
+#[test]
+fn explicit_claude_target_cannot_be_rendered_as_a_direct_connection() {
+    let mut profile = profile();
+    let shared = ownership::default_client_settings(AppKind::Claude);
+    assert!(render("{}",&SwitchPlan::direct(profile.clone(),shared.clone())).is_ok());
+    let mut settings = ClaudeModelSettings::default();
+    settings.routes.sonnet = Some(ClaudeModelRoute::Provider {
+        profile_id: "01234567-89ab-cdef-0123-456789abcdef".into(),
+        model:"target-only-model".into(),one_m:true,
+    });
+    profile.model_options = Some(ModelOptions::Claude(settings));
+    let direct = SwitchPlan::direct(profile.clone(),shared.clone());
+    assert!(render("{}",&direct).is_err());
+    assert!(preview("{}",&direct,"isolated-backup").is_err());
+    let gateway = SwitchPlan::through_gateway(profile,shared,
+        "http://127.0.0.1:47821".into(),"local-token".into());
+    let content = render("{}",&gateway).unwrap();
+    let rendered:Value = serde_json::from_str(&content).unwrap();
+    assert_eq!(rendered["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"],"asb-claude-sonnet[1m]");
+    assert_eq!(rendered["env"]["ANTHROPIC_BASE_URL"],"http://127.0.0.1:47821");
+    assert!(!content.contains("target-only-model"));
+}

@@ -12,7 +12,9 @@ impl GatewayInner {
         &self,
         wire: &asb_core::contracts::CodexSubagentRoute,
     ) -> Result<(ActiveRoute, Vec<ActiveRoute>), String> {
+        let _targets = self.profile_save_gate.read().map_err(|_| "供应商读取锁不可用")?;
         let store = crate::config_store::ConfigStore::new(self.state_root.clone());
+        self.ensure_target_available(&wire.profile_id)?;
         let file = store
             .find_codex_provider_file(&wire.profile_id)
             .map_err(|_| {
@@ -195,5 +197,19 @@ impl GatewayController {
                 }
             })
             .collect())
+    }
+}
+
+impl GatewayController {
+    pub(crate) fn codex_dependency_revision(
+        &self, owner: &CodexProviderFile, replacement: Option<&CodexProviderFile>,
+    ) -> Result<String, String> {
+        let Some(reference) = &owner.profile.subagent_route else { return Ok(String::new()) };
+        let target = if reference.profile_id == owner.profile.id { owner.clone() }
+            else if let Some(file) = replacement.filter(|file| file.profile.id == reference.profile_id) { file.clone() }
+            else { crate::config_store::ConfigStore::new(self.inner.state_root.clone())
+                .find_codex_provider_file(&reference.profile_id).map_err(|e| e.to_string())? };
+        crate::gateway::validate_subagent_target(reference, &target)?;
+        crate::gateway::codex_route_fingerprint(&target)
     }
 }

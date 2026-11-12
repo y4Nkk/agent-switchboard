@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
-use super::profile_save::ProfileSaveIntent;
 
 const PREPARATION_TTL: Duration = Duration::from_secs(10 * 60);
 const MAX_PREPARATIONS: usize = 32;
@@ -31,7 +30,6 @@ struct PreparationInner {
 }
 
 pub(super) struct PreparedCodexProfileSave {
-    pub(super) intent: ProfileSaveIntent,
     pub(super) created_at: Instant,
     pub(super) profile_id: String,
     pub(super) expected_file_hash: String,
@@ -91,12 +89,11 @@ pub(super) fn prepare_data(
     profile_id: &str,
     draft: &CodexProviderDraft,
     expected_file_hash: &str,
-    intent: ProfileSaveIntent,
 ) -> Result<
     (ProfileSaveKind, Option<asb_switch::FilePreview>, Option<CodexProviderFile>, Option<String>),
     CommandError,
 > {
-    let (_, candidate, kind, owner) = classify(state, gateway, profile_id, draft, expected_file_hash, intent)?;
+    let (_, candidate, kind, owner) = classify(state, gateway, profile_id, draft, expected_file_hash)?;
     let mut candidate_revision = None;
     let preview = if let Some(owner) = &owner {
         let projection = dependencies::projection(state, gateway, owner, &candidate)?;
@@ -125,13 +122,14 @@ pub(super) fn commit(
     prepared: &PreparedCodexProfileSave,
     confirm_write: bool,
 ) -> Result<CodexProviderRecord, CommandError> {
+    let _targets = gateway.inner.profile_save_gate.write()
+        .map_err(|_| CommandError::new("codex-profile-save-unavailable", "供应商保存锁不可用"))?;
     let (stored, candidate, actual_kind, owner) = classify(
         state,
         gateway,
         &prepared.profile_id,
         &prepared.draft,
         &prepared.expected_file_hash,
-        prepared.intent,
     )?;
     if actual_kind != prepared.kind || owner != prepared.projection_profile {
         return Err(stale());
@@ -174,7 +172,6 @@ fn classify(
     profile_id: &str,
     draft: &CodexProviderDraft,
     expected_file_hash: &str,
-    intent: ProfileSaveIntent,
 ) -> Result<
     (CodexProviderRecord, CodexProviderFile, ProfileSaveKind, Option<CodexProviderFile>),
     CommandError,
@@ -210,9 +207,6 @@ fn classify(
         .validate()
         .map_err(|error| CommandError::new("codex-profile-save-invalid", error))?;
     dependencies::validate_references(state, &candidate)?;
-    if intent == ProfileSaveIntent::Activate {
-        return Ok((stored, candidate.clone(), ProfileSaveKind::SaveAndApply, Some(candidate)));
-    }
     if candidate == current {
         return Ok((stored, candidate, ProfileSaveKind::NoChange, None));
     }

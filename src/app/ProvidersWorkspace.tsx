@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useI18n } from "../i18n";
 import { CodexProvidersPage } from "../pages/CodexProvidersPage";
 import { ProviderImportPage } from "../pages/ProviderImportPage";
 import { ProvidersPage } from "../pages/ProvidersPage";
@@ -6,6 +7,7 @@ import { useClientRouteTransition } from "./useClientRouteTransition";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
+  const { t } = useI18n();
   const importing = model.providerView.kind === "import";
   const { snapshot, appFilter, activeProfileId, providers, providerSwitch, appSettingsState, busy, operations } = model;
   const { discoveryState, ccImport, sqlImport } = model;
@@ -23,6 +25,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
   }, [active, importing, appFilter, claudeEditorSession, providerSwitch.clearCandidates]);
   return (
     <div ref={route.workspaceRef} className="asb-client-route-workspace">
+      {providers.pendingReleaseError != null && <p className="asb-field-help" role="status">{t("operations.save.retryRelease")}</p>}
       {importing && <div className="asb-editor-route" hidden={!active}>
         <ProviderImportPage appFilter={appFilter} discovery={discoveryState.discovery} busy={busy}
           ccScan={ccImport.ccScan} ccSelected={ccImport.ccSelected} ccResult={ccImport.ccResult} ccDirectory={ccImport.ccDirectory}

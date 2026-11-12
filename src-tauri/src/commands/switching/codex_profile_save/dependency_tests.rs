@@ -28,9 +28,9 @@ fn prepare(state: &LocalState, gateway: &GatewayController, target: &CodexProvid
     let mut draft = crate::codex_common::test_draft();
     draft.catalog[0].context_window *= 2;
     let (kind, preview, projection_profile, candidate_revision) = prepare_data(
-        state, gateway, &target.profile.id, &draft, &target.file_hash, ProfileSaveIntent::Save,
+        state, gateway, &target.profile.id, &draft, &target.file_hash,
     ).unwrap();
-    PreparedCodexProfileSave { intent: ProfileSaveIntent::Save, created_at: Instant::now(), profile_id: target.profile.id.clone(),
+    PreparedCodexProfileSave { created_at: Instant::now(), profile_id: target.profile.id.clone(),
         expected_file_hash: target.file_hash.clone(), draft, kind, preview, projection_profile, candidate_revision }
 }
 

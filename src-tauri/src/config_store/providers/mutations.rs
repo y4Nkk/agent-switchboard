@@ -90,6 +90,7 @@ impl ConfigStore {
             return Err("该客户端已有官方登录入口".into());
         }
         let profile = ProviderProfile::from_draft(Uuid::new_v4().to_string(), draft);
+        crate::gateway::claude_targets::validate_references(self, &profile)?;
         let position = if profile.app == AppKind::Codex {
             self.list_codex_providers()?
                 .iter()
@@ -164,6 +165,7 @@ impl ConfigStore {
             }
         }
         let profile = ProviderProfile::from_draft(id.to_string(), draft);
+        crate::gateway::claude_targets::validate_references(self, &profile)?;
         let file = ProviderFile::from_profile(&profile, loaded.file.position);
         let hash = write_provider_file(self, app, &file)?;
         Ok(ProviderRecord {
@@ -181,6 +183,11 @@ impl ConfigStore {
         let (app, loaded) = self.locate(id)?;
         if loaded.hash != expected_file_hash {
             return Err("供应商文件已被外部修改，请重新读取后再删除".into());
+        }
+        for record in self.list_providers()? {
+            if record.profile.id != id && crate::gateway::claude_targets::references(&record.profile, id) {
+                return Err(format!("供应商「{}」的用途路由正在引用此档案，请先解除引用", record.profile.name).into());
+            }
         }
         fs::remove_file(provider_path(self, app, &loaded.file.id))
             .map_err(|_| StoreOperationError::Invalid("无法删除供应商文件".to_string()))

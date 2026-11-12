@@ -35,7 +35,6 @@ pub(super) async fn dispatch(
             argument(&request.args, "profileId")?,
             argument(&request.args, "draft")?,
             argument(&request.args, "expectedFileHash")?,
-            argument(&request.args, "intent")?,
         )),
         "commit_codex_profile_save" => command!(commands::switching::commit_codex_profile_save(
             app.clone(),

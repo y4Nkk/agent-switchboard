@@ -41,6 +41,7 @@ pub use connection::{
 };
 pub use kinds::{AppKind, AuthenticationScheme, GlobalPromptDocument, RouteMode, UpstreamProtocol};
 pub use model::{
+    ClaudeModelRole, ClaudeModelRoute, ClaudeModelRoutes, upgrade_claude_model_options,
     ClaudeModelDisplayNames, ClaudeModelSettings, CodexModelSettings, ExplicitMaxOutputTokens,
     ModelOptions,
 };

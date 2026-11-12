@@ -209,7 +209,9 @@ impl ProviderProfile {
 
     /// Managed xAI credentials are only sent to their fixed API origin.
     pub fn upstream_base_url(&self) -> Option<&str> {
-        if self.app == AppKind::Codex && self.connection.provider_type.as_deref() == Some("xai_oauth") {
+        if self.app == AppKind::Codex
+            && self.connection.provider_type.as_deref() == Some("xai_oauth")
+        {
             Some(crate::contracts::XAI_API_BASE_URL)
         } else {
             self.base_url.as_deref()
@@ -222,7 +224,9 @@ impl ProviderProfile {
             return false;
         }
         if self.app == AppKind::Codex {
-            let Some(upstream) = self.upstream_protocol.and_then(CodexUpstream::from_protocol)
+            let Some(upstream) = self
+                .upstream_protocol
+                .and_then(CodexUpstream::from_protocol)
             else {
                 return true;
             };
@@ -244,10 +248,12 @@ impl ProviderProfile {
                 self.authentication,
                 self.base_url.as_deref(),
                 subagent_route,
+                false,
             )
             .requires_gateway();
         }
-        self.requires_protocol_translation()
+        matches!(&self.model_options, Some(ModelOptions::Claude(settings)) if settings.has_provider_routes())
+            || self.requires_protocol_translation()
             || self.connection.requires_gateway(self.base_url.as_deref())
     }
 

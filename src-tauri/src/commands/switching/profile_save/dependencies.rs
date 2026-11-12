@@ -22,11 +22,13 @@ pub(super) fn affected_active_profile(
     }
     let policy = crate::gateway::failover::load(state.root())
         .map_err(|error| CommandError::new("claude-policy-invalid", error))?;
-    if !policy.enabled || !policy.provider_ids.contains(&current.id) {
+    let active = state.configuration().find_provider(&active_id)
+        .map_err(|error| operation_error("profile-not-found", error))?;
+    let referenced = crate::gateway::claude_targets::references(&active, &current.id);
+    if !referenced && (!policy.enabled || !policy.provider_ids.contains(&current.id)) {
         return Ok(None);
     }
-    state.configuration().find_provider(&active_id).map(Some)
-        .map_err(|error| operation_error("profile-not-found", error))
+    Ok(Some(active))
 }
 
 pub(super) fn projection(

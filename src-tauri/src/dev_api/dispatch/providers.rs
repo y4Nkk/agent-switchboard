@@ -15,7 +15,6 @@ pub(super) async fn profiles(app: &AppHandle, request: &InvokeRequest) -> Result
             argument::<Option<String>>(&request.args, "profileId")?,
             argument::<ProviderDraft>(&request.args, "draft")?,
             argument::<Option<String>>(&request.args, "expectedFileHash")?,
-            argument(&request.args, "intent")?,
         )),
         "commit_profile_save" => command!(commands::switching::commit_profile_save(
             app.clone(),

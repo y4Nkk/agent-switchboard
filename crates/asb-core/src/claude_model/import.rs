@@ -1,5 +1,7 @@
 use super::{parse_ccswitch_model, parse_optional_model};
-use crate::contracts::{ClaudeModelDisplayNames, ClaudeModelSettings, ModelOptions};
+use crate::contracts::{
+    ClaudeModelDisplayNames, ClaudeModelRoute, ClaudeModelRoutes, ClaudeModelSettings, ModelOptions,
+};
 use serde_json::{Map, Value};
 
 #[derive(Clone, Copy)]
@@ -62,16 +64,13 @@ fn read_roles(
     let (subagent_model, subagent_one_m) =
         source.decode(field("CLAUDE_CODE_SUBAGENT_MODEL")?, "subagent model", true)?;
     Ok(ClaudeModelSettings {
-        haiku_model,
-        haiku_one_m,
-        sonnet_model,
-        sonnet_one_m,
-        opus_model,
-        opus_one_m,
-        fable_model,
-        fable_one_m,
-        subagent_model,
-        subagent_one_m,
+        routes: ClaudeModelRoutes {
+            haiku: ClaudeModelRoute::primary(haiku_model, haiku_one_m),
+            sonnet: ClaudeModelRoute::primary(sonnet_model, sonnet_one_m),
+            opus: ClaudeModelRoute::primary(opus_model, opus_one_m),
+            fable: ClaudeModelRoute::primary(fable_model, fable_one_m),
+            subagent: ClaudeModelRoute::primary(subagent_model, subagent_one_m),
+        },
         ..ClaudeModelSettings::default()
     })
 }

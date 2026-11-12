@@ -71,3 +71,9 @@
 @media (max-width: 700px) {
   .asb-model-route-fields { grid-template-columns: minmax(0, 1fr); }
 }
+
+.asb-model-route-owner { display: flex; align-items: end; flex-wrap: wrap; gap: var(--asb-space-4); }
+.asb-model-route-owner > .asb-field { flex: 1; min-width: 12rem; }
+.asb-model-route-summary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--asb-space-2) var(--asb-space-4); }
+.asb-model-route-summary dt { color: var(--asb-text-muted); }
+.asb-model-route-summary dd { margin: 0; overflow-wrap: anywhere; }

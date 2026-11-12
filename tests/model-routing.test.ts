@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CodexProviderRecord, ProviderRecord } from "../src/api/client.ts";
 import { codexProviderDraft } from "../src/lib/provider-drafts.ts";
-import { resetRouting, roleTarget, routeDocument, routeIssue, routeRecords, routeRoles } from "../src/components/model-routing/model.ts";
+import { resetRouting, roleTarget, routeDocument, routeIssue, routeRecords, routeRoles, routeDescription } from "../src/components/model-routing/model.ts";
 
 function codex(id: string): CodexProviderRecord {
   return { profile: { id, name: id, routeMode: "gateway", endpoint: "https://fixture.invalid", apiKey: "fixture-key",
@@ -11,11 +11,16 @@ function codex(id: string): CodexProviderRecord {
     parameters: { settings: {} }, notes: null, websiteUrl: null, usageQuery: null, fileHash: id, position: 0 } as CodexProviderRecord;
 }
 
+function inventory(codex: CodexProviderRecord[] = [], profiles: ProviderRecord[] = []) {
+  return { codex, profiles, activeIds: {} };
+}
+
 function claude(): ProviderRecord {
   return { profile: { id: "claude", app: "claude", name: "Claude fixture", routeMode: "custom", model: "main-model",
     apiKey: "fixture-key", baseUrl: "https://fixture.invalid", parameters: { settings: {} },
-    modelOptions: { kind: "claude", primaryOneM: true, sonnetModel: "tier-model", sonnetOneM: true,
-      haikuModel: null, opusModel: null, opusOneM: false, availableModels: ["tier-model"] },
+    connection: {}, modelOptions: { kind: "claude", primaryOneM: true,
+      routes: { haiku: null, sonnet: { mode: "primary", model: "tier-model", oneM: true }, opus: null, fable: null, subagent: null },
+      availableModels: ["tier-model"] },
   }, fileHash: "claude", position: 0 } as ProviderRecord;
 }
 
@@ -24,9 +29,9 @@ test("same model names remain owned by the explicitly chosen provider", () => {
   const document = routeDocument({ kind: "codex", record: source });
   if (document.kind !== "codex") throw new Error("wrong boundary");
   document.draft.subagentRoute = { profileId: "b", model: "shared-model" };
-  assert.deepEqual(roleTarget(document, "subagent", [a, b]), { provider: "b", model: "shared-model" });
-  assert.equal(routeIssue(document, [a, b]), null);
-  assert.equal(routeIssue(document, [a]), "codex.subagent.missingTarget");
+  assert.deepEqual(roleTarget(document, "subagent", inventory([a, b])), { provider: "b", model: "shared-model" });
+  assert.equal(routeIssue(document, inventory([a, b])), null);
+  assert.equal(routeIssue(document, inventory([a])), "codex.subagent.missingTarget");
 });
 
 test("missing selections, bound targets and removed models cannot silently change route", () => {
@@ -35,11 +40,11 @@ test("missing selections, bound targets and removed models cannot silently chang
   const document = routeDocument({ kind: "codex", record: source });
   if (document.kind !== "codex") throw new Error("wrong boundary");
   document.draft.subagentRoute = { profileId: "", model: "" };
-  assert.equal(routeIssue(document, [target]), "modelRoutes.chooseTarget");
+  assert.equal(routeIssue(document, inventory([target])), "modelRoutes.chooseTarget");
   document.draft.subagentRoute = { profileId: "target", model: "removed" };
-  assert.equal(routeIssue(document, [target]), "codex.subagent.modelNotInCatalog");
+  assert.equal(routeIssue(document, inventory([target])), "codex.subagent.modelNotInCatalog");
   target.profile.connection = { authBinding: { kind: "fixture" } } as typeof target.profile.connection;
-  assert.equal(routeIssue(document, [target]), "codex.subagent.authBoundTarget");
+  assert.equal(routeIssue(document, inventory([target])), "codex.subagent.authBoundTarget");
 });
 
 test("reset removes explicit subagent routing while preserving provider credentials and catalog", () => {
@@ -60,7 +65,7 @@ test("client inventories and official routes expose only their supported roles",
   const inventory = { codex: [codex("codex")], profiles: [profile], activeIds: {} };
   assert.deepEqual(routeRecords(inventory, "codex").map(({ record }) => record.profile.id), ["codex"]);
   const document = routeDocument({ kind: "profile", record: profile });
-  assert.deepEqual(routeRoles(document), ["main", "haiku", "sonnet", "opus", "fable"]);
+  assert.deepEqual(routeRoles(document), ["main", "haiku", "sonnet", "opus", "fable", "subagent"]);
   profile.profile.routeMode = "official";
   assert.deepEqual(routeRoles(routeDocument({ kind: "profile", record: profile })), ["main"]);
 });
@@ -69,10 +74,7 @@ test("Claude reset clears tier overrides and context flags, retaining the saved 
   const document = resetRouting(routeDocument({ kind: "profile", record: claude() }));
   if (document.kind !== "profile" || document.draft.modelOptions?.kind !== "claude") throw new Error("wrong boundary");
   assert.equal(document.draft.model, null);
-  assert.equal(document.draft.modelOptions.sonnetModel, null);
-  assert.equal(document.draft.modelOptions.sonnetOneM, false);
-  assert.equal(document.draft.modelOptions.fableModel, null);
-  assert.equal(document.draft.modelOptions.fableOneM, false);
+  assert.deepEqual(document.draft.modelOptions.routes, { haiku: null, sonnet: null, opus: null, fable: null, subagent: null });
   assert.equal(document.draft.modelOptions.primaryOneM, false);
   assert.deepEqual(document.draft.modelOptions.availableModels, ["tier-model"]);
 });
@@ -85,4 +87,34 @@ test("Codex route drafts preserve stored capabilities and omit projection-only f
   assert.equal("routeMode" in draft, false);
   assert.notEqual(draft.catalog, record.profile.catalog);
   assert.notEqual(draft.parameters.settings, record.parameters.settings);
+});
+
+test("Claude cross-provider purpose identity is explicit and never inferred from matching model names", () => {
+  const source = claude();
+  const target = claude();
+  target.profile.id = "target";
+  target.profile.name = "Target provider";
+  const document = routeDocument({ kind: "profile", record: source });
+  if (document.kind !== "profile" || document.draft.modelOptions?.kind !== "claude") throw new Error("wrong boundary");
+  document.draft.modelOptions = { ...document.draft.modelOptions, routes: { ...document.draft.modelOptions.routes,
+    subagent: { mode: "provider", profileId: "target", model: "tier-model", oneM: false } } };
+  assert.equal(routeIssue(document, inventory([], [source, target])), null);
+  assert.deepEqual(roleTarget(document, "subagent", inventory([], [source, target])),
+    { provider: "Target provider", model: "tier-model" });
+  assert.equal(routeIssue(document, inventory([], [source])), "modelRoutes.missingTarget");
+  target.profile.connection = { authBinding: { source: "fixture" } };
+  assert.equal(routeIssue(document, inventory([], [source, target])), "modelRoutes.unsupportedTarget");
+});
+
+test("route summaries distinguish context flags and fixed targets, including self references", () => {
+  const source = claude();
+  const document = routeDocument({ kind: "profile", record: source });
+  if (document.kind !== "profile" || document.draft.modelOptions?.kind !== "claude") throw new Error("wrong boundary");
+  const options = document.draft.modelOptions;
+  const before = routeDescription(document, "main", inventory([], [source]));
+  document.draft.modelOptions = { ...options, primaryOneM: false,
+    routes: { ...options.routes, sonnet: { mode: "provider", profileId: source.profile.id, model: "self-declared", oneM: true } } };
+  assert.notDeepEqual(before, routeDescription(document, "main", inventory([], [source])));
+  assert.equal(routeIssue(document, inventory([], [source])), null);
+  assert.equal(routeDescription(document, "sonnet", inventory([], [source])).mode, "provider");
 });

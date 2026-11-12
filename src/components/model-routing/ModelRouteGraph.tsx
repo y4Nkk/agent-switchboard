@@ -1,15 +1,15 @@
 import { Fragment, useRef } from "react";
-import type { AppKind, CodexProviderRecord } from "../../api/client";
+import type { AppKind } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { Button } from "../Button";
 import { ClientLogo } from "../ClientLogo";
 import { GatewayDeviceArt } from "../GatewayDeviceArt";
 import { RouteConnections } from "./RouteConnections";
-import { roleTarget, routeRoles, type RouteDocument, type RouteRole } from "./model";
+import { roleTarget, routeRoles, type RouteDocument, type RouteRole, type RouteInventory } from "./model";
 
-export function ModelRouteGraph({ app, document, codex, role, onSelect, inspectorId, disabled }: {
-  app: AppKind; document: RouteDocument; codex: CodexProviderRecord[];
+export function ModelRouteGraph({ app, document, inventory, role, onSelect, inspectorId, disabled }: {
+  app: AppKind; document: RouteDocument; inventory: RouteInventory;
   role: RouteRole; onSelect: (role: RouteRole) => void; inspectorId: string; disabled: boolean;
 }) {
   const { t } = useI18n();
@@ -24,7 +24,7 @@ export function ModelRouteGraph({ app, document, codex, role, onSelect, inspecto
         <span>{t("modelRoutes.clientNode")}</span>
       </div>
       {roles.map((item, index) => {
-        const target = roleTarget(document, item, codex);
+        const target = roleTarget(document, item, inventory);
         const choosing = document.kind === "codex" && item === "subagent" && document.draft.subagentRoute?.profileId === "";
         return <Fragment key={item}>
           <div className="asb-model-route-purpose" data-route-node={`purpose-${item}`} style={{ gridRow: index + 1 }}>
@@ -39,6 +39,9 @@ export function ModelRouteGraph({ app, document, codex, role, onSelect, inspecto
                 <span className="asb-model-route-provider">{target
                   ? target.provider ?? t(choosing ? "modelRoutes.chooseProvider" : "modelRoutes.unresolved") : t("modelRoutes.automatic")}</span>
                 <span className="asb-model-route-model">{target?.model || t(item === "subagent" && target ? "modelRoutes.chooseTarget" : "modelRoutes.clientDefault")}</span>
+                {item === "fable" && document.kind === "profile" && document.draft.modelOptions?.kind === "claude"
+                  && !document.draft.modelOptions.routes.fable && document.draft.modelOptions.routes.opus
+                  && <span className="asb-field-help">{t("modelRoutes.inheritOpus")}</span>}
                 <span className="asb-model-route-edit">{t("modelRoutes.edit")}</span>
               </span>
             </Button>

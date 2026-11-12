@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type RefCallback } from "react";
 import type { AppKind } from "../api/client";
+import { readSlideMotion } from "../lib/slide-motion";
 
 type RouteFrame = { opacity: string; transform: string };
 interface ClientRouteSelection {
@@ -19,15 +20,12 @@ function animateClientRoute(workspace: HTMLElement, contents: Record<AppKind, HT
   const outgoing = contents[selection.from];
   const incoming = contents[selection.to];
   if (!outgoing || !incoming) return [];
-  const styles = getComputedStyle(workspace);
-  const durationToken = styles.getPropertyValue("--asb-motion-fast").trim();
-  const duration = Number.parseFloat(durationToken) * (durationToken.endsWith("ms") ? 1 : 1000);
-  if (duration === 0) return [];
-  const distance = Number.parseFloat(styles.getPropertyValue("--asb-space-3"));
+  const motion = readSlideMotion(workspace);
+  if (motion.duration === 0) return [];
   const direction = selection.to === "claude" ? 1 : -1;
   const options: KeyframeAnimationOptions = {
-    duration,
-    easing: styles.getPropertyValue("--asb-easing").trim(),
+    duration: motion.duration,
+    easing: motion.easing,
     fill: "both",
   };
   return [
@@ -36,14 +34,14 @@ function animateClientRoute(workspace: HTMLElement, contents: Record<AppKind, HT
       element: outgoing,
       animation: outgoing.animate([
         selection.frames[selection.from] ?? { opacity: "1", transform: "translateX(0px)" },
-        { opacity: "0", transform: `translateX(${-direction * distance}px)` },
+        { opacity: "0", transform: `translateX(${-direction * motion.distance}px)` },
       ], options),
     },
     {
       app: selection.to,
       element: incoming,
       animation: incoming.animate([
-        selection.frames[selection.to] ?? { opacity: "0", transform: `translateX(${direction * distance}px)` },
+        selection.frames[selection.to] ?? { opacity: "0", transform: `translateX(${direction * motion.distance}px)` },
         { opacity: "1", transform: "translateX(0px)" },
       ], options),
     },

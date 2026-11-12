@@ -23,11 +23,8 @@ export function providerDraft(record: ProviderRecord): ProviderDraft {
 
 export function claudeOptions(current: ModelOptions | null, patch: Partial<ClaudeModelSettings>): ModelOptions {
   const base: ClaudeModelSettings = current?.kind === "claude" ? current : {
-    primaryOneM: false, haikuModel: null, sonnetModel: null, sonnetOneM: false,
-    opusModel: null, opusOneM: false, availableModels: null, fableModel: null, fableOneM: false,
+    primaryOneM: false, availableModels: null,
+    routes: { haiku: null, sonnet: null, opus: null, fable: null, subagent: null },
   };
-  const next: ClaudeModelSettings = { ...base, ...patch };
-  if (base.haikuOneM && "haikuModel" in patch && patch.haikuModel !== base.haikuModel
-    && patch.haikuOneM === undefined) next.haikuOneM = false;
-  return { kind: "claude", ...next };
+  return { kind: "claude", ...base, ...patch };
 }

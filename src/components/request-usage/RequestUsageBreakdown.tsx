@@ -1,15 +1,14 @@
-import { useState, type ReactNode } from "react";
 import type { RequestUsageReport } from "../../api/client";
 import { useI18n } from "../../i18n";
+import type { MessageKey } from "../../i18n/messages";
 import { clientName } from "../../lib/client-name";
-import { CollapsibleSection } from "../Collapsible";
+import { Table, type TableColumn } from "../Table";
 import { Time } from "../Time";
 import { RequestUsageBar } from "./RequestUsageBar";
 import { cost, duration, number, tokens } from "./format";
 
-export function RequestUsageDetails({ report }: { report: RequestUsageReport }) {
+export function RequestUsageBreakdown({ report }: { report: RequestUsageReport }) {
   const { t, language } = useI18n();
-  const [open, setOpen] = useState(false);
   const m = report.summary;
   const attemptsKnown = m.attemptSamples > 0;
   const timings = [
@@ -29,51 +28,68 @@ export function RequestUsageDetails({ report }: { report: RequestUsageReport }) 
     { key: "usagePerformance.recovered", value: m.recoveredRecords },
     { key: "usagePerformance.attemptCoverage", value: m.attemptSamples },
   ] as const;
-  return <CollapsibleSection open={open} onOpenChange={setOpen} quiet label={t("usagePerformance.moreStats")}>
-    <div className="asb-request-usage-extra-charts">
+  const retryColumns: Array<TableColumn<{ key: MessageKey; value: number }>> = [
+    { key: "fact", header: t("usagePerformance.metricColumn"), render: (row) => t(row.key) },
+    { key: "value", header: t("usagePerformance.countColumn"), align: "end", render: (row) => number(row.value, language) },
+  ];
+  const sourceColumns: Array<TableColumn<typeof report.sources[number]>> = [
+    { key: "client", header: t("usagePerformance.clientColumn"), render: (source) => clientName(source.app) },
+    { key: "records", header: t("usagePerformance.recordCountColumn"), align: "end",
+      render: (source) => number(source.verifiedRecords, language) },
+    { key: "window", header: t("usagePerformance.window"), render: (source) => source.earliestAtMs !== null && <>
+      <Time iso={new Date(source.earliestAtMs).toISOString()} precision="second" />
+      {source.latestAtMs !== null && <> — <Time iso={new Date(source.latestAtMs).toISOString()} precision="second" /></>}
+    </> },
+  ];
+  return <section className="asb-request-usage-breakdown">
+    <h3 className="asb-group-title">{t("usagePerformance.moreStats")}</h3>
+    <div className="asb-request-usage-breakdown-grid">
       {m.records > 0 && <>
-        <MetricBars title={t("usagePerformance.tokenFacts")} format={tokens}
+        <BarBlock title={t("usagePerformance.tokenFacts")} format={tokens}
           items={m.tokens.map((token) => ({ id: token.kind, label: t(`usagePerformance.token.${token.kind}`),
             value: token.tokens, note: t("usagePerformance.samples", { count: token.samples }) }))} />
-        <MetricBars title={t("usagePerformance.timing")} format={duration}
+        <BarBlock title={t("usagePerformance.timing")} format={duration}
           items={timings.map((item) => ({ id: item.key, label: t(item.key), value: item.value,
             note: t("usagePerformance.samples", { count: item.samples }) }))} />
-        <MetricBars title={t("usagePerformance.failures")} format={number} tone="failed"
+        <BarBlock title={t("usagePerformance.failures")} format={number} tone="failed"
           items={failures.map((item) => ({ id: item.key, label: t(item.key), value: item.value }))} />
-        <MetricBars title={t("usagePerformance.retries")} format={number}
-          items={retries.map((item) => ({ id: item.key, label: t(item.key), value: attemptsKnown ? item.value : null }))} />
+        {attemptsKnown && <figure className="asb-request-usage-breakdown-block">
+          <figcaption className="asb-group-title">{t("usagePerformance.retries")}</figcaption>
+          <Table ariaLabel={t("usagePerformance.retries")} columns={retryColumns}
+            rows={retries.map((item) => ({ key: item.key, value: item.value }))}
+            rowKey={(row) => row.key} />
+        </figure>}
       </>}
-      <MetricBars title={t("usagePerformance.sourceCoverage")} format={number}
-        items={report.sources.map((source) => ({ id: source.app, label: clientName(source.app), value: source.verifiedRecords,
-          note: source.earliestAtMs !== null && <>
-            <Time iso={new Date(source.earliestAtMs).toISOString()} precision="second" />
-            {source.latestAtMs !== null && <> — <Time iso={new Date(source.latestAtMs).toISOString()} precision="second" /></>}
-          </> }))} />
+      <figure className="asb-request-usage-breakdown-block">
+        <figcaption className="asb-group-title">{t("usagePerformance.sourceCoverage")}</figcaption>
+        <Table ariaLabel={t("usagePerformance.sourceCoverage")} columns={sourceColumns}
+          rows={report.sources} rowKey={(source) => source.app} />
+      </figure>
     </div>
-    <div className="asb-request-usage-extra-status">
+    <div className="asb-request-usage-breakdown-status">
       {m.estimatedCostUsd !== null && <span>{t("usagePerformance.cost")} {cost(m.estimatedCostUsd, language)}
         {" · "}{t("usagePerformance.samples", { count: m.costSamples })}</span>}
       <span>{t("usagePerformance.window")}{" "}
         <Time iso={new Date(report.startAtMs).toISOString()} precision="second" /> — <Time iso={new Date(report.endAtMs).toISOString()} precision="second" />
       </span>
     </div>
-  </CollapsibleSection>;
+  </section>;
 }
 
-interface MetricItem { id: string; label: string; value: number | null; note?: ReactNode }
+interface BarItem { id: string; label: string; value: number | null; note?: string }
 
-function MetricBars({ title, items, format, tone }: {
-  title: string; items: MetricItem[]; tone?: "failed";
+function BarBlock({ title, items, format, tone }: {
+  title: string; items: BarItem[]; tone?: "failed";
   format: (value: number | null, language: string) => string;
 }) {
   const { language } = useI18n();
   if (items.every((item) => item.value === null)) return null;
   const maximum = Math.max(0, ...items.map((item) => item.value ?? 0));
-  return <figure className="asb-request-usage-mini-plot" aria-label={title} data-outcome={tone}>
+  return <figure className="asb-request-usage-breakdown-block" data-outcome={tone}>
     <figcaption className="asb-group-title">{title}</figcaption>
     <ul>
       {items.map((item) => <li key={item.id}>
-        <div className="asb-request-usage-mini-label"><span>{item.label}</span><strong>{format(item.value, language)}</strong></div>
+        <div className="asb-request-usage-breakdown-row"><span>{item.label}</span><strong>{format(item.value, language)}</strong></div>
         <RequestUsageBar value={item.value} maximum={maximum} />
         {item.note && <span className="asb-request-usage-caption">{item.note}</span>}
       </li>)}

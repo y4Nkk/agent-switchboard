@@ -244,6 +244,16 @@ jobs:
             --tag "$GITHUB_REF_NAME" \
             --version "$version"
 
+      # 下载表必须拼在 manifest 之后：latest.json 的更新说明保持纯 changelog，
+      # 而 create/edit 两条发布路径读的都是拼接后的 release-notes.md。
+      - name: 拼接下载表格到发布正文
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo ""
+            sed -e "s|REPOSITORY|${GITHUB_REPOSITORY}|g" -e "s|VERSION|$version|g" .github/release_template.md
+          } >> release-notes.md
+
       - name: 创建或复用 Release
         env:
           GH_TOKEN: ${{ github.token }}

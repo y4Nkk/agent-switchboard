@@ -102,7 +102,7 @@ Inspect the loopback address, protocol translation paths, request counts, failur
 
 **Graphical model routing: client → purpose → provider and model**
 
-Select a destination node to configure the main model, Codex default sub-agent, or Claude model tier, then preview and confirm. This isolated demonstration uses simulated providers and models.
+Select a saved profile independently of the active provider, then edit its main model, Codex default sub-agent, or Claude purpose routes. Saving updates only the profile and any active dependencies; it never activates the edited profile. Explicit purpose targets use the selected provider through the local gateway. Preview the affected routes and client-file changes before confirming. This isolated demonstration uses simulated providers and models.
 
 ![Graphical model routing with a simulated cross-provider default sub-agent route](docs/screenshots/model-routing.png)
 
@@ -232,13 +232,15 @@ In **Usage → Degradation radar**, batch-test the active Codex configuration wi
 
 ### Sub-agent models and protocol gateway
 
-Open the graphical workspace from a provider row's routing button or the Model routing & gateway entry in the sidebar. Choose a client and primary provider, then select a destination node to edit its model. Changing the primary provider loads that profile's saved plan; addresses, credentials, protocols and catalogs remain on Providers. Preview and confirmation save the models and activate the provider in one recoverable transaction. Claude's main model and Haiku, Sonnet, Opus and Fable tiers share the selected provider's connection.
+Open the graphical workspace from a provider row's routing button or the Model routing & gateway entry in the sidebar. Choose the profile to edit independently of the active provider. The main-model node belongs to that profile; other purpose nodes can follow its connection or explicitly reference another eligible saved provider and model. Claude supports Haiku, Sonnet, Opus, Fable and default sub-agent purposes. Addresses, credentials, protocols and catalogs remain on Providers. Saving never activates the edited profile: it saves only the profile or updates its active dependencies in the existing recoverable transaction. Enable a different primary provider through the explicit provider-switch flow.
 
 Cancelling a preview or leaving its workspace revokes the unconfirmed plan. Cancellation failures remain visible and can be retried; confirmed transactions continue to completion. Applying a route refreshes the actual configuration and gateway status immediately.
 
 A Codex default sub-agent model can target a model in another saved profile that is not account-bound. Requests use that target's authentication, protocol, model mapping, and runtime parameters, and usage belongs to the target. Invalid references fail explicitly, with no fallback to the main model. Referenced profiles and models cannot be deleted. Editing a target also previews and updates any affected active model catalog.
 
-When protocol translation or sub-agent routing is needed, the app uses a gateway listening only on `127.0.0.1`. Keep the app running while using those routes.
+Claude explicit targets own the upstream connection, authentication, model, connection overrides and model preferences. Client-generated behavior such as output styles and system prompts continues to follow the active primary plan; routing cannot regenerate that content after the client has constructed the request. Target updates participate in dependency previews and recovery. Legacy tier fields are converted once during configuration repair; current runtime readers accept only the purpose-route contract. Configuration backup snapshots use version 8, with an explicit offline conversion for the known version 7 format before strict validation.
+
+Protocol translation, explicit purpose routing and Codex model-name mappings use a gateway listening only on `127.0.0.1`. Client entry changes to this local gateway are distinct from upstream destination changes, and both are shown in the preview. Keep the app running while using those routes. Explicit targets use only that provider's configured endpoints and never join the primary provider's cross-provider failover queue.
 
 Codex and Claude Code are the supported clients. Names such as xAI (Grok) refer to upstream model services. Saving a provider used by an active failover route previews and applies its request settings together, while keeping the primary provider selected; failures roll back through the existing save transaction.
 

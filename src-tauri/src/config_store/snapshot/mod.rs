@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 
 /// The only plaintext configuration snapshot format written to cloud backup.
 /// The AES-GCM envelope has its own version and is intentionally independent.
-pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 7;
+pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 8;
 
 /// The complete persisted configuration of both clients. Provider files are
 /// grouped by the directory that owns their client association; secrets stay
@@ -90,6 +90,22 @@ pub fn validate_snapshot(snapshot: &ConfigurationSnapshot) -> Result<(), String>
     validate_codex_files(&snapshot.codex_providers, &mut seen_ids)?;
     validate_codex_official_files(&snapshot.codex_official, &mut seen_ids)?;
     validate_claude_files(&snapshot.claude_providers, &mut seen_ids)?;
+    validate_claude_references(&snapshot.claude_providers)?;
+    Ok(())
+}
+
+fn validate_claude_references(files: &[ProviderFile]) -> Result<(), String> {
+    use asb_core::contracts::{ClaudeModelRole, ClaudeModelRoute};
+    let profiles = files.iter().cloned().map(|file| file.into_profile(AppKind::Claude)).collect::<Vec<_>>();
+    for owner in &profiles {
+        for role in ClaudeModelRole::ALL {
+            if let Some(ClaudeModelRoute::Provider { profile_id, model, .. }) = crate::gateway::claude_targets::settings(owner).and_then(|s| s.route(role)) {
+                let target = profiles.iter().find(|profile| &profile.id == profile_id)
+                    .ok_or_else(|| format!("{} 的 {} 路由目标不存在：{profile_id}", owner.name, role.name()))?;
+                crate::gateway::claude_targets::validate_target(target, model)?;
+            }
+        }
+    }
     Ok(())
 }
 

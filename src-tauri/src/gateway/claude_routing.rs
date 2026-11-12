@@ -13,6 +13,7 @@ impl GatewayController {
         plan: &SwitchPlan,
         replacement: Option<&ProviderProfile>,
     ) -> Result<GatewayProjection, String> {
+        let dependency_revision = self.claude_dependency_revision(local, &plan.profile, replacement)?;
         let force_claude_gateway =
             plan.app() == AppKind::Claude && plan.profile.route_mode == RouteMode::Custom && {
                 let policy = failover::load(local.root())?;
@@ -36,6 +37,11 @@ impl GatewayController {
             projection.candidate_routes = self.claude_candidate_routes(
                 local, &route.profile_id, replacement.or(Some(&plan.profile)),
             )?;
+            super::claude_targets::validate_candidate_roles(&projection.candidate_routes)?;
+        }
+        projection.dependency_revision = Some(dependency_revision);
+        if plan.app() == AppKind::Claude && projection.plan.is_gateway() {
+            self.project_claude_target_preferences(local, &mut projection.plan, replacement)?;
         }
         Ok(projection)
     }
@@ -69,6 +75,7 @@ impl GatewayController {
             warning: Some(warning),
             codex_catalog: None,
             candidate_routes: Vec::new(),
+            dependency_revision: None,
         })
     }
 

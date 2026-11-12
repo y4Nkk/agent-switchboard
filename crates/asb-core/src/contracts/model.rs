@@ -1,4 +1,8 @@
+mod claude_routes;
 use super::CodexSubagentRoute;
+pub use claude_routes::{
+    upgrade_claude_model_options, ClaudeModelRole, ClaudeModelRoute, ClaudeModelRoutes,
+};
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize,
@@ -100,23 +104,9 @@ pub struct CodexModelSettings {
 pub struct ClaudeModelSettings {
     /// The primary model itself lives on `ProviderProfile::model`.
     pub primary_one_m: bool,
-    pub haiku_model: Option<String>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub haiku_one_m: bool,
-    pub sonnet_model: Option<String>,
-    pub sonnet_one_m: bool,
-    pub opus_model: Option<String>,
-    pub opus_one_m: bool,
+    pub routes: ClaudeModelRoutes,
     /// Optional `availableModels` list in settings.json.
     pub available_models: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fable_model: Option<String>,
-    #[serde(default)]
-    pub fable_one_m: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub subagent_model: Option<String>,
-    #[serde(default)]
-    pub subagent_one_m: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_names: Option<ClaudeModelDisplayNames>,
 }
@@ -137,8 +127,4 @@ pub struct ClaudeModelDisplayNames {
 pub enum ModelOptions {
     Codex(CodexModelSettings),
     Claude(ClaudeModelSettings),
-}
-
-fn is_false(value: &bool) -> bool {
-    !*value
 }

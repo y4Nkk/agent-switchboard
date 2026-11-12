@@ -41,9 +41,11 @@ impl CodexRouteMode {
         authentication: Option<AuthenticationScheme>,
         base_url: Option<&str>,
         subagent_route: Option<&CodexSubagentRoute>,
+        has_model_routes: bool,
     ) -> Self {
         let default_authentication = upstream.protocol().authentication_scheme();
-        if subagent_route.is_some()
+        if has_model_routes
+            || subagent_route.is_some()
             || upstream != CodexUpstream::Responses
             || request_mode == ResponsesRequestMode::Minimal
             || connection.requires_gateway(base_url)

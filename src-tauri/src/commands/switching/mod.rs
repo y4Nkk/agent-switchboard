@@ -23,7 +23,7 @@ pub(crate) use codex_policy::CodexPolicyPreparations;
 pub(crate) use codex_profile_save::CodexProfileSavePreparations;
 pub(crate) use codex_profile_save::validate_subagent_route_reference;
 pub(crate) use internal::switch_provider_internal;
-pub use profile_save::{ProfileSaveIntent, ProfileSavePreparation, ProfileSaveSource};
+pub use profile_save::{ProfileSavePreparation, ProfileSaveSource};
 pub(crate) use profile_save::ProfileSavePreparations;
 pub(crate) use recovery::{ensure_profile_save_recovered, recover_pending_profile_save};
 
@@ -74,7 +74,6 @@ pub async fn prepare_profile_save(
     profile_id: Option<String>,
     draft: ProviderDraft,
     expected_file_hash: Option<String>,
-    intent: ProfileSaveIntent,
 ) -> Result<ProfileSavePreparation, CommandError> {
     let state = state(&app)?;
     let gateway = app
@@ -99,10 +98,8 @@ pub async fn prepare_profile_save(
             profile_id.as_deref(),
             &draft,
             expected_file_hash.as_deref(),
-            intent,
         )?;
         let preparation_id = preparations.issue(PreparedProfileSave {
-            intent,
             created_at: Instant::now(),
             profile_id,
             expected_file_hash,
@@ -198,7 +195,6 @@ pub async fn prepare_codex_profile_save(
     profile_id: String,
     draft: asb_core::contracts::CodexProviderDraft,
     expected_file_hash: String,
-    intent: ProfileSaveIntent,
 ) -> Result<ProfileSavePreparation, CommandError> {
     let state = state(&app)?;
     let gateway = app
@@ -223,10 +219,8 @@ pub async fn prepare_codex_profile_save(
             &profile_id,
             &draft,
             &expected_file_hash,
-            intent,
         )?;
         let preparation_id = preparations.issue(PreparedCodexProfileSave {
-            intent,
             created_at: Instant::now(),
             profile_id,
             expected_file_hash,

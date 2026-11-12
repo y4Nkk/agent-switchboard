@@ -6,7 +6,7 @@ import { clientName } from "../../lib/client-name";
 import { Button } from "../Button";
 import { ClientLogo } from "../ClientLogo";
 import { ConfirmSheet } from "../ConfirmSheet";
-import { PreviewInspector } from "../PreviewInspector";
+import { RouteSavePreview } from "./RouteSavePreview";
 import { Select } from "../Select";
 import { Tabs } from "../Tabs";
 import { WorkspaceHeader } from "../WorkspaceHeader";
@@ -35,11 +35,10 @@ function RouteConfirmation({ operation, onDocument, busy }: {
 }) {
   const { t } = useI18n();
   if (!operation.pending) return null;
-  return <ConfirmSheet title={t("modelRoutes.confirmTitle")} confirmLabel={t("modelRoutes.apply")}
+  return <ConfirmSheet title={t("modelRoutes.confirmTitle")} confirmLabel={t(operation.pending.kind === "saveAndApply" ? "modelRoutes.apply" : "modelRoutes.saveOnly")}
     busy={busy} onCancel={() => void operation.cancel()} onConfirm={() => void operation.confirm(onDocument)}>
-    <p>{t("modelRoutes.confirmHelp")}</p>
+    <RouteSavePreview pending={operation.pending} />
     {operation.error != null && <p className="asb-fail-text" role="alert">{errorText(operation.error, t)}</p>}
-    <PreviewInspector filePreview={operation.pending.preview} userConfigModel={null} userConfigWarnings={[]} />
   </ConfirmSheet>;
 }
 
@@ -55,22 +54,22 @@ function RouteEditor({ editor, operation, inventory, disabled, inspectorId }: {
       disabled={disabled || editor.sources.length === 0} onChange={editor.selectProfile}
       options={editor.sources.map(({ record }) => ({ value: record.profile.id, label: record.profile.name }))} />
   </div>;
-  const issue = routeIssue(document, inventory.codex);
+  const issue = routeIssue(document, inventory);
   return <>
-    <ModelRouteGraph app={editor.app} document={document} codex={inventory.codex} role={editor.role}
+    <ModelRouteGraph app={editor.app} document={document} inventory={inventory} role={editor.role}
       onSelect={editor.setRole} inspectorId={inspectorId} disabled={disabled} />
     <section className="asb-model-route-inspector" id={inspectorId} aria-labelledby={`${inspectorId}-title`}>
       <h3 className="asb-section-title" id={`${inspectorId}-title`}>{t("modelRoutes.configureRole", { role: t(`modelRoutes.role.${editor.role}`) })}</h3>
       <div className="asb-model-route-fields">
         <RouteInspector document={document} role={editor.role} sources={editor.sources} codex={inventory.codex}
-          disabled={disabled || editor.stale} onChange={editor.setDocument} onSelectProfile={editor.selectProfile} />
+          disabled={disabled || editor.stale} onChange={editor.setDocument} />
       </div>
     </section>
     {issue && <p className="asb-warn-text" role="status">{t(issue)}</p>}
     <div className="asb-model-route-actions">
       <Button variant="secondary" disabled={disabled || editor.stale}
         onClick={() => editor.setDocument(resetRouting(document))}>{t("modelRoutes.reset")}</Button>
-      <Button variant="primary" disabled={disabled || editor.stale || !!issue}
+      <Button variant="primary" disabled={disabled || editor.stale || !!issue || !editor.dirty}
         onClick={() => void operation.prepare(document)}>{t("modelRoutes.review")}</Button>
     </div>
   </>;
@@ -95,13 +94,23 @@ export function ModelRoutingWorkspace(props: Props) {
     <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${editor.app}-tab`} className="asb-model-route-panel">
       <p className="asb-field-help">{t("modelRoutes.help")}</p>
       <p className="asb-model-route-state" role="status">{t("modelRoutes.current", { name: activeRecord?.record.profile.name ?? t("modelRoutes.unmatched") })}
-        {editor.document && <span>{t(editor.dirty || editor.selectedId !== activeId ? "modelRoutes.pending" : "modelRoutes.saved")}</span>}
+        {editor.document && <span>{t(editor.dirty ? "modelRoutes.pending" : editor.selectedId !== activeId ? "modelRoutes.savedInactive" : "modelRoutes.saved")}</span>}
       </p>
+      <div className="asb-model-route-owner">
+        <label className="asb-field"><span>{t("modelRoutes.editing")}</span>
+          <Select value={editor.selectedId} placeholder={t("modelRoutes.chooseProvider")} ariaLabel={t("modelRoutes.editing")}
+            disabled={disabled} onChange={editor.selectProfile}
+            options={editor.sources.map(({ record }) => ({ value: record.profile.id, label: record.profile.name }))} />
+        </label>
+        <Button variant="secondary" disabled={disabled || !activeId || editor.selectedId === activeId}
+          onClick={() => activeId && editor.selectProfile(activeId)}>{t("modelRoutes.editCurrent")}</Button>
+      </div>
       {editor.stale && <div className="asb-banner asb-banner-warning" role="alert">
         <p>{t("modelRoutes.stale")}</p><Button variant="secondary" disabled={disabled} onClick={editor.reload}>{t("modelRoutes.reload")}</Button>
       </div>}
       <RouteEditor editor={editor} operation={operation} inventory={props.inventory} disabled={disabled} inspectorId={`${id}-inspector`} />
       {operation.error != null && <p className="asb-fail-text" role="alert">{errorText(operation.error, t)}</p>}
+      {operation.releaseError != null && <p className="asb-field-help" role="status">{t("operations.save.retryRelease")}</p>}
     </div>
     {props.active && <RouteConfirmation operation={operation} onDocument={editor.setDocument} busy={props.busy} />}
     {props.active && editor.confirmation}

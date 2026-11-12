@@ -14,7 +14,7 @@ impl GatewayProjection {
             (&route.profile_id, &route.fingerprint, &route.upstream_base_url)
         }).collect::<Vec<_>>();
         asb_switch::sha256_hex(
-            &serde_json::to_string(&revisions).expect("route identity serializes"),
+            &serde_json::to_string(&(revisions, &self.dependency_revision)).expect("route identity serializes"),
         )
     }
 }

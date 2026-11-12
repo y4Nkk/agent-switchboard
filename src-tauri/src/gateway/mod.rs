@@ -47,6 +47,8 @@ use uuid::Uuid;
 
 mod activation_snapshot;
 mod claude_routing;
+pub(crate) mod claude_targets;
+mod profile_save_gate;
 mod controller;
 pub(crate) use claude_routing::claude_uses_gateway;
 mod codex_routing;
@@ -115,6 +117,7 @@ pub(crate) struct GatewayProjection {
     /// active route remains the source of the client projection; candidates
     /// never change the client-facing token or endpoint.
     pub(crate) candidate_routes: Vec<ActiveRoute>,
+    pub(crate) dependency_revision: Option<String>,
 }
 
 /// One immutable model-catalog file named from the selected provider and its
@@ -227,6 +230,9 @@ pub(crate) struct GatewayInner {
     pub(crate) state_path: PathBuf,
     pub(crate) state_root: PathBuf,
     pub(crate) endpoint_write_lock: Arc<Mutex<()>>,
+    /// Saves hold the writer through publication or rollback. Request resolvers
+    /// hold a reader only while materializing their complete target snapshot.
+    pub(crate) profile_save_gate: RwLock<()>,
     pub(crate) state: Mutex<GatewayStateFile>,
     pub(crate) routes: RwLock<BTreeMap<AppKind, ActiveRoute>>,
     pub(crate) candidate_routes: RwLock<BTreeMap<AppKind, Vec<ActiveRoute>>>,

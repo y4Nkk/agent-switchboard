@@ -36,6 +36,7 @@ impl GatewayController {
     ) -> Result<GatewayProjection, String> {
         policy.validate()?;
         let fragment = self.resolve_common_fragment(&file.profile.id)?;
+        let dependency_revision = self.codex_dependency_revision(file, replacement)?;
         let preserve = crate::codex_auth::policy::load(&self.inner.state_root)?
             .policy
             .preserve_official_login;
@@ -67,6 +68,7 @@ impl GatewayController {
                 ),
                 codex_catalog: Some(catalog),
                 candidate_routes: Vec::new(),
+            dependency_revision: Some(dependency_revision),
             });
         }
         if self.blocked_recovery().is_some() {
@@ -98,6 +100,7 @@ impl GatewayController {
         Ok(GatewayProjection {
             plan,
             candidate_routes: self.codex_candidate_routes(file, policy, replacement)?,
+            dependency_revision: Some(dependency_revision),
             activation: GatewayActivation::Routed(route),
             warning: Some(warning),
             codex_catalog: Some(catalog),
@@ -198,6 +201,7 @@ impl GatewayController {
             ),
             codex_catalog: None,
             candidate_routes: Vec::new(),
+            dependency_revision: None,
         })
     }
 }

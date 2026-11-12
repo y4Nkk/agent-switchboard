@@ -103,7 +103,6 @@ fn active_catalog_change_requires_a_projection_preview() {
         &record.profile.id,
         &changed,
         &record.file_hash,
-        ProfileSaveIntent::Save,
     )
     .unwrap();
     assert_eq!(kind, ProfileSaveKind::SaveAndApply);

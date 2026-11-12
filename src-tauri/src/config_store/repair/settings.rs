@@ -42,6 +42,9 @@ fn merge_promoted(values: &mut SettingsValues, promoted: BTreeMap<String, Config
 
 pub(super) fn repair_claude_provider(node: &mut Value) -> Result<bool, String> {
     let original = node.clone();
+    if let Some(options) = node.get_mut("modelOptions") {
+        asb_core::contracts::upgrade_claude_model_options(options)?;
+    }
     let parameters = node.get("parameters").ok_or("缺少供应商参数")?;
     let mut values: SettingsValues = serde_json::from_value(parameters.clone()).map_err(|error| error.to_string())?;
     let mut fragment = match node.get("claudeFragment") {

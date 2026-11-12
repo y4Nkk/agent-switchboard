@@ -18,7 +18,7 @@ type ValueFormatter = (value: number | null, language: string) => string;
 interface GroupMetric extends MetricChoice {
   format: ValueFormatter;
   samples?: (metrics: RequestUsageMetrics) => number;
-  companion?: { key: "outputRateP10" | "firstTokenP95Ms" | "durationP95Ms"; label: "P10" | "P95" };
+  companion?: { key: "outputRateP10" | "firstTokenP95Ms" | "durationP95Ms"; labelKey: MessageKey };
   maximum?: number;
 }
 
@@ -35,15 +35,15 @@ export const GROUP_METRICS: Record<RequestUsageGroupMetric, GroupMetric> = {
   records: { labelKey: "usagePerformance.recordsCount", format: number },
   outputRateP50: {
     labelKey: "usagePerformance.speed", format: speed, generationOnly: true, samples: (metrics) => metrics.speedSamples,
-    companion: { key: "outputRateP10", label: "P10" },
+    companion: { key: "outputRateP10", labelKey: "usagePerformance.slowest10" },
   },
   firstTokenP50Ms: {
     labelKey: "usagePerformance.firstToken", format: duration, generationOnly: true, samples: (metrics) => metrics.firstTokenSamples,
-    companion: { key: "firstTokenP95Ms", label: "P95" },
+    companion: { key: "firstTokenP95Ms", labelKey: "usagePerformance.slowest5" },
   },
   durationP50Ms: {
     labelKey: "usagePerformance.durationP50", format: duration, samples: (metrics) => metrics.durationSamples,
-    companion: { key: "durationP95Ms", label: "P95" },
+    companion: { key: "durationP95Ms", labelKey: "usagePerformance.slowest5" },
   },
   successRatio: {
     labelKey: "usagePerformance.successRatio", format: percent, maximum: 100,

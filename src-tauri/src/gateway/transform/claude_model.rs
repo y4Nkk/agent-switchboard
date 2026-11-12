@@ -1,4 +1,4 @@
-use asb_core::contracts::ClaudeModelSettings;
+use asb_core::contracts::{ClaudeModelSettings, ClaudeModelRole};
 use serde_json::Value;
 
 const ONE_M_SUFFIX: &str = "[1m]";
@@ -37,24 +37,16 @@ fn map_model<'a>(
         .map_err(super::TransformError)? {
         return Ok(model);
     }
-    if let Some(subagent) = settings.and_then(|value| value.subagent_model.as_deref()) {
-        if strip_one_m_suffix(subagent) == original {
-            return Ok(original);
-        }
+    let local_model = |role| settings.and_then(|value| value.route(role))
+        .filter(|route| route.profile_id().is_none()).map(|route| route.model());
+    if let Some(subagent) = local_model(ClaudeModelRole::Subagent) {
+        if strip_one_m_suffix(subagent) == original { return Ok(original); }
     }
-    let mapped = if original.to_ascii_lowercase().contains("fable") {
-        settings
-            .and_then(|value| value.fable_model.as_deref())
-            .or_else(|| settings.and_then(|value| value.opus_model.as_deref()))
-    } else if original.to_ascii_lowercase().contains("haiku") {
-        settings.and_then(|value| value.haiku_model.as_deref())
-    } else if original.to_ascii_lowercase().contains("opus") {
-        settings.and_then(|value| value.opus_model.as_deref())
-    } else if original.to_ascii_lowercase().contains("sonnet") {
-        settings.and_then(|value| value.sonnet_model.as_deref())
-    } else {
-        None
-    };
+    let name = original.to_ascii_lowercase();
+    let role = [ClaudeModelRole::Fable, ClaudeModelRole::Haiku, ClaudeModelRole::Opus, ClaudeModelRole::Sonnet]
+        .into_iter().find(|role| name.contains(role.name()));
+    let mapped = role.and_then(|role| local_model(role))
+        .or_else(|| (role == Some(ClaudeModelRole::Fable)).then(|| local_model(ClaudeModelRole::Opus)).flatten());
     Ok(mapped.or(primary_model).unwrap_or(original))
 }
 
@@ -74,14 +66,32 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn ordinary_model_names_never_map_a_foreign_providers_model_onto_the_primary_connection() {
+        use asb_core::contracts::{ClaudeModelRoute, ClaudeModelRoutes};
+        let fixed = |model: &str| Some(ClaudeModelRoute::Provider {
+            profile_id:"11111111-1111-4111-8111-111111111111".into(),model:model.into(),one_m:false,
+        });
+        let settings = ClaudeModelSettings { routes:ClaudeModelRoutes {
+            sonnet:fixed("shared-name"),opus:fixed("foreign-opus"),subagent:fixed("foreign-child"),
+            haiku:Some(ClaudeModelRoute::Primary {model:"local-haiku".into(),one_m:false}),
+            ..Default::default()
+        },..Default::default() };
+        for requested in ["claude-sonnet-5","claude-fable-5","claude-opus-5","shared-name","foreign-opus","foreign-child"] {
+            assert_eq!(map_model(requested,Some("source-main"),Some(&settings)).unwrap(),"source-main", "{requested}");
+        }
+        assert_eq!(map_model("claude-haiku-5",Some("source-main"),Some(&settings)).unwrap(),"local-haiku");
+        // Explicit internal roles remain reserved for the destination resolver.
+        assert_eq!(map_model("asb-claude-sonnet",Some("source-main"),Some(&settings)).unwrap(),"shared-name");
+    }
+
     fn settings() -> ClaudeModelSettings {
+        use asb_core::contracts::{ClaudeModelRoute, ClaudeModelRoutes};
+        let local = |model: &str| Some(ClaudeModelRoute::Primary { model: model.into(), one_m: false });
         ClaudeModelSettings {
-            haiku_model: Some("vendor-haiku".into()),
-            sonnet_model: Some("vendor-sonnet".into()),
-            opus_model: Some("vendor-opus".into()),
-            fable_model: None,
-            subagent_model: Some("vendor-agent".into()),
-            ..ClaudeModelSettings::default()
+            routes: ClaudeModelRoutes { haiku: local("vendor-haiku"), sonnet: local("vendor-sonnet"),
+                opus: local("vendor-opus"), subagent: local("vendor-agent"), ..Default::default() },
+            ..Default::default()
         }
     }
 

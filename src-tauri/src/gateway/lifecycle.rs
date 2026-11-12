@@ -54,6 +54,7 @@ impl GatewayController {
                 state_path,
                 state_root: local.root().to_path_buf(),
                 endpoint_write_lock,
+                profile_save_gate: RwLock::new(()),
                 state: Mutex::new(state),
                 routes: RwLock::new(BTreeMap::new()),
                 candidate_routes: RwLock::new(BTreeMap::new()),

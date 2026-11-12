@@ -31,6 +31,7 @@ fn validate_identity(profile: &CodexProviderProfile) -> Result<(), String> {
         profile.authentication,
         Some(profile.endpoint.0.as_str()),
         profile.subagent_route.as_ref(),
+        !profile.model_routes.is_empty(),
     );
     if profile.route_mode != expected_route {
         return Err("Codex 路由模式与上游协议、请求模式、认证或连接覆盖不一致".to_string());
@@ -271,6 +272,7 @@ mod tests {
                 None,
                 None,
                 None,
+                false,
             ),
             CodexRouteMode::Gateway,
         );
@@ -286,6 +288,7 @@ mod tests {
                 None,
                 None,
                 None,
+                false,
             ),
             CodexRouteMode::Direct,
         );
@@ -304,6 +307,7 @@ mod tests {
                     profile_id: "01234567-89ab-cdef-0123-456789abcdef".to_string(),
                     model: "gpt-5-codex".to_string(),
                 }),
+                false,
             ),
             CodexRouteMode::Gateway,
         );

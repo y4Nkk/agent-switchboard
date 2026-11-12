@@ -17,19 +17,14 @@ export interface CodexModelSettings {
   contextWindow: number | null;
 }
 
+export type ClaudeRouteRole = "haiku" | "sonnet" | "opus" | "fable" | "subagent";
+export type ClaudeModelRoute =
+  | { mode: "primary"; model: string; oneM: boolean }
+  | { mode: "provider"; profileId: string; model: string; oneM: boolean };
 export interface ClaudeModelSettings {
   primaryOneM: boolean;
-  haikuModel: string | null;
-  haikuOneM?: boolean;
-  sonnetModel: string | null;
-  sonnetOneM: boolean;
-  opusModel: string | null;
-  opusOneM: boolean;
+  routes: Record<ClaudeRouteRole, ClaudeModelRoute | null>;
   availableModels: string[] | null;
-  fableModel?: string | null;
-  fableOneM?: boolean;
-  subagentModel?: string | null;
-  subagentOneM?: boolean;
   displayNames?: { haiku: string | null; sonnet: string | null; opus: string | null; fable: string | null } | null;
 }
 

@@ -1,4 +1,5 @@
 use crate::adapter::OverlayEntry;
+use crate::contracts::ClaudeModelRole;
 use crate::contracts::{
     AppKind, AuthenticationScheme, ConfigValue, ModelOptions, SettingValue, SettingsValues,
     SwitchPlan, UpstreamProtocol,
@@ -34,7 +35,7 @@ fn claude_settings(
     }
 }
 
-fn rendered_model(value: Option<&String>, one_m: bool) -> Option<ConfigValue> {
+fn rendered_model(value: Option<&str>, one_m: bool) -> Option<ConfigValue> {
     value.map(|model| ConfigValue::Str(crate::claude_model::render_model(model, one_m)))
 }
 
@@ -54,7 +55,7 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
             .claude_route_revision()
             .map(|value| ConfigValue::Str(value.into())),
         "model" => rendered_model(
-            profile.model.as_ref(),
+            profile.model.as_deref(),
             settings.is_some_and(|value| value.primary_one_m),
         ),
         "availableModels" => settings.and_then(|value| {
@@ -79,24 +80,24 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
         // This older override must be removed for any current provider.
         ENV_MODEL_KEY | DEPRECATED_MODEL_KEY => None,
         "env.ANTHROPIC_DEFAULT_HAIKU_MODEL" => rendered_model(
-            settings.and_then(|value| value.haiku_model.as_ref()),
-            settings.is_some_and(|value| value.haiku_one_m),
+            settings.and_then(|value| value.model(ClaudeModelRole::Haiku)),
+            settings.is_some_and(|value| value.one_m(ClaudeModelRole::Haiku)),
         ),
         "env.ANTHROPIC_DEFAULT_SONNET_MODEL" => rendered_model(
-            settings.and_then(|value| value.sonnet_model.as_ref()),
-            settings.is_some_and(|value| value.sonnet_one_m),
+            settings.and_then(|value| value.model(ClaudeModelRole::Sonnet)),
+            settings.is_some_and(|value| value.one_m(ClaudeModelRole::Sonnet)),
         ),
         "env.ANTHROPIC_DEFAULT_OPUS_MODEL" => rendered_model(
-            settings.and_then(|value| value.opus_model.as_ref()),
-            settings.is_some_and(|value| value.opus_one_m),
+            settings.and_then(|value| value.model(ClaudeModelRole::Opus)),
+            settings.is_some_and(|value| value.one_m(ClaudeModelRole::Opus)),
         ),
         "env.ANTHROPIC_DEFAULT_FABLE_MODEL" => rendered_model(
-            settings.and_then(|value| value.fable_model.as_ref()),
-            settings.is_some_and(|value| value.fable_one_m),
+            settings.and_then(|value| value.model(ClaudeModelRole::Fable)),
+            settings.is_some_and(|value| value.one_m(ClaudeModelRole::Fable)),
         ),
         "env.CLAUDE_CODE_SUBAGENT_MODEL" => rendered_model(
-            settings.and_then(|value| value.subagent_model.as_ref()),
-            settings.is_some_and(|value| value.subagent_one_m),
+            settings.and_then(|value| value.model(ClaudeModelRole::Subagent)),
+            settings.is_some_and(|value| value.one_m(ClaudeModelRole::Subagent)),
         ),
         "env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME"
         | "env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME"

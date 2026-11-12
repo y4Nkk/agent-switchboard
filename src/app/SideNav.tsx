@@ -1,9 +1,11 @@
 import type { Icon as NavIcon } from "@phosphor-icons/react";
+import { useRef } from "react";
 import { useI18n } from "../i18n";
 import { PAGES, pageLabelKey, type Page } from "./navigation";
 import { Button } from "../components/Button";
 import { Tooltip } from "../components/Tooltip";
 import { UpdateButton } from "../components/UpdateButton";
+import { SideNavIndicator } from "./SideNavIndicator";
 import {
   ClientConfigurationIcon,
   ExtensionsIcon,
@@ -42,9 +44,14 @@ interface SideNavProps {
   update: { checking: boolean; latestVersion: string | null; onCheck: () => void; onOpen: () => void };
 }
 
-/** Navigation stays mounted across width changes; its group scrolls independently. */
+/** Navigation stays mounted across width changes; its group scrolls independently.
+ * Each list owns one indicator instance, so the pill only ever moves within
+ * the list that holds the current page. */
 export function SideNav({ page, onPageChange, collapsed, pending, onToggle, update }: SideNavProps) {
   const { t } = useI18n();
+  const groupRef = useRef<HTMLUListElement>(null);
+  const footerRef = useRef<HTMLUListElement>(null);
+  const groupIndex = WORKSPACE_PAGES.findIndex((item) => item === page);
   return (
     <aside className="asb-sidebar">
       <div className="asb-sidebar-top" data-tauri-drag-region>
@@ -55,15 +62,16 @@ export function SideNav({ page, onPageChange, collapsed, pending, onToggle, upda
         </Button>
       </div>
       <nav id="asb-primary-navigation" className="asb-sidenav" aria-label={t("shell.nav.aria")}>
-        <ul className="asb-sidenav-group">
+        <ul className="asb-sidenav-group" ref={groupRef}>
           {WORKSPACE_PAGES.map((item) => (
             <li key={item}>
               <SideNavItem page={item} active={page === item}
                 onSelect={() => onPageChange(item)} />
             </li>
           ))}
+          <SideNavIndicator list={groupRef} index={groupIndex === -1 ? null : groupIndex} />
         </ul>
-        <ul className="asb-sidenav-footer">
+        <ul className="asb-sidenav-footer" ref={footerRef}>
           <li>
             <UpdateButton checking={update.checking} latestVersion={update.latestVersion}
               onCheck={update.onCheck} onOpen={update.onOpen} />
@@ -72,6 +80,7 @@ export function SideNav({ page, onPageChange, collapsed, pending, onToggle, upda
             <SideNavItem page="settings" active={page === "settings"}
               onSelect={() => onPageChange("settings")} />
           </li>
+          <SideNavIndicator list={footerRef} index={page === "settings" ? 0 : null} />
         </ul>
       </nav>
     </aside>

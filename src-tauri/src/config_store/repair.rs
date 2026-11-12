@@ -132,7 +132,19 @@ fn repair_file(root: &Path, path: &Path, kind: FileKind) -> Result<bool, String>
     let source = text.strip_prefix('\u{feff}').unwrap_or(&text);
     let mut value: Value = serde_json::from_str(source)
         .map_err(|error| format!("{label} 的 JSON 无效：{error}"))?;
-    let mut changed = if provider {
+    let mut changed = false;
+    if provider && app == AppKind::Claude {
+        if let Some(options) = value.get_mut("modelOptions") {
+            changed |= asb_core::contracts::upgrade_claude_model_options(options)?;
+        }
+    }
+    if matches!(kind, FileKind::CodexProvider)
+        && value.pointer("/profile/routeMode").and_then(Value::as_str) == Some("direct")
+        && value.pointer("/profile/modelRoutes").and_then(Value::as_array).is_some_and(|routes| !routes.is_empty()) {
+        value["profile"]["routeMode"] = Value::String("gateway".into());
+        changed = true;
+    }
+    changed |= if provider {
         repair_provider_urls(kind, &mut value).map_err(|error| format!("{label}：{error}"))?
     } else {
         false

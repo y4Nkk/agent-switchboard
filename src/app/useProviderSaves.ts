@@ -3,10 +3,10 @@ import {
   commitCodexProfileSave, commitProfileSave, createCodexProfile, prepareCodexProfileSave, prepareProfileSave,
   type AppKind, type CodexProviderDraft, type CommandError, type ProviderDraft,
 } from "../api/client";
-import { useProfileSavePreparation } from "../components/useProfileSavePreparation";
+import { useProfileSavePreparation, type PendingProfileSave } from "../components/useProfileSavePreparation";
 import type { ProviderEditorSession, ProvidersDeps, SetEditorSession } from "./useProviders";
 
-type Preparation = ReturnType<typeof useProfileSavePreparation>;
+type Preparation = ReturnType<typeof useProfileSavePreparation<PendingProfileSave>>;
 type Saved = (app: AppKind, id: string) => Promise<void>;
 
 /** Claude and Codex official profiles share the same generic save boundary. */
@@ -21,7 +21,13 @@ function useGenericSave(deps: ProvidersDeps, session: ProviderEditorSession | nu
     setBusy(true);
     clearError();
     try {
-      const prepared = await prepareProfileSave(record?.profile.id ?? null, draft, record?.fileHash ?? null, "save");
+      await pending.retryReleases();
+      if (!pending.isCurrent(request)) return;
+      const prepared = await prepareProfileSave(record?.profile.id ?? null, draft, record?.fileHash ?? null);
+      if (!pending.isCurrent(request)) {
+        await pending.discard({ source: "profile", preparationId: prepared.preparationId });
+        return;
+      }
       if (prepared.kind === "saveAndApply") {
         if (!prepared.preview) {
           await pending.discard({ source: "profile", preparationId: prepared.preparationId });
@@ -47,6 +53,8 @@ function useCodexSave(deps: ProvidersDeps, session: ProviderEditorSession | null
     setBusy(true);
     clearError();
     try {
+      await pending.retryReleases();
+      if (!pending.isCurrent(request)) return;
       const record = session.source?.kind === "record" ? session.source.record : null;
       if (!record) {
         const created = await createCodexProfile(draft);
@@ -54,7 +62,11 @@ function useCodexSave(deps: ProvidersDeps, session: ProviderEditorSession | null
         await saved("codex", created.profile.id);
         return;
       }
-      const prepared = await prepareCodexProfileSave(record.profile.id, draft, record.fileHash, "save");
+      const prepared = await prepareCodexProfileSave(record.profile.id, draft, record.fileHash);
+      if (!pending.isCurrent(request)) {
+        await pending.discard({ source: "codex", preparationId: prepared.preparationId });
+        return;
+      }
       if (prepared.kind === "saveAndApply") {
         if (!prepared.preview) {
           await pending.discard({ source: "codex", preparationId: prepared.preparationId });
@@ -107,5 +119,5 @@ export function useProviderSaves(deps: ProvidersDeps, session: ProviderEditorSes
     catch (cause) { setPendingSaveError(cause); report(cause); }
     finally { setBusy(false); }
   };
-  return { pendingSave: preparation.pending, pendingSaveError, cancelPendingSave, saveGenericProfile, saveCodexProfile, runPendingSave };
+  return { pendingReleaseError: preparation.releaseError, pendingSave: preparation.pending, pendingSaveError, cancelPendingSave, saveGenericProfile, saveCodexProfile, runPendingSave };
 }

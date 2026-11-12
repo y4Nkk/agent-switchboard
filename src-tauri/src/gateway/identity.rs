@@ -47,7 +47,7 @@ pub(crate) fn codex_route_fingerprint(
         "endpoint": profile.endpoint,
         "apiKey": profile.api_key,
         "authentication": profile.authentication,
-        "connection": profile.connection,
+        "connection": profile.connection.routing_identity(),
         "routeMode": profile.route_mode,
         "upstream": profile.upstream,
         "requestMode": profile.request_mode,
@@ -180,6 +180,27 @@ impl ActiveRoute {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_revision_and_continuation_ignore_endpoint_usage_but_bind_credentials() {
+        let mut draft = crate::codex_common::test_draft();
+        draft.connection.custom_endpoints.insert("https://secondary.invalid".into(), asb_core::contracts::ProviderEndpoint {
+            url:"https://secondary.invalid".into(), added_at:1, last_used:None,
+        });
+        let mut file = draft.into_file(Uuid::new_v4().to_string(),100);
+        let initial = codex_route_fingerprint(&file).unwrap();
+        let key = codex_continuation_key("isolated-identity",&file.profile.id,&initial);
+        file.profile.connection.custom_endpoints.get_mut("https://secondary.invalid").unwrap().last_used = Some(500);
+        file.profile.connection.custom_endpoints.get_mut("https://secondary.invalid").unwrap().added_at = 100;
+        file.profile.name = "renamed".into(); file.notes = Some("metadata".into());
+        let after_metadata = codex_route_fingerprint(&file).unwrap();
+        assert_eq!(initial,after_metadata);
+        assert_eq!(key,codex_continuation_key("isolated-identity",&file.profile.id,&after_metadata));
+        file.profile.api_key = "changed-key".into();
+        let after_credential = codex_route_fingerprint(&file).unwrap();
+        assert_ne!(initial,after_credential);
+        assert_ne!(key,codex_continuation_key("isolated-identity",&file.profile.id,&after_credential));
+    }
 
     #[test]
     fn codex_capability_is_stable_across_provider_revisions() {

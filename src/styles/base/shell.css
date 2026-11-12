@@ -58,6 +58,7 @@
 }
 
 .asb-sidenav-group {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -71,6 +72,7 @@
 }
 
 .asb-sidenav-footer {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: none;
@@ -135,9 +137,15 @@
   transition: color var(--asb-motion-press) var(--asb-easing);
 }
 
-.asb-sidenav-item:hover,
-.asb-sidenav-item:active {
+.asb-sidenav-item:hover {
   background: var(--asb-chrome-hover);
+  color: var(--asb-text);
+}
+
+/* Pressed deepens the hover tint; cascade order keeps the current page on
+   its gradient (aria-current block follows). */
+.asb-sidenav-item:active {
+  background: var(--asb-chrome-active);
   color: var(--asb-text);
 }
 
@@ -157,6 +165,18 @@
 .asb-sidenav-item:focus-visible {
   /* Keep the focus ring inside the narrow scrolling group's paint area. */
   outline-offset: -2px;
+}
+
+/* Current-page indicator: a pill on the item's start edge, painted here and
+   stretched between rows by SideNavIndicator (top/height are inline). Its
+   left inset mirrors the entries' li padding so it aligns with the button. */
+.asb-sidenav-indicator {
+  position: absolute;
+  left: calc(var(--asb-space-3) / 2);
+  width: var(--asb-sidebar-indicator-width);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-sidebar-selected-icon);
+  pointer-events: none;
 }
 
 .asb-titlebar {
@@ -277,6 +297,13 @@
 
 .asb-updatebtn:hover {
   background: var(--asb-chrome-hover);
+  color: var(--asb-text);
+}
+
+/* Same pressed feedback as the nav items; declared before the state-color
+   rules so is-available / is-checking survive it. */
+.asb-updatebtn:active {
+  background: var(--asb-chrome-active);
   color: var(--asb-text);
 }
 

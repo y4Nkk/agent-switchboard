@@ -113,6 +113,7 @@ impl GatewayController {
                 warning: None,
                 codex_catalog: None,
                 candidate_routes: Vec::new(),
+            dependency_revision: None,
             });
         }
         if self.blocked_recovery().is_some() {
@@ -140,6 +141,7 @@ impl GatewayController {
             warning: Some(warning),
             codex_catalog: None,
             candidate_routes: Vec::new(),
+            dependency_revision: None,
         })
     }
 

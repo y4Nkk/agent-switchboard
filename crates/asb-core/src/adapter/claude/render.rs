@@ -5,6 +5,15 @@ use crate::adapter::claude::document::{parse, remove, set};
 use crate::adapter::claude::overlay::{client_settings_overlay, overlay};
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
+    if !plan.is_gateway()
+        && matches!(&plan.profile.model_options,
+        Some(crate::contracts::ModelOptions::Claude(settings)) if settings.has_provider_routes())
+    {
+        return Err(AdapterError {
+            message: "Claude 显式供应商用途路由必须经过本机网关，不能写入直连配置".into(),
+            line: None,
+        });
+    }
     let mut entries = overlay(plan);
     entries.extend(super::native::entries(current, plan)?);
     let rendered = render_entries(current, entries)?;
@@ -14,17 +23,14 @@ pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, Adapter
     };
     if !plan.writes_client_settings() {
         let profile = super::model_preferences::projected_profile(plan)?;
-        return crate::claude_common::apply_profile(&rendered, &profile)
-            .map_err(fragment_error);
+        return crate::claude_common::apply_profile(&rendered, &profile).map_err(fragment_error);
     }
     let (shared, profile) = super::model_preferences::projected(plan)?;
     // Remove the old profile before the shared overlay can claim its leaves.
     let rendered = crate::claude_common::apply_profile(&rendered, &Default::default())
         .map_err(fragment_error)?;
-    let rendered = crate::claude_common::apply(&rendered, &shared)
-        .map_err(fragment_error)?;
-    crate::claude_common::apply_profile(&rendered, &profile)
-        .map_err(fragment_error)
+    let rendered = crate::claude_common::apply(&rendered, &shared).map_err(fragment_error)?;
+    crate::claude_common::apply_profile(&rendered, &profile).map_err(fragment_error)
 }
 
 pub(crate) fn render_gateway_base_url(
@@ -44,8 +50,12 @@ pub(crate) fn render_client_settings_into_file(
     current: &str,
     client_settings: &SettingsValues,
 ) -> Result<String, AdapterError> {
-    crate::claude_common::validate_shared_write(current, &client_settings.claude_extra)
-        .map_err(|message| AdapterError { message, line: None })?;
+    crate::claude_common::validate_shared_write(current, &client_settings.claude_extra).map_err(
+        |message| AdapterError {
+            message,
+            line: None,
+        },
+    )?;
     let entries = client_settings_overlay(client_settings);
     let rendered = render_entries(current, entries)?;
     crate::claude_common::apply(&rendered, &client_settings.claude_extra).map_err(|message| {
@@ -67,9 +77,14 @@ pub(crate) fn render_entries(
     entries: Vec<(String, OverlayEntry)>,
 ) -> Result<String, AdapterError> {
     let mut root = parse(current)?;
-    let writes_preferences = entries.iter().any(|(key, _)| crate::ownership::setting_spec(crate::AppKind::Claude, key)
-        .is_some_and(|spec| spec.control != crate::ownership::SettingControl::None));
-    if entries.iter().any(|(key, _)| key.starts_with("attribution.")) {
+    let writes_preferences = entries.iter().any(|(key, _)| {
+        crate::ownership::setting_spec(crate::AppKind::Claude, key)
+            .is_some_and(|spec| spec.control != crate::ownership::SettingControl::None)
+    });
+    if entries
+        .iter()
+        .any(|(key, _)| key.starts_with("attribution."))
+    {
         crate::claude_common::normalize_attribution(&mut root);
     }
     for (key, entry) in entries {
@@ -83,7 +98,10 @@ pub(crate) fn render_entries(
         }
     }
     if writes_preferences {
-        crate::claude_common::reconcile_manifests(&mut root).map_err(|message| AdapterError { message, line: None })?;
+        crate::claude_common::reconcile_manifests(&mut root).map_err(|message| AdapterError {
+            message,
+            line: None,
+        })?;
     }
     serde_json::to_string_pretty(&root).map_err(|_| AdapterError {
         message: "配置序列化失败".to_string(),

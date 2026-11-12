@@ -20,26 +20,68 @@ fn draft(upstream: CodexUpstream, endpoint: &str) -> CodexProviderDraft {
 
 #[test]
 fn saved_codex_direct_and_gateway_requests_use_the_native_store_and_upstream_model() {
-    for (upstream, mode, base, path) in [
-        (CodexUpstream::Responses, CodexRouteMode::Direct, "https://provider.example/v1", "/responses"),
-        (CodexUpstream::ChatCompletions, CodexRouteMode::Gateway, "https://provider.example/v1", "/chat/completions"),
+    for (upstream, mode, mapped, expected_model, base, path) in [
+        (CodexUpstream::Responses, CodexRouteMode::Direct, false, "client-model", "https://provider.example/v1", "/responses"),
+        (CodexUpstream::Responses, CodexRouteMode::Gateway, true, "upstream-model", "https://provider.example/v1", "/responses"),
+        (CodexUpstream::ChatCompletions, CodexRouteMode::Gateway, true, "upstream-model", "https://provider.example/v1", "/chat/completions"),
         // Anthropic 地址契约是服务根：/v1 前缀由请求路径追加（endpoint.rs）。
-        (CodexUpstream::AnthropicMessages, CodexRouteMode::Gateway, "https://provider.example", "/v1/messages"),
+        (CodexUpstream::AnthropicMessages, CodexRouteMode::Gateway, true, "upstream-model", "https://provider.example", "/v1/messages"),
     ] {
         let directory = tempfile::tempdir().unwrap();
         let store = ConfigStore::new(directory.path().join("state"));
-        let record = store.create_codex_provider(draft(upstream, base)).unwrap();
+        let mut input = draft(upstream, base);
+        if !mapped { input.model_routes.clear(); }
+        let record = store.create_codex_provider(input).unwrap();
         assert_eq!(record.profile.route_mode, mode);
         let requests = ProviderRequests::default();
         let prepared = prepare(&requests, &store,
             ProviderRequestTarget::Saved { profile_id: record.profile.id.clone() }).unwrap();
         assert_eq!(prepared.endpoint, format!("{base}{path}"));
-        assert_eq!(prepared.default_model.as_deref(), Some("upstream-model"));
+        assert_eq!(prepared.default_model.as_deref(), Some(expected_model));
         let source = requests.inspect(&prepared.request_id).unwrap().source;
         let connection = resolve_prepared(&store, source).unwrap();
         assert_eq!(connection.api_key, "isolated-test-key");
         assert_eq!(connection.upstream_protocol, upstream.protocol());
+        assert_eq!(connection.default_model.as_deref(), Some(expected_model));
         assert_eq!(store.find_codex_provider_with_revision(&record.profile.id).unwrap().1, record.file_hash);
+    }
+}
+
+#[test]
+fn codex_saved_request_sender_emits_the_exact_direct_or_mapped_model_to_the_upstream() {
+    use tiny_http::{Response, Header, Server};
+    use serde_json::json;
+    for (mapped, expected_mode, expected_model) in [
+        (false, CodexRouteMode::Direct, "client-model"),
+        (true, CodexRouteMode::Gateway, "upstream-model"),
+    ] {
+        let upstream = Server::http(("127.0.0.1",0)).unwrap();
+        let base = format!("http://{}/v1",upstream.server_addr());
+        let directory = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(directory.path().join("state"));
+        let mut input = draft(CodexUpstream::Responses,&base);
+        if !mapped { input.model_routes.clear(); }
+        let record = store.create_codex_provider(input).unwrap();
+        assert_eq!(record.profile.route_mode,expected_mode);
+        let requests = ProviderRequests::default();
+        let prepared = prepare(&requests,&store,ProviderRequestTarget::Saved { profile_id:record.profile.id }).unwrap();
+        let connection = resolve_prepared(&store,requests.inspect(&prepared.request_id).unwrap().source).unwrap();
+        let worker = std::thread::spawn(move || {
+            let mut request = upstream.recv_timeout(std::time::Duration::from_secs(10)).unwrap().expect("upstream request");
+            assert_eq!(request.url(),"/v1/responses");
+            let mut body = String::new(); request.as_reader().read_to_string(&mut body).unwrap();
+            assert_eq!(serde_json::from_str::<serde_json::Value>(&body).unwrap()["model"],expected_model);
+            let reply = json!({"id":"fake","object":"response","status":"completed","model":expected_model,
+                "output":[{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok"}]}]});
+            request.respond(Response::from_string(reply.to_string()).with_header(Header::from_bytes("content-type","application/json").unwrap())).unwrap();
+        });
+        let result = tokio::runtime::Runtime::new().unwrap().block_on(transport::send(
+            reqwest::Client::builder().no_proxy().build().unwrap(),connection,prepared.endpoint,
+            prepared.default_model.unwrap(),std::time::Instant::now(),
+        )).unwrap();
+        assert_eq!(result.outcome,contracts::ProviderRequestOutcome::Success,"{result:?}");
+        assert_eq!(result.model.as_deref(),Some(expected_model));
+        worker.join().unwrap();
     }
 }
 

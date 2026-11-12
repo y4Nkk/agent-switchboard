@@ -9,6 +9,8 @@ import { PreviewIcon } from "./icons";
 
 interface Props {
   filePreview: FilePreview | null;
+  showUserConfigModel?: boolean;
+  showWarnings?: boolean;
   /** Model read from the client's user-level configuration file. */
   userConfigModel: string | null;
   /** Known conditions that can override the user-level configuration. */
@@ -23,6 +25,8 @@ interface Props {
  */
 export function PreviewInspector({
   filePreview,
+  showUserConfigModel = true,
+  showWarnings = true,
   userConfigModel,
   userConfigWarnings,
 }: Props) {
@@ -41,10 +45,10 @@ export function PreviewInspector({
   const { preview } = filePreview;
   return (
     <div className="asb-inspector">
-      <div className="asb-kv">
+      {showUserConfigModel && <div className="asb-kv">
         <span className="asb-kv-label">{t("providers.preview.userConfigModel")}</span>
         <span className="asb-kv-value asb-code">{userConfigModel ?? t("providers.label.defaultModel")}</span>
-      </div>
+      </div>}
       {userConfigWarnings.length > 0 && (
         <ul className="asb-warnings" aria-label={t("providers.preview.scopeWarningsAria")}>
           {userConfigWarnings.map((warning) => (
@@ -54,7 +58,7 @@ export function PreviewInspector({
       )}
       {/* Warnings precede the diff: the gateway rewrite is explained before
           the 127.0.0.1 endpoint change is seen. */}
-      {preview.warnings.length > 0 && (
+      {showWarnings && preview.warnings.length > 0 && (
         <ul className="asb-warnings" aria-label={t("providers.preview.warningsAria")}>
           {preview.warnings.map((warning) => (
             <li key={warning.key}>{localizedMessageText(warning, t)}</li>

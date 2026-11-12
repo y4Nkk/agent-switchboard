@@ -155,7 +155,6 @@ function useCodexMetadata(deps: ProvidersDeps) {
           record.profile.id,
           draft,
           record.fileHash,
-          "save",
         );
         if (prepared.kind === "saveAndApply") {
           await cancelProfileSave("codex", prepared.preparationId);
@@ -208,7 +207,7 @@ function useProviderMetadata(deps: ProvidersDeps) {
       clearError();
       try {
         const { id, ...draft } = profile;
-        const prepared = await prepareProfileSave(id, { ...draft, ...patch }, record.fileHash, "save");
+        const prepared = await prepareProfileSave(id, { ...draft, ...patch }, record.fileHash);
         if (prepared.kind === "saveAndApply") {
           await cancelProfileSave("profile", prepared.preparationId);
           throw {

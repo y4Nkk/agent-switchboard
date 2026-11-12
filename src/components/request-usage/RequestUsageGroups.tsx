@@ -34,7 +34,7 @@ export function RequestUsageGroups({ report, metric, onPage }: {
           <span className="asb-request-usage-bar-value">
             <strong>{definition.format(value, language)}</strong>
             {definition.companion && marker !== null && <span className="asb-request-usage-caption">
-              {definition.companion.label} {definition.format(marker, language)}
+              {t(definition.companion.labelKey)} {definition.format(marker, language)}
             </span>}
             {samples !== null && <span className="asb-request-usage-caption">{t("usagePerformance.samples", { count: samples })}</span>}
           </span>

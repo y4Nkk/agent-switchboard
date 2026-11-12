@@ -22,6 +22,7 @@ impl CodexProviderDraft {
                     self.authentication,
                     Some(self.endpoint.0.as_str()),
                     self.subagent_route.as_ref(),
+                    !self.model_routes.is_empty(),
                 ),
                 endpoint: self.endpoint,
                 api_key: self.api_key,
@@ -141,8 +142,8 @@ impl CodexProviderFile {
 #[cfg(test)]
 mod tests {
     use crate::contracts::{
-        AppKind, CodexCatalogEntry, CodexEndpoint, CodexProviderDraft,
-        ResponsesRequestMode, DEFAULT_CODEX_CAPABILITIES,
+        AppKind, CodexCatalogEntry, CodexEndpoint, CodexProviderDraft, ResponsesRequestMode,
+        DEFAULT_CODEX_CAPABILITIES,
     };
 
     fn draft(request_mode: ResponsesRequestMode) -> CodexProviderDraft {
@@ -176,6 +177,19 @@ mod tests {
     #[test]
     fn minimal_responses_reject_a_stale_direct_route() {
         let mut file = draft(ResponsesRequestMode::Minimal).into_file("profile".into(), 1);
+        file.profile.route_mode = super::CodexRouteMode::Direct;
+        assert!(file.validate().is_err());
+    }
+    #[test]
+    fn a_model_mapping_cannot_bypass_the_gateway() {
+        let mut mapped = draft(ResponsesRequestMode::Standard);
+        mapped.model_routes = vec![crate::contracts::CodexModelRoute {
+            client_model: "relay-model".into(),
+            upstream_model: "vendor-model".into(),
+        }];
+        let mut file = mapped.into_file("profile".into(), 1);
+        assert_eq!(file.profile.route_mode, super::CodexRouteMode::Gateway);
+        assert!(file.validate().is_ok());
         file.profile.route_mode = super::CodexRouteMode::Direct;
         assert!(file.validate().is_err());
     }

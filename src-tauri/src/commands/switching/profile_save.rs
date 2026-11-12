@@ -12,14 +12,6 @@ use std::time::{Duration, Instant};
 use tauri::AppHandle;
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum ProfileSaveIntent {
-    Save,
-    /// Projects the selected profile even when its stored content is unchanged.
-    Activate,
-}
-
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProfileSaveSource {
@@ -36,7 +28,6 @@ pub(crate) fn classify_existing_profile_save(
     profile_id: &str,
     draft: &ProviderDraft,
     expected_file_hash: &str,
-    intent: ProfileSaveIntent,
 ) -> Result<(ProviderRecord, ProfileSaveKind, Option<ProviderProfile>), CommandError> {
     draft
         .validate()
@@ -59,10 +50,9 @@ pub(crate) fn classify_existing_profile_save(
             "供应商文件已被外部修改，请重新读取后再保存",
         ));
     }
-    if intent == ProfileSaveIntent::Activate {
-        let owner = ProviderProfile::from_draft(record.profile.id.clone(), draft.clone());
-        return Ok((record, ProfileSaveKind::SaveAndApply, Some(owner)));
-    }
+    let candidate = ProviderProfile::from_draft(record.profile.id.clone(), draft.clone());
+    crate::gateway::claude_targets::validate_references(&state.configuration(), &candidate)
+        .map_err(|error| CommandError::new("claude-route-unresolved", error))?;
     let touches_live = record.profile.draft_touches_live_configuration(draft);
     let owner = if touches_live {
         dependencies::affected_active_profile(state, gateway, &record.profile, draft)?
@@ -94,7 +84,6 @@ struct ProfileSavePreparationInner {
 }
 
 pub(super) struct PreparedProfileSave {
-    pub(super) intent: ProfileSaveIntent,
     pub(super) created_at: Instant,
     pub(super) profile_id: Option<String>,
     pub(super) expected_file_hash: Option<String>,
@@ -194,11 +183,7 @@ pub(super) fn prepare_profile_save_data(
     profile_id: Option<&str>,
     draft: &ProviderDraft,
     expected_file_hash: Option<&str>,
-    intent: ProfileSaveIntent,
 ) -> Result<(ProfileSaveKind, Option<asb_switch::FilePreview>, Option<ProviderProfile>, Option<String>), CommandError> {
-    if intent == ProfileSaveIntent::Activate && profile_id.is_none() {
-        return Err(CommandError::keyed("profile-activation-invalid", "modelRoutes.empty", "请先保存供应商档案，再配置模型路由"));
-    }
     match (profile_id, expected_file_hash) {
         (None, None) => {
             draft
@@ -223,8 +208,7 @@ pub(super) fn prepare_profile_save_data(
                 profile_id,
                 draft,
                 expected_file_hash,
-                intent,
-            )?;
+                )?;
             let (preview, candidate_revision) = if let Some(owner) = &owner {
                 let candidate = ProviderProfile::from_draft(record.profile.id, draft.clone());
                 let (preview, revision) = dependencies::preview(state, gateway, owner, &candidate)?;
@@ -366,11 +350,13 @@ pub(super) fn commit_prepared_profile_save(
     prepared: &PreparedProfileSave,
     confirm_write: bool,
 ) -> Result<ProviderRecord, CommandError> {
+    let _targets = gateway.inner.profile_save_gate.write()
+        .map_err(|_| CommandError::new("profile-save-unavailable", "供应商保存锁不可用"))?;
     let (stored, actual_kind, owner) = match (
         prepared.profile_id.as_deref(),
         prepared.expected_file_hash.as_deref(),
     ) {
-        (None, None) if prepared.intent == ProfileSaveIntent::Save => {
+        (None, None) => {
             prepared
                 .draft
                 .validate()
@@ -384,8 +370,7 @@ pub(super) fn commit_prepared_profile_save(
                 profile_id,
                 &prepared.draft,
                 expected_file_hash,
-                prepared.intent,
-            )?;
+                    )?;
             (Some(record), kind, owner)
         }
         _ => {

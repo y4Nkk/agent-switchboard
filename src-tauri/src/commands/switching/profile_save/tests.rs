@@ -2,7 +2,8 @@ use super::*;
 use crate::{gateway::GatewayController, local_state::LocalState};
 use asb_core::{AppKind, RouteMode, UpstreamProtocol};
 
-mod activation;
+mod save_identity;
+mod claude_targets;
 
 fn draft(name: &str) -> ProviderDraft {
     ProviderDraft {
@@ -39,10 +40,9 @@ fn prepare(state: &LocalState, gateway: &GatewayController, record: &ProviderRec
     draft.base_url = Some("https://replacement.example".into());
     draft.model = Some("replacement-model".into());
     let (kind, preview, projection_profile, candidate_revision) = prepare_profile_save_data(
-        state, gateway, Some(&record.profile.id), &draft, Some(&record.file_hash), ProfileSaveIntent::Save,
+        state, gateway, Some(&record.profile.id), &draft, Some(&record.file_hash),
     ).unwrap();
     PreparedProfileSave {
-        intent: ProfileSaveIntent::Save,
         created_at: Instant::now(), profile_id: Some(record.profile.id.clone()),
         expected_file_hash: Some(record.file_hash.clone()), draft, kind, preview,
         projection_profile, candidate_revision,

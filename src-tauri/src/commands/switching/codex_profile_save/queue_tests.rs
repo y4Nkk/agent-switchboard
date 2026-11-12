@@ -2,7 +2,7 @@ use super::*;
 use crate::{gateway::GatewayController, local_state::LocalState};
 use asb_core::AppKind;
 
-mod activation;
+mod save_identity;
 
 fn providers(state: &LocalState, gateway: &GatewayController) -> (CodexProviderRecord, CodexProviderFile) {
     let target = state.configuration().create_codex_provider(crate::codex_common::test_draft()).unwrap();
@@ -27,10 +27,9 @@ fn prepare(state: &LocalState, gateway: &GatewayController, target: &CodexProvid
         client_model: "relay-model".into(), upstream_model: "replacement-model".into(),
     }];
     let (kind, preview, projection_profile, candidate_revision) = prepare_data(
-        state, gateway, &target.profile.id, &draft, &target.file_hash, ProfileSaveIntent::Save,
+        state, gateway, &target.profile.id, &draft, &target.file_hash,
     ).unwrap();
     PreparedCodexProfileSave {
-        intent: ProfileSaveIntent::Save,
         created_at: Instant::now(), profile_id: target.profile.id.clone(),
         expected_file_hash: target.file_hash.clone(), draft, kind, preview,
         projection_profile, candidate_revision,

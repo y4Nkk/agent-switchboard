@@ -268,3 +268,52 @@ fn codex_anthropic_version_prefixes_are_repaired() {
     assert!(repeated.repaired_files.is_empty());
     assert!(repeated.backup_path.is_none());
 }
+
+#[test]
+fn claude_tiers_upgrade_offline_and_current_readers_reject_retired_fields() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(directory.path().join("state"));
+    let file = provider(100);
+    let mut old = serde_json::to_value(&file).unwrap();
+    old["modelOptions"] = json!({"kind":"claude", "primaryOneM":false,
+        "haikuModel":null,"sonnetModel":"saved-sonnet","sonnetOneM":true,
+        "opusModel":null,"opusOneM":false,"availableModels":["saved-sonnet"]});
+    let (path, original) = write_provider(&store, &old);
+    assert!(store.list_providers().is_err());
+    let report = store.repair().unwrap();
+    let current:Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(current["modelOptions"]["routes"]["sonnet"], json!({"mode":"primary","model":"saved-sonnet","oneM":true}));
+    assert!(current["modelOptions"].get("sonnetModel").is_none());
+    assert_eq!(fs::read_to_string(PathBuf::from(report.backup_path.unwrap()).join(path.strip_prefix(store.configuration_dir()).unwrap())).unwrap(), original);
+    assert!(store.repair().unwrap().repaired_files.is_empty());
+}
+
+#[test]
+fn direct_codex_mapping_upgrade_changes_only_the_derived_route_mode() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(directory.path().join("state"));
+    let mut draft = crate::codex_common::test_draft();
+    draft.model_routes = vec![asb_core::contracts::CodexModelRoute {client_model:draft.default_model.clone(), upstream_model:"upstream-model".into()}];
+    let file = draft.into_file(Uuid::new_v4().to_string(), 100);
+    let mut old = serde_json::to_value(&file).unwrap(); old["profile"]["routeMode"] = json!("direct");
+    let path = store.providers_dir(AppKind::Codex).join(format!("{}.json",file.profile.id));
+    fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+    assert!(store.list_codex_providers().is_err());
+    let report = store.repair().unwrap(); assert_eq!(report.repaired_files.len(),1);
+    assert_eq!(store.find_codex_provider_file(&file.profile.id).unwrap(),file);
+    assert!(store.repair().unwrap().repaired_files.is_empty());
+}
+
+#[test]
+fn mixed_current_and_retired_claude_routes_reject_the_whole_upgrade() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(directory.path().join("state"));
+    let mut old = serde_json::to_value(provider(100)).unwrap();
+    old["modelOptions"] = json!({"kind":"claude","primaryOneM":false,"sonnetModel":"legacy",
+        "routes":{"haiku":null,"sonnet":{"mode":"primary","model":"current","oneM":false},"opus":null,"fable":null,"subagent":null}});
+    let (path, original) = write_provider(&store, &old);
+    let before = file_tree(&store.configuration_dir()).unwrap();
+    assert!(store.repair().unwrap_err().contains("mix"));
+    assert_eq!(fs::read_to_string(path).unwrap(),original);
+    assert_eq!(file_tree(&store.configuration_dir()).unwrap(),before);
+}

@@ -155,6 +155,9 @@
   /* One shell tint; the native window compositor owns background blur. */
   --asb-chrome-bg: hsl(240 12% 93% / 0.6);
   --asb-chrome-hover: color-mix(in srgb, var(--asb-text) 5%, transparent);
+  /* Pressed chrome feedback: twice the hover tint, still derived from the
+     text role so dark mode deepens it without a second palette. */
+  --asb-chrome-active: color-mix(in srgb, var(--asb-text) 10%, transparent);
   --asb-chrome-selected: color-mix(in srgb, var(--asb-action) 10%, transparent);
 
   /* Motion */
@@ -163,6 +166,9 @@
   --asb-motion-node: 220ms;
   --asb-motion-sheet: 240ms;
   --asb-motion-navigation: 400ms;
+  /* Sidebar selection-indicator stretch; SideNavIndicator's rAF reads this
+     value, so the reduce mappings below also gate the JS animation. */
+  --asb-motion-indicator: 320ms;
   /* Ambient loops (skeleton pulse) — slower than any interaction motion. */
   --asb-motion-ambient: 1600ms;
   --asb-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -212,6 +218,10 @@
   --asb-touch-target: var(--asb-control-height);
   --asb-sidebar-expanded-width: 224px;
   --asb-sidebar-collapsed-width: 56px;
+  /* Current-page indicator pill on the item's start edge (shell.css paints
+     it, SideNavIndicator stretches it between rows). */
+  --asb-sidebar-indicator-width: 3px;
+  --asb-sidebar-indicator-height: 16px;
   --asb-sidebar-width: var(--asb-sidebar-expanded-width);
   --asb-titlebar-height: 64px;
   --asb-button-min-width: 72px;
@@ -350,6 +360,7 @@
     --asb-motion-sheet: 0ms;
     --asb-motion-ambient: 0ms;
     --asb-motion-navigation: 0ms;
+    --asb-motion-indicator: 0ms;
   }
 }
 
@@ -360,4 +371,5 @@
   --asb-motion-sheet: 0ms;
   --asb-motion-ambient: 0ms;
   --asb-motion-navigation: 0ms;
+  --asb-motion-indicator: 0ms;
 }

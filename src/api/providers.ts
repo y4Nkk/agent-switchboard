@@ -240,7 +240,6 @@ export interface ProbeResult {
 }
 
 export type ProfileSaveKind = "create" | "noChange" | "saveOnly" | "saveAndApply";
-export type ProfileSaveIntent = "save" | "activate";
 
 /** Backend-owned classification of an edit against the stored profile and
  * the current client configuration. A candidate exists only for an edit that
@@ -269,13 +268,11 @@ export function prepareCodexProfileSave(
   profileId: string,
   draft: CodexProviderDraft,
   expectedFileHash: string,
-  intent: ProfileSaveIntent,
 ): Promise<ProfileSavePreparation> {
   return invoke<ProfileSavePreparation>("prepare_codex_profile_save", {
     profileId,
     draft,
     expectedFileHash,
-    intent,
   });
 }
 
@@ -307,9 +304,8 @@ export function prepareProfileSave(
   profileId: string | null,
   draft: ProviderDraft,
   expectedFileHash: string | null,
-  intent: ProfileSaveIntent,
 ): Promise<ProfileSavePreparation> {
-  return invoke<ProfileSavePreparation>("prepare_profile_save", { profileId, draft, expectedFileHash, intent });
+  return invoke<ProfileSavePreparation>("prepare_profile_save", { profileId, draft, expectedFileHash });
 }
 
 export function commitProfileSave(
