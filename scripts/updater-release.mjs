@@ -172,15 +172,51 @@ export async function assertReleaseVersion({ cargoManifest, tag, version }) {
   if (tag !== `v${version}`) {
     throw new Error(`Release tag ${tag} must equal v${version}`);
   }
+  await assertWorkspaceLockVersions(cargoManifest, version);
+}
+
+async function assertWorkspaceLockVersions(cargoManifest, version) {
+  const manifest = (await readFile(cargoManifest, "utf8")).replaceAll("\r\n", "\n");
+  const workspace = manifest.split(/^\[workspace\][ \t]*$/m)[1]?.split(/^\[/m)[0];
+  const members = workspace?.match(/^members\s*=\s*\[([^\]]*)\]/m)?.[1];
+  const paths = members ? [...members.matchAll(/"([^"\n]+)"/g)].map((match) => match[1]) : [];
+  if (!paths.length || paths.some((member) => /[*?{}]/.test(member))) {
+    throw new Error(`Release workspace must declare explicit package directories in ${cargoManifest}`);
+  }
+  const directory = path.dirname(cargoManifest);
+  const lockFile = path.join(directory, "Cargo.lock");
+  const lock = (await readFile(lockFile, "utf8")).replaceAll("\r\n", "\n");
+  const packages = lock.split(/^\[\[package\]\][ \t]*$/m);
+  for (const member of paths) {
+    const memberFile = path.join(directory, member, "Cargo.toml");
+    const packageManifest = (await readFile(memberFile, "utf8")).replaceAll("\r\n", "\n");
+    const packageSection = packageManifest.split(/^\[package\][ \t]*$/m)[1]?.split(/^\[/m)[0];
+    const name = packageSection?.match(/^name[ \t]*=[ \t]*"([^"]+)"[ \t]*$/m)?.[1];
+    if (!name) throw new Error(`Missing package name in ${memberFile}`);
+    const entries = packages.filter((entry) => !/^source\s*=/m.test(entry)
+      && entry.match(/^name\s*=\s*"([^"]+)"/m)?.[1] === name);
+    if (entries.length !== 1) {
+      throw new Error(`${lockFile} must contain exactly one local workspace package ${name}; found ${entries.length}`);
+    }
+    const lockedVersion = entries[0].match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+    if (lockedVersion !== version) {
+      throw new Error(`${lockFile} workspace package ${name} has version ${lockedVersion ?? "missing"}; expected ${version}`);
+    }
+  }
 }
 
 export async function readReleaseNotes({ changelogFile, version }) {
   assertVersion(version);
   const changelog = (await readFile(changelogFile, "utf8")).replaceAll("\r\n", "\n");
-  const heading = new RegExp(`^## \\[${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\](?:\\s+-\\s+.+)?\\s*$`, "m");
+  const heading = new RegExp(`^## \\[${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]([^\\n]*)$`, "m");
   const match = heading.exec(changelog);
   if (!match || match.index === undefined) {
     throw new Error(`Missing release notes for version ${version} in ${changelogFile}`);
+  }
+  const releaseDate = match[1].match(/^[ \t]+-[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*$/)?.[1];
+  const dateValue = releaseDate ? Date.parse(`${releaseDate}T00:00:00.000Z`) : NaN;
+  if (!Number.isFinite(dateValue) || new Date(dateValue).toISOString().slice(0, 10) !== releaseDate) {
+    throw new Error(`Missing or invalid release date for version ${version}; expected YYYY-MM-DD`);
   }
   const afterHeading = changelog.slice(match.index + match[0].length);
   const nextVersion = afterHeading.search(/^## \[/m);
@@ -188,7 +224,7 @@ export async function readReleaseNotes({ changelogFile, version }) {
   if (notes.length === 0) {
     throw new Error(`Release notes for version ${version} are empty`);
   }
-  return notes;
+  return `发布日期：${releaseDate}\n\n${notes}`;
 }
 
 async function requireAsset(inputDirectory, assetName) {

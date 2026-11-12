@@ -10,6 +10,12 @@ GitHub Release 正文此前只有 CHANGELOG.md 提取的版本段落，用户要
 
 下载表唯一属主是 `.github/release_template.md`：动态下载量徽章（`img.shields.io/github/downloads/REPOSITORY/vVERSION/total`）、五枚静态徽章套资产链接的表格、CHANGELOG 链接；模板不含任何仓库与版本字面量，`REPOSITORY` 与 `VERSION` 两个占位符由 `package.yml` 的 release job 注入（`GITHUB_REPOSITORY` 与 tag 派生版本），仓库身份单一来源是 GitHub 上下文。资产文件名与 `scripts/updater-release.mjs` 的 `BUILD_ARTIFACTS` 命名逐字一致（nsis.exe、darwin-aarch64.dmg、darwin-x86_64.dmg、linux-x86_64.AppImage、linux-x86_64.deb）。拼接发生在「生成签名更新清单」之后、「创建或复用 Release」之前——顺序承重：manifest 的 `--notes-file` 必须吃到纯 changelog（应用内更新说明不含徽章表格），create/edit 两条发布路径读的都是拼接后的正文。表格只列用户直接下载的资产；`*.app.tar.gz`、`*.sig`、`latest.json` 是更新器载荷，永不进表。
 
+## Release metadata
+
+发布说明中的发布日期唯一来自 `CHANGELOG.md` 的版本标题（`## [x.y.z] - YYYY-MM-DD`）。`readReleaseNotes` 校验实际日历日期并在正文前展示，不以构建时间补值；GitHub 正文与应用更新说明消费同一输出。日期缺失、格式错误或空正文阻止生成发布说明。更新器 `pub_date` 仍表示清单的生成时间，不冒充版本日历日期。
+
+发布版本校验同时检查 `Cargo.toml`、标签与三个 Rust 工作区包的锁文件版本。只替换 `Cargo.lock` 中第一个版本会留下其余 `version.workspace` 包的旧值，使四平台 `--locked` 门禁失败；发布时使用 Cargo 同步工作区版本，保持第三方依赖版本与校验和不变。失败的 `v0.3.19` 标签不改写，其未完成发布的内容合并入 `v0.3.20`。
+
 ## Related decisions
 
 - [应用内更新日志渲染](../feature/2026-10-14-changelog-section-display.md)确立 CHANGELOG.md 是更新说明唯一来源——本篇不改变它：release 正文说明部分仍由 `updater-release.mjs release-notes` 从 CHANGELOG.md 提取，表格只是追加段，latest.json 保持纯 changelog。
@@ -19,6 +25,7 @@ GitHub Release 正文此前只有 CHANGELOG.md 提取的版本段落，用户要
 - 手动在 Release 编辑框粘贴表格：零 CI 成本，但每次发布都要手工替换版本号并核对文件名，漏改即死链；模板 + sed 让文件名契约只写一次。
 - 徽章直链 `releases/latest/download/…` 而非固定 tag：URL 永不变，但历史版本页面的徽章会指向最新版文件，版本错位；固定 tag 链接与页面自洽。
 - 把下载表也塞进 latest.json 的更新说明：应用内查看器禁原生 HTML/图片，徽章渲染不出且噪音大。
+- 用发布时的本机日期填正文最省步骤，但会因重跑流水线改变历史版本日期；从版本标题提取使日期有唯一所有者，并使缺失日期显式失败。
 
 ## Consequences
 

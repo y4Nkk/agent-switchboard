@@ -317,6 +317,8 @@ Windows 远程流水线还构建 MSIX。开发机执行 `npm run msix:package` �
 
 版本由 [Cargo.toml](Cargo.toml) 的工作区版本统一管理。完整脚本见 [package.json](package.json)，各平台构建矩阵与发布步骤见 [打包工作流](.github/workflows/package.yml)。本地构建不会自动发布版本。
 
+[CHANGELOG.md](CHANGELOG.md) 的正式版本标题统一标注 `YYYY-MM-DD` 发布日期；GitHub 发布正文和应用内更新说明从同一标题提取并显示日期，缺失或无效日期会阻止生成发布说明。发布前，`Cargo.lock` 中所有 Rust 工作区包的版本必须与工作区版本和标签一致。
+
 ### 本地构建缓存与验证资料
 
 Cargo 的开发与测试构建使用精简调试信息并关闭增量编译，减少 `target/` 和 `target-dev/` 的增长；发布配置不变。需要变量级调试时，可在单次构建中设置 `CARGO_PROFILE_DEV_DEBUG=full`。关闭增量编译后，小改动的 Rust 重编译可能变慢。

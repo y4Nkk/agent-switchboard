@@ -337,6 +337,8 @@ The Windows workflow also builds MSIX. Running `npm run msix:package` locally re
 
 The workspace version in [Cargo.toml](Cargo.toml) owns the application version. See [package.json](package.json) for all scripts and the [packaging workflow](.github/workflows/package.yml) for the platform matrix and release steps. Local builds do not automatically publish a release.
 
+Every release heading in [CHANGELOG.md](CHANGELOG.md) includes its publication date as `YYYY-MM-DD`. GitHub release notes and in-app update notes derive the displayed date from that heading; missing or invalid dates block release-note generation. All Rust workspace package versions in `Cargo.lock` must match the workspace version and tag before publishing.
+
 ### Local build caches and verification data
 
 Development and test builds use smaller debug information and disable incremental compilation to slow growth in `target/` and `target-dev/`; the release profile is unchanged. Set `CARGO_PROFILE_DEV_DEBUG=full` for a single build when variable-level debugging is needed. Small Rust edits may take longer to rebuild without incremental compilation.
