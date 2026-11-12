@@ -12,7 +12,6 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronsLeft,
-  ChevronsRight,
   Copy,
   Download,
   Eye,
@@ -80,7 +79,6 @@ export const ConnectivityIcon = icon(Wifi, 16);
 export const RequestIcon = icon(Send, 16);
 export const GatewayIcon = icon(Network, 20);
 export const CollapseNavigationIcon = icon(ChevronsLeft, 20);
-export const ExpandNavigationIcon = icon(ChevronsRight, 20);
 export const ReloadIcon = icon(RotateCw, 20);
 
 export const ChevronDownIcon = icon(ChevronDown, 16, 2.4);

@@ -37,7 +37,7 @@ function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplic
       <div className="asb-prepared-app" inert={suspended}>
       <AppShell page={page} onPageChange={setPage} error={error} busy={busy}
         sidebar={model.sidebar}
-        preparation={preparation.snapshot!} settingsError={appSettingsState.loadError}
+        preparation={preparation.snapshot!} settingsError={appSettingsState.loadFailure}
         pin={appSettingsState.pin} update={{
           checking: updateCheck.checking,
           latestVersion: updateCheck.updateCheck?.latestVersion ?? null,

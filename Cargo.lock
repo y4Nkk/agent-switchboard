@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "agent-switchboard"
-version = "0.3.20"
+version = "0.3.21"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -205,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "asb-core"
-version = "0.3.20"
+version = "0.3.21"
 dependencies = [
  "serde",
  "serde_json",
@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "asb-switch"
-version = "0.3.20"
+version = "0.3.21"
 dependencies = [
  "asb-core",
  "chrono",

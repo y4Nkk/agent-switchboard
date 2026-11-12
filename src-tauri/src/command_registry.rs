@@ -199,7 +199,7 @@ macro_rules! handler {
             crate::app_update::start_update_download,
             crate::app_update::read_update_download,
             crate::app_update::cancel_update_download,
-            changelog::changelog_section,
+            changelog::changelog_history,
             crate::commands::get_app_settings,
             crate::commands::set_app_settings,
             crate::commands::get_outbound_proxy_settings,

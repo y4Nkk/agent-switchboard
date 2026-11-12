@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-AppShell 使用两行两列 grid：导航跨两行，顶栏占右上，工作区占右下。224px/56px 导航宽度、64px 顶栏高度及 400ms 动画沿用 tokens.css；只有 grid 列宽负责宽度动画，导航项直接从父级可用宽度扣除横向留白，文字以 flex 接收剩余空间，不再独立过渡宽度或借用行高计算宽度。侧栏和顶栏没有独立底色、模糊、分隔线或覆盖定位，共享 `.asb-shell` 的一层半透明材质。悬停统一使用 chrome-hover 透明叠色，删除旧 sidebar-bg、sidebar-hover 与更新标记的重复表面染色；标题栏信息弹层的高度预算来自 titlebar-height。
+AppShell 使用两行两列 grid：导航跨两行，顶栏占右上，工作区占右下。224px/56px 导航宽度、64px 顶栏高度由 tokens.css 拥有；[FlClash 交互重构](../feature/2026-11-12-flclash-sidebar-interaction.md)将展开动画收敛为 250ms。只有 grid 列宽负责宽度动画，导航项直接从父级可用宽度扣除横向留白，文字按展开宽度固定排布并裁切，不再独立过渡宽度或借用行高计算宽度。侧栏和顶栏没有独立底色、模糊、分隔线或覆盖定位，共享 `.asb-shell` 的一层半透明材质。悬停统一使用 chrome-hover 透明叠色，删除旧 sidebar-bg、sidebar-hover 与更新标记的重复表面染色；标题栏信息弹层的高度预算来自 titlebar-height。
 
 主窗口通过现有 Tauri windowEffects 配置启用透明窗口与透明 WebView 背景，Windows 使用 Acrylic，macOS 使用 UnderWindowBackground。系统合成器拥有桌面背景模糊，tokens.css 只拥有深浅模式的表面染色；删除网页 chrome-blur token 及侧栏/顶栏的 backdrop-filter，不引入第二个材质实现或新依赖。
 

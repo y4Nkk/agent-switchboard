@@ -7,6 +7,8 @@ import {
 import { applyAppAppearance } from "../lib/app-appearance";
 import { applyLanguagePreference } from "../i18n/current";
 import { isBrowserDevelopment } from "../lib/runtime";
+import { useI18n } from "../i18n";
+import { errorText } from "../i18n/errors";
 
 interface AppSettingsDeps {
   busy: boolean;
@@ -17,14 +19,16 @@ interface AppSettingsDeps {
 
 function useLoadedAppSettings(onError: AppSettingsDeps["onError"], revision: number) {
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
-  const [loadError, setLoadError] = useMessageState();
+  const [loadFailure, setLoadFailure] = useState<CommandError | null>(null);
+  const { t } = useI18n();
+  const loadError = loadFailure === null ? null : errorText(loadFailure, t);
   const [desktopError, setDesktopError] = useMessageState();
   const [reload, setReload] = useState(0);
   const acceptSnapshot = useCallback((snapshot: AppSettingsSnapshot) => {
     applyLanguagePreference(snapshot.settings.language);
     setAppSettingsState(snapshot.settings);
     setDesktopError(snapshot.desktopError);
-    setLoadError(null);
+    setLoadFailure(null);
     if (snapshot.desktopError) onError(snapshot.desktopError);
   }, [onError]);
   useEffect(() => {
@@ -32,7 +36,7 @@ function useLoadedAppSettings(onError: AppSettingsDeps["onError"], revision: num
     void getAppSettings().then((snapshot) => {
       if (!disposed) acceptSnapshot(snapshot);
     }).catch((caught: CommandError) => {
-      if (!disposed) { onError(caught); setLoadError(caught); }
+      if (!disposed) { onError(caught); setLoadFailure(caught); }
     });
     return () => { disposed = true; };
   }, [onError, reload, revision, acceptSnapshot]);
@@ -58,7 +62,7 @@ function useLoadedAppSettings(onError: AppSettingsDeps["onError"], revision: num
     if (isBrowserDevelopment) document.documentElement.style.zoom = String((appSettings?.interfaceScale ?? 100) / 100);
   }, [appSettings]);
   const retryLoad = useCallback(() => setReload((count) => count + 1), []);
-  return { appSettings, loadError, desktopError, setAppSettingsState, setDesktopError, acceptSnapshot, retryLoad };
+  return { appSettings, loadError, loadFailure, desktopError, setAppSettingsState, setDesktopError, acceptSnapshot, retryLoad };
 }
 
 function useSettingsRestart({ busy, onError, clearError, setBusy }: AppSettingsDeps) {
@@ -115,7 +119,8 @@ export function useAppSettings(deps: AppSettingsDeps, revision: number) {
     void saveSettingsPatch({ expandedUsageIds });
   }, [appSettings, saveSettingsPatch]);
   return {
-    appSettings, loadError: loaded.loadError, desktopError: loaded.desktopError, retryLoad: loaded.retryLoad,
+    appSettings, loadError: loaded.loadError, loadFailure: loaded.loadFailure,
+    desktopError: loaded.desktopError, retryLoad: loaded.retryLoad,
     ...recovery, saveAppSettings, saveSettingsPatch, pin, toggleUsageExpanded,
   };
 }

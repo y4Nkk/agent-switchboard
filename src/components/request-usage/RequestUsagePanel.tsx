@@ -17,7 +17,7 @@ export function RequestUsagePanel({ performance }: { performance: ReturnType<typ
     if (!report) return !error && <RequestUsageEmpty state="loading" onShowAll={showAll} />;
     return <>
       {report.summary.records > 0 ? <>
-        <RequestUsageSummary metrics={report.summary} scope={report.scope} />
+        <RequestUsageSummary report={report} />
         {report.summary.mixedMeasurements && analysis.view !== "models" && <div className="asb-request-usage-notice">
           <span>{t("usagePerformance.mixedMeasurements")}</span>
           <Button variant="ghost" size="compact" onClick={() => setAnalysis({ ...analysis, view: "models" })}>
@@ -31,7 +31,7 @@ export function RequestUsagePanel({ performance }: { performance: ReturnType<typ
         && <RequestUsageBreakdown report={report} />}
     </>;
   };
-  return <div className="asb-panel asb-request-usage">
+  return <div className="asb-request-usage">
     <NativeTelemetrySetup active={active} onApplied={refresh} />
     {error && <p className="asb-field-error" role="alert">{t("usagePerformance.readFailed")} {error}</p>}
     <div className="asb-request-usage-stage" ref={stage.stageRef}>

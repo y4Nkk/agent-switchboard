@@ -19,9 +19,7 @@ pub(super) async fn windows(app: &AppHandle, request: &InvokeRequest) -> Result<
         "cancel_update_download" => command!(crate::app_update::cancel_update_download(
             app.clone(), argument(&request.args, "id")?,
         )),
-        "changelog_section" => as_json(Ok::<_, CommandError>(crate::changelog::changelog_section(
-            app.clone(), argument(&request.args, "version")?,
-        ))),
+        "changelog_history" => as_json(crate::changelog::changelog_history(app.clone())),
         "pick_directory" => {
             command!(commands::window::pick_directory(app.clone()))
         }

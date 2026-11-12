@@ -8,11 +8,12 @@ Status: implemented
 
 ## Decision
 
-Markdown 本身就是格式契约，项目不拥有也不解析它。CHANGELOG.md 经 `tauri.conf.json` 资源映射随应用打包；后端 `changelog.rs` 只拥有版本段落边界：`changelog_section(version)` 定位 `## [version]` 段、截取到下一个 `## [` 为止，返回段落原文（不含段标题行），文件或段落缺失返回 `null`。渲染归前端共享查看器 `MarkdownContent`（react-markdown + remark-gfm，会话记录与更新日志唯一共用的渲染管线）：原生 HTML 一律不渲染（库默认，无注入面），http(s) 链接经 opener 打开系统浏览器，非 http 文本不渲染为链接。更新说明与新版本 release body 都是原文进查看器；元素间距由共享 `.asb-markdown` 作用域类拥有（自 session-message.css 提升），`.asb-update-notes` 与 `.asb-session-message-body` 只保留各自的布局。当前版本说明在 `appVersion` 就绪时加载一次，结果为空或读取失败即不渲染披露。设置行（`.asb-app-setting-row`）的垂直对齐契约为统一的顶端对齐：动作按钮钉在文案首行旁，任何行内增长的正文（如整篇日志）都不会把按钮拖进正文中间，不设按行特例。
+Markdown 正文继续作为格式契约，应用不拆解正文的类别、列表和行内元素。CHANGELOG.md 经 `tauri.conf.json` 资源映射随应用打包；[关于页历史日志](2026-11-12-about-changelog-history.md)接管版本边界与元数据，取代原单版本读取、当前版本披露及失败时静默隐藏的决定。正文渲染仍归前端共享查看器 `MarkdownContent`（react-markdown + remark-gfm，会话记录与更新日志唯一共用的渲染管线）：原生 HTML 不渲染，http(s) 链接经 opener 打开系统浏览器，非 http 文本不渲染为链接。历史日志与新版本 release body 共用 `ReleaseNotes`，原文进入同一个查看器；元素间距由共享 `.asb-markdown` 拥有，`.asb-update-notes` 与 `.asb-session-message-body` 只保留各自布局。设置行（`.asb-app-setting-row`）统一顶端对齐：动作按钮钉在文案首行旁，正文增长不会把按钮拖进中间，不设按行特例。
 
 ## Related decisions
 
 - [标题栏信息](../feature/2026-10-12-titlebar-information.md)拥有全局反馈位置，与本篇更新模块内容无冲突。
+- [关于页历史日志](2026-11-12-about-changelog-history.md)部分取代当前版本读取；本篇继续拥有唯一随包文档、Markdown 查看器与链接语义。
 - 壳层笔记（`2026-10-14-unified-native-glass-shell.md`）拥有侧边栏更新入口的位置与状态，本篇只拥有设置页更新模块的日志展示。
 
 ## Alternatives considered
@@ -25,10 +26,10 @@ Markdown 本身就是格式契约，项目不拥有也不解析它。CHANGELOG.m
 
 ## Consequences
 
-- 收益：应用代码零 Markdown 解析——格式契约归 Markdown 规范与 remark 库，应用只拥有"取段落"和"渲染"两端；会话记录与更新日志共用同一查看器、同一链接行为、同一元素样式；当前版本与新版本共享同一渲染路径。安装包只多几 KB 文本资源，读取是本地文件访问。
-- 代价：react-markdown 进主包（此前仅会话页使用）；`## [version]` 边界仍是 `changelog.rs` 解析的契约，改段标题格式必须同步；链接行为沿用会话记录的既有语义（`openUrl` 失败静默）；开发模式下资源目录可能不含该文件，披露不出现（生产行为不受影响）。
-- 披露默认收起，不增加更新节的默认高度；details 原生键盘行为无需额外代码。
+- 收益：Markdown 元素格式归 remark 库，应用只拥有版本边界与元数据；会话记录与更新日志共用同一查看器、同一链接行为、同一元素样式，当前、历史与新版本正文共享渲染路径。资源读取不依赖联网。
+- 代价：react-markdown 进入主包；`## [version]` 边界仍由 changelog.rs 拥有，改标题格式必须同步；链接打开沿用共享查看器语义。缺失资源现在明确报错并可重试，不能继续当作没有日志。
+- 历史披露默认收起并使用共享 Collapsible，打开后才加载，关闭后释放；不增加更新模块的默认正文高度。
 
 ## Verification
 
-按项目要求不运行编译与自动化测试。静态核对：`version_section` 针对当前 CHANGELOG.md 首段与相邻段边界手推通过，`## [0.3.3]` 的右括号保证不误匹配 `0.3.30` 类版本；`tauri.conf.json` 资源映射（JSON 解析通过）、lib.rs 模块声明、命令注册、client.ts 契约与渲染链经源码交叉检查；旧结构契约（`ChangelogSection`、`parse_release_notes`、`asb-update-notes-section`）与 `asb-session-message-body` 元素样式的残留引用检查为零，react-markdown 库引用仅剩共享查看器一处。会话记录迁移后的视觉等价性依据是选择器集合逐条平移，未做像素比对。
+既有资源映射、lib.rs 模块声明和共享 Markdown 渲染链继续成立；单版本解析用例随旧命令删除，新历史边界和验证范围见[关于页历史日志](2026-11-12-about-changelog-history.md)。正文旧结构契约与样式迁移当时仅按源码核对，不作为新历史模块的运行验收；类型检查、编译与自动化测试仍遵守项目授权规则。

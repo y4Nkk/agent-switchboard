@@ -1,154 +1,145 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
+import type { Page } from "./navigation";
 
-/** The lead edge finishes within the first 60% of the travel while the trail
- * edge follows from 35% on, so the pill stretches toward the target before
- * its far side catches up (FlClash's sidebar indicator, prism_ui sidebar.dart). */
-const LEAD_PHASE = 0.6;
-const TRAIL_PHASE = 0.35;
-
-interface SideNavIndicatorProps {
-  list: RefObject<HTMLUListElement | null>;
-  /** Index of the current page inside this list; null when the current page
-   * lives in the other list, so the pill only ever moves within one list. */
-  index: number | null;
+interface IndicatorFrame { top: number; bottom: number }
+interface IndicatorState {
+  frame: IndicatorFrame | null;
+  target: IndicatorFrame | null;
+  cancel: () => void;
 }
 
-/** Current-page pill for one sidenav list. CSS paints the geometry
- * (shell.css) and owns the travel duration via --asb-motion-indicator, whose
- * reduce mappings also zero this animation; this component owns the stretch.
- * Item rows are measured, never derived from index arithmetic, so text
- * scaling and list padding cannot desync it. */
-export function SideNavIndicator({ list, index }: SideNavIndicatorProps) {
-  const pillRef = useRef<HTMLLIElement | null>(null);
-  // The last target the pill stretched to; a new selection departs from it.
-  const fromRef = useRef<number | null>(index);
-  const indexRef = useRef<number | null>(index);
-  const frameRef = useRef(0);
+export function SideNavIndicator({ list, current }: {
+  list: HTMLUListElement | null;
+  current: Page | null;
+}) {
+  const pill = useRef<HTMLLIElement>(null);
+  const state = useRef<IndicatorState>({ frame: null, target: null, cancel: () => {} });
+  useIndicatorLayout(list, pill, state);
 
   useLayoutEffect(() => {
-    if (index === null) {
-      indexRef.current = null;
+    const motion = state.current;
+    motion.cancel();
+    const target = measureTarget(list);
+    const node = pill.current;
+    if (!node || !target || current === null) {
+      motion.frame = null;
+      motion.target = null;
       return;
     }
-    const pill = pillRef.current;
-    if (!pill) {
+    const from = motion.frame;
+    motion.target = target;
+    const duration = readDuration();
+    if (!from || duration <= 0 || document.hidden || sameFrame(from, target)) {
+      paintFrame(node, motion, target);
       return;
     }
-    const from = fromRef.current;
-    fromRef.current = index;
-    indexRef.current = index;
+    motion.cancel = animateIndicator(node, motion, from, target, duration);
+    return () => motion.cancel();
+  }, [current, list]);
 
-    const { duration, pillHeight } = indicatorMotion();
-    if (pillHeight <= 0) {
-      return;
-    }
-    const apply = (top: number, height: number) => {
-      pill.style.top = `${top}px`;
-      pill.style.height = `${height}px`;
-    };
-    const fromTop = from === null ? null : restingTop(list.current, from, pillHeight);
-    const toTop = restingTop(list.current, index, pillHeight);
-    if (toTop === null) {
-      return;
-    }
-    // Mount (from === index), no readable row, or reduced motion: land
-    // directly instead of running a zero-distance stretch.
-    if (from === index || fromTop === null || duration <= 0) {
-      apply(toTop, pillHeight);
-      return;
-    }
-    const start = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      const lead = easeOutCubic(Math.min(1, t / LEAD_PHASE));
-      const trail = easeInOutCubic(
-        Math.max(0, (t - TRAIL_PHASE) / (1 - TRAIL_PHASE)),
-      );
-      // Descending: the bottom edge leads; ascending: the top edge does.
-      const top =
-        toTop >= fromTop
-          ? lerp(fromTop, toTop, trail)
-          : lerp(fromTop, toTop, lead);
-      const bottom =
-        toTop >= fromTop
-          ? lerp(fromTop, toTop, lead)
-          : lerp(fromTop, toTop, trail);
-      apply(top, bottom - top + pillHeight);
-      if (t < 1) {
-        frameRef.current = requestAnimationFrame(step);
-      }
-    };
-    frameRef.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frameRef.current);
-  }, [index, list]);
+  return current === null ? null : (
+    <li ref={pill} className="asb-sidenav-indicator" aria-hidden="true" />
+  );
+}
 
-  // Layout shifts (rail collapse, font scaling) re-sync the resting pill
-  // instantly; the initial observer callback only re-places what mount
-  // already placed, so it never interrupts a running stretch.
+function useIndicatorLayout(
+  list: HTMLUListElement | null,
+  pill: RefObject<HTMLLIElement | null>,
+  state: RefObject<IndicatorState>,
+) {
   useLayoutEffect(() => {
-    const l = list.current;
-    if (!l) {
-      return;
-    }
-    const observer = new ResizeObserver(() => {
-      const current = indexRef.current;
-      const pill = pillRef.current;
-      if (!pill || current === null) {
-        return;
-      }
-      const { pillHeight } = indicatorMotion();
-      const top = restingTop(l, current, pillHeight);
-      if (top !== null && pillHeight > 0) {
-        pill.style.top = `${top}px`;
-        pill.style.height = `${pillHeight}px`;
-      }
+    const container = list;
+    if (!container) return;
+    const settle = () => {
+      const target = measureTarget(container);
+      const node = pill.current;
+      if (!target || !node) return;
+      state.current.cancel();
+      state.current.target = target;
+      paintFrame(node, state.current, target);
+    };
+    const resize = new ResizeObserver(() => {
+      const next = measureTarget(container);
+      const previous = state.current.target;
+      // Initial observer delivery and width-only changes must not end travel.
+      if (next && (!previous || !sameFrame(next, previous))) settle();
     });
-    observer.observe(l);
-    return () => observer.disconnect();
-  }, [list]);
-
-  if (index === null) {
-    return null;
-  }
-  return <li ref={pillRef} className="asb-sidenav-indicator" aria-hidden="true" />;
+    resize.observe(container);
+    container.querySelectorAll(".asb-sidenav-item").forEach((item) => resize.observe(item));
+    const preferenceChanged = () => { if (readDuration() <= 0) settle(); };
+    const preferences = new MutationObserver(preferenceChanged);
+    preferences.observe(document.documentElement, {
+      attributes: true, attributeFilter: ["data-motion", "class", "style"],
+    });
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    reducedMotion.addEventListener("change", preferenceChanged);
+    document.addEventListener("visibilitychange", settle);
+    window.addEventListener("blur", settle);
+    return () => {
+      state.current.cancel();
+      resize.disconnect();
+      preferences.disconnect();
+      reducedMotion.removeEventListener("change", preferenceChanged);
+      document.removeEventListener("visibilitychange", settle);
+      window.removeEventListener("blur", settle);
+    };
+  }, [list, pill, state]);
 }
 
-/** Duration and pill height resolve from tokens at trigger time, so the
- * reduce mappings in tokens.css gate this JS animation like every CSS one. */
-function indicatorMotion() {
-  const root = getComputedStyle(document.documentElement);
-  return {
-    duration: Number.parseFloat(root.getPropertyValue("--asb-motion-indicator")) || 0,
-    pillHeight:
-      Number.parseFloat(root.getPropertyValue("--asb-sidebar-indicator-height")) || 0,
+function animateIndicator(
+  node: HTMLElement, state: IndicatorState, from: IndicatorFrame,
+  to: IndicatorFrame, duration: number,
+) {
+  let frame = 0;
+  const start = performance.now();
+  const descending = (to.top + to.bottom) >= (from.top + from.bottom);
+  const step = (now: number) => {
+    const progress = Math.min(1, (now - start) / duration);
+    const lead = 1 - (1 - Math.min(1, progress / 0.6)) ** 3;
+    const trailingProgress = Math.max(0, (progress - 0.35) / 0.65);
+    const trail = trailingProgress < 0.5
+      ? 4 * trailingProgress ** 3 : 1 - (-2 * trailingProgress + 2) ** 3 / 2;
+    paintFrame(node, state, {
+      top: lerp(from.top, to.top, descending ? trail : lead),
+      bottom: lerp(from.bottom, to.bottom, descending ? lead : trail),
+    });
+    if (progress < 1) frame = requestAnimationFrame(step);
   };
+  frame = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(frame);
 }
 
-/** The pill's resting top for one row, in the list's content coordinates so
- * absolute positioning inside the scrolling list stays scroll-independent. */
-function restingTop(list: HTMLElement | null, index: number, pillHeight: number) {
-  if (!list) {
-    return null;
-  }
-  const item = list.querySelectorAll<HTMLElement>(
-    ":scope > li .asb-sidenav-item",
-  )[index];
-  if (!item) {
-    return null;
-  }
+function paintFrame(node: HTMLElement, state: IndicatorState, frame: IndicatorFrame) {
+  state.frame = frame;
+  node.style.top = `${frame.top}px`;
+  node.style.height = `${Math.max(0, frame.bottom - frame.top)}px`;
+}
+
+function measureTarget(list: HTMLElement | null): IndicatorFrame | null {
+  const item = list?.querySelector<HTMLElement>('.asb-sidenav-item[aria-current="page"]');
+  if (!list || !item) return null;
+  const height = Number.parseFloat(getComputedStyle(document.documentElement)
+    .getPropertyValue("--asb-sidebar-indicator-height"));
+  if (!(height > 0)) return null;
   const rect = item.getBoundingClientRect();
-  const top = rect.top - list.getBoundingClientRect().top + list.scrollTop;
-  return top + (rect.height - pillHeight) / 2;
+  if (item.offsetHeight === 0) return null;
+  // Rects include ancestor CSS zoom; top and scrollTop use layout pixels.
+  const zoom = rect.height / item.offsetHeight;
+  const top = (rect.top - list.getBoundingClientRect().top) / zoom + list.scrollTop
+    + (item.offsetHeight - height) / 2;
+  return { top, bottom: top + height };
 }
 
-function lerp(from: number, to: number, t: number) {
-  return from + (to - from) * t;
+function readDuration() {
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue("--asb-motion-indicator").trim();
+  return Number.parseFloat(value) * (value.endsWith("ms") ? 1 : 1000);
 }
 
-function easeOutCubic(t: number) {
-  return 1 - (1 - t) ** 3;
+function sameFrame(a: IndicatorFrame, b: IndicatorFrame) {
+  return Math.abs(a.top - b.top) < 0.01 && Math.abs(a.bottom - b.bottom) < 0.01;
 }
 
-function easeInOutCubic(t: number) {
-  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+function lerp(from: number, to: number, progress: number) {
+  return from + (to - from) * progress;
 }

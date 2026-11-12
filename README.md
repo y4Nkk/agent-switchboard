@@ -119,7 +119,7 @@ Select a saved profile independently of the active provider, then edit its main 
 | Settings → Client tools | Save and restore Codex work scenarios; manage Claude client integration |
 | Settings → Preferences | Follow the system, Simplified Chinese, or English for the interface; select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, and choose the startup page |
 | Settings → Diagnostics | Inspect configuration or environment issues and runtime logs |
-| Settings → About | Check for signed updates, track download progress, cancel a download, and read release notes |
+| Settings → About | Check for signed updates, track or cancel downloads, and browse bundled release history by version and publication date |
 
 **Settings → About** shows real download bytes and a progress bar for application updates. A percentage appears only when the server provides a total size; downloading, signature verification, cancellation, and installation have distinct states. Cancelling stops the transfer and discards the partial download; retrying starts from the beginning. Once installation starts, cancellation is unavailable. The task continues when you leave About, and a completed installation uses the existing restart flow. Startup checks remain silent, and Microsoft Store installations continue to receive their updates through the Store.
 

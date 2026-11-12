@@ -1,5 +1,5 @@
 import type { Icon as NavIcon } from "@phosphor-icons/react";
-import { useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { PAGES, pageLabelKey, type Page } from "./navigation";
 import { Button } from "../components/Button";
@@ -15,7 +15,6 @@ import {
   SettingsIcon,
   UsageNavigationIcon,
   CollapseNavigationIcon,
-  ExpandNavigationIcon,
   ReloadIcon,
 } from "../components/icons";
 
@@ -49,29 +48,33 @@ interface SideNavProps {
  * the list that holds the current page. */
 export function SideNav({ page, onPageChange, collapsed, pending, onToggle, update }: SideNavProps) {
   const { t } = useI18n();
-  const groupRef = useRef<HTMLUListElement>(null);
-  const footerRef = useRef<HTMLUListElement>(null);
-  const groupIndex = WORKSPACE_PAGES.findIndex((item) => item === page);
+  // A descendant's layout effect can run before the list ref attaches.
+  // Publishing the node re-runs indicator setup once the container exists.
+  const [group, setGroup] = useState<HTMLUListElement | null>(null);
+  const [footer, setFooter] = useState<HTMLUListElement | null>(null);
   return (
     <aside className="asb-sidebar">
       <div className="asb-sidebar-top" data-tauri-drag-region>
-        <Button variant="icon" aria-label={t(collapsed === null ? "shell.nav.retry" : collapsed ? "shell.nav.expand" : "shell.nav.collapse")}
+        <Button variant="unstyled" className="asb-sidebar-toggle"
+          aria-label={t(collapsed === null ? "shell.nav.retry" : collapsed ? "shell.nav.expand" : "shell.nav.collapse")}
           aria-expanded={collapsed === null ? undefined : !collapsed}
           aria-controls="asb-primary-navigation" disabled={pending} aria-busy={pending} onClick={onToggle}>
-          {collapsed === null ? <ReloadIcon /> : collapsed ? <ExpandNavigationIcon /> : <CollapseNavigationIcon />}
+          {collapsed === null ? <ReloadIcon /> : (
+            <span className="asb-sidebar-toggle-glyph" aria-hidden="true"><CollapseNavigationIcon /></span>
+          )}
         </Button>
       </div>
       <nav id="asb-primary-navigation" className="asb-sidenav" aria-label={t("shell.nav.aria")}>
-        <ul className="asb-sidenav-group" ref={groupRef}>
+        <ul className="asb-sidenav-group" ref={setGroup}>
           {WORKSPACE_PAGES.map((item) => (
             <li key={item}>
               <SideNavItem page={item} active={page === item}
                 onSelect={() => onPageChange(item)} />
             </li>
           ))}
-          <SideNavIndicator list={groupRef} index={groupIndex === -1 ? null : groupIndex} />
+          <SideNavIndicator list={group} current={page === "settings" ? null : page} />
         </ul>
-        <ul className="asb-sidenav-footer" ref={footerRef}>
+        <ul className="asb-sidenav-footer" ref={setFooter}>
           <li>
             <UpdateButton checking={update.checking} latestVersion={update.latestVersion}
               onCheck={update.onCheck} onOpen={update.onOpen} />
@@ -80,7 +83,7 @@ export function SideNav({ page, onPageChange, collapsed, pending, onToggle, upda
             <SideNavItem page="settings" active={page === "settings"}
               onSelect={() => onPageChange("settings")} />
           </li>
-          <SideNavIndicator list={footerRef} index={page === "settings" ? 0 : null} />
+          <SideNavIndicator list={footer} current={page === "settings" ? page : null} />
         </ul>
       </nav>
     </aside>
@@ -104,9 +107,26 @@ function SideNavItem({ page, active, onSelect }: {
         aria-current={active ? "page" : undefined}
         onClick={onSelect}
       >
-        <Icon size={24} weight={active ? "fill" : "regular"} aria-hidden="true" focusable="false" />
+        <SideNavGlyph icon={Icon} active={active} />
         <span className="asb-sidenav-label" aria-hidden="true">{label}</span>
       </Button>
     </Tooltip>
+  );
+}
+
+function SideNavGlyph({ icon: Icon, active }: { icon: NavIcon; active: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const wasActive = useRef(active);
+  useLayoutEffect(() => {
+    const entering = active && !wasActive.current;
+    wasActive.current = active;
+    const node = ref.current;
+    node?.toggleAttribute("data-entering", entering);
+  }, [active]);
+  return (
+    <span ref={ref} className="asb-sidenav-glyph" aria-hidden="true">
+      <Icon size={24} weight="regular" focusable="false" />
+      <Icon size={24} weight="fill" focusable="false" />
+    </span>
   );
 }

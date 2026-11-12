@@ -9,6 +9,7 @@ import { Button } from "../components/Button";
 import { ModuleHeader, WorkspaceHeader } from "../components/WorkspaceHeader";
 import { Tabs } from "../components/Tabs";
 import { UpdateSection } from "../components/UpdateSection";
+import { ChangelogHistory } from "../components/ChangelogHistory";
 
 interface SettingsPageProps {
   section: SettingsSection;
@@ -94,6 +95,7 @@ function AboutSettings(props: SettingsPageProps) {
         download={props.updateDownload} checkedAt={props.updateCheckedAt} restartRequired={props.updateRestartRequired}
         onCheck={props.onCheckUpdate} onInstall={props.onInstallUpdate} onCancel={props.onCancelUpdateDownload}
         onRestart={props.onRestartInstalledUpdate} />
+      <ChangelogHistory appVersion={props.appVersion} />
     </div>
   );
 }

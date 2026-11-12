@@ -9,8 +9,7 @@ export const LIGHT = {
   surface: "#ffffff", rail: "#f0f1f4", stroke: "rgba(20,22,27,0.12)",
   text: "#14161b", muted: "rgba(20,22,27,0.56)", faint: "rgba(20,22,27,0.24)",
   accent: "#0a84ff", danger: "#d70015", warning: "#b25000",
-  sidebarStart: "var(--asb-sidebar-light-start)",
-  sidebarEnd: "var(--asb-sidebar-light-end)",
+  sidebarFill: "var(--asb-sidebar-light-fill)",
   sidebarIcon: "var(--asb-sidebar-light-icon)",
 };
 
@@ -18,8 +17,7 @@ export const DARK: typeof LIGHT = {
   surface: "#0d2133", rail: "#111e2b", stroke: "rgba(237,240,247,0.24)",
   text: "#edf0f7", muted: "rgba(237,240,247,0.6)", faint: "rgba(237,240,247,0.28)",
   accent: "#0a84ff", danger: "#ff453a", warning: "#ff9f0a",
-  sidebarStart: "var(--asb-sidebar-dark-start)",
-  sidebarEnd: "var(--asb-sidebar-dark-end)",
+  sidebarFill: "var(--asb-sidebar-dark-fill)",
   sidebarIcon: "var(--asb-sidebar-dark-icon)",
 };
 
@@ -61,23 +59,18 @@ export function WindowFrame({ palette, zoom = 1, active = null, children }: {
   active?: number | null;
   children: ReactNode;
 }) {
-  const selectedGradient = useId();
   return (
     <>
-      <defs>
-        <linearGradient id={selectedGradient} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop stopColor={palette.sidebarStart} />
-          <stop offset="1" stopColor={palette.sidebarEnd} />
-        </linearGradient>
-      </defs>
       <rect x="40" y="32" width="320" height="234" rx="18" fill={palette.rail} stroke={palette.stroke} />
       {[58, 68, 78].map((cx) => <circle key={cx} cx={cx} cy="49" r="2.5" fill={palette.faint} />)}
       <rect x="102" y="47" width="64" height="4" rx="2" fill={palette.faint} />
       <rect x="86" y="65" width="262" height="195" rx="14" fill={palette.surface} />
       {[91, 126, 161].map((cy, index) => (
         <g key={cy} transform={`translate(63 ${cy})`}>
-          {index === active && <rect x="-14" y="-14" width="28" height="28" rx="10"
-            fill={`url(#${selectedGradient})`} />}
+          {index === active && <>
+            <rect x="-14" y="-14" width="28" height="28" rx="8" fill={palette.sidebarFill} />
+            <rect x="-14" y="-5" width="2" height="10" rx="1" fill={palette.sidebarIcon} />
+          </>}
           <g transform={`scale(${zoom})`} fill="none" stroke={index === active ? palette.sidebarIcon : palette.muted}
             strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             {index === 0 ? <path d="M-6-3H6m-3-3 3 3-3 3 M6 4H-6m3-3-3 3 3 3" />

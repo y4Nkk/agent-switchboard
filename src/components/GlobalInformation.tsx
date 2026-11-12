@@ -4,7 +4,7 @@ import type { CommandError } from "../api/client";
 import type { ApplicationPreparation } from "../api/application-preparation";
 import { PreparationDetails } from "./ApplicationPreparation";
 import { useI18n } from "../i18n";
-import { commandErrorText } from "../i18n/errors";
+import { commandErrorText, errorText } from "../i18n/errors";
 import { Button } from "./Button";
 import { CloseIcon, TrashIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
@@ -15,7 +15,7 @@ import { useToast, type ToastContent, type ToastKind } from "./use-toast";
 
 interface Props {
   error: CommandError | null;
-  settingsError: string | null;
+  settingsError: CommandError | null;
   busy: boolean;
   preparation: ApplicationPreparation;
 }
@@ -25,7 +25,7 @@ interface InformationMessage {
   kind: ToastKind;
   title: ToastContent;
   description?: ToastContent;
-  onDismiss?: () => void;
+  onDismiss: () => void;
   toastId?: string;
 }
 
@@ -43,37 +43,54 @@ function InformationRow({ message, onBeforeDismiss }: {
           <div className="asb-information-description"><ToastText content={message.description} /></div>
         )}
       </div>
-      {message.onDismiss && (
-        <Tooltip label={t("shell.information.delete")} className="asb-information-tooltip">
-          <Button variant="icon" aria-label={t("shell.information.delete")} onClick={() => {
-            onBeforeDismiss();
-            message.onDismiss?.();
-          }}>
-            <TrashIcon />
-          </Button>
-        </Tooltip>
-      )}
+      <Tooltip label={t("shell.information.delete")} className="asb-information-tooltip">
+        <Button variant="icon" aria-label={t("shell.information.delete")} onClick={() => {
+          onBeforeDismiss();
+          message.onDismiss();
+        }}>
+          <TrashIcon />
+        </Button>
+      </Tooltip>
     </div>
   );
+}
+
+/** Acknowledgement belongs to this source occurrence, never to its translated text. */
+function useInformationDismissal(source: unknown) {
+  const [notice, setNotice] = useState({ source, dismissed: false });
+  if (notice.source !== source) setNotice({ source, dismissed: false });
+  return {
+    hidden: notice.source === source && notice.dismissed,
+    dismiss: () => setNotice({ source, dismissed: true }),
+  };
 }
 
 function useInformationMessages({ error, settingsError, busy, preparation }: Props) {
   const { t } = useI18n();
   const queue = useToast();
+  const settings = useInformationDismissal(settingsError);
+  const operation = useInformationDismissal(error);
+  const preparationId = preparation.status !== "running"
+    && (preparation.issues.length > 0 || preparation.repairedFiles.length > 0)
+    ? `preparation-${preparation.sessionId}-${preparation.runId}-${preparation.revision}` : null;
+  const prepared = useInformationDismissal(preparationId);
+  const processing = useInformationDismissal(busy);
   const messages: InformationMessage[] = [];
 
-  if (settingsError) messages.push({
-    id: "settings-error", kind: "error", title: t("shell.banner.settingsUnavailable", { detail: settingsError }),
+  if (settingsError && !settings.hidden) messages.push({
+    id: "settings-error", kind: "error",
+    title: t("shell.banner.settingsUnavailable", { detail: errorText(settingsError, t) }),
+    onDismiss: settings.dismiss,
   });
-  if (error) messages.push({
+  if (error && !operation.hidden) messages.push({
     id: "operation-error", kind: "error", title: commandErrorText(error, t),
-
+    onDismiss: operation.dismiss,
   });
-  if (preparation.status !== "running" && (preparation.issues.length || preparation.repairedFiles.length)) {
-    messages.push({ id: `preparation-${preparation.sessionId}-${preparation.runId}`, kind: preparation.issues.length ? "warning" : "info",
+  if (preparationId && !prepared.hidden) {
+    messages.push({ id: preparationId, kind: preparation.issues.length ? "warning" : "info",
       title: preparation.issues.length ? t("preparation.partial")
         : t("preparation.repaired", { count: preparation.repairedFiles.length }),
-      description: <PreparationDetails snapshot={preparation} /> });
+      description: <PreparationDetails snapshot={preparation} />, onDismiss: prepared.dismiss });
   }
   const toastMessages = queue.toasts.map((toast): InformationMessage => ({
     id: `toast-${toast.id}`, toastId: toast.id, kind: toast.kind,
@@ -81,7 +98,9 @@ function useInformationMessages({ error, settingsError, busy, preparation }: Pro
     onDismiss: () => queue.dismiss(toast.id),
   }));
   messages.push(...toastMessages.filter((message) => message.kind === "error"));
-  if (busy) messages.push({ id: "busy", kind: "info", title: t("shell.busy") });
+  if (busy && !processing.hidden) messages.push({
+    id: "busy", kind: "info", title: t("shell.busy"), onDismiss: processing.dismiss,
+  });
   messages.push(...toastMessages.filter((message) => message.kind !== "error"));
   return { ...queue, messages };
 }
@@ -94,15 +113,14 @@ function InformationPanel({ id, messages, onClose }: {
   const { t } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
   const focusClose = () => closeRef.current?.focus({ preventScroll: true });
-  const dismissible = messages.filter((message) => message.onDismiss);
   return <Dialog id={id} className="asb-information-dialog" aria-label={t("shell.information.aria")}>
     <div className="asb-information-heading">
       <h2 className="asb-section-title">{t("shell.information.aria")}</h2>
       <div className="asb-information-heading-actions">
-        <Button variant="secondary" size="compact" disabled={!dismissible.length}
+        <Button variant="secondary" size="compact" disabled={!messages.length}
           onClick={() => {
             focusClose();
-            dismissible.forEach((message) => message.onDismiss?.());
+            messages.forEach((message) => message.onDismiss());
           }}>
           {t("shell.information.clear")}
         </Button>

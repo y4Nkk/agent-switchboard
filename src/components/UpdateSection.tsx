@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { getChangelogSection, type UpdateChannel, type UpdateCheck } from "../api/client";
+import type { UpdateChannel, UpdateCheck } from "../api/client";
 import type { UpdateDownloadView } from "../app/update-download-state";
-import { MarkdownContent } from "./Markdown";
+import { ReleaseNotes } from "./ReleaseNotes";
 import { Button } from "./Button";
-import { CollapsibleSection } from "./Collapsible";
 import { Time } from "./Time";
 import { UpdateDownloadPanel } from "./UpdateDownloadPanel";
 import { useI18n } from "../i18n";
@@ -25,26 +23,6 @@ interface Props {
   onInstall: () => void;
   onCancel: () => void;
   onRestart: () => void;
-}
-
-function ReleaseNotes({ notes, version }: { notes: string; version: string }) {
-  const { t } = useI18n();
-  return <div className="asb-update-notes asb-markdown" aria-label={t("backup.update.notesAria", { version })}>
-    <MarkdownContent text={notes} />
-  </div>;
-}
-
-function useCurrentNotes(appVersion: string | null) {
-  const [currentNotes, setCurrentNotes] = useState<{ version: string; notes: string } | null>(null);
-  useEffect(() => {
-    if (appVersion === null) return;
-    let current = true;
-    void getChangelogSection(appVersion).then((notes) => {
-      if (current) setCurrentNotes(notes ? { version: appVersion, notes } : null);
-    }).catch(() => { if (current) setCurrentNotes(null); });
-    return () => { current = false; };
-  }, [appVersion]);
-  return currentNotes?.version === appVersion ? currentNotes : null;
 }
 
 function openReleasePage() {
@@ -89,8 +67,6 @@ function StoreUpdateSection({ appVersion }: { appVersion: string | null }) {
 export function UpdateSection(props: Props) {
   const { t } = useI18n();
   const { channel, appVersion, result, busy, installing, checkedAt, restartRequired } = props;
-  const currentNotes = useCurrentNotes(appVersion);
-  const [changelogOpen, setChangelogOpen] = useState(false);
   if (channel === "microsoftStore") return <StoreUpdateSection appVersion={appVersion} />;
   const label = restartRequired ? t(installing ? "backup.update.restarting" : "backup.update.restartRequired")
     : result ? t("backup.update.newVersion", { version: result.latestVersion })
@@ -110,9 +86,5 @@ export function UpdateSection(props: Props) {
     </div>
     <UpdateDownloadPanel download={props.download} busy={busy} onCancel={props.onCancel} onRetry={props.onInstall} />
     {result?.releaseNotes && <ReleaseNotes notes={result.releaseNotes} version={result.latestVersion} />}
-    {currentNotes && <CollapsibleSection quiet open={changelogOpen} onOpenChange={setChangelogOpen}
-      label={t("backup.update.currentNotes")}>
-      <ReleaseNotes notes={currentNotes.notes} version={currentNotes.version} />
-    </CollapsibleSection>}
   </section>;
 }

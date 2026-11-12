@@ -175,6 +175,7 @@ function toast(props: ToastOptions) {
   }
 
   const id = genId();
+  const previousToasts = memoryState.toasts;
   dispatch({
     type: "ADD_TOAST",
     toast: {
@@ -184,8 +185,8 @@ function toast(props: ToastOptions) {
     },
   });
   const retainedIds = new Set(memoryState.toasts.map((item) => item.id));
-  for (const toastId of toastTimers.keys()) {
-    if (!retainedIds.has(toastId)) clearToastTimer(toastId);
+  for (const previous of previousToasts) {
+    if (!retainedIds.has(previous.id)) clearToastTimer(previous.id);
   }
   if (retainedIds.has(id)) scheduleAutoDismiss(id, props.kind, props.durationMs);
   return () => dismissToast(id);

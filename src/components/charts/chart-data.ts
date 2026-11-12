@@ -1,10 +1,10 @@
-import { formatCompactUsageValue, formatUsageValue } from "../../lib/usage-format";
-import { formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
-import { currentLanguage, tr } from "../../i18n/current";
+import { formatCompactUsageValue, formatUsageValue } from "../../lib/usage-format.ts";
+import { formatCompactTokenCount, formatTokenValue } from "../../lib/token-format.ts";
+import { currentLanguage, tr } from "../../i18n/current.ts";
 
 export interface UsageTrendPoint {
   at: string;
-  value: number;
+  value: number | null;
 }
 
 export interface UsageTrendSeries {
@@ -36,16 +36,15 @@ export interface PreparedTrendSeries {
  * whether a `tokens` reading is local model usage or a provider-owned value. */
 export type UsageTrendValueKind = "generic" | "local-token" | "percentage";
 
-/** Keep renderer data defensive: malformed points disappear rather than
- * creating an invalid SVG path or a made-up replacement value. */
+/** Null is an explicit gap; invalid numbers and timestamps are not observations. */
 export function prepareTrendSeries(series: UsageTrendSeries[]): PreparedTrendSeries[] {
   return series.flatMap((entry, seriesIndex) => {
     const points = entry.points.flatMap((point, pointIndex) => {
       const timestamp = Date.parse(point.at);
-      if (!Number.isFinite(timestamp) || !Number.isFinite(point.value)) return [];
+      if (!Number.isFinite(timestamp) || (point.value !== null && !Number.isFinite(point.value))) return [];
       return [{ ...point, timestamp, index: pointIndex }];
     });
-    if (points.length === 0) return [];
+    if (!points.some((point) => point.value !== null)) return [];
 
     return [{
       id: entry.id.trim() || `series-${seriesIndex}`,
@@ -84,7 +83,7 @@ export function trendYAxisDomain(
 ): [number, number] {
   if (valueKind === "percentage") return [0, 100];
 
-  const values = series.flatMap((entry) => entry.points.map((point) => point.value));
+  const values = series.flatMap((entry) => entry.points.flatMap((point) => point.value === null ? [] : [point.value]));
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
 

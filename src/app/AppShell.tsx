@@ -18,7 +18,7 @@ interface AppShellProps {
   error: CommandError | null;
   busy: boolean;
   /** Persistent settings read failure. */
-  settingsError: string | null;
+  settingsError: CommandError | null;
   preparation: ApplicationPreparation;
   /** Always-on-top toggle state; null until settings load. */
   pin: { active: boolean; onToggle: () => void } | null;

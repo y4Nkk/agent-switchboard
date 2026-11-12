@@ -37,6 +37,7 @@ export function RequestUsageAnalysis({ report, selection, onChange, onGroupPage,
     requests: chartMetricOptions(RECORD_METRICS, report.scope, t),
   }[selection.view];
   return <div className="asb-request-usage-analysis">
+    <h3 className="asb-section-title">{t("usagePerformance.analysis")}</h3>
     <div className="asb-request-usage-analysis-controls">
       <Tabs value={selection.view} scope={id} label={t("usagePerformance.analysis")}
         onChange={(view) => onChange({ ...selection, view })} tabs={views.map((view) => ({

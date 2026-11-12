@@ -8,13 +8,13 @@ Status: implemented
 
 ## Decision
 
-当前页指示条与按下染色由 tokens.css 与 shell.css、`SideNavIndicator` 三处共同承载，事实归属如下：
+当前页指示条与按下染色由 tokens.css 与 shell.css、`SideNavIndicator` 三处共同承载。[FlClash 交互重构](2026-11-12-flclash-sidebar-interaction.md)修正行 padding 继承、连续切换起点和观察回调取消边界，并以独立叠层取代按下背景覆盖；本篇继续拥有指示条几何、两段拉伸和每列表独立定位：
 
 - `tokens.css` 是唯一几何与尺度事实：`--asb-sidebar-indicator-width`（3px）与 `--asb-sidebar-indicator-height`（16px）定义胶囊几何；`--asb-motion-indicator`（320ms）定义拉伸时长，并进入两个减少动效映射块归零；`--asb-chrome-active`（正文色 10% 染色，悬停的两倍）定义按下中性染色，与 `--asb-chrome-hover` 同样派生自 `--asb-text`，深色主题随正文角色自动加深，不设第二份明暗色板。
-- `shell.css` 唯一拥有指示条绘制语法：绝对定位在列表内、左缘对齐条目的 li 内边距、`--asb-radius-pill` 全圆角、底色取 `--asb-sidebar-selected-icon` 品牌蓝、`pointer-events: none` 且 `aria-hidden`；两个导航列表（工作区组与页脚设置组）获得 `position: relative`。条目的 `:hover` 与 `:active` 拆分为两条规则，`:active` 使用 `--asb-chrome-active`，声明顺序保证 `[aria-current="page"]` 的渐变底在悬停与按下时都保持不变；共享更新入口 `.asb-updatebtn` 获得同一按下规则，且置于 is-available / is-checking 之前。
-- `SideNavIndicator`（src/app/SideNavIndicator.tsx）唯一拥有拉伸动画：切换目标时以 requestAnimationFrame 在 `--asb-motion-indicator` 时长内驱动，前缘在时长前 60% 内以 easeOutCubic 就位，后缘自 35% 起以 easeInOutCubic 追上——下行时下缘先行、上行时上缘先行，胶囊先拉伸再收缩；快速连点从上一目标重新出发，挂载、读取失败与时长归零（减少动效）时直接落位。它每次触发时从 tokens.css 读计算值，因此减少动效映射同时约束这条 JS 动画，与 CSS 过渡共用同一个偏好事实。
+- `shell.css` 唯一拥有指示条绘制语法：绝对定位在列表内、左缘对齐条目的 li 内边距、`--asb-radius-pill` 全圆角、底色取 `--asb-sidebar-selected-icon` 品牌蓝、`pointer-events: none` 且 `aria-hidden`；指示条 li 明确排除行 padding。两个导航列表分别为相对定位容器；导航、更新与展开按钮的 `::before` 统一拥有中性 hover/active 叠层，与当前页底色独立。
+- `SideNavIndicator`（src/app/SideNavIndicator.tsx）唯一拥有拉伸动画：切换目标时以 requestAnimationFrame 在 `--asb-motion-indicator` 时长内驱动，前缘在时长前 60% 内以 easeOutCubic 就位，后缘自 35% 起以 easeInOutCubic 追上——下行时下缘先行、上行时上缘先行。帧间保留实际上下边缘，连点从已绘制形状继续，挂载与时长归零时直接落位。运行中减少动效、窗口失焦或隐藏同样结束帧循环。
 
-两个列表各持一个 `SideNavIndicator` 实例，指示条只在包含当前页的列表内出现；跨列表切换（工作区页与设置页互跳）时一枚消失、一枚直接落位，不做跨容器拉伸。条目位置用 getBoundingClientRect 相对滚动容器实测（含 scrollTop 折算），不从索引乘步距推算，文字缩放与列表内边距变化不会使它失准；列表上的 ResizeObserver 在布局变化时将静止胶囊瞬时复位，其初始回调只复位挂载已放置的胶囊，不打断运行中的拉伸。指示条不改变布局，不参与可访问树；aria-current 仍是唯一页面事实，指示条与常驻底色、品牌蓝、加粗文字一样只消费它。
+两个列表各持一个 `SideNavIndicator` 实例，指示条只在包含当前页的列表内出现；跨列表切换时一枚消失、一枚直接落位。条目位置用 getBoundingClientRect 相对滚动容器实测（含 scrollTop 折算），直接查询 aria-current，不从索引推算。ResizeObserver 观察列表与导航按钮，只有实际目标上下边缘改变才取消并复位，初始回调和仅宽度改变不打断拉伸。指示条不改变布局，不参与可访问树，当前页仍只有一个事实来源。
 
 ## Alternatives considered
 
@@ -27,6 +27,6 @@ Status: implemented
 
 - 当前页在底色、图标形态、文字与跨条目指示条四个层次可辨，切换页面时有明确的位移引导；按下、悬停、当前页三个状态染色各居一档且互不冒充。
 - tokens.css 的动效档位增加 320ms 一档并进入两个减少动效块；JS 动画经计算值读取同一 token，偏好切换即时生效，无第二份时长事实。
-- 指示条位置实测依赖 DOM 查询（`:scope > li .asb-sidenav-item`），条目类名是该选择器的契约；改动导航条目 DOM 结构时必须同步 `SideNavIndicator`。
-- 布局归属不变：指示条绝对定位、零占位，[桌面工作区笔记](../architecture/2026-10-13-desktop-workspace-uiux.md)拥有的轨道几何与滚动不受影响；设置缩略图（偏好预览）描绘的是静态窗口骨架，不含指示条。
+- 指示条位置实测依赖 `.asb-sidenav-item[aria-current="page"]`，不再接受导航索引；条目类名仍是选择器契约。
+- 布局归属不变：指示条绝对定位、零占位，[桌面工作区笔记](../architecture/2026-10-13-desktop-workspace-uiux.md)拥有轨道几何与滚动；设置缩略图绘制同色静态指示条。
 - 验证覆盖：笔记结构经 `npm run verify-notes`；指示条几何、染色档位与声明顺序按源码核对。动画时序与拉伸观感未跑自动化——类型检查、测试遵循仓库显式授权规则，视觉结论需在运行实例中人工确认。

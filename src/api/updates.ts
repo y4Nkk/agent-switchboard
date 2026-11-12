@@ -30,4 +30,10 @@ export const startUpdateDownload = (updateId: string): Promise<UpdateDownloadSta
 export const readUpdateDownload = (id: string): Promise<UpdateDownloadState> => invoke("read_update_download", { id });
 /** The returned phase is authoritative when installation has already committed. */
 export const cancelUpdateDownload = (id: string): Promise<UpdateDownloadState> => invoke("cancel_update_download", { id });
-export const getChangelogSection = (version: string): Promise<string | null> => invoke("changelog_section", { version });
+export interface ChangelogEntry {
+  version: string;
+  date: string | null;
+  notes: string;
+}
+
+export const getChangelogHistory = (): Promise<ChangelogEntry[]> => invoke("changelog_history");

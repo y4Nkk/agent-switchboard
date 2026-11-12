@@ -31,20 +31,12 @@
   --asb-surface-rail: var(--asb-content-muted);
   /* Fixed variants also supply the settings previews, independently of the
      current theme. Theme selectors only choose these values. */
-  --asb-sidebar-light-start: rgb(50 121 246 / 0.14);
-  --asb-sidebar-light-end: rgb(128 85 237 / 0.09);
+  --asb-sidebar-light-fill: rgb(20 22 27 / 0.08);
   --asb-sidebar-light-icon: #3279f6;
-  --asb-sidebar-dark-start: rgb(50 121 246 / 0.24);
-  --asb-sidebar-dark-end: rgb(128 85 237 / 0.18);
+  --asb-sidebar-dark-fill: rgb(237 240 247 / 0.08);
   --asb-sidebar-dark-icon: #8db4ff;
-  --asb-sidebar-selected-start: var(--asb-sidebar-light-start);
-  --asb-sidebar-selected-end: var(--asb-sidebar-light-end);
+  --asb-sidebar-selected: var(--asb-sidebar-light-fill);
   --asb-sidebar-selected-icon: var(--asb-sidebar-light-icon);
-  --asb-sidebar-selected: linear-gradient(
-    105deg,
-    var(--asb-sidebar-selected-start),
-    var(--asb-sidebar-selected-end)
-  );
   --asb-surface-menu: var(--asb-content);
   --asb-surface-sheet: var(--asb-content);
   --asb-overlay-backdrop: rgba(20, 22, 27, 0.32);
@@ -112,7 +104,7 @@
   --asb-num-font-variant: tabular-nums;
 
   /* Shape follows responsibility — the ONLY radius owner (DESIGN.md owns the
-     role table). 12px controls · 16px medium faces · 20px navigation ·
+     role table). 12px controls and navigation · 16px medium faces ·
      24px groups and dialogs · 28px panels and workspace · pill reserved for
      shape-semantic elements (status pills, switches, meters, dots, chip and
      pill actions). Components never define a local radius; sanctioned
@@ -121,7 +113,6 @@
      bars, heatmap cells, line skeletons). */
   --asb-radius: 12px;
   --asb-radius-medium: 16px;
-  --asb-radius-navigation: 20px;
   --asb-radius-group: 24px;
   --asb-radius-panel: 28px;
   --asb-radius-pill: 999px;
@@ -165,7 +156,7 @@
   --asb-motion-fast: 180ms;
   --asb-motion-node: 220ms;
   --asb-motion-sheet: 240ms;
-  --asb-motion-navigation: 400ms;
+  --asb-motion-navigation: 250ms;
   /* Sidebar selection-indicator stretch; SideNavIndicator's rAF reads this
      value, so the reduce mappings below also gate the JS animation. */
   --asb-motion-indicator: 320ms;
@@ -222,6 +213,7 @@
      it, SideNavIndicator stretches it between rows). */
   --asb-sidebar-indicator-width: 3px;
   --asb-sidebar-indicator-height: 16px;
+  --asb-sidebar-glyph-pop-scale: 1.1;
   --asb-sidebar-width: var(--asb-sidebar-expanded-width);
   --asb-titlebar-height: 64px;
   --asb-button-min-width: 72px;
@@ -275,8 +267,7 @@
      --asb-content: #0d2133;
      --asb-content-muted: #10293f;
     --asb-chrome-bg: rgb(17 30 43 / 0.6);
-    --asb-sidebar-selected-start: var(--asb-sidebar-dark-start);
-    --asb-sidebar-selected-end: var(--asb-sidebar-dark-end);
+    --asb-sidebar-selected: var(--asb-sidebar-dark-fill);
     --asb-sidebar-selected-icon: var(--asb-sidebar-dark-icon);
      --asb-surface-rail: var(--asb-content-muted);
      --asb-surface-menu: var(--asb-content);
@@ -320,8 +311,7 @@
     --asb-content: #0d2133;
     --asb-content-muted: #10293f;
     --asb-chrome-bg: rgb(17 30 43 / 0.6);
-    --asb-sidebar-selected-start: var(--asb-sidebar-dark-start);
-    --asb-sidebar-selected-end: var(--asb-sidebar-dark-end);
+    --asb-sidebar-selected: var(--asb-sidebar-dark-fill);
     --asb-sidebar-selected-icon: var(--asb-sidebar-dark-icon);
     --asb-surface-rail: var(--asb-content-muted);
     --asb-surface-menu: var(--asb-content);
