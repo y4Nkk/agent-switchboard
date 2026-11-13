@@ -1,4 +1,4 @@
-import { routeDescription, routeRecords, routeRoles, type RouteDocument, type RouteInventory, type RouteRole } from "../components/model-routing/model";
+import { routeDescription, routeRecords, routeRoles, type RouteDocument, type RouteInventory, type RouteRole } from "../components/model-routing/model.ts";
 import type { AppKind } from "../api/client";
 
 export interface ProviderSaveReview {
