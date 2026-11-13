@@ -1,0 +1,11 @@
+.asb-provider-editor-section { min-width: 0; }
+.asb-provider-editor-section[hidden] { display: none; }
+.asb-provider-editor-section > .asb-provider-form,
+.asb-provider-editor-section.asb-provider-form { gap: var(--asb-space-4); }
+.asb-provider-routing { gap: var(--asb-space-3); }
+.asb-provider-routing > .asb-model-route-graph { grid-column: 1 / -1; }
+.asb-provider-routing .asb-model-route-scene { padding-top: 0; }
+@media (max-width: 600px) {
+  .asb-provider-routing .asb-model-route-fields { grid-template-columns: minmax(0, 1fr); }
+  .asb-provider-editor .asb-tabs { max-width: 100%; }
+}

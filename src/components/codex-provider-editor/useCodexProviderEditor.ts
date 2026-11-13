@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { CodexProviderDraft, SettingsValues } from "../../api/client";
 import type { CodexEditorSource } from "../../app/useProviders";
+import { codexDraftFromConversion, conversionInputsComplete, conversionLimitsComplete } from "../../lib/provider-conversion";
 import { useI18n } from "../../i18n";
 import { useProviderConnection } from "../provider-editor/useProviderConnection";
 import { useProviderParameters } from "../provider-editor/useProviderParameters";
@@ -8,6 +9,9 @@ import { codexDraftFrom, prepareCodexDraft, validateCodexDraft, type CodexEditor
 
 function codexDraftFromSource(source: CodexEditorSource | null): CodexEditorDraft {
   if (source?.kind === "record") return codexDraftFrom(source.record);
+  if (source?.kind === "conversion" && source.conversion.seed?.app === "codex") {
+    return codexDraftFromConversion(source.conversion.seed.draft);
+  }
   return codexDraftFrom(null);
 }
 
@@ -15,11 +19,13 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
   const { t } = useI18n();
   const [draft, setDraft] = useState<CodexEditorDraft>(() => codexDraftFromSource(source));
   const baseline = useRef(draft);
-  const [parametersOpen, setParametersOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const conversion = source?.kind === "conversion" ? source.conversion : null;
+  const [reviewedCapabilities, setReviewedCapabilities] = useState<string | null>(null);
+  const capabilitySignature = JSON.stringify([draft.capabilities, draft.catalog.map(({ contextWindow: _context, maxOutputTokens: _output, ...entry }) => entry)]);
+  const capabilitiesReviewed = reviewedCapabilities === capabilitySignature;
+  const setCapabilitiesReviewed = (checked: boolean) => setReviewedCapabilities(checked ? capabilitySignature : null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const lastSection = useRef(false);
   // Third-party Codex is always a custom route; Responses is the only upstream
   // that carries request-mode facts.
   const connection = useProviderConnection({
@@ -29,6 +35,8 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
     apiKey: draft.apiKey,
     authentication: draft.authentication,
     connection: draft.connection,
+    subagentRoute: draft.subagentRoute,
+    modelRoutes: draft.modelRoutes,
     upstreamProtocol: draft.upstream,
     responsesOptions: draft.upstream === "responses" ? { requestMode: draft.requestMode } : null,
   });
@@ -41,22 +49,18 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
       : current);
   }, []);
   const parameters = useProviderParameters("codex", draft.parameters, seedParameters);
-  useEffect(() => {
-    if (parametersOpen) {
-      viewportRef.current?.scrollTo({ top: 0 });
-      headingRef.current?.focus();
-    } else if (lastSection.current) triggerRef.current?.focus();
-    lastSection.current = parametersOpen;
-  }, [parametersOpen]);
   const problems = validateCodexDraft(draft, t);
-  const canSave = !busy && parameters.ready && problems.length === 0;
+  const limitsComplete = conversionLimitsComplete(draft);
+  const canSave = !busy && !connection.modelsBusy && parameters.ready && problems.length === 0
+    && (!conversion || conversionInputsComplete(draft, capabilitiesReviewed));
   const save = (onSave: (value: CodexProviderDraft) => void) => {
-    if (!canSave) return;
+    if (!canSave || connection.isModelsPending()) return;
     const value = prepareCodexDraft(draft);
     if (value) onSave(value);
   };
-  return { draft, setDraft, dirty: JSON.stringify(draft) !== JSON.stringify(baseline.current), parametersOpen, setParametersOpen,
-    triggerRef, headingRef, viewportRef, connection, parameters, problems, canSave, save };
+  return { draft, setDraft, dirty: JSON.stringify(draft) !== JSON.stringify(baseline.current),
+    headingRef, viewportRef, connection, parameters, problems, canSave, save,
+    conversion, capabilitiesReviewed, setCapabilitiesReviewed, limitsComplete };
 }
 
 export type CodexEditorState = ReturnType<typeof useCodexProviderEditor>;

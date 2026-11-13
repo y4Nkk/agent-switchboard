@@ -1,15 +1,15 @@
 import { errorText, uiMessage } from "../../i18n/errors";
 import { useMessageState } from "../../i18n/use-message-state";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchProviderModels, getGatewayStatus, resolveProviderEndpoints,
   type AppKind, type ProviderEndpoints, type ProviderModel,
   type ProviderConnectionOptions, type ResponsesOptions, type UpstreamProtocol } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
-import { NATIVE_PROTOCOL, protocolLabel, requiresGateway } from "../../lib/protocol";
+import { NATIVE_PROTOCOL, protocolLabel, requiresGateway, type GatewayProfileInput } from "../../lib/protocol";
 
 /** The routing facts every editor needs; both provider contracts project onto it. */
-export interface ProviderConnectionInput {
+export interface ProviderConnectionInput extends GatewayProfileInput {
   app: AppKind;
   routeMode: "official" | "custom";
   baseUrl: string | null;
@@ -81,12 +81,22 @@ function useResolvedEndpoints(
     resolvingEndpoint: Boolean(baseUrl && upstreamProtocol && !current) };
 }
 
+function sameModelConnection(current: ProviderConnectionInput, requested: ProviderConnectionInput): boolean {
+  return current.app === requested.app && current.baseUrl?.trim() === requested.baseUrl?.trim()
+    && current.upstreamProtocol === requested.upstreamProtocol && current.apiKey === requested.apiKey
+    && current.authentication === requested.authentication && current.connection === requested.connection;
+}
+
 export function useProviderConnection(input: ProviderConnectionInput) {
   const { t } = useI18n();
   const [models, setModels] = useState<ProviderModel[] | null>(null);
   const [modelsBusy, setModelsBusy] = useState(false);
   const [modelsError, setModelsError] = useMessageState();
   const modelsVersion = useRef(0);
+  const modelsPending = useRef<number | null>(null);
+  const currentInput = useRef(input);
+  currentInput.current = input;
+  const isModelsPending = useCallback(() => modelsPending.current !== null, []);
   const baseUrl = input.baseUrl?.trim() ?? "";
   const endpoints = useResolvedEndpoints(baseUrl, input.upstreamProtocol, input.connection);
   const gatewayRouteWarning = useGatewayWarning(input);
@@ -98,21 +108,25 @@ export function useProviderConnection(input: ProviderConnectionInput) {
     ? input.connection : undefined;
   useEffect(() => {
     modelsVersion.current += 1;
+    modelsPending.current = null;
     setModels(null);
     setModelsError(null);
     setModelsBusy(false);
+    return () => { modelsVersion.current += 1; modelsPending.current = null; };
   }, [baseUrl, input.app, input.upstreamProtocol, input.apiKey, input.authentication, input.connection]);
 
   /** Fetches the upstream model list; resolves with the fetched models, or
    * null when the request was skipped or superseded. */
   const fetchModels = async (): Promise<ProviderModel[] | null> => {
-    if (modelsBusy || !baseUrl || !input.upstreamProtocol) return null;
+    if (isModelsPending() || !baseUrl || !input.upstreamProtocol) return null;
     if (modelsEndpointError) {
       setModelsError(input.connection?.isFullUrl && !input.connection.modelsUrl?.trim()
         ? uiMessage("providers.gateway.modelsUrlMissing") : modelsEndpointError);
       return null;
     }
     const version = modelsVersion.current;
+    const current = () => modelsVersion.current === version && sameModelConnection(currentInput.current, input);
+    modelsPending.current = version;
     setModelsBusy(true);
     setModelsError(null);
     try {
@@ -124,16 +138,19 @@ export function useProviderConnection(input: ProviderConnectionInput) {
         modelAuthentication,
         modelConnection,
       );
-      if (modelsVersion.current === version) setModels(fetched);
-      return modelsVersion.current === version ? fetched : null;
+      if (current()) setModels(fetched);
+      return current() ? fetched : null;
     } catch (caught) {
-      if (modelsVersion.current === version) {
+      if (current()) {
         setModelsError(caught);
       }
       return null;
     } finally {
-      if (modelsVersion.current === version) setModelsBusy(false);
+      if (modelsVersion.current === version && modelsPending.current === version) {
+        modelsPending.current = null;
+        setModelsBusy(false);
+      }
     }
   };
-  return { models, modelsBusy, modelsError, modelsEndpointError, baseUrl, gatewayRouteWarning, fetchModels, ...endpoints };
+  return { models, modelsBusy, modelsError, modelsEndpointError, baseUrl, gatewayRouteWarning, fetchModels, isModelsPending, ...endpoints };
 }

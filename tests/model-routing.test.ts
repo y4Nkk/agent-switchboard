@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CodexProviderRecord, ProviderRecord } from "../src/api/client.ts";
 import { codexProviderDraft } from "../src/lib/provider-drafts.ts";
-import { resetRouting, roleTarget, routeDocument, routeIssue, routeRecords, routeRoles, routeDescription } from "../src/components/model-routing/model.ts";
+import { resetRouting, roleTarget, routeDocument, routeIssue, routeRecords, routeRoles, routeDescription, routeIssueRole, type RouteDocument } from "../src/components/model-routing/model.ts";
 
 function codex(id: string): CodexProviderRecord {
   return { profile: { id, name: id, routeMode: "gateway", endpoint: "https://fixture.invalid", apiKey: "fixture-key",
@@ -47,7 +47,7 @@ test("missing selections, bound targets and removed models cannot silently chang
   assert.equal(routeIssue(document, inventory([target])), "codex.subagent.authBoundTarget");
 });
 
-test("reset removes explicit subagent routing while preserving provider credentials and catalog", () => {
+test("reset removes explicit subagent routing while preserving the main model and catalog", () => {
   const source = codex("source");
   const document = routeDocument({ kind: "codex", record: source });
   if (document.kind !== "codex") throw new Error("wrong boundary");
@@ -55,8 +55,9 @@ test("reset removes explicit subagent routing while preserving provider credenti
   const reset = resetRouting(document);
   if (reset.kind !== "codex") throw new Error("wrong boundary");
   assert.equal(reset.draft.subagentRoute, null);
-  assert.equal(reset.draft.apiKey, source.profile.apiKey);
-  assert.deepEqual(reset.draft.catalog, source.profile.catalog);
+  assert.equal(reset.draft.defaultModel, source.profile.defaultModel);
+  assert.deepEqual(reset.draft.catalog, source.profile.catalog.map(({ id }) => ({ id })));
+  assert.equal("apiKey" in reset.draft, false);
   assert.ok(document.draft.subagentRoute);
 });
 
@@ -70,12 +71,12 @@ test("client inventories and official routes expose only their supported roles",
   assert.deepEqual(routeRoles(routeDocument({ kind: "profile", record: profile })), ["main"]);
 });
 
-test("Claude reset clears tier overrides and context flags, retaining the saved model catalog", () => {
+test("Claude reset clears purpose overrides while retaining the main model, its context flag and catalog", () => {
   const document = resetRouting(routeDocument({ kind: "profile", record: claude() }));
   if (document.kind !== "profile" || document.draft.modelOptions?.kind !== "claude") throw new Error("wrong boundary");
-  assert.equal(document.draft.model, null);
+  assert.equal(document.draft.model, "main-model");
   assert.deepEqual(document.draft.modelOptions.routes, { haiku: null, sonnet: null, opus: null, fable: null, subagent: null });
-  assert.equal(document.draft.modelOptions.primaryOneM, false);
+  assert.equal(document.draft.modelOptions.primaryOneM, true);
   assert.deepEqual(document.draft.modelOptions.availableModels, ["tier-model"]);
 });
 
@@ -117,4 +118,33 @@ test("route summaries distinguish context flags and fixed targets, including sel
   assert.notDeepEqual(before, routeDescription(document, "main", inventory([], [source])));
   assert.equal(routeIssue(document, inventory([], [source])), null);
   assert.equal(routeDescription(document, "sonnet", inventory([], [source])).mode, "provider");
+});
+
+
+test("a new Codex self target uses the unsaved owner's model catalog without a stored record", () => {
+  const profileId = "a7ae5414-5b71-459a-839e-f01f31ac2c8c";
+  const document: RouteDocument = { kind: "codex", profileId, draft: {
+    name: "Unsaved owner", defaultModel: "draft-model", catalog: [{ id: "draft-model" }],
+    connection: {}, subagentRoute: { profileId, model: "draft-model" },
+  } };
+  assert.deepEqual(roleTarget(document, "subagent", inventory()), { provider: "Unsaved owner", model: "draft-model" });
+  assert.equal(routeIssue(document, inventory()), null);
+  document.draft.catalog = [{ id: "other" }];
+  document.draft.defaultModel = "other";
+  assert.equal(routeIssueRole(document, inventory()), "subagent");
+  assert.equal(routeIssue(document, inventory()), "codex.subagent.modelNotInCatalog");
+});
+
+test("a new Claude fixed self target keeps its provider mode and unsaved display name", () => {
+  const profileId = "a7ae5414-5b71-459a-839e-f01f31ac2c8c";
+  const source = claude();
+  const draft = { ...source.profile, name: "Unsaved Claude owner" };
+  if (draft.modelOptions?.kind !== "claude") throw new Error("wrong boundary");
+  draft.modelOptions = { ...draft.modelOptions, routes: { ...draft.modelOptions.routes,
+    subagent: { mode: "provider", profileId, model: "tier-model", oneM: true } } };
+  const document: RouteDocument = { kind: "profile", profileId, draft };
+  assert.equal(routeIssue(document, inventory()), null);
+  assert.deepEqual(routeDescription(document, "subagent", inventory()), {
+    target: { provider: "Unsaved Claude owner", model: "tier-model" }, mode: "provider", oneM: true,
+  });
 });

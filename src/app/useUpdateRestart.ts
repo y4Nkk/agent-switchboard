@@ -5,14 +5,16 @@ export function useUpdateRestart(task: UpdateDownloadState | null, operation: Re
   mounted: RefObject<boolean>, onInstalled: () => void, onError: (error: CommandError) => void) {
   const [restartRequired, setRestartRequired] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [restartError, setRestartError] = useState<unknown>(null);
   const delivered = useRef<string | null>(null);
   const restartingNow = useRef(false);
   const relaunch = useCallback(async () => {
     if (restartingNow.current) return;
     restartingNow.current = true;
     setRestarting(true);
+    setRestartError(null);
     try { await restartApplication(); }
-    catch (error) { if (mounted.current) onError(error as CommandError); }
+    catch (error) { if (mounted.current) { setRestartError(() => error); onError(error as CommandError); } }
     finally { restartingNow.current = false; if (mounted.current) setRestarting(false); }
   }, [mounted, onError]);
   useEffect(() => {
@@ -27,5 +29,5 @@ export function useUpdateRestart(task: UpdateDownloadState | null, operation: Re
     }
   }, [task, operation, onInstalled, onError, relaunch]);
   const restart = useCallback(() => { if (restartRequired) void relaunch(); }, [restartRequired, relaunch]);
-  return { restartRequired, restarting, restart };
+  return { restartRequired, restarting, restartError, restart };
 }

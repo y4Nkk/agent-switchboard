@@ -39,6 +39,7 @@ mod outbound_proxy;
 mod probe;
 mod process_control;
 mod provider_diagnostics;
+mod provider_conversion;
 mod provider_request;
 mod provider_transfer;
 mod resource_monitor;

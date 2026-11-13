@@ -71,8 +71,10 @@ impl ConfigStore {
 
     pub fn create_provider(
         &self,
+        id: String,
         draft: ProviderDraft,
     ) -> Result<ProviderRecord, StoreOperationError> {
+        self.validate_new_provider_id(&id)?;
         if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
             return Err("Codex 第三方供应商必须使用专用档案格式".into());
         }
@@ -89,7 +91,7 @@ impl ConfigStore {
         {
             return Err("该客户端已有官方登录入口".into());
         }
-        let profile = ProviderProfile::from_draft(Uuid::new_v4().to_string(), draft);
+        let profile = ProviderProfile::from_draft(id, draft);
         crate::gateway::claude_targets::validate_references(self, &profile)?;
         let position = if profile.app == AppKind::Codex {
             self.list_codex_providers()?
@@ -127,7 +129,7 @@ impl ConfigStore {
         {
             return Ok((record_of(AppKind::Codex, loaded), false));
         }
-        self.create_provider(asb_core::codex_official_draft(
+        self.create_provider(Uuid::new_v4().to_string(), asb_core::codex_official_draft(
             asb_core::ownership::default_provider_parameters(AppKind::Codex),
         ))
         .map(|record| (record, true))
@@ -408,7 +410,7 @@ impl ConfigStore {
                 });
             }
         }
-        self.create_provider(draft)
+        self.create_provider(Uuid::new_v4().to_string(), draft)
     }
 
     /// Whether an exactly equal provider already exists (scan-side view of

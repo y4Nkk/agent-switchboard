@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { cancelProfileSave, type AppKind, type FilePreview, type ProfileSaveSource } from "../api/client";
+import type { ProviderSaveReview } from "../app/provider-save-review";
 
 export interface ProfileSaveToken { source: ProfileSaveSource; app: AppKind; preparationId: string }
-export interface PendingProfileSave extends ProfileSaveToken { preview: FilePreview }
+export interface PendingProfileSave extends ProfileSaveToken { preview: FilePreview; review: ProviderSaveReview; sessionRevision: string }
 type Token = Pick<ProfileSaveToken, "source" | "preparationId">;
 interface Release { token: Token; running?: Promise<void> }
 
@@ -89,5 +90,6 @@ export function useProfileSavePreparation<T extends ProfileSaveToken = PendingPr
     if (held.current === value) { held.current = null; setPending(null); }
   }, [release]);
   const finish = useCallback(() => setPending(null), []);
-  return { ...releases, pending, hold, take, cancel, finish, checkpoint, isCurrent };
+  const hasUnconfirmed = useCallback(() => held.current !== null, []);
+  return { ...releases, pending, hold, take, cancel, finish, checkpoint, isCurrent, hasUnconfirmed };
 }

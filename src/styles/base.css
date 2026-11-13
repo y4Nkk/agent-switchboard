@@ -6,6 +6,7 @@
 @import "./base/root.css";
 @import "./base/application-preparation.css";
 @import "./base/shell.css";
+@import "./base/sidebar-update.css";
 @import "./base/workspace-main.css";
 @import "./base/scroll-area.css";
 @import "./base/buttons.css";

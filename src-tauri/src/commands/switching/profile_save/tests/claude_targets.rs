@@ -3,14 +3,14 @@ use asb_core::contracts::{ClaudeModelRoute, ClaudeModelRoutes, ClaudeModelSettin
 use serde_json::json;
 
 fn setup(state: &LocalState, gateway: &GatewayController) -> (ProviderRecord, ProviderRecord, ProviderDraft) {
-    let target = state.configuration().create_provider(draft("Target")).unwrap();
+    let target = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), draft("Target")).unwrap();
     let mut source = draft("Source");
     source.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
         routes: ClaudeModelRoutes { fable:Some(ClaudeModelRoute::Provider {
             profile_id:target.profile.id.clone(),model:"fixture-model".into(),one_m:false,
         }), ..Default::default() }, ..Default::default()
     }));
-    let primary = state.configuration().create_provider(source.clone()).unwrap();
+    let primary = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), source.clone()).unwrap();
     std::fs::write(state.target(AppKind::Claude).unwrap(), "{}").unwrap();
     let projection = super::super::super::plan::build_plan_for_profile(state, gateway, primary.profile.clone(), None).unwrap();
     let preview = super::super::super::plan::preview_projection(state, &projection).unwrap();
@@ -19,11 +19,13 @@ fn setup(state: &LocalState, gateway: &GatewayController) -> (ProviderRecord, Pr
 }
 
 fn prepared(state: &LocalState, gateway: &GatewayController, record: &ProviderRecord, draft: ProviderDraft) -> PreparedProfileSave {
+    let target = ProfileSaveTarget::Update {
+        profile_id: record.profile.id.clone(), expected_file_hash: record.file_hash.clone(),
+    };
     let (kind, preview, projection_profile, candidate_revision) = prepare_profile_save_data(
-        state,gateway,Some(&record.profile.id),&draft,Some(&record.file_hash),
+        state, gateway, &target, &draft,
     ).unwrap();
-    PreparedProfileSave { created_at:Instant::now(),profile_id:Some(record.profile.id.clone()),
-        expected_file_hash:Some(record.file_hash.clone()),draft,kind,preview,projection_profile,candidate_revision }
+    PreparedProfileSave { created_at:Instant::now(),target,draft,kind,preview,projection_profile,candidate_revision }
 }
 
 #[test]

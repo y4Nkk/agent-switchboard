@@ -291,13 +291,38 @@ impl ProviderProfile {
     }
 }
 
+/// Creation and updates have distinct identities; an absent revision cannot
+/// reinterpret a failed update as a new provider.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum ProfileSaveTarget {
+    Create {
+        #[serde(rename = "profileId")]
+        profile_id: String,
+    },
+    Update {
+        #[serde(rename = "profileId")]
+        profile_id: String,
+        #[serde(rename = "expectedFileHash")]
+        expected_file_hash: String,
+    },
+}
+
+impl ProfileSaveTarget {
+    pub fn profile_id(&self) -> &str {
+        match self {
+            Self::Create { profile_id } | Self::Update { profile_id, .. } => profile_id,
+        }
+    }
+}
+
 /// What persisting one provider draft will do. This classification is the
 /// single contract for the editor save flow; the interface never re-derives
 /// which fields affect live configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProfileSaveKind {
-    /// A new provider: the store assigns the id; nothing is enabled.
+    /// A new provider with the editing session's stable id; nothing is enabled.
     Create,
     /// The draft equals the stored profile; nothing is written.
     NoChange,
@@ -466,3 +491,6 @@ pub struct ProviderRecord {
     pub position: u64,
     pub file_hash: String,
 }
+
+#[cfg(test)]
+mod save_target_tests;

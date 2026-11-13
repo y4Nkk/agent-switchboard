@@ -177,51 +177,59 @@ pub fn import_at(
                 }
                 outcome.imported_count += 1;
             }
-            ccswitch::CcSwitchProviderDraft::Codex(seed) => {
-                if state
-                    .configuration()
-                    .codex_route_exists(&seed.endpoint, seed.upstream)
-                {
-                    // A route-identical profile gains the source's missing
-                    // usage query; a query-less row or an already-queried
-                    // profile is a true duplicate.
-                    let enriched = match seed.usage_query.clone() {
-                        Some(query) => state.configuration().enrich_codex_route_usage_query(
-                            &seed.endpoint,
-                            seed.upstream,
-                            query,
-                        )?,
-                        None => false,
-                    };
-                    if !enriched {
-                        outcome.skipped_existing.push(seed.name.clone());
-                        continue;
-                    }
-                    outcome.usage_script_imported_count += 1;
-                    outcome.imported_count += 1;
-                    continue;
-                }
-                let draft = match seed.completion_draft() {
-                    Ok(draft) => draft,
-                    Err(reason) => {
-                        outcome.not_imported.push(ccswitch::CcSwitchSkip {
-                            key: key.clone(),
-                            app_type: "codex".to_string(),
-                            name: seed.name.clone(),
-                            reason,
-                        });
-                        continue;
-                    }
-                };
-                state.configuration().create_codex_provider(draft)?;
-                if seed.usage_query.is_some() {
-                    outcome.usage_script_imported_count += 1;
-                }
-                outcome.imported_count += 1;
-            }
+            ccswitch::CcSwitchProviderDraft::Codex(seed) => import_codex_seed(state, key, seed, &mut outcome)?,
         }
     }
     Ok(outcome)
+}
+
+fn import_codex_seed(
+    state: &LocalState,
+    key: &str,
+    seed: &ccswitch::CodexImportSeed,
+    outcome: &mut CcSwitchImportOutcome,
+) -> Result<(), StoreOperationError> {
+    if state
+        .configuration()
+        .codex_route_exists(&seed.endpoint, seed.upstream)
+    {
+        // A route-identical profile gains the source's missing
+        // usage query; a query-less row or an already-queried
+        // profile is a true duplicate.
+        let enriched = match seed.usage_query.clone() {
+            Some(query) => state.configuration().enrich_codex_route_usage_query(
+                &seed.endpoint,
+                seed.upstream,
+                query,
+            )?,
+            None => false,
+        };
+        if !enriched {
+            outcome.skipped_existing.push(seed.name.clone());
+            return Ok(());
+        }
+        outcome.usage_script_imported_count += 1;
+        outcome.imported_count += 1;
+        return Ok(());
+    }
+    let draft = match seed.completion_draft() {
+        Ok(draft) => draft,
+        Err(reason) => {
+            outcome.not_imported.push(ccswitch::CcSwitchSkip {
+                key: key.to_string(),
+                app_type: "codex".to_string(),
+                name: seed.name.clone(),
+                reason,
+            });
+            return Ok(());
+        }
+    };
+    state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), draft)?;
+    if seed.usage_query.is_some() {
+        outcome.usage_script_imported_count += 1;
+    }
+    outcome.imported_count += 1;
+    Ok(())
 }
 
 fn scan_item(state: &LocalState, proposal: ccswitch::CcSwitchProposal) -> CcSwitchScanItem {

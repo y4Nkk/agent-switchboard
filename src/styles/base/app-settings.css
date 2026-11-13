@@ -98,6 +98,11 @@
   width: 35%;
   animation: asb-update-download-scan var(--asb-motion-ambient) linear infinite;
 }
+.asb-update-download-meter[data-stale="true"] > span {
+  animation: none;
+  transition: none;
+  background: var(--asb-warning);
+}
 @keyframes asb-update-download-scan {
   from { transform: translateX(-100%); }
   to { transform: translateX(300%); }

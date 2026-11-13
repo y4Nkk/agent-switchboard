@@ -1,4 +1,4 @@
-import type { AppKind, ProviderDraft, UpstreamProtocol } from "../api/client";
+import type { AppKind, CodexModelRoute, CodexSubagentRoute, ProviderDraft, UpstreamProtocol } from "../api/client";
 import type { MessageKey, TFunction } from "../i18n";
 
 /** TS mirror of the routing contract owned by asb-core
@@ -37,12 +37,20 @@ function normalizeEndpointUrl(url: string): string {
 }
 
 /** Mirrors asb-core's routing decision, including Responses field filtering. */
-export function requiresGateway(profile: Pick<ProviderDraft,
-  "app" | "routeMode" | "upstreamProtocol" | "baseUrl" | "responsesOptions" | "connection" | "authentication">): boolean {
+export type GatewayProfileInput = Pick<ProviderDraft,
+  "app" | "routeMode" | "upstreamProtocol" | "baseUrl" | "responsesOptions" | "connection" | "authentication"> & {
+  modelOptions?: ProviderDraft["modelOptions"];
+  subagentRoute?: CodexSubagentRoute | null;
+  modelRoutes?: readonly CodexModelRoute[];
+};
+
+export function requiresGateway(profile: GatewayProfileInput): boolean {
   if (profile.app === "claude" && profile.connection?.claudeNative) return false;
   const normalizedBase = profile.baseUrl === null ? null : normalizeEndpointUrl(profile.baseUrl);
   return profile.routeMode === "custom" && profile.upstreamProtocol !== null && (
-    profile.upstreamProtocol !== NATIVE_PROTOCOL[profile.app]
+    Boolean(profile.subagentRoute || profile.modelRoutes?.length)
+    || (profile.modelOptions?.kind === "claude" && Object.values(profile.modelOptions.routes).some((route) => route?.mode === "provider"))
+    || profile.upstreamProtocol !== NATIVE_PROTOCOL[profile.app]
     || (profile.upstreamProtocol === "responses" && profile.responsesOptions?.requestMode === "minimal")
     || (profile.app === "codex" && profile.authentication != null
       && profile.authentication !== "bearer")

@@ -1,5 +1,7 @@
+import { useProviderEditorSession } from "./useProviderEditorSession";
+import type { ProviderEditorSession, SetEditorSession } from "./provider-editor-session";
 import { useProviderSaves } from "./useProviderSaves";
-import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useState } from "react";
 import {
   cancelProfileSave,
   commitCodexProfileSave,
@@ -19,25 +21,11 @@ import {
 } from "../api/client";
 import { codexProviderDraft } from "../lib/provider-drafts";
 
-/** What a Codex editor session edits: a stored third-party record or the
- * client's official-login record. The variants never convert into each other;
- * only their shared editor shape is editable. */
-export type CodexEditorSource =
-  | { kind: "record"; record: CodexProviderRecord }
-  | { kind: "official"; record: ProviderRecord | null };
-
-/** One open editor. Claude owns the generic contract; Codex owns its strict
- * specialized contract — the two draft shapes never convert into each other. */
-export type ProviderEditorSession =
-  | { app: "claude"; record: ProviderRecord | null }
-  | { app: "codex"; source: CodexEditorSource | null };
-
+export type { CodexEditorSource, ProviderEditorSession, SetEditorSession } from "./provider-editor-session";
 function codexSessionRecord(session: ProviderEditorSession | null): CodexProviderRecord | null {
   if (session?.app !== "codex") return null;
   return session.source?.kind === "record" ? session.source.record : null;
 }
-
-export type SetEditorSession = Dispatch<SetStateAction<ProviderEditorSession | null>>;
 
 export interface ProvidersDeps {
   active: boolean;
@@ -47,6 +35,11 @@ export interface ProvidersDeps {
   records: ProviderRecord[];
   /** The Codex official-login record, stored in the same generic boundary. */
   codexOfficialRecords: ProviderRecord[];
+  codexRecords: CodexProviderRecord[];
+  activeIds: Partial<Record<AppKind, string | null>>;
+  openEditorWorkspace: () => void;
+  returnToGateway: () => void;
+  workspaceVersion: () => number;
   targetProfileId: string | null;
   onError: (error: CommandError) => void;
   clearError: () => void;
@@ -58,86 +51,6 @@ export interface ProvidersDeps {
   setTargetProfileId: (id: string | null) => void;
 }
 
-function useProviderEditorSession(deps: ProvidersDeps) {
-  const { appFilter, records, clearCandidates, setAppFilter, setTargetProfileId } = deps;
-  const [editorSession, setEditorSession] = useState<ProviderEditorSession | null>(null);
-  const openEditor = useCallback(
-    (profile: ProviderProfile) => {
-      const record = records.find((item) => item.profile.id === profile.id);
-      if (!record) return;
-      clearCandidates();
-      setTargetProfileId(profile.id);
-      setEditorSession({ app: "claude", record });
-    },
-    [records, clearCandidates, setTargetProfileId],
-  );
-  const openCodexEditor = useCallback(
-    (record: CodexProviderRecord) => {
-      clearCandidates();
-      setTargetProfileId(record.profile.id);
-      setEditorSession({ app: "codex", source: { kind: "record", record } });
-    },
-    [clearCandidates, setTargetProfileId],
-  );
-  /** Opens the Codex editor on the client's official-login record. A null
-   * record creates it; the record itself is never a third-party draft. */
-  const openCodexOfficialEditor = useCallback(
-    (record: ProviderRecord | null) => {
-      clearCandidates();
-      setTargetProfileId(record?.profile.id ?? null);
-      setAppFilter("codex");
-      setEditorSession({ app: "codex", source: { kind: "official", record } });
-    },
-    [clearCandidates, setAppFilter, setTargetProfileId],
-  );
-  /** Switches an open Codex editor between its two access modes by replacing
-   * the session; a third-party draft never mutates into an official record. */
-  const switchCodexAccessMode = useCallback(
-    (official: boolean, existing: ProviderRecord | null) => {
-      clearCandidates();
-      setTargetProfileId(existing?.profile.id ?? null);
-      setEditorSession({
-        app: "codex",
-        source: official
-          ? { kind: "official", record: existing }
-          : null,
-      });
-    },
-    [clearCandidates, setTargetProfileId],
-  );
-  const newEditor = useCallback(() => {
-    clearCandidates();
-    setEditorSession(
-      appFilter === "codex"
-        ? { app: "codex", source: null }
-        : { app: "claude", record: null },
-    );
-  }, [appFilter, clearCandidates]);
-  /** Cross-contract client switch: replace the session instead of mutating
-   * one contract's draft into the other's. */
-  const newEditorFor = useCallback((app: AppKind) => {
-    clearCandidates();
-    setAppFilter(app);
-    setTargetProfileId(null);
-    setEditorSession(
-      app === "codex"
-        ? { app: "codex", source: null }
-        : { app: "claude", record: null },
-    );
-  }, [clearCandidates, setAppFilter, setTargetProfileId]);
-  const closeEditor = useCallback(() => setEditorSession(null), []);
-  /** Changing the list client clears the execution target and both preview states, not the editor session. */
-  const selectApp = useCallback(
-    (app: AppKind) => {
-      clearCandidates();
-      setAppFilter(app);
-      setTargetProfileId(null);
-    },
-    [clearCandidates, setAppFilter, setTargetProfileId],
-  );
-  return { editorSession, setEditorSession, openEditor, openCodexEditor, openCodexOfficialEditor,
-    switchCodexAccessMode, newEditor, newEditorFor, closeEditor, selectApp };
-}
 function useCodexMetadata(deps: ProvidersDeps) {
   const { busy, clearError, onError, refresh, setBusy } = deps;
   /** Saves one Codex third-party profile's usage query through the strict
@@ -207,7 +120,7 @@ function useProviderMetadata(deps: ProvidersDeps) {
       clearError();
       try {
         const { id, ...draft } = profile;
-        const prepared = await prepareProfileSave(id, { ...draft, ...patch }, record.fileHash);
+        const prepared = await prepareProfileSave({ kind: "update", profileId: id, expectedFileHash: record.fileHash }, { ...draft, ...patch });
         if (prepared.kind === "saveAndApply") {
           await cancelProfileSave("profile", prepared.preparationId);
           throw {
@@ -315,8 +228,8 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
 
 /** Editor identity remains independent of the current list selection and refreshed records. */
 export function useProviders(deps: ProvidersDeps) {
-  const { setEditorSession, ...editor } = useProviderEditorSession(deps);
-  const saves = useProviderSaves(deps, editor.editorSession, setEditorSession);
+  const { setEditorSession, editorSessionVersion, ...editor } = useProviderEditorSession(deps);
+  const saves = useProviderSaves(deps, editor.editorSession, setEditorSession, editorSessionVersion);
   const metadata = useProviderMetadata(deps);
   const removal = useProviderRemoval(deps, setEditorSession);
   return { ...editor, ...saves, ...metadata, ...removal };

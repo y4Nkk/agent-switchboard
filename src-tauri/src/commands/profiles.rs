@@ -44,19 +44,21 @@ pub async fn list_codex_profiles(
 #[tauri::command]
 pub async fn create_codex_profile(
     app: tauri::AppHandle,
+    profile_id: String,
     draft: CodexProviderDraft,
 ) -> Result<CodexProviderRecord, CommandError> {
     let refresh_app = app.clone();
     let result = observe(RuntimeLogAction::ProfileCreated, async move {
         let state = state(&app)?;
         let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+        let gateway = app.state::<crate::gateway::GatewayController>().inner().clone();
         gate.run(move || {
-            if let Some(route) = &draft.subagent_route {
-                switching::validate_subagent_route_reference(&state, route)?;
-            }
+            switching::ensure_profile_save_recovered(&app)?;
+            let _targets = gateway.inner.profile_save_gate.write()
+                .map_err(|_| CommandError::new("codex-profile-create-failed", "供应商保存锁不可用"))?;
             state
                 .configuration()
-                .create_codex_provider(draft)
+                .create_codex_provider(profile_id, draft)
                 .map_err(|error| operation_error("codex-profile-create-failed", error))
         })
         .await
@@ -218,11 +220,11 @@ mod subagent_reference_tests {
         let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
         let target = state
             .configuration()
-            .create_codex_provider(draft_with_route(None))
+            .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft_with_route(None))
             .unwrap();
         state
             .configuration()
-            .create_codex_provider(draft_with_route(Some(
+            .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft_with_route(Some(
                 asb_core::contracts::CodexSubagentRoute {
                     profile_id: target.profile.id.clone(),
                     model: "relay-model".to_string(),
@@ -454,7 +456,7 @@ pub async fn import_discovered_codex_profile(
                 CodexImportAction::ThirdParty(draft) => {
                     let record = state
                         .configuration()
-                        .create_codex_provider(draft)
+                        .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft)
                         .map_err(|error| operation_error("codex-profile-import-failed", error))?;
                     Ok(CodexImportResult {
                         id: record.profile.id,

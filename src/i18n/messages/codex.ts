@@ -100,9 +100,9 @@ export const messages = {
 
   // Runtime parameters page
   "codex.params.pageAria": ["供应商运行参数", "Provider runtime parameters"],
-  "codex.params.pageNote": ["运行参数随此供应商保存，返回编辑后统一保存；模型上下文窗口在「模型」分区配置。", "Runtime parameters are saved with this provider and committed when you return to the editor; model context windows are configured in the Models section."],
+  "codex.params.pageNote": ["运行参数与连接、模型路由一起保存；模型上下文窗口在「模型与路由」的模型目录中配置。", "Runtime parameters save together with connection and routing. Configure context windows in the Models & routing catalog."],
   "codex.params.subagent": ["子 agent", "Subagents"],
-  "codex.params.subagentNote": ["子 agent 推理参数随此供应商保存；模型去向在「模型路由」图形工作区配置。", "Subagent reasoning parameters are saved with this provider; configure model destinations in the graphical Model Routing workspace."],
+  "codex.params.subagentNote": ["子 agent 推理参数随此供应商保存；模型去向在当前编辑器的「模型与路由」分区配置。", "Subagent reasoning parameters save with this provider. Configure destinations in this editor's Models & routing section."],
   "codex.params.reset": ["恢复运行参数默认值", "Reset runtime parameters to defaults"],
 
   // Subagent model row (editor)

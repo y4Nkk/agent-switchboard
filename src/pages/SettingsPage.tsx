@@ -1,8 +1,8 @@
 import { useId, type ReactNode } from "react";
-import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
+import type { AppSettings } from "../api/client";
 import appIcon from "../assets/app-icon.svg";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
-import type { UpdateDownloadView } from "../app/update-download-state";
+import type { ApplicationUpdateControl } from "../app/update-state";
 import { useI18n } from "../i18n";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
@@ -31,21 +31,7 @@ interface SettingsPageProps {
   onPatch: (patch: Partial<AppSettings>) => Promise<boolean>;
   /** Restarts the desktop process on the user's explicit request. */
   onRestart: () => void;
-  /** Latest manual update check; null until the first check runs. */
-  updateCheck: UpdateCheck | null;
-  updateChannel: UpdateChannel | null;
-  /** Running build's version; null until the process reports it. */
-  appVersion: string | null;
-  /** A startup or user-triggered release lookup is currently in flight. */
-  updateChecking: boolean;
-  updateInstalling: boolean;
-  updateDownload: UpdateDownloadView;
-  updateCheckedAt: string | null;
-  updateRestartRequired: boolean;
-  onCheckUpdate: () => void;
-  onInstallUpdate: () => void;
-  onCancelUpdateDownload: () => void;
-  onRestartInstalledUpdate: () => void;
+  update: ApplicationUpdateControl;
 }
 
 function ApplicationSettings(props: SettingsPageProps) {
@@ -90,12 +76,8 @@ function AboutSettings(props: SettingsPageProps) {
           <p className="asb-field-help">{t("settings.about.tagline")}</p>
         </div>
       </div>
-      <UpdateSection channel={props.updateChannel} appVersion={props.appVersion}
-        result={props.updateCheck} busy={props.busy || props.updateChecking} installing={props.updateInstalling}
-        download={props.updateDownload} checkedAt={props.updateCheckedAt} restartRequired={props.updateRestartRequired}
-        onCheck={props.onCheckUpdate} onInstall={props.onInstallUpdate} onCancel={props.onCancelUpdateDownload}
-        onRestart={props.onRestartInstalledUpdate} />
-      <ChangelogHistory appVersion={props.appVersion} />
+      <UpdateSection update={props.update} busy={props.busy} />
+      <ChangelogHistory appVersion={props.update.state.appVersion} />
     </div>
   );
 }

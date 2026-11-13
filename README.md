@@ -110,8 +110,8 @@ Select a saved profile independently of the active provider, then edit its main 
 
 | Location | What you can do |
 | --- | --- |
-| Providers | Create, edit, reorder, import, and delete profiles; manage models, authentication, protocols, model mappings, and runtime parameters; diagnose configuration and connections, preview repairs and undo them; export provider SQL files |
-| Model routing & gateway | Configure main models, default sub-agents and Claude tiers graphically; preview and apply, then inspect actual connections and recent requests |
+| Providers | Create, edit, reorder, import, and delete profiles; convert a saved provider into a new profile for the other client; manage models, authentication, protocols, model mappings, and runtime parameters; diagnose configuration and connections, preview repairs and undo them; export provider SQL files |
+| Model routing & gateway | Review saved model destinations and live gateway state; open any purpose in the unified provider editor |
 | Client configuration | Manage shared settings, Codex sub-agent runtime settings, and global instructions; preview and apply drafts, including controlled edits to fields outside the regular form |
 | Extensions | Manage Skills and MCP with per-client enable/disable, search, updates, import/export, local discovery, and advanced management |
 | Sessions | Full-text search and message navigation, project groups, pins, tags, local aliases, time filters, and bulk organization; resume or delete sessions, export Markdown, and save prompts or answers as snippets |
@@ -120,6 +120,8 @@ Select a saved profile independently of the active provider, then edit its main 
 | Settings → Preferences | Follow the system, Simplified Chinese, or English for the interface; select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, and choose the startup page |
 | Settings → Diagnostics | Inspect configuration or environment issues and runtime logs |
 | Settings → About | Check for signed updates, track or cancel downloads, and browse bundled release history by version and publication date |
+
+**Convert a provider.** A saved provider's **Convert and add to Claude / Codex** action opens an independent new profile with its original upstream protocol, endpoint and static authentication. The source stays unchanged; saving never activates the new profile or adds it to a failover queue. Codex aliases resolve to actual upstream model IDs. Claude-to-Codex conversion requires explicit model limits and capability declarations before saving; absent source facts are never presented as discovered capabilities. The editor lists settings that cannot cross clients. Optional usage-query copies start with manual refresh only. Official logins, managed accounts, Claude cloud SDK connections and Gemini Native cannot be converted through this API-key workflow. Enabling the result uses the existing switch preview, confirmation and recovery flow; protocol conversion may require the local gateway.
 
 **Settings → About** shows real download bytes and a progress bar for application updates. A percentage appears only when the server provides a total size; downloading, signature verification, cancellation, and installation have distinct states. Cancelling stops the transfer and discards the partial download; retrying starts from the beginning. Once installation starts, cancellation is unavailable. The task continues when you leave About, and a completed installation uses the existing restart flow. Startup checks remain silent, and Microsoft Store installations continue to receive their updates through the Store.
 
@@ -236,7 +238,9 @@ In **Usage → Degradation radar**, batch-test the active Codex configuration wi
 
 ### Sub-agent models and protocol gateway
 
-Open the graphical workspace from a provider row's routing button or the Model routing & gateway entry in the sidebar. Choose the profile to edit independently of the active provider. The main-model node belongs to that profile; other purpose nodes can follow its connection or explicitly reference another eligible saved provider and model. Claude supports Haiku, Sonnet, Opus, Fable and default sub-agent purposes. Addresses, credentials, protocols and catalogs remain on Providers. Saving never activates the edited profile: it saves only the profile or updates its active dependencies in the existing recoverable transaction. Enable a different primary provider through the explicit provider-switch flow.
+Provider editing has Connection, Models & routing, and Runtime parameters sections sharing one draft and save action. Configure a new provider's connection, model catalog, main model and purpose destinations before its first save. A stable in-memory UUID lets new profiles explicitly target themselves without creating a placeholder file. Claude preserves automatic, primary-connection and fixed-provider routing, including Fable inheritance and 1M flags. Ordinary creation and inactive edits save directly; changes affecting an active plan use one combined preview and confirmation in the existing recoverable transaction. Saving never activates the edited profile.
+
+The Model routing & gateway workspace shows saved plans separately from the active provider and actual runtime connections. Selecting a plan does not activate it. Clicking a purpose opens the same provider editor at that purpose and returns to the source view on completion. Editing the same profile preserves its draft; replacing it requires handling unsaved changes. External file changes preserve the draft and require an explicit reload. Gateway port, recovery, topology and recent requests remain in the gateway workspace; its decorative hub image represents no runtime state.
 
 Cancelling a preview or leaving its workspace revokes the unconfirmed plan. Cancellation failures remain visible and can be retried; confirmed transactions continue to completion. Applying a route refreshes the actual configuration and gateway status immediately.
 

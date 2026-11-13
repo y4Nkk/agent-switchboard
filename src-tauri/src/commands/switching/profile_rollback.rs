@@ -247,7 +247,7 @@ mod tests {
         let state = LocalState::from_root(directory.path().join("state"));
         let created = state
             .configuration()
-            .create_codex_provider(draft("before"))
+            .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft("before"))
             .unwrap();
         let original = state
             .configuration()

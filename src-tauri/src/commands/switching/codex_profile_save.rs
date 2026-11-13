@@ -229,31 +229,6 @@ fn classify(
     Ok((stored, candidate, kind, owner))
 }
 
-/// A subagent route names another provider profile by UUID. The reference
-/// must resolve at save time — the same fail-loud rule the gateway applies
-/// at request time — and its credentials must be statically expressible:
-/// an auth-bound profile cannot be forwarded to by another route.
-pub(crate) fn validate_subagent_route_reference(
-    state: &crate::local_state::LocalState,
-    route: &asb_core::contracts::CodexSubagentRoute,
-) -> Result<(), CommandError> {
-    let target = state
-        .configuration()
-        .find_codex_provider_file(&route.profile_id)
-        .map_err(|_| {
-            CommandError::localized(
-                "codex-subagent-route-unresolved",
-                "errors.sw.subagentRouteTargetMissing",
-                format!(
-                    "子代理路由引用的 Codex 供应商不存在：{}（模型 {}）",
-                    route.profile_id, route.model
-                ),
-                serde_json::json!({ "profileId": route.profile_id, "model": route.model }),
-            )
-        })?;
-    dependencies::validate_target(route, &target)
-}
-
 fn apply(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,

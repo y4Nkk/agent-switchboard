@@ -162,7 +162,7 @@ mod tests {
         let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
         let file = state
             .configuration()
-            .create_codex_provider(
+            .create_codex_provider(uuid::Uuid::new_v4().to_string(),
                 test_draft(),
             )
             .unwrap();

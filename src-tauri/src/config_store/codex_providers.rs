@@ -14,6 +14,7 @@ use asb_core::contracts::{
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use uuid::Uuid;
+mod references;
 
 pub(super) struct LoadedCodexProvider {
     pub(super) file: CodexProviderFile,
@@ -34,8 +35,10 @@ impl ConfigStore {
     /// mutation API never writes into the Codex directory.
     pub fn create_codex_provider(
         &self,
+        id: String,
         draft: CodexProviderDraft,
     ) -> Result<CodexProviderRecord, StoreOperationError> {
+        self.validate_new_provider_id(&id)?;
         let loaded = load(self)?;
         let position = loaded.iter().map(|provider| provider.file.position)
             .chain(self.list_providers()?.into_iter()
@@ -45,7 +48,9 @@ impl ConfigStore {
             .unwrap_or(0)
             .checked_add(crate::config_store::PROVIDER_POSITION_STEP)
             .ok_or_else(|| StoreOperationError::Invalid("Codex 供应商排序位置溢出".to_string()))?;
-        let file = draft.into_file(Uuid::new_v4().to_string(), position);
+        let file = draft.into_file(id, position);
+        file.validate()?;
+        self.validate_codex_provider_references(&file)?;
         let hash = write(self, &file)?;
         Ok(file.record(hash))
     }
@@ -125,6 +130,7 @@ impl ConfigStore {
             return Err("Codex 供应商文件已被外部修改，请重新读取后再保存".into());
         }
         let file = draft.into_file(id.to_string(), existing.file.position);
+        self.validate_codex_provider_references(&file)?;
         let hash = write(self, &file)?;
         Ok(file.record(hash))
     }

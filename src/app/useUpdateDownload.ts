@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { cancelUpdateDownload, readUpdateDownload, startUpdateDownload,
   type CommandError, type UpdateCheck, type UpdateDownloadState } from "../api/client";
-import { useMessageState } from "../i18n/use-message-state";
 import { observeUpdateDownload } from "./update-download-reader";
 import { latestDownloadState, updateDownloadActive } from "./update-download-state";
 import { useUpdateRestart } from "./useUpdateRestart";
@@ -11,7 +10,9 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
   const [task, setTask] = useState<UpdateDownloadState | null>(null);
   const [starting, setStarting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [readError, setReadError] = useMessageState();
+  const [startError, setStartError] = useState<CommandError | null>(null);
+  const [readError, setReadError] = useState<unknown>(null);
+  const [cancelError, setCancelError] = useState<unknown>(null);
   const mounted = useRef(true);
   const taskId = useRef<string | null>(null);
   const cancelRequested = useRef(false);
@@ -21,8 +22,11 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
   }, []);
   const sendCancel = useCallback(async (id: string) => {
     setCancelling(true);
+    setCancelError(null);
     try { accept(await cancelUpdateDownload(id)); }
-    catch (error) { if (mounted.current && taskId.current === id) onError(error as CommandError); }
+    catch (error) {
+      if (mounted.current && taskId.current === id) { setCancelError(() => error); onError(error as CommandError); }
+    }
     finally { if (mounted.current && taskId.current === id) setCancelling(false); }
   }, [accept, onError]);
   const start = useCallback(async (update: UpdateCheck) => {
@@ -30,7 +34,7 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
     operation.current = true;
     cancelRequested.current = false;
     taskId.current = null;
-    setStarting(true); setCancelling(false); setTask(null); setReadError(null);
+    setStarting(true); setCancelling(false); setTask(null); setReadError(null); setStartError(null); setCancelError(null);
     try {
       const initial = await startUpdateDownload(update.id);
       if (!mounted.current) { void cancelUpdateDownload(initial.id).catch(console.error); return; }
@@ -42,10 +46,11 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
     } catch (error) {
       operation.current = false;
       cancelRequested.current = false;
-      if (mounted.current) { setCancelling(false); onError(error as CommandError); }
+      if (mounted.current) { setCancelling(false); setStartError(error as CommandError); onError(error as CommandError); }
     } finally { if (mounted.current) setStarting(false); }
   }, [operation, restart.restartRequired, accept, sendCancel, setReadError, onError]);
   const cancel = useCallback(() => {
+    if ((!task && !starting) || (task && !["downloading", "verifying"].includes(task.phase))) return;
     if (cancelRequested.current) return;
     cancelRequested.current = true;
     const id = taskId.current;
@@ -53,16 +58,17 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
       if (taskId.current === id) cancelRequested.current = false;
     });
     else setCancelling(true);
-  }, [sendCancel]);
+  }, [sendCancel, task, starting]);
   const active = task !== null && updateDownloadActive(task.phase);
   const reset = useCallback(() => {
     taskId.current = null;
     cancelRequested.current = false;
-    setTask(null); setReadError(null); setCancelling(false);
+    setTask(null); setReadError(null); setCancelling(false); setStartError(null); setCancelError(null);
   }, [setReadError]);
   useEffect(() => {
     if (!taskId.current || !active) return;
-    return observeUpdateDownload(taskId.current, { read: readUpdateDownload, onRead: accept, onError: setReadError });
+    return observeUpdateDownload(taskId.current, { read: readUpdateDownload, onRead: accept,
+      onError: (error) => setReadError(() => error) });
   }, [task?.id, active, accept, setReadError]);
   useEffect(() => {
     mounted.current = true;
@@ -72,6 +78,7 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
       if (taskId.current) void cancelUpdateDownload(taskId.current).catch(console.error);
     };
   }, []);
-  return { task, starting, cancelling, readError, ...restart,
-    installing: starting || active || restart.restarting, start, cancel, reset };
+  return { state: { task, starting, cancelling, startError, readError, cancelError,
+    restartRequired: restart.restartRequired, restarting: restart.restarting, restartError: restart.restartError },
+    start, cancel, reset, restart: restart.restart };
 }

@@ -175,23 +175,7 @@ impl GatewayController {
             codex_account: Some(auth),
             codex: Some(snapshot),
         };
-        let projected = attach_fragment(
-            SwitchPlan::through_gateway(
-                plan.profile.clone(),
-                plan.client_settings.clone(),
-                route.client_endpoint(&base_url),
-                route.client_token.clone(),
-            )
-            .with_codex_managed_auth(
-                route
-                    .codex_account
-                    .clone()
-                    .expect("official takeover carries its bound account"),
-            ),
-            plan.codex_common_fragment().cloned(),
-        );
-        asb_core::validate_plan(&projected.profile, &projected.client_settings)
-            .map_err(|error| error.to_string())?;
+        let projected = official_takeover_plan(plan, &route, &base_url)?;
         Ok(GatewayProjection {
             plan: projected,
             activation: GatewayActivation::Routed(route),
@@ -204,6 +188,31 @@ impl GatewayController {
             dependency_revision: None,
         })
     }
+}
+
+fn official_takeover_plan(
+    plan: SwitchPlan,
+    route: &ActiveRoute,
+    base_url: &str,
+) -> Result<SwitchPlan, String> {
+    let projected = attach_fragment(
+        SwitchPlan::through_gateway(
+            plan.profile.clone(),
+            plan.client_settings.clone(),
+            route.client_endpoint(base_url),
+            route.client_token.clone(),
+        )
+        .with_codex_managed_auth(
+            route
+                .codex_account
+                .clone()
+                .expect("official takeover carries its bound account"),
+        ),
+        plan.codex_common_fragment().cloned(),
+    );
+    asb_core::validate_plan(&projected.profile, &projected.client_settings)
+        .map_err(|error| error.to_string())?;
+    Ok(projected)
 }
 
 /// Attaches the resolved common-file fragment to a Codex plan. `None` (no
@@ -239,11 +248,11 @@ mod subagent_catalog_tests {
         let gateway = crate::gateway::GatewayController::start(&state);
         let target = state
             .configuration()
-            .create_codex_provider(draft_with_route(None))
+            .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft_with_route(None))
             .unwrap();
         let routed = state
             .configuration()
-            .create_codex_provider(draft_with_route(Some(
+            .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft_with_route(Some(
                 asb_core::contracts::CodexSubagentRoute {
                     profile_id: target.profile.id.clone(),
                     model: "relay-model".to_string(),

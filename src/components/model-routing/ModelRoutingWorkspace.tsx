@@ -1,118 +1,116 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import type { AppKind } from "../../api/client";
 import { useI18n } from "../../i18n";
-import { errorText } from "../../i18n/errors";
 import { clientName } from "../../lib/client-name";
+import routingHub from "../../assets/routing-hub.png";
 import { Button } from "../Button";
 import { ClientLogo } from "../ClientLogo";
-import { ConfirmSheet } from "../ConfirmSheet";
-import { RouteSavePreview } from "./RouteSavePreview";
+import { FactList } from "../FactList";
+import { ChevronRightIcon } from "../icons";
 import { Select } from "../Select";
 import { Tabs } from "../Tabs";
-import { WorkspaceHeader } from "../WorkspaceHeader";
-import { ModelRouteGraph } from "./ModelRouteGraph";
-import { RouteInspector } from "./RouteInspector";
-import { resetRouting, routeIssue, type ModelRouteRequest, type RouteInventory } from "./model";
-import { useRouteApply } from "./useRouteApply";
-import { useRouteDraft } from "./useRouteDraft";
+import { ModuleHeader, WorkspaceHeader } from "../WorkspaceHeader";
+import { routeDescription, routeDocument, routeIssue, routeRecords, routeRoles,
+  type RouteDocument, type RouteInventory, type RouteRole } from "./model";
 
 interface Props {
   runtimeSummary: ReactNode;
   inventory: RouteInventory;
   initialApp: AppKind;
-  request: ModelRouteRequest | null;
-  active: boolean;
   busy: boolean;
-  onBusy: (busy: boolean) => void;
-  onApplied: () => Promise<void>;
+  onEdit: (app: AppKind, profileId: string, role: RouteRole) => void;
   onProviders: (app: AppKind) => void;
 }
 
-function RouteConfirmation({ operation, onDocument, busy }: {
-  operation: ReturnType<typeof useRouteApply>;
-  onDocument: ReturnType<typeof useRouteDraft>["setDocument"];
-  busy: boolean;
+function SavedPurpose({ document, inventory, role, disabled, onEdit }: {
+  document: RouteDocument; inventory: RouteInventory; role: RouteRole; disabled: boolean; onEdit: () => void;
 }) {
   const { t } = useI18n();
-  if (!operation.pending) return null;
-  return <ConfirmSheet title={t("modelRoutes.confirmTitle")} confirmLabel={t(operation.pending.kind === "saveAndApply" ? "modelRoutes.apply" : "modelRoutes.saveOnly")}
-    busy={busy} onCancel={() => void operation.cancel()} onConfirm={() => void operation.confirm(onDocument)}>
-    <RouteSavePreview pending={operation.pending} />
-    {operation.error != null && <p className="asb-fail-text" role="alert">{errorText(operation.error, t)}</p>}
-  </ConfirmSheet>;
+  const { target, mode, oneM } = routeDescription(document, role, inventory);
+  const source = role === "main" ? "gatewayOverview.mainConnection"
+    : !target ? "modelRoutes.automatic" : mode === "provider" ? "gatewayOverview.fixedProvider" : "gatewayOverview.primaryConnection";
+  const provider = target ? target.provider ?? t("modelRoutes.unresolved") : t("modelRoutes.automatic");
+  const model = target?.model || t("modelRoutes.clientDefault");
+  return <li className="asb-route-overview-purpose">
+    <Button variant="ghost" className="asb-route-overview-edit" disabled={disabled} onClick={onEdit}
+      aria-label={t("gatewayOverview.editPurpose", { role: t(`modelRoutes.role.${role}`), provider, model })}>
+      <span className="asb-route-overview-role">{t(`modelRoutes.role.${role}`)}</span>
+      <span className="asb-route-overview-target">
+        <span className="asb-route-overview-provider">{provider}</span>
+        <span className="asb-route-overview-model asb-code">{model}{oneM && <span className="asb-route-overview-context">1M</span>}</span>
+      </span>
+      <span className="asb-route-overview-mode">{t(source)}</span>
+      <span className="asb-route-overview-arrow" aria-hidden="true"><ChevronRightIcon /></span>
+    </Button>
+  </li>;
 }
 
-function RouteEditor({ editor, operation, inventory, disabled, inspectorId }: {
-  editor: ReturnType<typeof useRouteDraft>; operation: ReturnType<typeof useRouteApply>;
-  inventory: RouteInventory; disabled: boolean; inspectorId: string;
+function SavedPlan({ document, app, inventory, busy, onEdit }: {
+  document: RouteDocument; app: AppKind; inventory: RouteInventory; busy: boolean; onEdit: Props["onEdit"];
 }) {
   const { t } = useI18n();
-  const document = editor.document;
-  if (!document) return <div className="asb-model-route-empty">
-    <p>{t("modelRoutes.empty")}</p>
-    <Select value={null} placeholder={t("modelRoutes.chooseProvider")} ariaLabel={t("modelRoutes.provider")}
-      disabled={disabled || editor.sources.length === 0} onChange={editor.selectProfile}
-      options={editor.sources.map(({ record }) => ({ value: record.profile.id, label: record.profile.name }))} />
-  </div>;
   const issue = routeIssue(document, inventory);
+  const official = document.kind === "profile" && document.draft.routeMode === "official";
   return <>
-    <ModelRouteGraph app={editor.app} document={document} inventory={inventory} role={editor.role}
-      onSelect={editor.setRole} inspectorId={inspectorId} disabled={disabled} />
-    <section className="asb-model-route-inspector" id={inspectorId} aria-labelledby={`${inspectorId}-title`}>
-      <h3 className="asb-section-title" id={`${inspectorId}-title`}>{t("modelRoutes.configureRole", { role: t(`modelRoutes.role.${editor.role}`) })}</h3>
-      <div className="asb-model-route-fields">
-        <RouteInspector document={document} role={editor.role} sources={editor.sources} codex={inventory.codex}
-          disabled={disabled || editor.stale} onChange={editor.setDocument} />
-      </div>
-    </section>
-    {issue && <p className="asb-warn-text" role="status">{t(issue)}</p>}
-    <div className="asb-model-route-actions">
-      <Button variant="secondary" disabled={disabled || editor.stale}
-        onClick={() => editor.setDocument(resetRouting(document))}>{t("modelRoutes.reset")}</Button>
-      <Button variant="primary" disabled={disabled || editor.stale || !!issue || !editor.dirty}
-        onClick={() => void operation.prepare(document)}>{t("modelRoutes.review")}</Button>
+    <div className="asb-route-overview-columns" aria-hidden="true">
+      <span>{t("modelRoutes.purpose")}</span><span>{t("gatewayOverview.destination")}</span><span>{t("gatewayOverview.rule")}</span>
     </div>
+    <ul className="asb-route-overview-list" aria-label={t("gatewayOverview.destinations")}>
+      {routeRoles(document).map((role) => <SavedPurpose key={role} document={document} inventory={inventory}
+        role={role} disabled={busy} onEdit={() => onEdit(app, document.profileId, role)} />)}
+    </ul>
+    {official && <p className="asb-field-help">{t("modelRoutes.official")}</p>}
+    {issue && <p className="asb-warn-text" role="status">{t(issue)}</p>}
   </>;
 }
 
-export function ModelRoutingWorkspace(props: Props) {
+/** Saved plans stay read-only here; every edit enters the provider-owned session. */
+export function ModelRoutingWorkspace({ runtimeSummary, inventory, initialApp, busy, onEdit, onProviders }: Props) {
   const { t } = useI18n();
   const id = useId();
-  const operation = useRouteApply(props);
-  const disabled = props.busy || !!operation.pending;
-  const editor = useRouteDraft({ ...props, busy: disabled });
-  const activeId = props.inventory.activeIds[editor.app];
-  const activeRecord = editor.sources.find(({ record }) => record.profile.id === activeId);
+  const [app, setApp] = useState(initialApp);
+  const [selections, setSelections] = useState<Partial<Record<AppKind, string>>>({});
+  const sources = routeRecords(inventory, app);
+  const activeId = inventory.activeIds[app] ?? null;
+  const activeSource = sources.find(({ record }) => record.profile.id === activeId);
+  const requestedId = selections[app] ?? activeId;
+  const selected = sources.find(({ record }) => record.profile.id === requestedId);
+  const document = selected ? routeDocument(selected) : null;
+  const selectedId = selected?.record.profile.id ?? null;
   return <section className="asb-panel asb-model-routing" aria-label={t("nav.page.gateway")}>
-    <WorkspaceHeader title={t("nav.page.gateway")} primary={
-      <Tabs value={editor.app} onChange={editor.selectApp} scope={id} label={t("modelRoutes.client")}
-        tabs={(["codex", "claude"] as const).map((app) => ({ value: app,
-          label: <><ClientLogo app={app} className="asb-model-route-logo" />{clientName(app)}</>, controls: `${id}-panel`, disabled }))} />
-    } primaryActions={<Button variant="secondary" disabled={disabled}
-      onClick={() => props.onProviders(editor.app)}>{t("modelRoutes.manageProviders")}</Button>} />
-    {props.runtimeSummary}
-    <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${editor.app}-tab`} className="asb-model-route-panel">
-      <p className="asb-field-help">{t("modelRoutes.help")}</p>
-      <p className="asb-model-route-state" role="status">{t("modelRoutes.current", { name: activeRecord?.record.profile.name ?? t("modelRoutes.unmatched") })}
-        {editor.document && <span>{t(editor.dirty ? "modelRoutes.pending" : editor.selectedId !== activeId ? "modelRoutes.savedInactive" : "modelRoutes.saved")}</span>}
-      </p>
-      <div className="asb-model-route-owner">
-        <label className="asb-field"><span>{t("modelRoutes.editing")}</span>
-          <Select value={editor.selectedId} placeholder={t("modelRoutes.chooseProvider")} ariaLabel={t("modelRoutes.editing")}
-            disabled={disabled} onChange={editor.selectProfile}
-            options={editor.sources.map(({ record }) => ({ value: record.profile.id, label: record.profile.name }))} />
-        </label>
-        <Button variant="secondary" disabled={disabled || !activeId || editor.selectedId === activeId}
-          onClick={() => activeId && editor.selectProfile(activeId)}>{t("modelRoutes.editCurrent")}</Button>
+    <div className="asb-route-overview-hero">
+      <div className="asb-route-overview-intro">
+        <WorkspaceHeader title={t("nav.page.gateway")} />
+        <p className="asb-route-overview-description">{t("gatewayOverview.description")}</p>
+        <p className="asb-route-overview-caption">{t("gatewayOverview.editHelp")}</p>
       </div>
-      {editor.stale && <div className="asb-banner asb-banner-warning" role="alert">
-        <p>{t("modelRoutes.stale")}</p><Button variant="secondary" disabled={disabled} onClick={editor.reload}>{t("modelRoutes.reload")}</Button>
-      </div>}
-      <RouteEditor editor={editor} operation={operation} inventory={props.inventory} disabled={disabled} inspectorId={`${id}-inspector`} />
-      {operation.error != null && <p className="asb-fail-text" role="alert">{errorText(operation.error, t)}</p>}
-      {operation.releaseError != null && <p className="asb-field-help" role="status">{t("operations.save.retryRelease")}</p>}
+      <img className="asb-route-overview-art" src={routingHub} alt="" aria-hidden="true" draggable={false} />
     </div>
-    {props.active && <RouteConfirmation operation={operation} onDocument={editor.setDocument} busy={props.busy} />}
-    {props.active && editor.confirmation}
+    <section className="asb-route-overview-runtime" aria-label={t("gatewayOverview.listener")}>{runtimeSummary}</section>
+    <section className="asb-route-overview-plan" aria-labelledby={`${id}-title`}>
+      <ModuleHeader id={`${id}-title`} title={t("gatewayOverview.savedPlan")} primary={
+        <Tabs value={app} onChange={setApp} scope={id} label={t("modelRoutes.client")}
+          tabs={(["codex", "claude"] as const).map((value) => ({ value, label: <><ClientLogo app={value} className="asb-model-route-logo" />{clientName(value)}</>, controls: `${id}-panel`, disabled: busy }))} />
+      } primaryActions={<Button variant="secondary" disabled={busy} onClick={() => onProviders(app)}>{t("modelRoutes.manageProviders")}</Button>} />
+      <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${app}-tab`} className="asb-route-overview-panel">
+        <div className="asb-route-overview-selection">
+          <label className="asb-field"><span>{t("gatewayOverview.viewing")}</span>
+            <Select value={selectedId} placeholder={t("modelRoutes.chooseProvider")} ariaLabel={t("gatewayOverview.viewing")}
+              disabled={busy || sources.length === 0} onChange={(profileId) => setSelections((current) => ({ ...current, [app]: profileId }))}
+              options={sources.map(({ record }) => ({ value: record.profile.id, label: record.profile.name }))} />
+          </label>
+          <Button variant="secondary" disabled={busy || !activeSource || selectedId === activeId}
+            onClick={() => activeId && setSelections((current) => ({ ...current, [app]: activeId }))}>{t("gatewayOverview.viewCurrent")}</Button>
+        </div>
+        <div className="asb-route-overview-identity">
+          <FactList inline rows={[{ label: t("gatewayOverview.active"), value: activeSource?.record.profile.name ?? t("modelRoutes.unmatched") }]} />
+          {document && <p className="asb-route-overview-saved">{t(selectedId === activeId ? "gatewayOverview.activePlan" : "gatewayOverview.inactivePlan")}</p>}
+        </div>
+        {document ? <SavedPlan document={document} app={app} inventory={inventory} busy={busy} onEdit={onEdit} />
+          : <div className="asb-route-overview-empty"><p>{t(requestedId ? "gatewayOverview.missingPlan" : "gatewayOverview.empty")}</p>
+            <Button variant="secondary" disabled={busy} onClick={() => onProviders(app)}>{t("modelRoutes.manageProviders")}</Button></div>}
+        <p className="asb-route-overview-footnote">{t("gatewayOverview.savedOnly")}</p>
+      </div>
+    </section>
   </section>;
 }

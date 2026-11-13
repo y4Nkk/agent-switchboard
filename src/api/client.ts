@@ -149,6 +149,7 @@ export * from "./request-usage";
 export * from "./native-telemetry";
 export * from "./resource-usage";
 export * from "./providers";
+export * from "./provider-conversion";
 export * from "./provider-request";
 export * from "./switching";
 export * from "./status";

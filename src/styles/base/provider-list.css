@@ -178,11 +178,20 @@
   min-width: 0;
 }
 
+.asb-row-controls > .asb-iconcluster {
+  flex: 0 1 auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 /* Keyboard-visible focus preserves Tab access without letting mouse clicks
    keep actions visible after the pointer leaves. */
-.asb-row-item:not(:hover, :has(:focus-visible), .is-dragging) .asb-row-action {
-  opacity: 0;
-  pointer-events: none;
+@media (hover: hover) and (pointer: fine) {
+  .asb-row-item:not(:hover, :has(:focus-visible), .is-dragging) .asb-row-action {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* The reveal fades at node speed, the same rhythm as the row's disclosure

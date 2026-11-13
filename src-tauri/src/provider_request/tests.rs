@@ -31,7 +31,7 @@ fn saved_codex_direct_and_gateway_requests_use_the_native_store_and_upstream_mod
         let store = ConfigStore::new(directory.path().join("state"));
         let mut input = draft(upstream, base);
         if !mapped { input.model_routes.clear(); }
-        let record = store.create_codex_provider(input).unwrap();
+        let record = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), input).unwrap();
         assert_eq!(record.profile.route_mode, mode);
         let requests = ProviderRequests::default();
         let prepared = prepare(&requests, &store,
@@ -61,7 +61,7 @@ fn codex_saved_request_sender_emits_the_exact_direct_or_mapped_model_to_the_upst
         let store = ConfigStore::new(directory.path().join("state"));
         let mut input = draft(CodexUpstream::Responses,&base);
         if !mapped { input.model_routes.clear(); }
-        let record = store.create_codex_provider(input).unwrap();
+        let record = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), input).unwrap();
         assert_eq!(record.profile.route_mode,expected_mode);
         let requests = ProviderRequests::default();
         let prepared = prepare(&requests,&store,ProviderRequestTarget::Saved { profile_id:record.profile.id }).unwrap();
@@ -89,7 +89,7 @@ fn codex_saved_request_sender_emits_the_exact_direct_or_mapped_model_to_the_upst
 fn a_changed_saved_codex_profile_rejects_the_prepared_request() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let record = store.create_codex_provider(draft(CodexUpstream::Responses, "https://provider.example/v1")).unwrap();
+    let record = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), draft(CodexUpstream::Responses, "https://provider.example/v1")).unwrap();
     let requests = ProviderRequests::default();
     let prepared = prepare(&requests, &store,
         ProviderRequestTarget::Saved { profile_id: record.profile.id.clone() }).unwrap();
@@ -104,7 +104,7 @@ fn a_changed_saved_codex_profile_rejects_the_prepared_request() {
 fn saved_official_codex_keeps_its_own_contract_and_cannot_send_a_custom_request() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let record = store.create_provider(asb_core::codex_official_draft(
+    let record = store.create_provider(uuid::Uuid::new_v4().to_string(), asb_core::codex_official_draft(
         asb_core::ownership::default_provider_parameters(AppKind::Codex))).unwrap();
     assert!(matches!(store.resolve_saved_provider(&record.profile.id).unwrap(), SavedProvider::Client(_)));
     let result = prepare(&ProviderRequests::default(), &store,
@@ -116,7 +116,7 @@ fn saved_official_codex_keeps_its_own_contract_and_cannot_send_a_custom_request(
 fn corrupt_codex_storage_is_not_reinterpreted_as_a_generic_missing_provider() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let record = store.create_codex_provider(draft(CodexUpstream::Responses, "https://provider.example/v1")).unwrap();
+    let record = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), draft(CodexUpstream::Responses, "https://provider.example/v1")).unwrap();
     let path = store.providers_dir(AppKind::Codex).join(format!("{}.json", record.profile.id));
     std::fs::write(&path, "{}").unwrap();
     assert!(matches!(store.resolve_saved_provider(&record.profile.id),
@@ -144,7 +144,7 @@ fn saved_xai_request_uses_the_bound_account_and_rejects_changed_account_identity
     let mut input = draft(CodexUpstream::Responses, "https://provider.example/v1");
     input.connection.provider_type = Some("xai_oauth".into());
     input.api_key = asb_core::contracts::XAI_OAUTH_PLACEHOLDER.into();
-    let record = store.create_codex_provider(input).unwrap();
+    let record = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), input).unwrap();
     xai_accounts(store.state_root(), &record.profile.id, "first-account", "first-isolated-token");
     let requests = ProviderRequests::default();
     let prepared = prepare(&requests, &store,

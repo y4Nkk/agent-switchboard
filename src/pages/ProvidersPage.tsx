@@ -17,6 +17,7 @@ import { ProviderList } from "../components/ProviderList";
 import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
 import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
 import type { ProviderEditorSession } from "../app/useProviders";
+import type { ProviderEditorNavigation } from "../app/provider-editor-session";
 
 interface ProvidersPageProps {
   view: ProviderView;
@@ -38,6 +39,7 @@ interface ProvidersPageProps {
   userConfigWarnings: LocalizedMessage[];
   /** The generic editor serves Claude only; Codex owns its specialized editor. */
   editorSession: Extract<ProviderEditorSession, { app: "claude" }> | null;
+  editorNavigation: ProviderEditorNavigation;
   busy: boolean;
   /** Persisted profile ids whose usage details are expanded. */
   expandedUsageIds: string[];
@@ -63,6 +65,7 @@ interface ProvidersPageProps {
   /** Discards the pending switch candidate without writing. */
   onCancelActivation: () => void;
   onEdit: (profile: ProviderProfile) => void;
+  onConvert: (profile: ProviderProfile) => void;
   onRoutes: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
   /** Refreshes the provider snapshot after a management-dialog change. */
@@ -75,7 +78,9 @@ function ProviderEditView(props: ProvidersPageProps) {
   const profile = editorSession.record?.profile ?? null;
   return (
     <ProviderEditor
-      key={profile?.id ?? `new-${editorSession.app}`}
+      key={editorSession.instanceId}
+      {...props.editorNavigation} profileId={editorSession.profileId} section={editorSession.section} routeRole={editorSession.role} returnTo={editorSession.returnTo}
+      conversion={editorSession.conversion} sessionId={editorSession.sessionId}
       active={props.active}
       profile={profile}
       initialApp={editorSession.app}
@@ -137,6 +142,7 @@ function ProviderListView({
         onConfirmSwitch={props.onConfirmSwitch}
         onCancelActivation={props.onCancelActivation}
         onEdit={props.onEdit}
+        onConvert={props.onConvert}
         onRoutes={props.onRoutes}
         onConfigureUsage={onConfigureUsage}
         onDelete={props.onDelete}

@@ -19,6 +19,7 @@ pub mod extensions;
 pub mod lock;
 pub mod ownership;
 pub mod provider_transfer;
+pub mod provider_conversion;
 pub mod redact;
 pub mod validate;
 
@@ -36,7 +37,7 @@ pub use contracts::{
     CodexSubagentSettings,
     CodexSubagentSettingsSnapshot, CodexUpstream, ConfigValue,
     ConfigWriteRecord, ExplicitMaxOutputTokens, GlobalPromptDocument, KeyChange,
-    ModelOptions, ProviderDisplay, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord,
+    ModelOptions, ProfileSaveTarget, ProviderDisplay, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord,
     RouteMode, RouteState, SettingValue, SettingsValues, SwitchPlan,
     SwitchPreview, UpstreamProtocol, WriteOperation, CODEX_PROVIDER_SCHEMA_VERSION,
 };

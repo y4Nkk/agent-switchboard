@@ -123,6 +123,9 @@ pub(crate) fn resolve(root: &Path, profile_id: &str) -> Result<Option<CodexCommo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use asb_core::extensions::contracts::{
+        DesiredState, ExtensionBinding, ExtensionTarget, EXTENSIONS_SCHEMA_VERSION,
+    };
 
     #[test]
     fn save_validates_rejects_stale_revisions_and_resolves_per_profile() {
@@ -142,7 +145,7 @@ mod tests {
         // 逐档案启用：默认启用；禁用后 enabled=false，文本仍随计划携带以便剥离
         let file = state
             .configuration()
-            .create_codex_provider(
+            .create_codex_provider(uuid::Uuid::new_v4().to_string(),
                 crate::codex_common::test_draft(),
             )
             .unwrap();
@@ -162,43 +165,43 @@ mod tests {
         assert!(resolve(root, &file.profile.id).unwrap().is_none());
     }
 
+    fn write_binding(
+        bindings_dir: &Path,
+        id: &str,
+        target: ExtensionTarget,
+        native_key: &str,
+        desired: DesiredState,
+    ) {
+        let binding = ExtensionBinding {
+            schema_version: EXTENSIONS_SCHEMA_VERSION,
+            id: id.to_string(),
+            resource_id: format!("ext-{id}"),
+            target,
+            native_key: Some(native_key.to_string()),
+            deploy_name: None,
+            desired,
+            locked_digest: None,
+            last_applied_revision: Some(1),
+            updated_at: "2026-09-16T00:00:00Z".to_string(),
+        };
+        std::fs::write(
+            bindings_dir.join(format!("{id}.json")),
+            serde_json::to_string(&binding).unwrap(),
+        )
+        .unwrap();
+    }
+
     #[test]
     fn fragment_save_rejects_mcp_keys_bound_to_codex_user_config() {
-        use asb_core::extensions::contracts::{
-            DesiredState, ExtensionBinding, ExtensionTarget, EXTENSIONS_SCHEMA_VERSION,
-        };
-
         let directory = tempfile::tempdir().unwrap();
         let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
         let root = state.root();
         let bindings_dir = root.join("extensions/bindings");
         std::fs::create_dir_all(&bindings_dir).unwrap();
-        // 直接落绑定文件：保存侧守卫只读扩展库的绑定记录。
-        let write_binding = |id: &str,
-                             target: ExtensionTarget,
-                             native_key: &str,
-                             desired: DesiredState| {
-            let binding = ExtensionBinding {
-                schema_version: EXTENSIONS_SCHEMA_VERSION,
-                id: id.to_string(),
-                resource_id: format!("ext-{id}"),
-                target,
-                native_key: Some(native_key.to_string()),
-                deploy_name: None,
-                desired,
-                locked_digest: None,
-                last_applied_revision: Some(1),
-                updated_at: "2026-09-16T00:00:00Z".to_string(),
-            };
-            std::fs::write(
-                bindings_dir.join(format!("{id}.json")),
-                serde_json::to_string(&binding).unwrap(),
-            )
-            .unwrap();
-        };
 
         let initial = view(root).unwrap();
         write_binding(
+            &bindings_dir,
             "bind-codex",
             ExtensionTarget::App {
                 client: asb_core::AppKind::Codex,
@@ -217,6 +220,7 @@ mod tests {
         // 经过这些条目。
         let after_first = view(root).unwrap();
         write_binding(
+            &bindings_dir,
             "bind-disabled",
             ExtensionTarget::App {
                 client: asb_core::AppKind::Codex,
@@ -231,6 +235,7 @@ mod tests {
         // 文档——都与用户级 config.toml 无关，不构成冲突。
         let after_second = view(root).unwrap();
         write_binding(
+            &bindings_dir,
             "bind-claude",
             ExtensionTarget::App {
                 client: asb_core::AppKind::Claude,
@@ -239,6 +244,7 @@ mod tests {
             DesiredState::Enabled,
         );
         write_binding(
+            &bindings_dir,
             "bind-project",
             ExtensionTarget::ProjectShared {
                 client: asb_core::AppKind::Codex,

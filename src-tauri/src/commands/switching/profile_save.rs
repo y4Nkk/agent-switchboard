@@ -3,7 +3,7 @@ mod dependencies;
 use crate::commands::error::{operation_error, require_write_confirmation, validation_error, CommandError};
 use crate::config_store::PendingProfileSave;
 use asb_core::contracts::{
-    classify_profile_save, ProfileSaveKind, ProviderDraft, ProviderProfile, ProviderRecord,
+    classify_profile_save, ProfileSaveKind, ProfileSaveTarget, ProviderDraft, ProviderProfile, ProviderRecord,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -85,8 +85,7 @@ struct ProfileSavePreparationInner {
 
 pub(super) struct PreparedProfileSave {
     pub(super) created_at: Instant,
-    pub(super) profile_id: Option<String>,
-    pub(super) expected_file_hash: Option<String>,
+    pub(super) target: ProfileSaveTarget,
     pub(super) draft: ProviderDraft,
     pub(super) kind: ProfileSaveKind,
     pub(super) preview: Option<asb_switch::FilePreview>,
@@ -177,48 +176,46 @@ pub struct ProfileSavePreparation {
     pub preview: Option<asb_switch::FilePreview>,
 }
 
+fn classify_save_target(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+    target: &ProfileSaveTarget,
+    draft: &ProviderDraft,
+) -> Result<(Option<ProviderRecord>, ProfileSaveKind, Option<ProviderProfile>), CommandError> {
+    match target {
+        ProfileSaveTarget::Create { profile_id } => {
+            state.configuration().validate_new_provider_id(profile_id)
+                .map_err(|error| operation_error("profile-save-invalid", error))?;
+            draft.validate().map_err(|error| validation_error("profile-save-invalid", error))?;
+            let candidate = ProviderProfile::from_draft(profile_id.clone(), draft.clone());
+            crate::gateway::claude_targets::validate_references(&state.configuration(), &candidate)
+                .map_err(|error| CommandError::new("claude-route-unresolved", error))?;
+            Ok((None, ProfileSaveKind::Create, None))
+        }
+        ProfileSaveTarget::Update { profile_id, expected_file_hash } => {
+            let (record, kind, owner) = classify_existing_profile_save(
+                state, gateway, profile_id, draft, expected_file_hash,
+            )?;
+            Ok((Some(record), kind, owner))
+        }
+    }
+}
+
 pub(super) fn prepare_profile_save_data(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
-    profile_id: Option<&str>,
+    target: &ProfileSaveTarget,
     draft: &ProviderDraft,
-    expected_file_hash: Option<&str>,
 ) -> Result<(ProfileSaveKind, Option<asb_switch::FilePreview>, Option<ProviderProfile>, Option<String>), CommandError> {
-    match (profile_id, expected_file_hash) {
-        (None, None) => {
-            draft
-                .validate()
-                .map_err(|error| validation_error("profile-save-invalid", error))?;
-            Ok((ProfileSaveKind::Create, None, None, None))
-        }
-        (None, Some(_)) => Err(CommandError::keyed(
-            "profile-save-invalid",
-            "validate.save.createCannotCarryVersion",
-            "新建供应商不能携带已有档案版本",
-        )),
-        (Some(_), None) => Err(CommandError::keyed(
-            "profile-save-invalid",
-            "validate.save.editRequiresVersion",
-            "编辑供应商必须携带当前档案版本",
-        )),
-        (Some(profile_id), Some(expected_file_hash)) => {
-            let (record, kind, owner) = classify_existing_profile_save(
-                state,
-                gateway,
-                profile_id,
-                draft,
-                expected_file_hash,
-                )?;
-            let (preview, candidate_revision) = if let Some(owner) = &owner {
-                let candidate = ProviderProfile::from_draft(record.profile.id, draft.clone());
-                let (preview, revision) = dependencies::preview(state, gateway, owner, &candidate)?;
-                (Some(preview), Some(revision))
-            } else {
-                (None, None)
-            };
-            Ok((kind, preview, owner, candidate_revision))
-        }
-    }
+    let (_, kind, owner) = classify_save_target(state, gateway, target, draft)?;
+    let (preview, candidate_revision) = if let Some(owner) = &owner {
+        let candidate = ProviderProfile::from_draft(target.profile_id().to_string(), draft.clone());
+        let (preview, revision) = dependencies::preview(state, gateway, owner, &candidate)?;
+        (Some(preview), Some(revision))
+    } else {
+        (None, None)
+    };
+    Ok((kind, preview, owner, candidate_revision))
 }
 
 pub(super) fn invalidate_provider_cache(app: &AppHandle, profile_id: &str) {
@@ -352,35 +349,9 @@ pub(super) fn commit_prepared_profile_save(
 ) -> Result<ProviderRecord, CommandError> {
     let _targets = gateway.inner.profile_save_gate.write()
         .map_err(|_| CommandError::new("profile-save-unavailable", "供应商保存锁不可用"))?;
-    let (stored, actual_kind, owner) = match (
-        prepared.profile_id.as_deref(),
-        prepared.expected_file_hash.as_deref(),
-    ) {
-        (None, None) => {
-            prepared
-                .draft
-                .validate()
-                .map_err(|error| validation_error("profile-save-invalid", error))?;
-            (None, ProfileSaveKind::Create, None)
-        }
-        (Some(profile_id), Some(expected_file_hash)) => {
-            let (record, kind, owner) = classify_existing_profile_save(
-                state,
-                gateway,
-                profile_id,
-                &prepared.draft,
-                expected_file_hash,
-                    )?;
-            (Some(record), kind, owner)
-        }
-        _ => {
-            return Err(CommandError::keyed(
-                "profile-save-stale",
-                "errors.sw.savePreviewVersionInvalid",
-                "保存预览的档案版本无效，请重新保存",
-            ));
-        }
-    };
+    let (stored, actual_kind, owner) = classify_save_target(
+        state, gateway, &prepared.target, &prepared.draft,
+    )?;
     if actual_kind != prepared.kind || owner != prepared.projection_profile {
         return Err(CommandError::keyed(
             "profile-save-stale",
@@ -391,7 +362,7 @@ pub(super) fn commit_prepared_profile_save(
     match prepared.kind {
         ProfileSaveKind::Create => state
             .configuration()
-            .create_provider(prepared.draft.clone())
+            .create_provider(prepared.target.profile_id().to_string(), prepared.draft.clone())
             .map_err(|error| operation_error("profile-save-failed", error)),
         ProfileSaveKind::NoChange => Ok(stored.expect("existing preparation has a record")),
         ProfileSaveKind::SaveOnly => {

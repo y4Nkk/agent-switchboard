@@ -69,7 +69,7 @@ pub(super) fn confirmed_projection(
     prepared: &PreparedProfileSave,
 ) -> Result<crate::gateway::GatewayProjection, CommandError> {
     let candidate = ProviderProfile::from_draft(
-        prepared.profile_id.as_ref().expect("active preparation has a profile").clone(),
+        prepared.target.profile_id().to_string(),
         prepared.draft.clone(),
     );
     let projection = projection(state, gateway, owner, &candidate)?;

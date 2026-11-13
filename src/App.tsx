@@ -20,7 +20,7 @@ export default function App() {
 
 function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplicationPreparation> }) {
   const model = useSwitchboardModel(preparation.snapshot!, preparation.completedRevision);
-  const { page, setPage, error, busy, providers, operations, appSettingsState, updateCheck } = model;
+  const { page, setPage, error, busy, providers, operations, appSettingsState, update } = model;
   const settingsReady = appSettingsState.appSettings !== null || appSettingsState.loadError !== null;
   if (!settingsReady || !model.sidebar.ready) {
     return (
@@ -38,16 +38,7 @@ function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplic
       <AppShell page={page} onPageChange={setPage} error={error} busy={busy}
         sidebar={model.sidebar}
         preparation={preparation.snapshot!} settingsError={appSettingsState.loadFailure}
-        pin={appSettingsState.pin} update={{
-          checking: updateCheck.checking,
-          latestVersion: updateCheck.updateCheck?.latestVersion ?? null,
-          // Store installs are updated by the Store; their entry only leads to
-          // the settings section that says so, mirroring the settings page.
-          onCheck: updateCheck.updateChannel === "microsoftStore"
-            ? () => model.openSettings("about")
-            : updateCheck.runUpdateCheck,
-          onOpen: () => model.openSettings("about"),
-        }}>
+        pin={appSettingsState.pin} update={update} onOpenUpdate={() => model.openSettings("about")}>
         <AppErrorBoundary><AppWorkspace model={model} /></AppErrorBoundary>
       </AppShell>
       <OperationConfirmSheets operations={operations} providers={providers} busy={busy} />

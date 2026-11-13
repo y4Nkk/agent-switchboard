@@ -101,10 +101,6 @@ export const messages = {
 		"{detail}；供应商档案未能回滚：{error}；已保留恢复记录以继续完成已确认的保存",
 		"{detail}; the provider profile could not be rolled back: {error}. Recovery records were kept to finish the confirmed save.",
 	],
-	"errors.sw.savePreviewVersionInvalid": [
-		"保存预览的档案版本无效，请重新保存",
-		"The profile version in the save preview is invalid; please save again.",
-	],
 	"errors.sw.saveContextChanged": [
 		"供应商、客户端设置或当前客户端配置已变更，请重新保存并查看最新差异",
 		"The provider, client settings, or current client configuration has changed; please save again and review the latest diff.",
@@ -126,10 +122,6 @@ export const messages = {
 	"errors.sw.codexProfileFileModified": [
 		"Codex 供应商文件已被外部修改，请重新读取后再保存",
 		"The Codex provider file was modified externally; please re-read it before saving.",
-	],
-	"errors.sw.subagentRouteTargetMissing": [
-		"子代理路由引用的 Codex 供应商不存在：{profileId}（模型 {model}）",
-		"The Codex provider referenced by the subagent route does not exist: {profileId} (model {model})",
 	],
 	"errors.sw.codexProfileRolledBackClearFailed": [
 		"{detail}；Codex 供应商档案已回滚，但{error}",

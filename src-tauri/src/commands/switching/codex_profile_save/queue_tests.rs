@@ -5,10 +5,10 @@ use asb_core::AppKind;
 mod save_identity;
 
 fn providers(state: &LocalState, gateway: &GatewayController) -> (CodexProviderRecord, CodexProviderFile) {
-    let target = state.configuration().create_codex_provider(crate::codex_common::test_draft()).unwrap();
+    let target = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), crate::codex_common::test_draft()).unwrap();
     let mut draft = crate::codex_common::test_draft();
     draft.name = "Primary".into();
-    let primary = state.configuration().create_codex_provider(draft).unwrap();
+    let primary = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), draft).unwrap();
     let primary = state.configuration().find_codex_provider_file(&primary.profile.id).unwrap();
     let mut policy = crate::gateway::codex::policy::CodexGatewayPolicy::default();
     policy.takeover = true;
@@ -94,7 +94,7 @@ fn queue_reordering_invalidates_a_prepared_provider_save() {
     let state = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&state);
     let (target, _) = providers(&state, &gateway);
-    let other = state.configuration().create_codex_provider(crate::codex_common::test_draft()).unwrap();
+    let other = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), crate::codex_common::test_draft()).unwrap();
     let (mut policy, _) = crate::gateway::codex::policy::load(state.root()).unwrap();
     policy.provider_ids.push(other.profile.id);
     crate::gateway::codex::policy::save(state.root(), &policy).unwrap();

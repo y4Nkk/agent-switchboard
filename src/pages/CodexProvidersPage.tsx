@@ -8,7 +8,7 @@ import {
   type UsageQuery,
   type LocalizedMessage,
 } from "../api/client";
-import type { CodexEditorSource } from "../app/useProviders";
+import type { ProviderEditorSession, ProviderEditorNavigation } from "../app/provider-editor-session";
 import { useProviderSwitchFlow } from "../app/useProviderSwitchFlow";
 import { notifyWriteOutcome } from "../app/notifications";
 import type { ActiveProfileRef } from "../lib/current-provider-name";
@@ -42,9 +42,12 @@ interface Props {
   onDeleteOfficial: (record: ProviderRecord) => void;
   /** Codex-only editor session; the shared session state keeps drafts alive
    * across pages exactly like the Claude editor. */
-  editorSession: { source: CodexEditorSource | null } | null;
+  editorSession: Extract<ProviderEditorSession, { app: "codex" }> | null;
+  editorNavigation: ProviderEditorNavigation;
   onNew: () => void;
   onEdit: (record: CodexProviderRecord) => void;
+  onConvert: (record: CodexProviderRecord) => void;
+  onConvertOfficial: (profile: ProviderProfile) => void;
   onRoutes: (profileId: string) => void;
   /** Opens the official-login editor arm; null record creates the entry. */
   onEditOfficial: (record: ProviderRecord | null) => void;
@@ -157,6 +160,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
             return (
               <CodexOfficialRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)} quotaOpen={state.quotaOpen}
                 onEdit={() => { state.clearCandidates(); props.onEditOfficial(row.record); }}
+                onConvert={() => props.onConvertOfficial(row.record.profile)} busy={props.busy}
                 onRoutes={() => props.onRoutes(row.record.profile.id)}
                 onDelete={() => props.onDeleteOfficial(row.record)}
                 onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
@@ -173,6 +177,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
               onToggleUsage={() => props.onToggleUsage(row.record.profile.id)}
               onConfigureUsage={() => state.setUsageRecord(row.record)}
               onEdit={() => { state.clearCandidates(); props.onEdit(row.record); }}
+              onConvert={() => props.onConvert(row.record)} busy={props.busy}
               onRoutes={() => props.onRoutes(row.record.profile.id)}
               onDelete={() => props.onDelete(row.record)}>
               {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
@@ -189,7 +194,8 @@ export function CodexProvidersPage(props: Props) {
   const state = useCodexProvidersState(props);
   if (props.editorSession) return (
     <div className="asb-editor-route" hidden={!props.active}>
-      <CodexProviderEditor active={props.active} source={props.editorSession.source} busy={props.busy}
+      <CodexProviderEditor key={props.editorSession.instanceId} active={props.active} source={props.editorSession.source} busy={props.busy}
+        {...props.editorNavigation} profileId={props.editorSession.profileId} section={props.editorSession.section} routeRole={props.editorSession.role} returnTo={props.editorSession.returnTo}
         userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings}
         onSave={props.onSave} onSaveOfficial={props.onSaveOfficial}
         onSwitchAccessMode={props.onSwitchAccessMode} onCancel={props.onCloseEditor}

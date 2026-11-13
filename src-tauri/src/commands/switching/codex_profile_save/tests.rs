@@ -67,7 +67,7 @@ fn active_catalog_change_requires_a_projection_preview() {
     let gateway = crate::gateway::GatewayController::start(&state);
     let record = state
         .configuration()
-        .create_codex_provider(draft())
+        .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft())
         .unwrap();
     let target = state.target(asb_core::AppKind::Codex).unwrap();
     std::fs::write(&target, "model_provider = 'openai'\n").unwrap();
@@ -117,28 +117,31 @@ fn a_subagent_route_reference_must_resolve_at_save_time() {
     let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
     let record = state
         .configuration()
-        .create_codex_provider(draft())
+        .create_codex_provider(uuid::Uuid::new_v4().to_string(), draft())
         .unwrap();
 
     let resolved = asb_core::contracts::CodexSubagentRoute {
         profile_id: record.profile.id.clone(),
         model: "codex".to_string(),
     };
-    assert!(super::validate_subagent_route_reference(&state, &resolved).is_ok());
+    let candidate = |route| {
+        let mut input = draft();
+        input.subagent_route = Some(route);
+        input.into_file(uuid::Uuid::new_v4().to_string(), 1)
+    };
+    assert!(state.configuration().validate_codex_provider_references(&candidate(resolved)).is_ok());
 
     let missing = asb_core::contracts::CodexSubagentRoute {
         profile_id: "01234567-89ab-cdef-0123-456789abcdef".to_string(),
         model: "codex".to_string(),
     };
-    let error = super::validate_subagent_route_reference(&state, &missing).unwrap_err();
-    assert_eq!(error.code, "codex-subagent-route-unresolved");
-    assert!(error.message.contains("不存在"), "{error:?}");
+    let error = state.configuration().validate_codex_provider_references(&candidate(missing)).unwrap_err();
+    assert!(error.to_string().contains("不存在"), "{error:?}");
 
     let unknown_model = asb_core::contracts::CodexSubagentRoute {
         profile_id: record.profile.id.clone(),
         model: "no-such-model".to_string(),
     };
-    let error = super::validate_subagent_route_reference(&state, &unknown_model).unwrap_err();
-    assert_eq!(error.code, "codex-subagent-route-unresolved");
-    assert!(error.message.contains("目录"), "{error:?}");
+    let error = state.configuration().validate_codex_provider_references(&candidate(unknown_model)).unwrap_err();
+    assert!(error.to_string().contains("目录"), "{error:?}");
 }

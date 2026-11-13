@@ -8,10 +8,9 @@ import { useClientSettings } from "./useClientSettings";
 import { useCodexSubagentSettings } from "./useCodexSubagentSettings";
 import { useOperationFrame } from "./useOperationFrame";
 import { usePromptDocuments } from "./usePromptDocuments";
-import { useUpdateCheck } from "./useUpdateCheck";
+import { useApplicationUpdate } from "./useApplicationUpdate";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 import { useSidebarState } from "./useSidebarState";
-import { useModelRouteNavigation } from "./useModelRouteNavigation";
 import { useCodexProbe } from "./useCodexProbe";
 
 function useTrayEvents(reportError: (error: CommandError) => void) {
@@ -43,10 +42,10 @@ export function useSwitchboardModel(preparation: ApplicationPreparation, dataRev
     appSettingsState.loadError, reportError,
   );
   const { page, setPage } = navigation;
-  const modelRoutes = useModelRouteNavigation(navigation.setPage);
   const configuration = useConfigurationModel({
     operationContext: { ...operationContext, busy: busy || !preparation.configurationReady },
-    appFilter, setAppFilter, page, setPage, preparation, dataRevision,
+    appFilter, setAppFilter, page, setPage, setProviderView: navigation.setProviderView,
+    workspaceVersion: navigation.pageVersion, preparation, dataRevision,
   });
   const { providerSwitch, refresh } = configuration;
   const { invalidateCandidates } = providerSwitch;
@@ -64,13 +63,13 @@ export function useSwitchboardModel(preparation: ApplicationPreparation, dataRev
     ...operationContext, active: page === "clientConfiguration",
   });
   const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });
-  const updateCheck = useUpdateCheck({ onError: reportError });
+  const update = useApplicationUpdate({ onError: reportError });
   const openBackupFolder = useCallback(
     () => openBackupDir().catch((caught) => reportError(caught as CommandError)), [reportError],
   );
 
-  return { ...navigation, sidebar, appFilter, ...frame, busy, preparation, dataRevision, ...configuration, modelRoutes,
-    clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, openBackupFolder, probe };
+  return { ...navigation, sidebar, appFilter, ...frame, busy, preparation, dataRevision, ...configuration,
+    clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, update, openBackupFolder, probe };
 }
 
 export type SwitchboardModel = ReturnType<typeof useSwitchboardModel>;

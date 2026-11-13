@@ -2,6 +2,7 @@ import { commandErrorText, errorText } from "../i18n/errors";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { DiffView } from "../components/DiffView";
 import { PreviewInspector } from "../components/PreviewInspector";
+import { ProviderSaveReview } from "../components/ProviderSaveReview";
 import { Time } from "../components/Time";
 import { useI18n } from "../i18n";
 import { clientName } from "../lib/client-name";
@@ -21,6 +22,7 @@ function ProviderSaveConfirmation({ providers, busy }: Pick<OperationConfirmShee
   return <ConfirmSheet title={t("operations.save.title")} busy={busy} confirmLabel={t("operations.save.title")}
     onConfirm={() => void providers.runPendingSave()} onCancel={() => void providers.cancelPendingSave()}>
     {providers.pendingSaveError != null && <p role="alert" className="asb-fail-text">{errorText(providers.pendingSaveError, t)}</p>}
+    <ProviderSaveReview review={pending.review} />
     <p>{t("operations.save.writesTarget", { target: pending.preview.preview.target })}</p>
     <PreviewInspector filePreview={pending.preview} userConfigModel={null} userConfigWarnings={[]} />
   </ConfirmSheet>;

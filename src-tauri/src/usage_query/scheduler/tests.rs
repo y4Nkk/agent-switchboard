@@ -2,7 +2,7 @@ use super::*;
 use asb_core::contracts::{ProviderDraft, UpstreamProtocol, UsageQuery};
 
 fn claude(state: &LocalState, base_url: &str) -> ProviderProfile {
-    state.configuration().create_provider(ProviderDraft {
+    state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), ProviderDraft {
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "isolated-claude".into(),
@@ -114,7 +114,7 @@ fn script_execution_failure_preserves_valid_profiles_and_successful_readings_for
     state.configuration().overwrite_provider_file(app, file).unwrap();
     let mut draft = crate::codex_common::test_draft();
     draft.usage_query = Some(script);
-    let codex = state.configuration().create_codex_provider(draft).unwrap();
+    let codex = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), draft).unwrap();
     let configuration = state.configuration().data_revision().unwrap();
     let summary = super::super::response::normalize_readings(vec![
         serde_json::from_value(serde_json::json!({"remaining":7})).unwrap(),

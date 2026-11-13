@@ -13,13 +13,13 @@ pub(super) fn activate(state: &LocalState, gateway: &GatewayController, file: Co
 }
 
 fn providers(state: &LocalState) -> (CodexProviderRecord, CodexProviderFile) {
-    let target = state.configuration().create_codex_provider(crate::codex_common::test_draft()).unwrap();
+    let target = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), crate::codex_common::test_draft()).unwrap();
     let mut source = crate::codex_common::test_draft();
     source.name = "Primary".into();
     source.subagent_route = Some(CodexSubagentRoute {
         profile_id: target.profile.id.clone(), model: "relay-model".into(),
     });
-    let source = state.configuration().create_codex_provider(source).unwrap();
+    let source = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), source).unwrap();
     let source = state.configuration().find_codex_provider_file(&source.profile.id).unwrap();
     (target, source)
 }

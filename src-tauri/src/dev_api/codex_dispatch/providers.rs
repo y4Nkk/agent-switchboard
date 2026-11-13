@@ -18,6 +18,7 @@ pub(super) async fn dispatch(
         "list_codex_profiles" => command!(commands::list_codex_profiles(app.clone())),
         "create_codex_profile" => command!(commands::create_codex_profile(
             app.clone(),
+            argument(&request.args, "profileId")?,
             argument(&request.args, "draft")?,
         )),
         "delete_codex_profile" => command!(commands::delete_codex_profile(

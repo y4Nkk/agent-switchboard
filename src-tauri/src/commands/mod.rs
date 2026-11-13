@@ -58,6 +58,7 @@ pub(crate) mod prompt_management;
 pub(crate) mod provider_endpoints;
 pub(crate) mod provider_request;
 pub(crate) mod provider_diagnostics;
+pub(crate) mod provider_conversion;
 pub(crate) mod runtime_log;
 pub(crate) mod status;
 pub(crate) mod subagent_settings;

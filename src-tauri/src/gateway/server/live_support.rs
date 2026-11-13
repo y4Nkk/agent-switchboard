@@ -160,7 +160,7 @@ pub(super) fn prepare_live_sandbox(route: &LiveRoute, api_key: &str) -> LiveSand
     let state = LocalState::from_root(root.join("state"));
     let record = state
         .configuration()
-        .create_codex_provider(live_draft(route, api_key))
+        .create_codex_provider(uuid::Uuid::new_v4().to_string(), live_draft(route, api_key))
         .expect("create temporary specialized Codex provider");
     let file = state
         .configuration()

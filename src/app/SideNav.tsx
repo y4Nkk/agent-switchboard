@@ -5,6 +5,7 @@ import { PAGES, pageLabelKey, type Page } from "./navigation";
 import { Button } from "../components/Button";
 import { Tooltip } from "../components/Tooltip";
 import { UpdateButton } from "../components/UpdateButton";
+import type { ApplicationUpdateControl } from "./update-state";
 import { SideNavIndicator } from "./SideNavIndicator";
 import {
   ClientConfigurationIcon,
@@ -39,14 +40,15 @@ interface SideNavProps {
   collapsed: boolean | null;
   pending: boolean;
   onToggle: () => void;
-  /** Sidebar update entry above the settings item; App owns the check state. */
-  update: { checking: boolean; latestVersion: string | null; onCheck: () => void; onOpen: () => void };
+  /** App owns the update task; navigation only forwards its snapshot. */
+  update: ApplicationUpdateControl;
+  onOpenUpdate: () => void;
 }
 
 /** Navigation stays mounted across width changes; its group scrolls independently.
  * Each list owns one indicator instance, so the pill only ever moves within
  * the list that holds the current page. */
-export function SideNav({ page, onPageChange, collapsed, pending, onToggle, update }: SideNavProps) {
+export function SideNav({ page, onPageChange, collapsed, pending, onToggle, update, onOpenUpdate }: SideNavProps) {
   const { t } = useI18n();
   // A descendant's layout effect can run before the list ref attaches.
   // Publishing the node re-runs indicator setup once the container exists.
@@ -68,7 +70,7 @@ export function SideNav({ page, onPageChange, collapsed, pending, onToggle, upda
         <ul className="asb-sidenav-group" ref={setGroup}>
           {WORKSPACE_PAGES.map((item) => (
             <li key={item}>
-              <SideNavItem page={item} active={page === item}
+              <SideNavItem page={item} active={page === item} collapsed={collapsed === true}
                 onSelect={() => onPageChange(item)} />
             </li>
           ))}
@@ -76,11 +78,10 @@ export function SideNav({ page, onPageChange, collapsed, pending, onToggle, upda
         </ul>
         <ul className="asb-sidenav-footer" ref={setFooter}>
           <li>
-            <UpdateButton checking={update.checking} latestVersion={update.latestVersion}
-              onCheck={update.onCheck} onOpen={update.onOpen} />
+            <UpdateButton update={update} collapsed={collapsed === true} onOpen={onOpenUpdate} />
           </li>
           <li>
-            <SideNavItem page="settings" active={page === "settings"}
+            <SideNavItem page="settings" active={page === "settings"} collapsed={collapsed === true}
               onSelect={() => onPageChange("settings")} />
           </li>
           <SideNavIndicator list={footer} current={page === "settings" ? page : null} />
@@ -90,16 +91,17 @@ export function SideNav({ page, onPageChange, collapsed, pending, onToggle, upda
   );
 }
 
-function SideNavItem({ page, active, onSelect }: {
+function SideNavItem({ page, active, collapsed, onSelect }: {
   page: Page;
   active: boolean;
+  collapsed: boolean;
   onSelect: () => void;
 }) {
   const { t } = useI18n();
   const label = t(pageLabelKey(page));
   const Icon = PAGE_ICONS[page];
   return (
-    <Tooltip label={label} side="right">
+    <Tooltip label={label} side="right" enabled={collapsed}>
       <Button
         variant="unstyled"
         className="asb-sidenav-item"

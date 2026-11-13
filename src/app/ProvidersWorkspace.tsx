@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useI18n } from "../i18n";
 import { CodexProvidersPage } from "../pages/CodexProvidersPage";
 import { ProviderImportPage } from "../pages/ProviderImportPage";
+import { ProviderConversionBlocked } from "../components/provider-editor/ProviderConversionSummary";
 import { ProvidersPage } from "../pages/ProvidersPage";
 import { useClientRouteTransition } from "./useClientRouteTransition";
 import type { SwitchboardModel } from "./useSwitchboardModel";
@@ -11,20 +12,13 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
   const importing = model.providerView.kind === "import";
   const { snapshot, appFilter, activeProfileId, providers, providerSwitch, appSettingsState, busy, operations } = model;
   const { discoveryState, ccImport, sqlImport } = model;
-  const route = useClientRouteTransition({
-    app: appFilter,
-    active: active && model.providerView.kind === "list" && !providers.editorSession,
-    onSelectApp: providers.selectApp,
-  });
-  const editorApp = providers.editorSession?.app ?? appFilter;
-  const userConfigRoute = snapshot.statuses?.find((status) => status.app === editorApp)?.route ?? null;
-  const codexEditorSession = providers.editorSession?.app === "codex" ? providers.editorSession : null;
-  const claudeEditorSession = providers.editorSession?.app === "claude" ? providers.editorSession : null;
-  useEffect(() => {
-    if (!active || importing || appFilter !== "claude" || claudeEditorSession) providerSwitch.clearCandidates();
-  }, [active, importing, appFilter, claudeEditorSession, providerSwitch.clearCandidates]);
+  const { route, userConfigRoute, codexEditorSession, claudeEditorSession } = useProvidersWorkspaceRoute(model, active);
+  const editorNavigation = { request: providers.editorRequest, onRequestHandled: providers.handleEditorRequest,
+    onReplaceSession: providers.replaceEditorSession, onReload: providers.reloadEditor, inventory: { codex: snapshot.codexRecords,
+      profiles: [...snapshot.records, ...snapshot.codexOfficialRecords], activeIds: { codex: activeProfileId("codex"), claude: activeProfileId("claude") } } };
   return (
     <div ref={route.workspaceRef} className="asb-client-route-workspace">
+      {providers.blockedConversion && <ProviderConversionBlocked conversion={providers.blockedConversion} onClose={providers.dismissConversion} />}
       {providers.pendingReleaseError != null && <p className="asb-field-help" role="status">{t("operations.save.retryRelease")}</p>}
       {importing && <div className="asb-editor-route" hidden={!active}>
         <ProviderImportPage appFilter={appFilter} discovery={discoveryState.discovery} busy={busy}
@@ -43,11 +37,13 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onSelectApp={route.selectApp} records={snapshot.codexRecords}
         officialRecord={snapshot.codexOfficialRecords[0] ?? null}
         activeProfileId={activeProfileId("codex")}
-        busy={busy} onBusy={model.setBusy} onError={model.reportError} onRefresh={async () => { await snapshot.refresh(); }}
+        busy={busy || !!providers.pendingSave} onBusy={model.setBusy} onError={model.reportError} onRefresh={async () => { await snapshot.refresh(); }}
         onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
         onDelete={(record) => providers.setDeletePending({ kind: "codexThirdParty", record })}
         onDeleteOfficial={(record) => providers.setDeletePending({ kind: "generic", profile: record.profile })}
-        editorSession={codexEditorSession} onNew={providers.newEditor} onEdit={providers.openCodexEditor} onRoutes={(id) => { if (!busy) model.modelRoutes.open("codex", id); }}
+        onConvert={providers.convertCodexProfile} onConvertOfficial={providers.convertProfile}
+        editorNavigation={editorNavigation} editorSession={codexEditorSession} onNew={providers.newEditor} onEdit={providers.openCodexEditor}
+        onRoutes={(id) => providers.openRoutes("codex", id)}
         onEditOfficial={providers.openCodexOfficialEditor} onCloseEditor={providers.closeEditor}
         onSave={providers.saveCodexProfile} onSaveOfficial={providers.saveGenericProfile}
         onSwitchAccessMode={providers.switchCodexAccessMode} onSwitchClient={providers.newEditorFor}
@@ -62,8 +58,8 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       profiles={snapshot.profiles} relayProfiles={snapshot.relayProfiles}
       activeProfileId={activeProfileId("claude")} statuses={snapshot.statuses} locks={snapshot.locks}
       userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []}
-      editorSession={claudeEditorSession} onNew={providers.newEditor}
-      busy={busy} expandedUsageIds={appSettingsState.appSettings?.expandedUsageIds ?? []}
+      editorNavigation={editorNavigation} editorSession={claudeEditorSession} onNew={providers.newEditor}
+      busy={busy || !!providers.pendingSave} expandedUsageIds={appSettingsState.appSettings?.expandedUsageIds ?? []}
       activationCandidate={providerSwitch.activationCandidate}
       onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
       onCloseEditor={providers.closeEditor} onSave={providers.saveGenericProfile}
@@ -82,9 +78,28 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       onConfirmSwitch={() => void operations.runSwitch()}
       onCancelActivation={providerSwitch.clearCandidates}
       onEdit={providers.openEditor}
-      onRoutes={(profile) => { if (!busy) model.modelRoutes.open("claude", profile.id); }}
+      onConvert={providers.convertProfile}
+      onRoutes={(profile) => providers.openRoutes("claude", profile.id)}
       onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })}
       onRefresh={async () => { await snapshot.refresh(); }} />
     </div>
   );
+}
+
+function useProvidersWorkspaceRoute(model: SwitchboardModel, active: boolean) {
+  const { appFilter, providers, snapshot, providerSwitch } = model;
+  const importing = model.providerView.kind === "import";
+  const route = useClientRouteTransition({
+    app: appFilter,
+    active: active && model.providerView.kind === "list" && !providers.editorSession,
+    onSelectApp: providers.selectApp,
+  });
+  const editorApp = providers.editorSession?.app ?? appFilter;
+  const userConfigRoute = snapshot.statuses?.find((status) => status.app === editorApp)?.route ?? null;
+  const codexEditorSession = providers.editorSession?.app === "codex" ? providers.editorSession : null;
+  const claudeEditorSession = providers.editorSession?.app === "claude" ? providers.editorSession : null;
+  useEffect(() => {
+    if (!active || importing || appFilter !== "claude" || claudeEditorSession) providerSwitch.clearCandidates();
+  }, [active, importing, appFilter, claudeEditorSession, providerSwitch.clearCandidates]);
+  return { route, userConfigRoute, codexEditorSession, claudeEditorSession };
 }

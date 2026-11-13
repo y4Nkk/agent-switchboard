@@ -1,58 +1,48 @@
 import { useId } from "react";
-import { downloadPercent, type UpdateDownloadView } from "../app/update-download-state";
-import { useI18n, type MessageKey } from "../i18n";
-import { errorText } from "../i18n/errors";
+import { formatUpdateBytes, updateDownloadView, UPDATE_DOWNLOAD_LABELS, type UpdateDownloadSnapshot } from "../app/update-download-state";
+import { useI18n } from "../i18n";
+import { CommandErrorLines } from "../app/notifications";
 import { Button } from "./Button";
 
-const PHASE_LABEL = {
-  downloading: "backup.update.downloading", verifying: "backup.update.verifying",
-  cancelling: "backup.update.cancelling", installing: "backup.update.installing",
-  installed: "backup.update.restartRequired", cancelled: "backup.update.cancelled", failed: "backup.update.failed",
-} as const satisfies Record<string, MessageKey>;
-
-function formatBytes(bytes: number, language: string): string {
-  const units = ["B", "KB", "MB", "GB"];
-  const unit = bytes > 0 ? Math.min(3, Math.floor(Math.log10(bytes) / 3)) : 0;
-  return `${new Intl.NumberFormat(language, { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(bytes / 1000 ** unit)} ${units[unit]}`;
-}
-
-export function UpdateDownloadPanel({ download, busy, onCancel, onRetry }: {
-  download: UpdateDownloadView; busy: boolean; onCancel: () => void; onRetry: () => void;
-}) {
+export function UpdateDownloadPanel({ download, onCancel }: { download: UpdateDownloadSnapshot; onCancel: () => void }) {
   const { t, language } = useI18n();
   const id = useId();
-  const { task, starting, cancelling, readError } = download;
-  if (!starting && (!task || task.phase === "installed")) return null;
-  const phase = cancelling && (!task || task.phase === "downloading" || task.phase === "verifying")
-    ? "cancelling" : task?.phase ?? "downloading";
-  const working = starting || !["cancelled", "failed"].includes(phase);
-  const canCancel = starting || phase === "downloading" || phase === "verifying" || phase === "cancelling";
-  const percent = task && phase === "downloading" ? downloadPercent(task) : null;
-  const label = t(PHASE_LABEL[phase]);
-  const bytes = formatBytes(task?.downloadedBytes ?? 0, language);
-  const size = task?.totalBytes ? `${bytes} / ${formatBytes(task.totalBytes, language)}`
-    : t("backup.update.downloadedUnknown", { size: bytes });
+  const { task, starting } = download;
+  const view = updateDownloadView(download);
+  const { phase, active, stale, percent } = view;
+  if (!phase || phase === "installed") return null;
+  const label = t(UPDATE_DOWNLOAD_LABELS[phase]);
+  const bytes = formatUpdateBytes(task?.downloadedBytes ?? 0, language);
+  const reading = !task ? label : task.totalBytes && task.totalBytes > 0
+    ? `${bytes} / ${formatUpdateBytes(task.totalBytes, language)}` : t("backup.update.downloadedUnknown", { size: bytes });
+  const size = stale ? t("update.lastReading", { size: reading }) : reading;
+  const heading = stale && task ? t("update.lastPhase", { phase: t(UPDATE_DOWNLOAD_LABELS[task.phase]) }) : label;
+  const progress = percent === null ? null : stale ? t("update.lastProgress", { percent }) : `${percent}%`;
   return <div className="asb-update-download" data-phase={phase}>
     <div className="asb-update-download-heading">
-      <span id={id} className="asb-checkbox-label" role="status">{label}</span>
-      {percent !== null && <span className="asb-update-download-percent asb-num" aria-hidden="true">{percent}%</span>}
+      <span id={id} className="asb-checkbox-label" role="status">{heading}</span>
+      {progress && <span className="asb-update-download-percent asb-num" aria-hidden="true">{progress}</span>}
     </div>
-    {working && <div className="asb-update-download-meter" role="progressbar" aria-labelledby={id}
-      aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}
-      aria-valuetext={`${label} · ${size}`} data-indeterminate={percent === null}>
+    {active && <div className="asb-update-download-meter" role="progressbar" aria-labelledby={id}
+      aria-valuemin={0} aria-valuemax={100} aria-valuenow={stale ? undefined : percent ?? undefined}
+      aria-valuetext={`${heading} · ${size}`} data-indeterminate={percent === null} data-stale={stale}>
       <span style={percent === null ? undefined : { width: `${percent}%` }} />
     </div>}
     <div className="asb-update-download-footer">
-      <span className="asb-app-setting-detail asb-num">{working ? size : t("backup.update.retryHint")}</span>
-      {(canCancel || !working) && <Button variant={working ? "secondary" : "primary"} size="compact"
-        autoFocus={starting} disabled={phase === "cancelling" || (!working && busy)}
-        aria-busy={phase === "cancelling"} onClick={working ? onCancel : onRetry}>
-        {t(!working ? "backup.update.retryDownload"
-          : phase === "cancelling" ? "backup.update.cancelling" : "backup.update.cancelDownload")}
+      <span className="asb-app-setting-detail asb-num">{active ? size : t("backup.update.retryHint")}</span>
+      {view.canCancel && <Button variant="secondary" size="compact" autoFocus={starting}
+        disabled={phase === "cancelling"} aria-busy={phase === "cancelling"} onClick={onCancel}>
+        {t(phase === "cancelling" ? "backup.update.cancelling"
+          : view.cancelError != null ? "backup.update.retryCancel" : "backup.update.cancelDownload")}
       </Button>}
     </div>
     {phase === "installing" && <p className="asb-app-setting-detail">{t("backup.update.installHint")}</p>}
-    {task?.error && <p className="asb-fail-text" role="alert">{errorText(task.error, t)}</p>}
-    {readError && <p className="asb-warn-text" role="alert">{t("backup.update.statusRetry")} {readError}</p>}
+    {view.error != null && <div className="asb-fail-text" role="alert"><CommandErrorLines error={view.error} /></div>}
+    {view.cancelError != null && <div className="asb-warn-text" role="alert">
+      <div>{t("update.cancelFailed")}</div><CommandErrorLines error={view.cancelError} />
+    </div>}
+    {view.readError != null && <div className="asb-warn-text" role="alert">
+      <div>{t("backup.update.statusRetry")}</div><CommandErrorLines error={view.readError} />
+    </div>}
   </div>;
 }

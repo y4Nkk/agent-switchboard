@@ -37,6 +37,10 @@ fn map_model<'a>(
         .map_err(super::TransformError)? {
         return Ok(model);
     }
+    if settings.and_then(|value| value.available_models.as_ref())
+        .is_some_and(|models| models.iter().any(|model| strip_one_m_suffix(model) == original)) {
+        return Ok(original);
+    }
     let local_model = |role| settings.and_then(|value| value.route(role))
         .filter(|route| route.profile_id().is_none()).map(|route| route.model());
     if let Some(subagent) = local_model(ClaudeModelRole::Subagent) {
@@ -123,6 +127,57 @@ mod tests {
     fn keeps_configured_subagent_model_and_uses_primary_for_unknown_models() {
         assert_eq!(model(json!({"model":"vendor-agent[1m]"})), "vendor-agent");
         assert_eq!(model(json!({"model":"unknown-model"})), "default");
+    }
+
+    #[test]
+    fn declared_models_keep_their_exact_identity_before_tier_name_matching() {
+        let mut settings = settings();
+        settings.available_models = Some(vec!["vendor-sonnet-v2".into(), "other-model".into()]);
+        for requested in ["vendor-sonnet-v2", "other-model"] {
+            assert_eq!(map_model(requested, Some("default"), Some(&settings)).unwrap(), requested);
+        }
+        assert_eq!(map_model("OTHER-MODEL", Some("default"), Some(&settings)).unwrap(), "default");
+        assert_eq!(map_model("claude-sonnet-4", Some("default"), Some(&settings)).unwrap(), "vendor-sonnet");
+    }
+
+    #[test]
+    fn reserved_roles_still_win_when_also_declared_as_an_available_model() {
+        let mut settings = settings();
+        settings.available_models = Some(vec!["asb-claude-sonnet".into(), "asb-claude-unknown".into()]);
+        assert_eq!(map_model("asb-claude-sonnet", Some("default"), Some(&settings)).unwrap(), "vendor-sonnet");
+        assert!(map_model("asb-claude-unknown", Some("default"), Some(&settings)).is_err());
+    }
+
+    #[test]
+    fn same_named_foreign_target_does_not_redefine_an_explicit_local_model() {
+        use asb_core::contracts::ClaudeModelRoute;
+        let mut settings = settings();
+        settings.routes.sonnet = Some(ClaudeModelRoute::Provider {
+            profile_id: "11111111-1111-4111-8111-111111111111".into(),
+            model: "shared-name".into(), one_m: false,
+        });
+        settings.available_models = Some(vec!["shared-name".into()]);
+        assert_eq!(map_model("shared-name", Some("default"), Some(&settings)).unwrap(), "shared-name");
+        assert_eq!(map_model("other-sonnet", Some("default"), Some(&settings)).unwrap(), "default");
+        assert_eq!(map_model("asb-claude-sonnet", Some("default"), Some(&settings)).unwrap(), "shared-name");
+    }
+
+    #[test]
+    fn multiple_declared_models_reach_each_protocol_payload_without_primary_replacement() {
+        use asb_core::contracts::UpstreamProtocol;
+        let mut settings = settings();
+        settings.available_models = Some(vec!["vendor-sonnet-v2".into(), "other-model".into()]);
+        for model in ["vendor-sonnet-v2", "other-model"] {
+            let body = json!({"model":format!("{model}[1M]"),"max_tokens":10,
+                "messages":[{"role":"user","content":"fixture"}]});
+            let mapped = apply_claude_model_mapping(&serde_json::to_vec(&body).unwrap(), Some("default"), Some(&settings)).unwrap();
+            for protocol in [UpstreamProtocol::ChatCompletions, UpstreamProtocol::Responses] {
+                let converted = super::super::convert_request(UpstreamProtocol::AnthropicMessages, protocol,
+                    &mapped, None, None, None).unwrap();
+                let outgoing: Value = serde_json::from_slice(&converted.body).unwrap();
+                assert_eq!(outgoing["model"], model);
+            }
+        }
     }
 
     #[test]

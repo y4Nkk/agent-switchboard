@@ -1,0 +1,15 @@
+export const messages = {
+  "providerEditor.backToGateway": ["返回模型路由与网关", "Back to Model routing & gateway"],
+  "providerEditor.sections": ["供应商编辑分区", "Provider editor sections"],
+  "providerEditor.section.connection": ["连接设置", "Connection"],
+  "providerEditor.section.models": ["模型与路由", "Models & routing"],
+  "providerEditor.section.parameters": ["运行参数", "Runtime parameters"],
+  "providerEditor.selfTarget": ["本供应商 · {name}", "This provider · {name}"],
+  "providerEditor.routingTitle": ["配置模型去向", "Configure model destinations"],
+  "providerEditor.routingHelp": ["连接、模型和各用途共用当前草稿，最后一起保存。指定本供应商时可以直接使用正在编辑的模型目录。", "Connection, models and purposes share this draft and save together. This provider uses the model catalog you are editing."],
+  "providerEditor.resetPurposes": ["恢复用途自动路由", "Restore automatic purpose routing"],
+  "providerEditor.catalog": ["模型目录与名称映射", "Model catalog & name mapping"],
+  "providerEditor.fetchModels": ["从当前连接获取模型", "Fetch models from this connection"],
+  "providerEditor.invalidDraft": ["请检查当前草稿中的必填内容和模型设置。", "Check required fields and model settings in this draft."],
+  "providerEditor.stale": ["已保存的档案已修改或删除。草稿仍保留，请重新读取档案后再保存。", "The saved profile changed or was deleted. Your draft is retained; reload the profile before saving."],
+} as const;

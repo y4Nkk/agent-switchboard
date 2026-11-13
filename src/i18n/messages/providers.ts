@@ -260,7 +260,7 @@ export const messages = {
 
   // Editor: runtime parameters page.
   "providers.parameters.aria": ["供应商运行参数", "Provider runtime parameters"],
-  "providers.parameters.help": ["运行参数随此供应商保存，返回编辑后统一保存；新建供应商从默认值开始。", "Runtime parameters are saved with this provider and committed when you return to the editor; a new provider starts from the defaults."],
+  "providers.parameters.help": ["运行参数与连接、模型路由共用当前草稿并一起保存；新建供应商从默认值开始。", "Runtime parameters share this draft with connection and routing, and save together. New providers start from defaults."],
   "providers.parameters.reset": ["恢复运行参数默认值", "Restore default runtime parameters"],
   "providers.parameters.loading": ["正在读取运行参数", "Loading runtime parameters"],
   "providers.parameters.retry": ["重新读取运行参数", "Reload runtime parameters"],

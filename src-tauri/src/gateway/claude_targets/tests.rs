@@ -34,8 +34,8 @@ fn explicit_roles_use_target_credentials_and_models_for_json_and_streaming_witho
         routes: ClaudeModelRoutes { sonnet: Some(ClaudeModelRoute::Primary { model:"wrong-recursive-model".into(), one_m:false }), ..Default::default() },
         ..Default::default()
     }));
-    let target = state.configuration().create_provider(target).unwrap();
-    let source = state.configuration().create_provider(routed_draft("source", &format!("http://{}", primary_server.server_addr()), &target.profile.id)).unwrap();
+    let target = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), target).unwrap();
+    let source = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), routed_draft("source", &format!("http://{}", primary_server.server_addr()), &target.profile.id)).unwrap();
     let gateway = GatewayController::start(&state);
     let projection = gateway.project_with_candidates(&state, &SwitchPlan::direct(source.profile.clone(),
         asb_core::ownership::default_client_settings(AppKind::Claude)), None).unwrap();
@@ -76,8 +76,8 @@ fn explicit_roles_use_target_credentials_and_models_for_json_and_streaming_witho
 fn references_prevent_target_deletion_and_removal_of_the_declared_model() {
     let directory = tempfile::tempdir().unwrap();
     let store = crate::config_store::ConfigStore::new(directory.path().join("state"));
-    let target = store.create_provider(draft("target", "https://target.invalid")).unwrap();
-    store.create_provider(routed_draft("source", "https://source.invalid", &target.profile.id)).unwrap();
+    let target = store.create_provider(uuid::Uuid::new_v4().to_string(), draft("target", "https://target.invalid")).unwrap();
+    store.create_provider(uuid::Uuid::new_v4().to_string(), routed_draft("source", "https://source.invalid", &target.profile.id)).unwrap();
     assert!(store.delete_provider(&target.profile.id, &target.file_hash).unwrap_err().to_string().contains("引用"));
     let mut changed = draft("target", "https://target.invalid"); changed.model = Some("removed".into());
     assert!(store.update_provider(&target.profile.id, changed, &target.file_hash).unwrap_err().to_string().contains("已保存模型"));
@@ -91,8 +91,8 @@ fn explicit_target_failure_never_falls_back_to_primary_even_with_failover_enable
     let state = LocalState::from_root(directory.path().join("state"));
     let target_server = Server::http(("127.0.0.1", 0)).unwrap();
     let primary_server = Server::http(("127.0.0.1", 0)).unwrap();
-    let target = state.configuration().create_provider(draft("target", &format!("http://{}", target_server.server_addr()))).unwrap();
-    let source = state.configuration().create_provider(routed_draft("source", &format!("http://{}", primary_server.server_addr()), &target.profile.id)).unwrap();
+    let target = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), draft("target", &format!("http://{}", target_server.server_addr()))).unwrap();
+    let source = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), routed_draft("source", &format!("http://{}", primary_server.server_addr()), &target.profile.id)).unwrap();
     let mut policy = failover::ClaudeFailoverPolicy::default();
     policy.enabled = true; policy.max_retries = 1; policy.provider_ids = vec![target.profile.id.clone()];
     failover::save(state.root(), &policy).unwrap();
@@ -122,8 +122,8 @@ fn target_parameter_and_preference_edits_invalidate_prepared_dependency_revision
     let _paths = crate::test_client_paths::redirect_client_paths();
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
-    let target = state.configuration().create_provider(draft("target", "https://target.invalid")).unwrap();
-    let source = state.configuration().create_provider(routed_draft("source", "https://source.invalid", &target.profile.id)).unwrap();
+    let target = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), draft("target", "https://target.invalid")).unwrap();
+    let source = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), routed_draft("source", "https://source.invalid", &target.profile.id)).unwrap();
     let gateway = GatewayController::start(&state);
     let before = gateway.claude_dependency_revision(&state, &source.profile, None).unwrap();
     let mut changed = draft("target", "https://target.invalid");
@@ -144,11 +144,11 @@ fn request_target_snapshots_wait_for_the_complete_save_transaction_for_both_clie
     let gateway = GatewayController::start(&state);
     for app in [AppKind::Claude, AppKind::Codex] {
         let (target_id, hash, candidates) = if app == AppKind::Claude {
-            let target = state.configuration().create_provider(draft("target", "https://target.invalid")).unwrap();
-            let source = state.configuration().create_provider(routed_draft("source", "https://source.invalid", &target.profile.id)).unwrap();
+            let target = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), draft("target", "https://target.invalid")).unwrap();
+            let source = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), routed_draft("source", "https://source.invalid", &target.profile.id)).unwrap();
             (target.profile.id, target.file_hash, vec![gateway.route_for_profile(&source.profile).unwrap()])
         } else {
-            let target = state.configuration().create_codex_provider(crate::codex_common::test_draft()).unwrap();
+            let target = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), crate::codex_common::test_draft()).unwrap();
             (target.profile.id, target.file_hash, Vec::new())
         };
         let gate = gateway.inner.profile_save_gate.write().unwrap();
@@ -194,10 +194,10 @@ fn target_model_preferences_override_target_global_defaults_without_changing_sou
     let mut target_draft = draft("target", "https://target.invalid");
     target_draft.claude_fragment.insert("effortLevel".into(), json!("low"));
     target_draft.parameters.settings.insert("maxEffortLevel".into(), SettingValue::Explicit { value:ConfigValue::Str("medium".into()) });
-    let target = state.configuration().create_provider(target_draft.clone()).unwrap();
+    let target = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), target_draft.clone()).unwrap();
     let mut source_draft = routed_draft("source", "https://source.invalid", &target.profile.id);
     source_draft.claude_fragment.insert("effortLevel".into(), json!("xhigh"));
-    let source = state.configuration().create_provider(source_draft).unwrap();
+    let source = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), source_draft).unwrap();
     let gateway = GatewayController::start(&state);
     let plan = SwitchPlan::direct(source.profile.clone(), asb_core::ownership::default_client_settings(AppKind::Claude));
     let first = gateway.project_with_candidates(&state, &plan, None).unwrap();

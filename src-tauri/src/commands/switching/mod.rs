@@ -21,7 +21,6 @@ pub(super) mod transaction;
 
 pub(crate) use codex_policy::CodexPolicyPreparations;
 pub(crate) use codex_profile_save::CodexProfileSavePreparations;
-pub(crate) use codex_profile_save::validate_subagent_route_reference;
 pub(crate) use internal::switch_provider_internal;
 pub use profile_save::{ProfileSavePreparation, ProfileSaveSource};
 pub(crate) use profile_save::ProfileSavePreparations;
@@ -33,7 +32,7 @@ use crate::commands::error::{
 use crate::commands::ConfigWriteGate;
 use crate::runtime_log::RuntimeLogAction;
 use asb_core::contracts::{
-    AppKind, BackupRecord, ProfileSaveKind, ProviderDraft, ProviderRecord,
+    AppKind, BackupRecord, ProfileSaveKind, ProfileSaveTarget, ProviderDraft, ProviderRecord,
     WriteOperation,
 };
 use asb_switch::{RestoreOutcome, SwitchOutcome};
@@ -71,9 +70,8 @@ pub async fn cancel_profile_save(
 #[tauri::command]
 pub async fn prepare_profile_save(
     app: AppHandle,
-    profile_id: Option<String>,
+    target: ProfileSaveTarget,
     draft: ProviderDraft,
-    expected_file_hash: Option<String>,
 ) -> Result<ProfileSavePreparation, CommandError> {
     let state = state(&app)?;
     let gateway = app
@@ -95,14 +93,12 @@ pub async fn prepare_profile_save(
         let (kind, preview, projection_profile, candidate_revision) = prepare_profile_save_data(
             &state,
             &gateway,
-            profile_id.as_deref(),
+            &target,
             &draft,
-            expected_file_hash.as_deref(),
         )?;
         let preparation_id = preparations.issue(PreparedProfileSave {
             created_at: Instant::now(),
-            profile_id,
-            expected_file_hash,
+            target,
             draft,
             kind,
             preview: preview.clone(),

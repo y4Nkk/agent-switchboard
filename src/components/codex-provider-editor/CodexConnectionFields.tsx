@@ -123,6 +123,8 @@ export function CodexConnectionFields({ editor, busy }: Props) {
     upstreamProtocol: draft.upstream,
     responsesOptions: draft.upstream === "responses" ? { requestMode: draft.requestMode } : null,
     connection: draft.connection,
+    subagentRoute: draft.subagentRoute,
+    modelRoutes: draft.modelRoutes,
     authentication: draft.authentication,
   });
   return (

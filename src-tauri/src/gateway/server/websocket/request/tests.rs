@@ -7,7 +7,7 @@ fn target_controls_native_fields_and_continuation_revision() {
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&state);
-    let target = state.configuration().create_codex_provider(crate::codex_common::test_draft()).unwrap();
+    let target = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), crate::codex_common::test_draft()).unwrap();
     let source = crate::codex_common::test_draft().into_file(uuid::Uuid::new_v4().to_string(), 1);
     let mut primary = gateway.route_for_codex_file(&source, None).unwrap();
     primary.upstream_protocol = UpstreamProtocol::ChatCompletions;
@@ -40,7 +40,7 @@ fn parent_minimal_mode_does_not_strip_target_reasoning() {
     let gateway = GatewayController::start(&state);
     let mut target = crate::codex_common::test_draft();
     target.upstream = asb_core::contracts::CodexUpstream::ChatCompletions;
-    let target = state.configuration().create_codex_provider(target).unwrap();
+    let target = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), target).unwrap();
     let mut source = crate::codex_common::test_draft();
     source.request_mode = ResponsesRequestMode::Minimal;
     let source = source.into_file(uuid::Uuid::new_v4().to_string(), 1);

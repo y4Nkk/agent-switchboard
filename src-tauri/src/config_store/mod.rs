@@ -20,6 +20,7 @@
 
 pub mod client_settings;
 mod codex_providers;
+mod provider_creation;
 pub mod history;
 pub mod providers;
 mod repair;

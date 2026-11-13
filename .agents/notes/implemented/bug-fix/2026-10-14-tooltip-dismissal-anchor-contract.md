@@ -16,6 +16,7 @@ Status: implemented
 - `tooltip-feedback.css` 把原生 `:disabled` 和共享复合控件的 `[data-disabled="true"]` 直接子节点移出命中测试，anchor 替它接收全部指针事件；选择器不耦合 `.asb-btn`。Checkbox / Switch 保留原生 input 的禁用语义，通过现有外层标识接入同一命中契约；[扩展共享控件](../architecture/2026-10-24-extension-shared-controls.md)使用这一路径。
 - 组件内监听 `window blur` 立即 `setOpen(false)`，补上失焦关闭。
 - 调用点不得再手工包裹 anchor span；`UpdateButton` 与 `PinTopButton` 的旧包裹已删除。`dismissedAfterAction` 的抑制语义不变（激活后到指针离开 anchor 前不重开）。
+- `Tooltip.enabled` 默认为 true；禁用时立即隐藏提示、清空打开状态并拒绝后续打开请求，Trigger、anchor 和内部按钮保持挂载。`SideNav` 将现有 collapsed 状态传给导航项、设置项与 `UpdateButton`，仅在明确收起时启用提示；展开或读取状态未知时不显示提示，按钮始终保留可访问名称。
 - 侧栏是唯一的拉伸布局消费者：`shell.css` 把导航条目的轨道内边距宽度转移到 `.asb-sidenav-* > li > .asb-tooltip-anchor` 上，`.asb-sidenav-item` 改为填满 anchor。
 - `UsageTrendChart` 在数据更换时清零 `activeIndex`，悬停读数不跨刷新存续。
 
@@ -26,10 +27,13 @@ Status: implemented
 - 全局 `button:disabled { pointer-events: none }`：最强的理由是一行 CSS 覆盖全应用、不插入任何 DOM；但事件会穿透到父层而不是 trigger 本身，trigger 是按钮时 `pointerleave` 照样丢失，卡住机制原样保留，还会改变依赖 disabled 控件拦截命中的其他交互。不采用。
 - 用 `aria-disabled` 加点击守卫替代 `disabled` 以保留指针事件：最强的理由是从根上消灭「disabled 吞事件」，不需要 anchor；但它改写全应用禁用控件的交互与可访问语义（保持可聚焦、可点击、由调用方各自守卫），触及每一个禁用控件，远超本缺陷的边界。不采用。
 - 逐个调用点补 anchor span（延续现状）：零组件改动，但契约靠记忆执行，本次审查已清点出十四处遗漏，新增 Tooltip 用法还会继续裸包。不采用。
+- 展开时直接移除 Tooltip 包裹：无需新增组件参数，但改变按钮的父级组件树，会重新挂载按钮并丢失焦点；侧栏改用 enabled 控制显示，保持锚点和按钮身份稳定。
 
 ## Verification
 
 组件检查确认：所有 `<Tooltip>` 调用点的直接子节点由组件统一包裹进 anchor，`UpdateButton`/`PinTopButton` 无残留 span；disabled 翻转后 anchor 仍接收指针事件，移开即关；窗口失焦即时关闭。侧栏条目宽度改由 anchor 承担，展开与收起几何不变。最终差异与笔记结构校验随改动执行；遵循项目限制，不运行编译、类型检查或自动化测试。真实桌面的悬浮、禁用翻转与 alt-tab 场景未运行验收。
+
+侧栏提示的源码核对覆盖全部七个导航项和更新入口：enabled 仅来自 collapsed === true；共享组件在禁用时关闭并清空打开状态，不能由悬停或聚焦重新打开。未运行浏览器或原生窗口的展开／收起悬停验收。
 
 ## Consequences
 

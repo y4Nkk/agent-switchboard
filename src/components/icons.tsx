@@ -33,6 +33,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  TriangleAlert,
   Upload,
   Wifi,
   X,
@@ -73,6 +74,7 @@ export const GripIcon = icon(GripVertical, 18);
 export const PlayIcon = icon(Play, 16);
 export const UpdateIcon = icon(Download, 16);
 export const UpdateSpinnerIcon = icon(LoaderCircle, 16);
+export const UpdateFailureIcon = icon(TriangleAlert, 16);
 export const ExportIcon = icon(Upload, 16);
 export const UsageIcon = icon(ChartColumnIncreasing, 16);
 export const ConnectivityIcon = icon(Wifi, 16);

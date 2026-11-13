@@ -19,8 +19,8 @@ fn draft(name: &str) -> ProviderDraft {
 }
 
 fn providers(state: &LocalState, gateway: &GatewayController) -> (ProviderRecord, ProviderRecord) {
-    let target = state.configuration().create_provider(draft("Standby")).unwrap();
-    let primary = state.configuration().create_provider(draft("Primary")).unwrap();
+    let target = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), draft("Standby")).unwrap();
+    let primary = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), draft("Primary")).unwrap();
     let mut policy = crate::gateway::failover::ClaudeFailoverPolicy::default();
     policy.enabled = true;
     policy.max_retries = 1;
@@ -39,12 +39,14 @@ fn prepare(state: &LocalState, gateway: &GatewayController, record: &ProviderRec
     draft.api_key = "replacement-fixture-key".into();
     draft.base_url = Some("https://replacement.example".into());
     draft.model = Some("replacement-model".into());
+    let target = ProfileSaveTarget::Update {
+        profile_id: record.profile.id.clone(), expected_file_hash: record.file_hash.clone(),
+    };
     let (kind, preview, projection_profile, candidate_revision) = prepare_profile_save_data(
-        state, gateway, Some(&record.profile.id), &draft, Some(&record.file_hash),
+        state, gateway, &target, &draft,
     ).unwrap();
     PreparedProfileSave {
-        created_at: Instant::now(), profile_id: Some(record.profile.id.clone()),
-        expected_file_hash: Some(record.file_hash.clone()), draft, kind, preview,
+        created_at: Instant::now(), target, draft, kind, preview,
         projection_profile, candidate_revision,
     }
 }
@@ -115,7 +117,7 @@ fn claude_queue_changes_invalidate_a_prepared_dependent_save() {
     let state = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&state);
     let (target, _) = providers(&state, &gateway);
-    let other = state.configuration().create_provider(draft("Other")).unwrap();
+    let other = state.configuration().create_provider(uuid::Uuid::new_v4().to_string(), draft("Other")).unwrap();
     let mut policy = crate::gateway::failover::load(state.root()).unwrap();
     policy.provider_ids.push(other.profile.id);
     crate::gateway::failover::save(state.root(), &policy).unwrap();

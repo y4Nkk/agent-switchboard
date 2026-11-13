@@ -66,17 +66,45 @@ fn draft() -> CodexProviderDraft {
 fn codex_store_writes_and_reads_only_the_specialized_file() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let created = store.create_codex_provider(draft()).unwrap();
+    let created = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), draft()).unwrap();
     let listed = store.list_codex_providers().unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].profile, created.profile);
 }
 
 #[test]
+fn new_codex_provider_can_reference_its_own_complete_candidate() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(directory.path().join("state"));
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut input = draft();
+    input.subagent_route = Some(asb_core::contracts::CodexSubagentRoute {
+        profile_id: id.clone(), model: "codex".into(),
+    });
+    let created = store.create_codex_provider(id.clone(), input).unwrap();
+    assert_eq!(created.profile.id, id);
+    assert_eq!(created.profile.subagent_route.unwrap().profile_id, id);
+    assert_eq!(store.list_codex_providers().unwrap().len(), 1);
+}
+
+#[test]
+fn creation_rejects_invalid_or_occupied_identity_without_overwriting() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(directory.path().join("state"));
+    assert!(store.create_codex_provider("../not-an-id".into(), draft()).is_err());
+    let id = uuid::Uuid::new_v4().to_string();
+    let created = store.create_codex_provider(id.clone(), draft()).unwrap();
+    let mut replacement = draft();
+    replacement.api_key = "replacement-fixture-key".into();
+    assert!(store.create_codex_provider(id.clone(), replacement).is_err());
+    assert_eq!(store.find_codex_provider_with_revision(&id).unwrap().1, created.file_hash);
+}
+
+#[test]
 fn codex_route_exists_marks_a_stored_route_without_blocking_completion() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let created = store.create_codex_provider(draft()).unwrap();
+    let created = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), draft()).unwrap();
     assert!(store.codex_route_exists(&created.profile.endpoint, created.profile.upstream));
     assert!(!store.codex_route_exists(
         &CodexEndpoint("https://other.example/v1".to_string()),
@@ -108,7 +136,7 @@ fn codex_store_rejects_the_old_generic_file_shape() {
 fn codex_store_updates_only_the_expected_revision_and_preserves_position() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let created = store.create_codex_provider(draft()).unwrap();
+    let created = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), draft()).unwrap();
     let mut changed = draft();
     changed.name = "Updated relay".to_string();
     let saved = store
@@ -135,7 +163,7 @@ fn codex_endpoint_usage_updates_only_a_configured_fallback() {
             last_used: None,
         },
     );
-    let created = store.create_codex_provider(configured).unwrap();
+    let created = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), configured).unwrap();
 
     assert!(store
         .mark_codex_endpoint_used(&created.profile.id, "https://backup.example/v1/")
@@ -154,7 +182,7 @@ fn codex_store_level_failures_stay_typed() {
     std::fs::create_dir_all(store.legacy_store_path().parent().unwrap()).unwrap();
     std::fs::write(store.legacy_store_path(), b"{}").unwrap();
     assert_eq!(
-        store.create_codex_provider(draft()),
+        store.create_codex_provider(uuid::Uuid::new_v4().to_string(), draft()),
         Err(StoreOperationError::Store(ProfileStoreError::invalid(
             &store.legacy_store_path(), "检测到旧配置布局，无法按当前格式读取",
         )))
@@ -165,7 +193,7 @@ fn codex_store_level_failures_stay_typed() {
 fn codex_store_deletes_only_the_expected_revision() {
     let directory = tempfile::tempdir().unwrap();
     let store = ConfigStore::new(directory.path().join("state"));
-    let created = store.create_codex_provider(draft()).unwrap();
+    let created = store.create_codex_provider(uuid::Uuid::new_v4().to_string(), draft()).unwrap();
     assert!(store
         .delete_codex_provider(&created.profile.id, "stale")
         .is_err());

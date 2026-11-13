@@ -50,7 +50,7 @@ pub use plan::{
     RouteState, SwitchPlan, SwitchPreview, WriteOperation,
 };
 pub use provider::{
-    classify_profile_save, codex_official_draft, ProfileSaveKind, ProviderDisplay, ProviderDraft,
+    classify_profile_save, codex_official_draft, ProfileSaveKind, ProfileSaveTarget, ProviderDisplay, ProviderDraft,
     ProviderFile, ProviderProfile, ProviderRecord,
 };
 pub use responses::{ResponsesOptions, ResponsesRequestMode};

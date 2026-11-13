@@ -3,7 +3,14 @@ import { getStartupPage, onExitRecovery, rememberWorkspacePage, type CommandErro
 import type { DiagnosticSection, ExtensionSection, Page, ProviderView, SettingsSection, UsageSection } from "./navigation";
 
 export function useWorkspaceNavigation(settingsReady: boolean, settingsError: string | null, onError: (error: CommandError) => void) {
-  const [page, changePage] = useState<Page>("providers");
+  const [page, setPageState] = useState<Page>("providers");
+  const currentPage = useRef<Page>("providers");
+  const pageRevision = useRef(0);
+  const changePage = useCallback((next: Page) => {
+    if (currentPage.current !== next) { currentPage.current = next; pageRevision.current += 1; }
+    setPageState(next);
+  }, []);
+  const pageVersion = useCallback(() => pageRevision.current, []);
   const [navigationReady, setNavigationReady] = useState(false);
   const initialized = useRef(false);
   const userNavigated = useRef(false);
@@ -54,6 +61,19 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
     setUsageSection("quota");
     setPage("usage");
   }, [setPage]);
+  useRecoveryNavigation({ setUsageSection, setSettingsSection, setPage, setBackupRecoveryRequest, onError });
+  return { page, pageVersion, setPage, navigationReady, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
+    extensionSection, setExtensionSection, usageSection, setUsageSection, settingsReturnToProviders,
+    openSettings, returnToProviders, openQuota, backupRecoveryRequest };
+}
+
+function useRecoveryNavigation({ setUsageSection, setSettingsSection, setPage, setBackupRecoveryRequest, onError }: {
+  setUsageSection: (section: UsageSection) => void;
+  setSettingsSection: (section: SettingsSection) => void;
+  setPage: (page: Page) => void;
+  setBackupRecoveryRequest: (update: (value: number) => number) => void;
+  onError: (error: CommandError) => void;
+}) {
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
@@ -65,8 +85,5 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
     }).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten; })
       .catch((error: CommandError) => onError(error));
     return () => { disposed = true; stop?.(); };
-  }, [setPage, onError]);
-  return { page, setPage, navigationReady, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
-    extensionSection, setExtensionSection, usageSection, setUsageSection, settingsReturnToProviders,
-    openSettings, returnToProviders, openQuota, backupRecoveryRequest };
+  }, [setUsageSection, setSettingsSection, setPage, setBackupRecoveryRequest, onError]);
 }

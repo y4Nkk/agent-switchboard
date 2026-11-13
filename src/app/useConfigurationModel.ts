@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
 import type { AppKind, CommandError } from "../api/client";
 import type { ApplicationPreparation } from "../api/application-preparation";
-import type { Page } from "./navigation";
+import type { Page, ProviderView } from "./navigation";
 import { useConfigSnapshot } from "./useConfigSnapshot";
 import { useProviderSwitchFlow } from "./useProviderSwitchFlow";
 import { useDiscovery } from "./useDiscovery";
@@ -15,9 +15,11 @@ interface Context {
   clearError: () => void; setBusy: (busy: boolean) => void;
 }
 
-export function useConfigurationModel({ operationContext, appFilter, setAppFilter, page, setPage, preparation, dataRevision }: {
+export function useConfigurationModel({ operationContext, appFilter, setAppFilter, page, setPage, setProviderView, workspaceVersion, preparation, dataRevision }: {
   operationContext: Context; appFilter: AppKind; setAppFilter: Dispatch<SetStateAction<AppKind>>;
   page: Page; setPage: (page: Page) => void; preparation: ApplicationPreparation; dataRevision: number;
+  setProviderView: (view: ProviderView) => void;
+  workspaceVersion: () => number;
 }) {
   const { busy, onError: reportError, clearError } = operationContext;
   const snapshot = useConfigSnapshot({ onError: reportError, revision: dataRevision });
@@ -46,7 +48,11 @@ export function useConfigurationModel({ operationContext, appFilter, setAppFilte
   });
   const providers = useProviders({
     ...operationContext, active: page === "providers", appFilter, setAppFilter, records,
-    codexOfficialRecords: snapshot.codexOfficialRecords, targetProfileId,
+    codexOfficialRecords: snapshot.codexOfficialRecords, codexRecords: snapshot.codexRecords, targetProfileId,
+    activeIds: { codex: activeProfileId("codex"), claude: activeProfileId("claude") },
+    workspaceVersion,
+    openEditorWorkspace: useCallback(() => { setProviderView({ kind: "list" }); setPage("providers"); }, [setProviderView, setPage]),
+    returnToGateway: useCallback(() => setPage("gateway"), [setPage]),
     invalidateCandidates, clearCandidates: providerSwitch.clearCandidates, refresh, setTargetProfile,
     setTargetProfileId,
   });

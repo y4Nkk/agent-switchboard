@@ -19,7 +19,7 @@ fn compact_uses_target_capabilities_and_only_target_endpoints() {
     target.model_routes = vec![asb_core::contracts::CodexModelRoute {
         client_model: "relay-model".into(), upstream_model: "vendor-model".into(),
     }];
-    let target = state.configuration().create_codex_provider(target).unwrap();
+    let target = state.configuration().create_codex_provider(uuid::Uuid::new_v4().to_string(), target).unwrap();
     let wire = CodexSubagentRoute { profile_id: target.profile.id.clone(), model: "relay-model".into() };
     for operation in [CodexOperation::Compact, CodexOperation::Responses] {
         let input = if operation.is_compact() { json!([]) }

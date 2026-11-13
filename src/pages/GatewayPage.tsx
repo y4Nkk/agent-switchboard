@@ -37,7 +37,7 @@ interface Props {
 
 /** Runtime snapshots and transient focus share one page owner. */
 export function GatewayPage({ active, busy, profiles, routing }: Props & {
-  routing: (summary: ReactNode, refresh: () => Promise<void>, mutating: boolean) => ReactNode;
+  routing: (summary: ReactNode, mutating: boolean) => ReactNode;
 }) {
   const { t } = useI18n();
   const [focus, setFocus] = useState<ClientFilterValue>("all");
@@ -66,7 +66,7 @@ export function GatewayPage({ active, busy, profiles, routing }: Props & {
   </> : error ? <GatewayUnavailable error={error} onRetry={refresh} /> : <GatewayLoading />;
   return (
     <div className="asb-gateway-workspace">
-      {routing(summary, refresh, retrying)}
+      {routing(summary, retrying)}
       {status && <CollapsibleSection className="asb-panel asb-gateway-panel" open={detailsOpen}
         onOpenChange={setDetailsOpen} label={t("modelRoutes.runtime")}>
       <ClientFilter value={focus} onChange={setFocus} label={t("gateway.focusAriaLabel")} showLogos />

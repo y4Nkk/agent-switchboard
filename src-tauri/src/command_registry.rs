@@ -44,6 +44,7 @@ macro_rules! handler {
             crate::commands::provider_endpoints::add_provider_endpoint,
             crate::commands::provider_endpoints::remove_provider_endpoint,
             crate::commands::list_profiles,
+            crate::commands::provider_conversion::prepare_provider_conversion,
             crate::commands::provider_diagnostics::diagnose_provider,
             crate::commands::provider_diagnostics::prepare_provider_repair,
             crate::commands::provider_diagnostics::commit_provider_repair,

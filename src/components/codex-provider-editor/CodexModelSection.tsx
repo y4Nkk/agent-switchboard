@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CodexReasoningLevel, LocalizedMessage } from "../../api/client";
 import type { TFunction } from "../../i18n";
 import { useI18n } from "../../i18n";
@@ -25,6 +25,9 @@ interface Props {
   busy: boolean;
   userConfigModel: string | null;
   userConfigWarnings: LocalizedMessage[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  revealRevision: number;
 }
 
 type CatalogUpdate = (patch: Partial<EditableCodexCatalogEntry>) => void;
@@ -73,10 +76,11 @@ function parseLimitInput(raw: string): number | null {
   return raw.trim() && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function CatalogLimits({ entry, busy, defaults, update, toggleLevel }: {
+function CatalogLimits({ entry, busy, defaults, explicit, update, toggleLevel }: {
   entry: EditableCodexCatalogEntry;
   busy: boolean;
   defaults: ReturnType<typeof defaultModelLimits>;
+  explicit: boolean;
   update: CatalogUpdate;
   toggleLevel: (level: CodexReasoningLevel) => void;
 }) {
@@ -87,14 +91,14 @@ function CatalogLimits({ entry, busy, defaults, update, toggleLevel }: {
       <label className="asb-field">
         <span>{t("codex.model.contextWindow")}</span>
         <Input aria-label={t("codex.model.contextWindowAria", { model })} type="number" min="1" step="1"
-          placeholder={t("codex.model.defaultLimit", { value: defaults.contextWindow.toLocaleString("en-US") })}
+          required={explicit} placeholder={explicit ? t("providers.conversion.limitPlaceholder") : t("codex.model.defaultLimit", { value: defaults.contextWindow.toLocaleString("en-US") })}
           value={entry.contextWindow?.toString() ?? ""} disabled={busy}
           onChange={(event) => update({ contextWindow: parseLimitInput(event.target.value) })} />
       </label>
       <label className="asb-field">
         <span>{t("codex.model.maxOutput")}</span>
         <Input aria-label={t("codex.model.maxOutputAria", { model })} type="number" min="1" step="1"
-          placeholder={t("codex.model.defaultLimit", { value: defaults.maxOutputTokens.toLocaleString("en-US") })}
+          required={explicit} placeholder={explicit ? t("providers.conversion.limitPlaceholder") : t("codex.model.defaultLimit", { value: defaults.maxOutputTokens.toLocaleString("en-US") })}
           value={entry.maxOutputTokens?.toString() ?? ""} disabled={busy}
           onChange={(event) => update({ maxOutputTokens: parseLimitInput(event.target.value) })} />
       </label>
@@ -172,7 +176,7 @@ function CatalogRow({ editor, busy, entry, index }: {
           </Button>
         </Tooltip>
       </div>
-      <CatalogLimits entry={entry} busy={busy} defaults={defaults}
+      <CatalogLimits entry={entry} busy={busy} defaults={defaults} explicit={Boolean(editor.conversion)}
         update={update} toggleLevel={toggleLevel} />
       <CatalogCapabilities entry={entry} capabilities={capabilities} busy={busy}
         update={update} toggleReasoning={toggleReasoning} />
@@ -183,10 +187,9 @@ function CatalogRow({ editor, busy, entry, index }: {
   );
 }
 
-function ModelMapping({ editor, busy }: { editor: CodexEditorState; busy: boolean }) {
+function ModelMapping({ editor, busy, expanded, setExpanded }: { editor: CodexEditorState; busy: boolean; expanded: boolean; setExpanded: (open: boolean) => void }) {
   const { t } = useI18n();
   const { draft, setDraft } = editor;
-  const [expanded, setExpanded] = useState(() => draft.modelRoutes.length > 0);
   const update = (index: number, clientModel: string, upstreamModel: string) =>
     setDraft((current) => ({
       ...current,
@@ -234,28 +237,24 @@ function ModelMapping({ editor, busy }: { editor: CodexEditorState; busy: boolea
 }
 
 /** Structured catalog and mapping editor; no raw JSON anywhere. */
-export function CodexModelSection({ editor, busy, userConfigModel, userConfigWarnings }: Props) {
+export function CodexModelSection({ editor, busy, userConfigModel, userConfigWarnings, open, onOpenChange, revealRevision }: Props) {
   const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
+  const [mappingOpen, setMappingOpen] = useState(() => draft.modelRoutes.length > 0);
+  useEffect(() => { if (revealRevision > 0) setMappingOpen(true); }, [revealRevision]);
   const fetchIntoCatalog = async () => {
     const models = await connection.fetchModels();
     if (models) setDraft((current) => ({
       ...current,
-      catalog: mergeFetchedCatalog(current.catalog, models, current.capabilities),
+      catalog: mergeFetchedCatalog(current.catalog, models, current.capabilities).map((entry) =>
+        editor.conversion && !current.catalog.some((old) => old.id === entry.id)
+          ? { ...entry, contextWindow: null, maxOutputTokens: null, images: false } : entry),
     }));
   };
   return (
-    <section className="asb-editor-section" aria-label={t("codex.model.title")}>
-      <h3 className="asb-section-title">{t("codex.model.title")}</h3>
+    <CollapsibleSection className="asb-editor-section" open={open} onOpenChange={onOpenChange} label={t("providerEditor.catalog")}>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-model-toolbar">
-          <label className="asb-field">
-            <span>{t("codex.model.defaultModel")}</span>
-            <Select ariaLabel={t("codex.model.defaultModel")} value={draft.defaultModel || null} disabled={busy}
-              placeholder={draft.catalog.length === 0 ? t("codex.model.addFirst") : t("codex.model.chooseDefault")}
-              options={draft.catalog.map((entry) => ({ value: entry.id, label: entry.id }))}
-              onChange={(value) => setDraft((current) => ({ ...current, defaultModel: value }))} />
-          </label>
           <div className="asb-provider-model-actions" aria-label={t("codex.model.catalogActions")}>
             <Tooltip label={connection.modelsBusy ? t("codex.model.fetching") : connection.modelsEndpointError ?? t("codex.model.fetch")}>
               <Button variant="icon" aria-label={connection.modelsBusy ? t("codex.model.fetching") : connection.modelsEndpointError ?? t("codex.model.fetch")}
@@ -269,14 +268,14 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
               <Button variant="icon" aria-label={t("codex.model.add")} disabled={busy}
                 onClick={() => setDraft((current) => ({
                   ...current,
-                  catalog: [...current.catalog, emptyCatalogEntry(current.capabilities)],
+                  catalog: [...current.catalog, { ...emptyCatalogEntry(current.capabilities),
+                    ...(editor.conversion ? { images: false } : {}) }],
                 }))}>
                 <PlusIcon />
               </Button>
             </Tooltip>
           </div>
         </div>
-        <p className="asb-scope-note">{t("codex.model.defaultNote")}</p>
         {userConfigModel && <p className="asb-scope-note">{t("codex.model.userConfigModel", { model: userConfigModel })}</p>}
         {userConfigWarnings.map((warning) => (
           <p key={warning.key} className="asb-scope-note asb-warn-text">{localizedMessageText(warning, t)}</p>
@@ -289,8 +288,8 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
             <CatalogRow key={index} editor={editor} busy={busy} entry={entry} index={index} />
           ))}
         </div>
-        <ModelMapping editor={editor} busy={busy} />
+        <ModelMapping editor={editor} busy={busy} expanded={mappingOpen} setExpanded={setMappingOpen} />
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }

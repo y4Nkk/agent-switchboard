@@ -7,7 +7,7 @@ import { StorageSettings } from "../components/StorageSettings";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
-  const { appSettingsState: settings, updateCheck: update, snapshot, operations, busy } = model;
+  const { appSettingsState: settings, update, snapshot, operations, busy } = model;
   return (
     <SettingsPage section={model.settingsSection} onSectionChange={model.setSettingsSection}
       onReturnToProviders={model.settingsReturnToProviders ? model.returnToProviders : undefined}
@@ -30,11 +30,6 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         onLogLevelChange={(runtimeLogLevel) => settings.saveSettingsPatch({ runtimeLogLevel })} />}
       settings={settings.appSettings} loadError={settings.loadError} desktopError={settings.desktopError} onRetryLoad={settings.retryLoad}
       busy={busy} onPatch={settings.saveSettingsPatch}
-      onRestart={() => void settings.restart()} updateCheck={update.updateCheck} updateChannel={update.updateChannel}
-      appVersion={update.appVersion} updateChecking={update.checking} updateInstalling={update.installing}
-      updateDownload={update} updateCheckedAt={update.lastCheckedAt}
-      updateRestartRequired={update.restartRequired} onCheckUpdate={() => void update.runUpdateCheck()}
-      onInstallUpdate={update.installAvailableUpdate} onCancelUpdateDownload={update.cancelUpdateDownload}
-      onRestartInstalledUpdate={update.restartInstalledUpdate} />
+      onRestart={() => void settings.restart()} update={update} />
   );
 }

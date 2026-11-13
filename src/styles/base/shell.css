@@ -179,8 +179,7 @@
 
 .asb-shell.is-collapsed :is(.asb-sidenav-label, .asb-updatebtn-label) { opacity: 0; }
 
-.asb-sidenav-glyph,
-.asb-updatebtn > svg {
+.asb-sidenav-glyph {
   display: grid;
   flex: none;
   width: var(--asb-icon-size-xl);
@@ -315,43 +314,4 @@
    (cascade order keeps the blue ahead of .asb-winbtn:hover). */
 .asb-pinbtn.is-active {
   color: var(--asb-action);
-}
-
-/* Declared after :hover so the state colors survive it. */
-.asb-updatebtn.is-available {
-  color: var(--asb-safe);
-}
-
-.asb-updatebtn.is-checking {
-  color: var(--asb-action);
-  /* The global disabled dim would fade the spinner that explains the wait. */
-  opacity: 1;
-}
-
-.asb-updatebtn.is-checking > svg {
-  animation: asb-updatebtn-spin 1s linear infinite;
-}
-
-@keyframes asb-updatebtn-spin {
-  to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .asb-updatebtn.is-checking > svg { animation: none; }
-}
-
-:root[data-motion="reduce"] .asb-updatebtn.is-checking > svg { animation: none; }
-
-/* The badge pins to the icon's top-right corner, so it stays readable in the
-   collapsed rail where no room beside the icon remains. */
-.asb-updatebtn-dot {
-  position: absolute;
-  top: calc(50% - var(--asb-icon-size-xl) / 2);
-  left: calc((var(--asb-sidebar-collapsed-width) - var(--asb-space-3) - var(--asb-icon-size-xl)) / 2 + var(--asb-icon-size-xl));
-  width: calc(var(--asb-space-unit) + var(--asb-space-hairline));
-  height: calc(var(--asb-space-unit) + var(--asb-space-hairline));
-  border-radius: var(--asb-radius-pill);
-  background: var(--asb-safe);
-  box-shadow: 0 0 0 2px var(--asb-chrome-bg);
-  transform: translate(-50%, -50%);
 }

@@ -3,6 +3,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 interface Props {
   label: ReactNode;
+  enabled?: boolean;
   side?: "top" | "bottom" | "left" | "right";
   className?: string;
   children: ReactNode;
@@ -19,9 +20,13 @@ interface Props {
  * counts as neither, so it stays suppressed. Window deactivation dispatches
  * none of these events, so the blur listener closes the label too.
  */
-export function Tooltip({ label, side = "top", className, children }: Props) {
+export function Tooltip({ label, enabled = true, side = "top", className, children }: Props) {
   const [open, setOpen] = useState(false);
   const dismissedAfterAction = useRef(false);
+
+  useEffect(() => {
+    if (!enabled) setOpen(false);
+  }, [enabled]);
 
   useEffect(() => {
     const close = () => setOpen(false);
@@ -32,9 +37,9 @@ export function Tooltip({ label, side = "top", className, children }: Props) {
   return (
     <TooltipPrimitive.Provider delayDuration={150}>
       <TooltipPrimitive.Root
-        open={open}
+        open={enabled && open}
         onOpenChange={(nextOpen) => {
-          if (nextOpen && dismissedAfterAction.current) return;
+          if (nextOpen && (!enabled || dismissedAfterAction.current)) return;
           setOpen(nextOpen);
         }}
         disableHoverableContent

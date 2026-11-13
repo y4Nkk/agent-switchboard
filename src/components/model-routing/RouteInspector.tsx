@@ -31,7 +31,7 @@ function CodexInspector(props: RouteInspectorProps & { document: Extract<RouteDo
   const { t } = useI18n();
   const { document, role, codex, disabled, onChange } = props;
   const route = document.draft.subagentRoute;
-  const target = route?.profileId === document.record.profile.id ? document.draft
+  const target = route?.profileId === document.profileId ? document.draft
     : codex.find(({ profile }) => profile.id === route?.profileId)?.profile;
   const change = (patch: Partial<typeof document.draft>) => onChange({ ...document, draft: { ...document.draft, ...patch } });
   return <>
@@ -49,8 +49,12 @@ function CodexInspector(props: RouteInspectorProps & { document: Extract<RouteDo
       {route && <>
         <label className="asb-field"><span>{t("modelRoutes.targetProvider")}</span>
           <Select value={route.profileId || null} placeholder={t("modelRoutes.chooseProvider")}
-            options={codex.filter(({ profile }) => !profile.connection?.authBinding)
-              .map(({ profile }) => ({ value: profile.id, label: profile.name }))}
+            options={[
+              ...(!document.draft.connection?.authBinding ? [{ value: document.profileId,
+                label: t("providerEditor.selfTarget", { name: document.draft.name }) }] : []),
+              ...codex.filter(({ profile }) => profile.id !== document.profileId && !profile.connection?.authBinding)
+                .map(({ profile }) => ({ value: profile.id, label: profile.name })),
+            ]}
             ariaLabel={t("modelRoutes.targetProvider")} disabled={disabled}
             onChange={(profileId) => change({ subagentRoute: { profileId, model: "" } })} />
         </label>

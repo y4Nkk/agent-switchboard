@@ -4,31 +4,8 @@ pub(super) fn validate_references(
     state: &crate::local_state::LocalState,
     candidate: &CodexProviderFile,
 ) -> Result<(), CommandError> {
-    if let Some(route) = &candidate.profile.subagent_route {
-        if route.profile_id == candidate.profile.id {
-            validate_target(route, candidate)?;
-        } else {
-            validate_subagent_route_reference(state, route)?;
-        }
-    }
-    for record in state.configuration().list_codex_providers().map_err(store_error)? {
-        if record.profile.id == candidate.profile.id { continue; }
-        if let Some(route) = record.profile.subagent_route.as_ref()
-            .filter(|route| route.profile_id == candidate.profile.id)
-        {
-            validate_target(route, candidate)?;
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn validate_target(
-    route: &asb_core::contracts::CodexSubagentRoute,
-    file: &CodexProviderFile,
-) -> Result<(), CommandError> {
-    crate::gateway::validate_subagent_target(route, file)
-        .map(|_| ())
-        .map_err(|error| CommandError::new("codex-subagent-route-unresolved", error))
+    state.configuration().validate_codex_provider_references(candidate)
+        .map_err(|error| CommandError::new("codex-subagent-route-unresolved", error.to_string()))
 }
 
 pub(super) fn affected_active_profile(

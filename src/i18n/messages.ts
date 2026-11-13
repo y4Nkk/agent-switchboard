@@ -28,6 +28,7 @@ import { messages as mcp } from "./messages/mcp.ts";
 import { messages as operations } from "./messages/operations.ts";
 import { messages as ownership } from "./messages/ownership.ts";
 import { messages as protocols } from "./messages/protocols.ts";
+import { messages as providerConversion } from "./messages/provider-conversion.ts";
 import { messages as providers } from "./messages/providers.ts";
 import { messages as probeVisual } from "./messages/probe-visual.ts";
 import { messages as probeNotifications } from "./messages/probe-notifications.ts";
@@ -42,10 +43,14 @@ import { messages as usage } from "./messages/usage.ts";
 import { messages as requestPerformance } from "./messages/requestPerformance.ts";
 import { messages as resources } from "./messages/resources.ts";
 import { messages as modelRoutes } from "./messages/modelRoutes.ts";
+import { messages as gatewayOverview } from "./messages/gateway-overview.ts";
+import { messages as providerRoutingEditor } from "./messages/provider-routing-editor.ts";
 
 export const messages = Object.freeze({
   ...preparation,
   ...modelRoutes,
+  ...gatewayOverview,
+  ...providerRoutingEditor,
   ...backup,
   ...clientConfig,
   ...clientSoftware,
@@ -69,6 +74,7 @@ export const messages = Object.freeze({
   ...ownership,
   ...protocols,
   ...providers,
+  ...providerConversion,
   ...probeVisual,
   ...probeNotifications,
   ...providerDiagnostics,

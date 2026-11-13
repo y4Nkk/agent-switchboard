@@ -1,72 +1,87 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import type { AppKind, CodexCatalogEntry, CodexProviderRecord, ProviderRecord } from "../src/api/client";
 import { ModelRoutingWorkspace } from "../src/components/model-routing/ModelRoutingWorkspace";
+import type { RouteInventory, RouteRole } from "../src/components/model-routing/model";
 import { applyLanguagePreference } from "../src/i18n";
 import "../src/styles/tokens.css";
 import "../src/styles/base.css";
 
-const roles = { haiku: null, sonnet: null, opus: null, fable: null, subagent: null };
-const codex = (id: string) => ({ profile: { id, name: id, routeMode: "gateway", endpoint: `https://${id}.invalid`,
-  apiKey: "isolated-key", connection: {}, upstream: "responses", requestMode: "standard", defaultModel: "shared-model",
-  catalog: ["shared-model", "other-model"].map((id) => ({ id, supportedReasoningLevels: [] })),
-  modelRoutes: [], subagentRoute: null, capabilities: {} }, fileHash: id, parameters: { settings: {} } });
-const claude = (id: string) => ({ profile: { id, app: "claude", name: id, routeMode: "custom", baseUrl: `https://${id}.invalid`,
-  apiKey: "isolated-key", connection: {}, model: "shared-model", parameters: { settings: {} },
-  modelOptions: { kind: "claude", primaryOneM: false, routes: { ...roles, ...(id === "Claude A" ? { sonnet: { mode: "primary", model: "unique-only-tier", oneM: false } } : {}) }, availableModels: ["shared-model", "other-model"] } }, fileHash: id });
-const records = { codex: [codex("Codex A"), codex("Codex B")], profiles: [claude("Claude A"), claude("Claude B")] };
-const calls: { command: string; args: any }[] = [];
-let kind = "saveOnly";
-let serial = 0;
-let cancelFailures = 0;
-let delayNextPrepare = false;
-let resolvePreparation: (() => void) | null = null;
-const prepared = new Map<string, any>();
-const preview = { content: "isolated preview", contentHash: "before", renderedHash: "after", preview: {
-  target: "isolated/client-config", backupDir: "isolated/backup", changes: [
-    { key: "env.ANTHROPIC_BASE_URL", kind: "set", before: "https://A.invalid", after: "http://127.0.0.1:47821" },
-  ], warnings: [{ key: "warnings.gateway.freeform", params: { detail: "Isolated warning remains visible." }, text: "Isolated warning remains visible." }], preservedKeys: [] } };
-(window as any).__TAURI_INTERNALS__ = { invoke: async (command: string, args: any) => {
-  calls.push({ command, args });
-  if (command.startsWith("prepare_")) {
-    const id = `isolated-${++serial}`;
-    prepared.set(id, args);
-    if (delayNextPrepare) {
-      delayNextPrepare = false;
-      await new Promise<void>((resolve) => { resolvePreparation = resolve; });
-      resolvePreparation = null;
-    }
-    return { preparationId: id, kind, preview: kind === "saveAndApply" ? preview : null };
-  }
-  if (command === "cancel_profile_save") {
-    if (cancelFailures > 0) { cancelFailures--; throw { code: "isolated-cancel-failure", message: "Isolated cancellation failure" }; }
-    prepared.delete(args.preparationId); return;
-  }
-  if (command.startsWith("commit_")) {
-    const { profileId, draft } = prepared.get(args.preparationId);
-    prepared.delete(args.preparationId);
-    const rows = command === "commit_codex_profile_save" ? records.codex : records.profiles;
-    const index = rows.findIndex(({ profile }) => profile.id === profileId);
-    const saved = { ...rows[index], profile: { ...rows[index].profile, ...draft, id: profileId }, fileHash: `saved-${serial}` };
-    (rows as any)[index] = saved;
-    return saved;
-  }
-  throw new Error(`Unexpected mocked command: ${command}`);
-} };
-applyLanguagePreference("en-US");
-function Fixture() {
-  const [busy, setBusy] = useState(false);
-  const [inventory, setInventory] = useState({ ...records, activeIds: { codex: "Codex A", claude: "Claude A" } });
-  (window as any).routeTest = { calls,
-    failCancels: (count: number) => { cancelFailures = count; },
-    delayNext: () => { delayNextPrepare = true; },
-    resolveDelayed: () => resolvePreparation?.(),
-    setLanguage: applyLanguagePreference, setKind: (next: string) => { kind = next; },
-    switchActive: (client: string, id: string) => setInventory((value) => ({ ...value, activeIds: { ...value.activeIds, [client]: id } })),
-    removeClaudeTarget: () => setInventory((value) => ({ ...value, profiles: value.profiles.filter(({ profile }) => profile.id !== "Claude B") })),
-    snapshot: () => ({ ...inventory, pendingCount: prepared.size, waitingPreparation: !!resolvePreparation }),
-  };
-  return <main style={{ padding: 24 }}><ModelRoutingWorkspace inventory={inventory as any} active initialApp={new URLSearchParams(location.search).get("client") === "claude" ? "claude" : "codex"}
-    request={null} busy={busy} onBusy={setBusy} runtimeSummary={<p>Observed runtime stays independent of the editor.</p>}
-    onProviders={() => {}} onApplied={async () => { setInventory((value) => ({ ...value, ...records })); }} /></main>;
+const ids = {
+  codexA: "11111111-1111-4111-8111-111111111111",
+  codexB: "22222222-2222-4222-8222-222222222222",
+  claudeA: "33333333-3333-4333-8333-333333333333",
+  claudeB: "44444444-4444-4444-8444-444444444444",
+};
+const calls: { command: string; args: unknown }[] = [];
+const entries: { app: AppKind; profileId: string; role: RouteRole }[] = [];
+const providerEntries: AppKind[] = [];
+const initialActiveIds = { codex: ids.codexA, claude: ids.claudeA };
+
+function catalogEntry(id: string): CodexCatalogEntry {
+  return { id, contextWindow: 32768, maxOutputTokens: 4096, functionTools: false, customTools: false,
+    toolSearch: false, reasoning: false, defaultReasoningLevel: "none", supportedReasoningLevels: ["none"],
+    images: false, compact: false };
 }
+
+function codex(id: string, name: string, position: number): CodexProviderRecord {
+  const subagentRoute = id === ids.codexA ? { profileId: ids.codexB, model: "shared-model" } : null;
+  return { profile: { id, name, routeMode: subagentRoute ? "gateway" : "direct",
+    endpoint: "https://codex.fixture.invalid/v1", apiKey: "isolated-fixture-key", connection: {},
+    upstream: "responses", requestMode: "standard", defaultModel: "shared-model",
+    catalog: ["shared-model", "other-model"].map(catalogEntry), modelRoutes: [], subagentRoute,
+    capabilities: { responses: true, compact: false, models: true, chatCompletions: false,
+      alphaSearch: false, imageGeneration: false, imageEdit: false, functionTools: false,
+      customTools: false, toolSearch: false, reasoning: false, chatReasoning: { kind: "unsupported" } } },
+    position, fileHash: `fixture-${id}`, parameters: { settings: {} }, notes: null, websiteUrl: null, usageQuery: null };
+}
+
+function claude(id: string, name: string, position: number): ProviderRecord {
+  const primary = id === ids.claudeA;
+  return { profile: { id, app: "claude", name, routeMode: "custom", baseUrl: "https://claude.fixture.invalid/v1",
+    apiKey: "isolated-fixture-key", connection: {}, upstreamProtocol: "anthropicMessages", responsesOptions: null,
+    maxOutputTokens: null, model: "shared-model", parameters: { settings: {} }, websiteUrl: null,
+    modelOptions: { kind: "claude", primaryOneM: primary,
+      routes: { haiku: null,
+        sonnet: primary ? { mode: "primary", model: "sonnet-local", oneM: false } : null,
+        opus: primary ? { mode: "provider", profileId: ids.claudeB, model: "shared-model", oneM: true } : null,
+        fable: null,
+        subagent: primary ? { mode: "provider", profileId: id, model: "local-subagent", oneM: false } : null },
+      availableModels: ["shared-model", "other-model", "sonnet-local", "local-subagent"] } },
+    position, fileHash: `fixture-${id}` };
+}
+
+function initialInventory(scenario: string | null): RouteInventory {
+  if (scenario === "empty") return { codex: [], profiles: [], activeIds: {} };
+  const inventory: RouteInventory = { codex: [codex(ids.codexA, "Codex A", 100), codex(ids.codexB, "Codex B", 200)],
+    profiles: [claude(ids.claudeA, "Claude A", 100), claude(ids.claudeB, "Claude B", 200)], activeIds: { ...initialActiveIds } };
+  return scenario === "missing" ? { ...inventory,
+    codex: inventory.codex.filter(({ profile }) => profile.id !== ids.codexB),
+    profiles: inventory.profiles.filter(({ profile }) => profile.id !== ids.claudeB) } : inventory;
+}
+
+Object.assign(window, { __TAURI_INTERNALS__: { invoke: async (command: string, args: unknown): Promise<never> => {
+  calls.push({ command, args });
+  throw new Error(`The read-only overview must not invoke ${command}`);
+} } });
+applyLanguagePreference("en-US");
+
+function Fixture() {
+  const query = new URLSearchParams(location.search);
+  const [inventory, setInventory] = useState(() => initialInventory(query.get("scenario")));
+  const [busy, setBusy] = useState(false);
+  Object.assign(window, { routeTest: { ids, calls, entries, providerEntries, initialActiveIds,
+    setLanguage: applyLanguagePreference, setBusy,
+    removeProvider: (id: string) => setInventory((value) => ({ ...value,
+      codex: value.codex.filter(({ profile }) => profile.id !== id),
+      profiles: value.profiles.filter(({ profile }) => profile.id !== id) })),
+    snapshot: () => structuredClone(inventory),
+  } });
+  return <main style={{ padding: 24 }}><ModelRoutingWorkspace inventory={inventory}
+    initialApp={query.get("client") === "claude" ? "claude" : "codex"} busy={busy}
+    runtimeSummary={<p data-testid="runtime-observation">Isolated runtime observation. No gateway listener is started.</p>}
+    onEdit={(app, profileId, role) => entries.push({ app, profileId, role })}
+    onProviders={(app) => providerEntries.push(app)} /></main>;
+}
+
 createRoot(document.getElementById("root")!).render(<Fixture />);

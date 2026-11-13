@@ -1,0 +1,181 @@
+.asb-model-routing,
+.asb-route-overview-plan,
+.asb-route-overview-panel,
+.asb-route-overview-runtime {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-model-routing { container: routing-overview / inline-size; }
+
+.asb-route-overview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 13rem);
+  align-items: center;
+  column-gap: var(--asb-space-5);
+}
+
+.asb-route-overview-intro {
+  display: grid;
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+.asb-route-overview-description {
+  max-width: var(--asb-measure-prose);
+  margin: 0;
+  font: var(--asb-text-body);
+  color: var(--asb-text);
+}
+
+.asb-route-overview-caption,
+.asb-route-overview-footnote {
+  max-width: var(--asb-measure-prose);
+  margin: 0;
+  font: var(--asb-text-caption);
+  color: var(--asb-text-muted);
+}
+
+.asb-route-overview-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.asb-route-overview-selection {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-3);
+}
+
+.asb-route-overview-selection > .asb-field {
+  flex: 1 1 16rem;
+  max-width: var(--asb-measure-form);
+  min-width: 0;
+}
+
+.asb-route-overview-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-4);
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-route-overview-saved {
+  margin: 0;
+  font: var(--asb-text-caption);
+  color: var(--asb-text-muted);
+}
+
+.asb-route-overview-columns,
+.asb-route-overview-edit.asb-btn {
+  display: grid;
+  grid-template-columns: minmax(8rem, .7fr) minmax(0, 1.5fr) minmax(8rem, 1fr) var(--asb-icon-size-sm);
+  align-items: center;
+  gap: var(--asb-space-3);
+  padding-inline: var(--asb-space-3);
+}
+
+.asb-route-overview-columns {
+  font: var(--asb-text-caption);
+  color: var(--asb-text-muted);
+}
+
+.asb-route-overview-list {
+  display: grid;
+  gap: var(--asb-space-unit);
+  margin: calc(-1 * var(--asb-space-2)) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-route-overview-purpose { min-width: 0; }
+
+.asb-route-overview-edit.asb-btn {
+  width: 100%;
+  min-height: var(--asb-row-min-height);
+  padding-block: var(--asb-space-3);
+  text-align: start;
+  white-space: normal;
+}
+
+.asb-route-overview-role {
+  font: var(--asb-text-label);
+  color: var(--asb-text);
+}
+
+.asb-route-overview-target {
+  display: grid;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+}
+
+.asb-route-overview-provider {
+  font: var(--asb-text-label);
+  color: var(--asb-text);
+  overflow-wrap: anywhere;
+}
+
+.asb-route-overview-model {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.asb-route-overview-context {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-route-overview-mode {
+  font: var(--asb-text-caption);
+  color: var(--asb-text-muted);
+}
+
+.asb-route-overview-arrow {
+  display: flex;
+  color: var(--asb-text-muted);
+}
+
+.asb-route-overview-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--asb-space-3);
+  padding-block: var(--asb-space-4);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-route-overview-empty > p { margin: 0; }
+
+@container routing-overview (max-width: 54rem) {
+  .asb-route-overview-hero { grid-template-columns: minmax(0, 1fr) 10rem; }
+  .asb-route-overview-columns { display: none; }
+  .asb-route-overview-list { margin-top: 0; }
+  .asb-route-overview-edit.asb-btn { grid-template-columns: minmax(7rem, .7fr) minmax(0, 1.5fr) var(--asb-icon-size-sm); }
+  .asb-route-overview-mode { grid-column: 2; }
+  .asb-route-overview-arrow { grid-column: 3; grid-row: 1 / span 2; }
+}
+
+@container routing-overview (max-width: 36rem) {
+  .asb-route-overview-hero { grid-template-columns: minmax(0, 1fr); }
+  .asb-route-overview-art { display: none; }
+  .asb-route-overview-edit.asb-btn { grid-template-columns: minmax(0, 1fr) var(--asb-icon-size-sm); gap: var(--asb-space-1); }
+  .asb-route-overview-role { grid-column: 1; }
+  .asb-route-overview-target,
+  .asb-route-overview-mode { grid-column: 1; }
+  .asb-route-overview-arrow { grid-column: 2; grid-row: 1 / span 3; }
+}

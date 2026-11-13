@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import { Button } from "./Button";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { ScrollArea } from "./ScrollArea";
@@ -37,10 +37,9 @@ export function EditorFrame({
   footer,
 }: Props) {
   const heading = useRef<HTMLHeadingElement>(null);
+  useImperativeHandle(titleRef, () => heading.current!, []);
   const [returnTarget] = useState(() => document.activeElement);
   useEffect(() => {
-    // Callers with a title ref already own route-specific focus changes.
-    if (titleRef) return;
     const target = heading.current;
     const frame = target?.closest(".asb-editor-frame");
     if (!target || !frame || target.closest("[hidden]")) return;
@@ -51,12 +50,12 @@ export function EditorFrame({
       if (returnTarget instanceof HTMLElement && returnTarget.isConnected && returnTarget.getClientRects().length > 0)
         returnTarget.focus({ preventScroll: true });
     };
-  }, [titleRef, returnTarget]);
+  }, [returnTarget]);
   return (
     <div className={className ? `asb-editor-frame ${className}` : "asb-editor-frame"}>
       <WorkspaceHeader
         title={title}
-        titleRef={titleRef ?? heading}
+        titleRef={heading}
         back={
           <Button variant="back" disabled={busy} aria-label={backLabel} onClick={onBack}>
             <span aria-hidden="true">←</span>

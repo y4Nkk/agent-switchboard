@@ -19,11 +19,9 @@ export function ClaudeRouteInspector({ document, role, sources, disabled, onChan
   if (options.kind !== "claude") return null;
   const route = role === "main" ? null : options.routes[role];
   const selected = route?.mode === "provider" ? sources.find((source) => source.kind === "profile" && source.record.profile.id === route.profileId) : null;
-  const target = route?.mode === "provider" ? route.profileId === document.record.profile.id ? draft : selected?.kind === "profile" ? selected.record.profile : undefined : draft;
-  const selfTarget = route?.mode === "provider" && route.profileId === document.record.profile.id;
+  const target = route?.mode === "provider" ? route.profileId === document.profileId ? draft : selected?.kind === "profile" ? selected.record.profile : undefined : draft;
   const models = [...new Set([
-    ...(target ? claudeModels(target, route?.mode === "provider" ? route.profileId : document.record.profile.id) : []),
-    ...(selfTarget ? claudeModels(document.record.profile, document.record.profile.id) : []),
+    ...(target ? claudeModels(target, route?.mode === "provider" ? route.profileId : document.profileId) : []),
   ])];
   const value = role === "main" ? draft.model ?? "" : route?.model ?? "";
   const changeRoute = (next: ClaudeModelRoute | null) => {
@@ -52,8 +50,13 @@ export function ClaudeRouteInspector({ document, role, sources, disabled, onChan
     {route?.mode === "provider" && <>
       <label className="asb-field"><span>{t("modelRoutes.targetProvider")}</span>
         <Select value={route.profileId || null} placeholder={t("modelRoutes.chooseProvider")}
-          options={sources.filter((source) => source.kind === "profile" && !claudeTargetIssue(source.record.profile))
-            .map(({ record }) => ({ value: record.profile.id, label: record.profile.name }))}
+          options={[
+            ...(!claudeTargetIssue(draft) ? [{ value: document.profileId,
+              label: t("providerEditor.selfTarget", { name: draft.name }) }] : []),
+            ...sources.filter((source) => source.kind === "profile" && source.record.profile.id !== document.profileId
+              && !claudeTargetIssue(source.record.profile))
+              .map(({ record }) => ({ value: record.profile.id, label: record.profile.name })),
+          ]}
           ariaLabel={t("modelRoutes.targetProvider")} disabled={disabled}
           onChange={(profileId) => changeRoute({ ...route, profileId, model: "", oneM: false })} />
       </label>

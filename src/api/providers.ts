@@ -258,8 +258,8 @@ export function listCodexProfiles(): Promise<CodexProviderRecord[]> {
   return invoke<CodexProviderRecord[]>("list_codex_profiles");
 }
 
-export function createCodexProfile(draft: CodexProviderDraft): Promise<CodexProviderRecord> {
-  return invoke<CodexProviderRecord>("create_codex_profile", { draft });
+export function createCodexProfile(profileId: string, draft: CodexProviderDraft): Promise<CodexProviderRecord> {
+  return invoke<CodexProviderRecord>("create_codex_profile", { profileId, draft });
 }
 
 /** Prepares an existing Codex profile save. A live route change returns the
@@ -300,12 +300,12 @@ export function reorderCodexProfiles(
   });
 }
 
-export function prepareProfileSave(
-  profileId: string | null,
-  draft: ProviderDraft,
-  expectedFileHash: string | null,
-): Promise<ProfileSavePreparation> {
-  return invoke<ProfileSavePreparation>("prepare_profile_save", { profileId, draft, expectedFileHash });
+export type ProfileSaveTarget =
+  | { kind: "create"; profileId: string }
+  | { kind: "update"; profileId: string; expectedFileHash: string };
+
+export function prepareProfileSave(target: ProfileSaveTarget, draft: ProviderDraft): Promise<ProfileSavePreparation> {
+  return invoke<ProfileSavePreparation>("prepare_profile_save", { target, draft });
 }
 
 export function commitProfileSave(
