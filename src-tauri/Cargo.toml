@@ -14,7 +14,7 @@ name = "agent_switchboard_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7.4", features = [] }
 windows-bindgen = "=0.61.1"
 
 [dependencies]
