@@ -19,6 +19,7 @@ export type RuntimeLogAction =
   | "codexSubagentSettingsApplied"
   | "providersSqlImported"
   | "applicationDataRepaired"
+  | "configurationReadFailed"
   | "profileCreated"
   | "profileUpdated"
   | "profileDeleted"
@@ -52,6 +53,7 @@ export interface RuntimeLogEntry {
   level: RuntimeLogSeverity;
   action: RuntimeLogAction;
   errorCode?: string;
+  configurationPath?: string;
 }
 
 export interface ConfigFileStatus {

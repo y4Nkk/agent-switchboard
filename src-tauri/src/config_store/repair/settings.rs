@@ -2,10 +2,11 @@ use asb_core::contracts::{AppKind, ConfigValue, SettingValue, SettingsValues};
 use asb_core::ownership::{self, SettingOwner};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use crate::config_store::error::json_diagnostic;
 
 pub(super) fn fill_automatic(node: &mut Value, app: AppKind, provider: bool) -> Result<bool, String> {
     let mut values: SettingsValues = serde_json::from_value(node.clone())
-        .map_err(|error| format!("设置结构无法解析：{error}"))?;
+        .map_err(|error| format!("设置结构无法解析：{}", json_diagnostic(&error)))?;
     if app == AppKind::Codex {
         if provider {
             for key in ownership::RETIRED_CODEX_PROVIDER_KEYS { values.settings.remove(*key); }
@@ -46,7 +47,7 @@ pub(super) fn repair_claude_provider(node: &mut Value) -> Result<bool, String> {
         asb_core::contracts::upgrade_claude_model_options(options)?;
     }
     let parameters = node.get("parameters").ok_or("缺少供应商参数")?;
-    let mut values: SettingsValues = serde_json::from_value(parameters.clone()).map_err(|error| error.to_string())?;
+    let mut values: SettingsValues = serde_json::from_value(parameters.clone()).map_err(|error| json_diagnostic(&error))?;
     let mut fragment = match node.get("claudeFragment") {
         Some(value) => value.as_object().cloned().ok_or("claudeFragment 必须是对象")?,
         None => Default::default(),

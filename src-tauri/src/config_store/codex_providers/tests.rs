@@ -96,14 +96,12 @@ fn codex_store_rejects_the_old_generic_file_shape() {
         .join("00000000-0000-0000-0000-000000000001.json");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(
-        path,
+        &path,
         r#"{"id":"00000000-0000-0000-0000-000000000001","model":null}"#,
     )
     .unwrap();
-    assert_eq!(
-        store.list_codex_providers(),
-        Err(ProfileStoreError::Unsupported)
-    );
+    assert!(matches!(store.list_codex_providers(),
+        Err(ProfileStoreError::InvalidFile { path: failed, .. }) if failed == path));
 }
 
 #[test]
@@ -157,7 +155,9 @@ fn codex_store_level_failures_stay_typed() {
     std::fs::write(store.legacy_store_path(), b"{}").unwrap();
     assert_eq!(
         store.create_codex_provider(draft()),
-        Err(StoreOperationError::Store(ProfileStoreError::Unsupported))
+        Err(StoreOperationError::Store(ProfileStoreError::invalid(
+            &store.legacy_store_path(), "检测到旧配置布局，无法按当前格式读取",
+        )))
     );
 }
 

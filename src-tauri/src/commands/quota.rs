@@ -1,3 +1,4 @@
+use tauri::Manager;
 use super::error::{blocking, state, CommandError};
 use crate::codex_reset::{CodexResetHubRead, CodexResetRead, CodexResetStatus};
 use crate::local_state::LocalState;
@@ -11,7 +12,8 @@ pub async fn query_codex_official_quota(
     profile_id: String,
 ) -> Result<(), CommandError> {
     let state = state(&app)?;
-    let result = blocking(move || super::quota_refresh::refresh(&state, &profile_id, true).map(|_| ())).await;
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    let result = blocking(move || super::quota_refresh::refresh(&state, &profile_id, true, &gate).map(|_| ())).await;
     crate::tray::refresh(&app);
     result
 }
@@ -22,7 +24,8 @@ pub async fn read_codex_official_quota(
     profile_id: String,
 ) -> Result<Option<asb_core::contracts::CodexOfficialQuota>, CommandError> {
     let state = state(&app)?;
-    blocking(move || super::quota_refresh::read(&state, &profile_id)).await
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    gate.run(move || super::quota_refresh::read(&state, &profile_id)).await
 }
 
 /// Records one successful official read in the persisted detection baseline

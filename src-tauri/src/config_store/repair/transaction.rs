@@ -130,7 +130,8 @@ impl Transaction {
 
     fn check_record(&self) -> Result<(), String> {
         let bytes = io::read_bounded(&self.record(), 64 * 1024)?.ok_or("配置恢复记录已消失，保留全部材料")?;
-        let current: Journal = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+        let current: Journal = serde_json::from_slice(&bytes)
+            .map_err(|error| super::super::error::json_error(&self.record(), &error).to_string())?;
         if current != self.journal { return Err("配置恢复记录已被修改，保留全部材料".into()); }
         Ok(())
     }
@@ -140,7 +141,8 @@ impl ConfigStore {
     pub(crate) fn recover_pending_repair(&self) -> Result<Option<RepairReport>, String> {
         let Some(bytes) = io::read_bounded(&self.state_root.join(JOURNAL), 64 * 1024)? else { return Ok(None); };
         if bytes.len() > 64 * 1024 { return Err("配置修复记录超过大小上限，原件已保留".into()); }
-        let journal: Journal = serde_json::from_slice(&bytes).map_err(|error| format!("配置修复记录无效：{error}"))?;
+        let journal: Journal = serde_json::from_slice(&bytes)
+            .map_err(|error| super::super::error::json_error(&self.state_root.join(JOURNAL), &error).to_string())?;
         let valid_id = uuid::Uuid::parse_str(&journal.id).is_ok_and(|id| id.simple().to_string() == journal.id);
         let valid_hash = |hash: &str| hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit());
         if journal.version != 1 || !valid_id || !valid_hash(&journal.original)

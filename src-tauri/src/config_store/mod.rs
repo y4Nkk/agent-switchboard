@@ -39,22 +39,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
-/// Read-side failures of the configuration store.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ProfileStoreError {
-    Unreadable,
-    Unsupported,
-}
-
-impl std::fmt::Display for ProfileStoreError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unreadable => formatter.write_str("配置存储不可读"),
-            Self::Unsupported => formatter
-                .write_str("配置存储格式无效或不受支持；原件已保留，请查看应用数据检查详情"),
-        }
-    }
-}
+mod error;
+pub use error::ProfileStoreError;
+use error::parse_file;
+#[cfg(test)]
+mod diagnostic_tests;
 
 /// Failures of one validating store operation. Store-level state errors stay
 /// typed so every command keeps their stable code; all remaining failures
@@ -131,7 +120,7 @@ impl ConfigStore {
         self.ensure_layout()?;
         match read_optional(&self.profile_save_journal_path())? {
             None => Ok(None),
-            Some(text) => parse_strict(&text).map(Some),
+            Some(text) => parse_file(&text, &self.profile_save_journal_path()).map(Some),
         }
     }
 
@@ -195,14 +184,18 @@ impl ConfigStore {
     /// Startup and runtime readers accept only the current layout.
     pub fn ensure_layout(&self) -> Result<(), ProfileStoreError> {
         let recovery = self.state_root.join(REPAIR_JOURNAL_FILE);
-        if recovery.is_symlink() || recovery.try_exists().map_err(|_| ProfileStoreError::Unreadable)? {
-            return Err(ProfileStoreError::Unsupported);
+        if recovery.is_symlink() || recovery.try_exists()
+            .map_err(|error| ProfileStoreError::unreadable(&recovery, &error))? {
+            return Err(ProfileStoreError::Recovering { path: recovery });
         }
-        if self.retired_layout_markers().into_iter().any(|path| path.exists())
-            || (self.client_dir("client-settings").exists()
-                && !self.client_dir("client-settings").is_dir())
-        {
-            return Err(ProfileStoreError::Unsupported);
+        for path in self.retired_layout_markers() {
+            if path.exists() {
+                return Err(ProfileStoreError::invalid(&path, "检测到旧配置布局，无法按当前格式读取"));
+            }
+        }
+        let settings = self.client_dir("client-settings");
+        if settings.exists() && !settings.is_dir() {
+            return Err(ProfileStoreError::invalid(&settings, "客户端设置路径应为目录"));
         }
         Ok(())
     }
@@ -274,15 +267,15 @@ pub(crate) fn read_optional(path: &Path) -> Result<Option<String>, ProfileStoreE
     match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(ProfileStoreError::Unreadable),
+        Err(error) => Err(ProfileStoreError::unreadable(path, &error)),
     }
 }
 
 /// Strictly parses one JSON document; any shape drift is unsupported.
 pub(crate) fn parse_strict<T: serde::de::DeserializeOwned>(
     text: &str,
-) -> Result<T, ProfileStoreError> {
-    serde_json::from_str(text).map_err(|_| ProfileStoreError::Unsupported)
+) -> Result<T, serde_json::Error> {
+    serde_json::from_str(text)
 }
 
 #[cfg(test)]
@@ -308,13 +301,13 @@ mod tests {
         fs::write(store.legacy_store_path(), b"{}").expect("legacy file");
         assert_eq!(
             store.ensure_layout().expect_err("both present must fail"),
-            ProfileStoreError::Unsupported
+            ProfileStoreError::invalid(&store.legacy_store_path(), "检测到旧配置布局，无法按当前格式读取")
         );
         fs::remove_file(store.legacy_store_path()).expect("remove retired profile marker");
         fs::write(store.retired_upgrade_journal_path(), b"{}").expect("retired journal");
         assert_eq!(
             store.ensure_layout().expect_err("retired journal must fail"),
-            ProfileStoreError::Unsupported
+            ProfileStoreError::invalid(&store.retired_upgrade_journal_path(), "检测到旧配置布局，无法按当前格式读取")
         );
     }
 

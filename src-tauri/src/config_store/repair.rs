@@ -10,6 +10,7 @@ use files::{copy_tree, json_files, relative};
 #[cfg(test)]
 use files::file_tree;
 use super::{history, write_json_atomic, ConfigStore, PROFILE_PREIMAGE_FILE, SWITCH_INTENT_FILE};
+use super::error::json_diagnostic;
 use asb_core::contracts::{
     AppKind, CodexProviderFile, ProviderConnectionOptions, ProviderFile, RouteMode,
     SettingsValues, UpstreamProtocol,
@@ -56,7 +57,8 @@ impl ConfigStore {
             let repaired = repair_stage(&staged)?;
             let probe = ConfigStore::new(transaction.stage_root());
             let snapshot = super::snapshot::read_configuration_snapshot(&probe)
-                .map_err(|error| format!("修复后的配置仍未通过校验：{error}"))?;
+                .map_err(|error| format!("修复后的配置仍未通过校验：{}",
+                    error.original_path(&staged, &self.configuration_dir())))?;
             super::snapshot::validate_snapshot(&snapshot)?;
             if repaired.is_empty() { return Err("配置无法通过当前修复规则恢复，原件已保留".into()); }
             Ok(repaired)
@@ -131,7 +133,7 @@ fn repair_file(root: &Path, path: &Path, kind: FileKind) -> Result<bool, String>
     let text = fs::read_to_string(path).map_err(|error| format!("{label} 不可读：{error}"))?;
     let source = text.strip_prefix('\u{feff}').unwrap_or(&text);
     let mut value: Value = serde_json::from_str(source)
-        .map_err(|error| format!("{label} 的 JSON 无效：{error}"))?;
+        .map_err(|error| format!("{label}：{}", json_diagnostic(&error)))?;
     let mut changed = false;
     if provider && app == AppKind::Claude {
         if let Some(options) = value.get_mut("modelOptions") {
@@ -164,7 +166,7 @@ fn repair_file(root: &Path, path: &Path, kind: FileKind) -> Result<bool, String>
         inspect_provider(&label, kind, &value)?;
     } else {
         serde_json::from_value::<SettingsValues>(value.clone())
-            .map_err(|error| format!("{label}：{error}"))?
+            .map_err(|error| format!("{label}：{}", json_diagnostic(&error)))?
             .validate_client_settings(app)
             .map_err(|error| format!("{label}：{error}"))?;
     }
@@ -256,17 +258,13 @@ fn inspect_provider(label: &str, kind: FileKind, value: &Value) -> Result<(), St
     match kind {
         FileKind::CodexProvider => {
             let file: CodexProviderFile = serde_json::from_value(value.clone())
-                .map_err(|error| invalid(error.to_string()))?;
+                .map_err(|error| invalid(json_diagnostic(&error)))?;
             file.validate().map_err(invalid)?;
         }
         FileKind::GenericProvider(app) => {
             let file: ProviderFile = serde_json::from_value(value.clone())
-                .map_err(|error| invalid(error.to_string()))?;
-            let query = file.usage_query.clone();
+                .map_err(|error| invalid(json_diagnostic(&error)))?;
             file.into_profile(app).validate().map_err(|error| invalid(error.to_string()))?;
-            if let Some(query) = query {
-                crate::usage_query::validate_persisted(&query).map_err(invalid)?;
-            }
         }
         FileKind::ClientSettings(_) => unreachable!("client settings are validated separately"),
     }
@@ -278,7 +276,7 @@ fn repair_history(root: &Path, path: &Path, app: AppKind) -> Result<bool, String
     let text = fs::read_to_string(path).map_err(|error| format!("{label} 不可读：{error}"))?;
     let source = text.strip_prefix('\u{feff}').unwrap_or(&text);
     let file: history::HistoryFile = serde_json::from_str(source)
-        .map_err(|error| format!("{label}：{error}"))?;
+        .map_err(|error| format!("{label}：{}", json_diagnostic(&error)))?;
     for record in &file.records {
         history::validate_write_record(app, record)
             .map_err(|error| format!("{label}：{error}"))?;

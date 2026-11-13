@@ -16,18 +16,7 @@ mod script;
 
 use asb_core::contracts::{ProviderConnectionOptions, UpstreamProtocol, UsageQuery, UsageSummary};
 use declarative::run_declarative_query;
-use script::{run_script_query, ScriptProgram};
-
-/// Validates every field that becomes durable state. The core validates the
-/// shared tagged shape; script mode additionally evaluates the source once to
-/// prove it produces both required functions before LocalState writes it.
-pub(crate) fn validate_persisted(query: &UsageQuery) -> Result<(), String> {
-    asb_core::validate::validate_usage_query(query).map_err(|error| error.to_string())?;
-    if let UsageQuery::Script { source, .. } = query {
-        ScriptProgram::new(source).map(|_| ())?;
-    }
-    Ok(())
-}
+use script::run_script_query;
 
 /// Runs one usage query against the provider endpoint. The credential travels
 /// only in the declarative mode's selected auth header, or into the script's

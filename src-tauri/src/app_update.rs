@@ -35,7 +35,10 @@ pub(crate) async fn check_application_update(app: AppHandle) -> Result<Option<Up
     require_direct_install()?;
     let manager = app.state::<UpdateManager>().inner().clone();
     let _guard = manager.begin_check()?;
-    let updater = app.updater().map_err(|error| failure("check", error))?;
+    let builder = app.updater_builder();
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    let builder = builder.target("windows-x86_64-nsis");
+    let updater = builder.build().map_err(|error| failure("check", error))?;
     let update = updater.check().await.map_err(|error| failure("check", error))?;
     manager.checked(update)
 }

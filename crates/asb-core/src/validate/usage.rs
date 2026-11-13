@@ -4,10 +4,9 @@ use crate::validate::error::{ValidationError, MAX_AUTO_REFRESH_INTERVAL_MINUTES}
 
 const MAX_USAGE_QUERY_SOURCE_LEN: usize = 65_536;
 
-/// Checks the serializable usage-query contract. Loading the two JavaScript
-/// functions is intentionally desktop-runtime work, because this core crate
-/// owns no JavaScript engine; the store runs that additional validation for
-/// every persisted provider before it accepts or writes a file.
+/// Owns the serializable usage-query contract for both clients. Source code
+/// executes only during a query: runtime resource failures cannot determine
+/// whether an unchanged provider file is valid.
 pub fn validate_usage_query(query: &UsageQuery) -> Result<(), ValidationError> {
     if query.refresh_interval_minutes() > MAX_AUTO_REFRESH_INTERVAL_MINUTES {
         return Err(ValidationError::UsageQueryRefreshIntervalTooLarge(

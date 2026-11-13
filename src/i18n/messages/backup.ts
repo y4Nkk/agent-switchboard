@@ -7,6 +7,8 @@ export const messages = {
   "backup.logs.skipped": ["有 {count} 条日志无法解析或超过单条读取上限，未计入当前结果。", "{count} log records could not be parsed or exceeded the record limit and are excluded."],
   "backup.action.storageCacheMaintained": ["维护浏览器缓存", "Maintain browser cache"],
   "backup.action.outboundProxySaved": ["保存出站代理", "Save outbound proxy"],
+  "backup.action.configurationReadFailed": ["读取配置失败", "Configuration read failed"],
+  "backup.col.configurationPath": ["配置位置", "Configuration location"],
   "backup.action.applicationDataRepaired": ["检查并修复应用数据", "Check and repair application data"],
   "backup.action.codexSubagentSettingsApplied": ["应用 Codex 子代理设置", "Apply Codex sub-agent settings"],
   "backup.action.providersSqlImported": ["导入供应商 SQL", "Import provider SQL"],

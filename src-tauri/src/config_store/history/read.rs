@@ -9,6 +9,7 @@ struct History<'a> {
     app: AppKind,
     visit: &'a mut dyn FnMut(ConfigWriteRecord) -> Result<(), String>,
     failure: &'a mut Option<String>,
+    invalid: &'a mut Option<String>,
 }
 
 impl<'de> DeserializeSeed<'de> for History<'_> {
@@ -27,7 +28,7 @@ impl<'de> Visitor<'de> for History<'_> {
         let mut seen = false;
         while let Some(key) = map.next_key::<String>()? {
             if key != "records" || seen { return Err(M::Error::custom("invalid history field")); }
-            map.next_value_seed(Records { app: self.app, visit: &mut *self.visit, failure: &mut *self.failure })?;
+            map.next_value_seed(Records { app: self.app, visit: &mut *self.visit, failure: &mut *self.failure, invalid: &mut *self.invalid })?;
             seen = true;
         }
         if !seen { return Err(M::Error::missing_field("records")); }
@@ -39,6 +40,7 @@ struct Records<'a> {
     app: AppKind,
     visit: &'a mut dyn FnMut(ConfigWriteRecord) -> Result<(), String>,
     failure: &'a mut Option<String>,
+    invalid: &'a mut Option<String>,
 }
 
 impl<'de> DeserializeSeed<'de> for Records<'_> {
@@ -55,7 +57,10 @@ impl<'de> Visitor<'de> for Records<'_> {
     }
     fn visit_seq<S: SeqAccess<'de>>(self, mut sequence: S) -> Result<(), S::Error> {
         while let Some(record) = sequence.next_element::<ConfigWriteRecord>()? {
-            validate_write_record(self.app, &record).map_err(S::Error::custom)?;
+            if let Err(error) = validate_write_record(self.app, &record) {
+                *self.invalid = Some(error.clone());
+                return Err(S::Error::custom(error));
+            }
             if let Err(error) = (self.visit)(record) {
                 *self.failure = Some(error.clone());
                 return Err(S::Error::custom(error));
@@ -70,15 +75,16 @@ pub(super) fn visit(path: &Path, app: AppKind,
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(_) => return Err(ProfileStoreError::Unreadable.into()),
+        Err(error) => return Err(ProfileStoreError::unreadable(path, &error).into()),
     };
     let mut failure = None;
+    let mut invalid = None;
     let mut reader = serde_json::Deserializer::from_reader(BufReader::new(file));
-    let result = History { app, visit, failure: &mut failure }.deserialize(&mut reader).and_then(|()| reader.end());
+    let result = History { app, visit, failure: &mut failure, invalid: &mut invalid }.deserialize(&mut reader).and_then(|()| reader.end());
     match result {
         Ok(()) => Ok(()),
+        Err(_) if invalid.is_some() => Err(ProfileStoreError::invalid(path, invalid.unwrap()).into()),
         Err(_) if failure.is_some() => Err(failure.unwrap().into()),
-        Err(error) if error.is_io() => Err(ProfileStoreError::Unreadable.into()),
-        Err(_) => Err(ProfileStoreError::Unsupported.into()),
+        Err(error) => Err(super::super::error::json_error(path, &error).into()),
     }
 }

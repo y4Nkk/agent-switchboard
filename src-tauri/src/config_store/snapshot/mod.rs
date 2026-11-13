@@ -168,9 +168,6 @@ fn validate_claude_files(
             .into_profile(AppKind::Claude)
             .validate()
             .map_err(|error| error.to_string())?;
-        if let Some(query) = &file.usage_query {
-            crate::usage_query::validate_persisted(query)?;
-        }
         if file.route_mode == RouteMode::Official {
             if has_official_route {
                 return Err("Claude 存在重复的官方登录入口".to_string());

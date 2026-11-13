@@ -28,6 +28,13 @@ export function errorText(error: unknown, t: TFunction): string {
   return t("common.operationFailed");
 }
 
+/** Keep the backend diagnostic when the localized explanation omits it. */
+export function errorDiagnosticText(error: unknown, t: TFunction): string | null {
+  if (!error || typeof error !== "object" || !("message" in error)
+    || typeof error.message !== "string" || !error.message.trim()) return null;
+  return errorText(error, t).includes(error.message) ? null : error.message;
+}
+
 /** Renders one backend warning in the current language. Unknown keys fall
  * back to the scrubbed `text` so a message can never go blank. */
 export function localizedMessageText(message: LocalizedMessage, t: TFunction): string {

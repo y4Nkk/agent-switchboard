@@ -104,7 +104,8 @@ pub async fn tray_snapshot(app: AppHandle) -> Result<snapshot::TraySnapshot, Com
         .state::<crate::gateway::GatewayController>()
         .inner()
         .clone();
-    crate::commands::error::blocking(move || {
+    let gate = app.state::<crate::commands::ConfigWriteGate>().inner().clone();
+    gate.run(move || {
         Ok(snapshot::read(
             &state,
             &gateway,

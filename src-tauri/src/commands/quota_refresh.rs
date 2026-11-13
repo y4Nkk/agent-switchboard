@@ -39,7 +39,8 @@ pub(crate) fn read(state: &LocalState, profile_id: &str) -> Result<Option<CodexO
         .map_err(|error| CommandError::new("codex-account-quota-unavailable", error))
 }
 
-pub(crate) fn refresh(state: &LocalState, id: &str, force: bool) -> Result<bool, CommandError> {
+pub(crate) fn refresh(state: &LocalState, id: &str, force: bool,
+    gate: &super::ConfigWriteGate) -> Result<bool, CommandError> {
     let mut attempts = ATTEMPTS.get_or_init(|| Mutex::new(HashMap::new())).lock()
         .map_err(|_| {
             CommandError::keyed(
@@ -48,7 +49,10 @@ pub(crate) fn refresh(state: &LocalState, id: &str, force: bool) -> Result<bool,
                 "官方额度查询锁不可用",
             )
         })?;
-    let profile = profile(state, id)?;
+    let profile = {
+        let _guard = gate.lock().map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
+        profile(state, id)?
+    };
     let interval = profile.official_quota_refresh_interval_minutes.unwrap_or(0);
     let key = (state.root().to_path_buf(), id.to_string());
     if !force && (interval == 0 || attempts.get(&key).is_some_and(|at|

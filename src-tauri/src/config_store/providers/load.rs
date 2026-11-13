@@ -1,5 +1,5 @@
 use crate::config_store::{
-    content_revision, parse_strict, read_optional, write_json_atomic, ConfigStore,
+    content_revision, parse_file, read_optional, write_json_atomic, ConfigStore,
     ProfileStoreError, StoreOperationError, PROVIDER_POSITION_STEP,
 };
 use asb_core::contracts::{
@@ -38,11 +38,11 @@ fn load_client(
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
-        Err(_) => return Err(ProfileStoreError::Unreadable),
+        Err(error) => return Err(ProfileStoreError::unreadable(&dir, &error)),
     };
     let mut loaded = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|_| ProfileStoreError::Unreadable)?;
+        let entry = entry.map_err(|error| ProfileStoreError::unreadable(&dir, &error))?;
         let path = entry.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
@@ -50,21 +50,17 @@ fn load_client(
         let stem = path
             .file_stem()
             .and_then(|stem| stem.to_str())
-            .ok_or(ProfileStoreError::Unsupported)?
+            .ok_or_else(|| ProfileStoreError::invalid(&path, "供应商文件名或文件内容不存在"))?
             .to_string();
-        let text = read_optional(&path)?.ok_or(ProfileStoreError::Unsupported)?;
-        let file = parse_strict::<ProviderFile>(&text)?;
+        let text = read_optional(&path)?.ok_or_else(|| ProfileStoreError::invalid(&path, "供应商文件名或文件内容不存在"))?;
+        let file = parse_file::<ProviderFile>(&text, &path)?;
         if Uuid::parse_str(&file.id).is_err() || file.id != stem {
-            return Err(ProfileStoreError::Unsupported);
+            return Err(ProfileStoreError::invalid(&path, "供应商标识不是 UUID 或与文件名不一致"));
         }
         let profile = file.clone().into_profile(app);
         profile
             .validate()
-            .map_err(|_| ProfileStoreError::Unsupported)?;
-        if let Some(query) = &file.usage_query {
-            crate::usage_query::validate_persisted(query)
-                .map_err(|_| ProfileStoreError::Unsupported)?;
-        }
+            .map_err(|error| ProfileStoreError::invalid(&path, error.to_string()))?;
         loaded.push(LoadedProvider {
             file,
             hash: content_revision(text.as_bytes()),
@@ -82,7 +78,10 @@ fn load_client(
     for provider in &loaded {
         if !seen_ids.insert(provider.file.id.clone()) || provider.file.position <= previous_position
         {
-            return Err(ProfileStoreError::Unsupported);
+            return Err(ProfileStoreError::invalid(
+                &dir.join(format!("{}.json", provider.file.id)),
+                "供应商标识重复或排序位置无效",
+            ));
         }
         previous_position = provider.file.position;
     }
@@ -152,9 +151,6 @@ pub(super) fn write_provider_file(
         return Err("Codex 第三方供应商必须使用专用档案格式".into());
     }
     profile.validate().map_err(|error| error.to_string())?;
-    if let Some(query) = &file.usage_query {
-        crate::usage_query::validate_persisted(query)?;
-    }
     let json =
         serde_json::to_string_pretty(file).map_err(|_| "供应商文件序列化失败".to_string())?;
     let path = provider_path(store, app, &file.id);

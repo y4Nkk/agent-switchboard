@@ -111,9 +111,21 @@ fn scrub_params(params: serde_json::Value) -> Option<serde_json::Value> {
 
 pub(crate) fn store_error(error: ProfileStoreError) -> CommandError {
     let code = match error {
-        ProfileStoreError::Unreadable => "store-unreadable",
-        ProfileStoreError::Unsupported => "profile-store-unsupported",
+        ProfileStoreError::UnreadableFile { .. } => "store-unreadable",
+        ProfileStoreError::InvalidFile { .. } => "profile-store-unsupported",
+        ProfileStoreError::Recovering { .. } => "application-preparing",
+        ProfileStoreError::NotFound { .. } => "codex-profile-not-found",
     };
+    if code != "application-preparing" {
+        let location = match &error {
+            ProfileStoreError::InvalidFile { path, .. } | ProfileStoreError::UnreadableFile { path, .. } =>
+                runtime_log::configuration_location(path),
+            ProfileStoreError::NotFound { id } => runtime_log::configuration_location(
+                &std::path::PathBuf::from(format!("configuration/providers/codex/{id}.json"))),
+            ProfileStoreError::Recovering { .. } => None,
+        };
+        runtime_log::record_configuration_failure(code, location);
+    }
     CommandError::new(code, error.to_string())
 }
 
@@ -125,7 +137,7 @@ pub(crate) fn validation_error(code: &'static str, error: asb_core::validate::Va
 }
 
 /// Maps one store operation failure: store-level state errors keep the
-/// stable `store_error` code so the UI can offer the reset entry; every
+/// stable `store_error` code and file diagnostic; every
 /// validation or write failure uses the command's own code. No command may
 /// stringify a store error instead of going through here.
 pub(crate) fn operation_error(code: &'static str, error: StoreOperationError) -> CommandError {
@@ -267,13 +279,27 @@ mod tests {
     #[test]
     fn profile_store_errors_have_stable_codes() {
         assert_eq!(
-            store_error(ProfileStoreError::Unsupported).code,
+            store_error(ProfileStoreError::invalid(std::path::Path::new("broken.json"), "invalid JSON")).code,
             "profile-store-unsupported"
         );
         assert_eq!(
-            store_error(ProfileStoreError::Unreadable).code,
+            store_error(ProfileStoreError::unreadable(std::path::Path::new("unreadable.json"),
+                &std::io::Error::from(std::io::ErrorKind::PermissionDenied))).code,
             "store-unreadable"
         );
+    }
+
+    #[test]
+    fn recovery_and_missing_profiles_are_not_reported_as_corruption() {
+        let pending = store_error(ProfileStoreError::Recovering { path: "configuration-repair.json".into() });
+        assert_eq!(pending.code, "application-preparing");
+        let missing = store_error(ProfileStoreError::NotFound { id: "missing-profile".into() });
+        assert_eq!(missing.code, "codex-profile-not-found");
+        assert!(missing.message.contains("missing-profile"));
+        let invalid = store_error(ProfileStoreError::invalid(std::path::Path::new("providers/broken.json"), "供应商排序位置无效"));
+        assert_eq!(invalid.code, "profile-store-unsupported");
+        assert!(invalid.message.contains("broken.json"));
+        assert!(invalid.message.contains("供应商排序位置无效"));
     }
 
     #[test]
@@ -281,7 +307,7 @@ mod tests {
         assert_eq!(
             operation_error(
                 "codex-profile-create-failed",
-                StoreOperationError::Store(ProfileStoreError::Unsupported),
+                StoreOperationError::Store(ProfileStoreError::invalid(std::path::Path::new("broken.json"), "invalid JSON")),
             )
             .code,
             "profile-store-unsupported"

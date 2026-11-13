@@ -52,7 +52,8 @@ pub async fn config_status(app: AppHandle) -> Result<Vec<ConfigFileStatus>, Comm
         .state::<crate::gateway::GatewayController>()
         .inner()
         .clone();
-    blocking(move || config_status_report(&state, &gateway)).await
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    gate.run(move || config_status_report(&state, &gateway)).await
 }
 
 #[tauri::command]

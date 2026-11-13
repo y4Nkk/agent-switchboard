@@ -4,12 +4,12 @@
 //! A file that predates this boundary is rejected rather than reinterpreted.
 
 use crate::config_store::{
-    content_revision, parse_strict, read_optional, write_json_atomic, ConfigStore,
+    content_revision, parse_file, read_optional, write_json_atomic, ConfigStore,
     ProfileStoreError, StoreOperationError,
 };
 use asb_core::contracts::{
     CodexEndpoint, CodexProviderDraft, CodexProviderFile, CodexProviderRecord, CodexUpstream,
-    UsageQuery, CODEX_PROVIDER_SCHEMA_VERSION,
+    UsageQuery,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -326,7 +326,7 @@ impl ConfigStore {
             .into_iter()
             .find(|loaded| loaded.file.profile.id == id)
             .map(|loaded| (loaded.file, loaded.hash))
-            .ok_or(ProfileStoreError::Unsupported)
+            .ok_or_else(|| ProfileStoreError::NotFound { id: id.to_string() })
     }
 
     pub(crate) fn find_codex_provider_file(
@@ -337,37 +337,34 @@ impl ConfigStore {
             .into_iter()
             .find(|loaded| loaded.file.profile.id == id)
             .map(|loaded| loaded.file)
-            .ok_or(ProfileStoreError::Unsupported)
+            .ok_or_else(|| ProfileStoreError::NotFound { id: id.to_string() })
     }
 }
 
 pub(super) fn load(store: &ConfigStore) -> Result<Vec<LoadedCodexProvider>, ProfileStoreError> {
     store.ensure_layout()?;
     let directory = store.providers_dir(asb_core::contracts::AppKind::Codex);
-    let entries = match fs::read_dir(directory) {
+    let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
-        Err(_) => return Err(ProfileStoreError::Unreadable),
+        Err(error) => return Err(ProfileStoreError::unreadable(&directory, &error)),
     };
     let mut loaded = Vec::new();
     for entry in entries {
-        let path = entry.map_err(|_| ProfileStoreError::Unreadable)?.path();
+        let path = entry.map_err(|error| ProfileStoreError::unreadable(&directory, &error))?.path();
         if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
             continue;
         }
         let stem = path
             .file_stem()
             .and_then(|value| value.to_str())
-            .ok_or(ProfileStoreError::Unsupported)?;
-        let text = read_optional(&path)?.ok_or(ProfileStoreError::Unsupported)?;
-        let file: CodexProviderFile = parse_strict(&text)?;
-        if file.schema_version != CODEX_PROVIDER_SCHEMA_VERSION
-            || Uuid::parse_str(&file.profile.id).is_err()
-            || file.profile.id != stem
-            || file.validate().is_err()
-        {
-            return Err(ProfileStoreError::Unsupported);
+            .ok_or_else(|| ProfileStoreError::invalid(&path, "供应商文件名或文件内容不存在"))?;
+        let text = read_optional(&path)?.ok_or_else(|| ProfileStoreError::invalid(&path, "供应商文件名或文件内容不存在"))?;
+        let file: CodexProviderFile = parse_file(&text, &path)?;
+        if Uuid::parse_str(&file.profile.id).is_err() || file.profile.id != stem {
+            return Err(ProfileStoreError::invalid(&path, "供应商标识不是 UUID 或与文件名不一致"));
         }
+        file.validate().map_err(|error| ProfileStoreError::invalid(&path, error))?;
         loaded.push(LoadedCodexProvider {
             file,
             hash: content_revision(text.as_bytes()),
@@ -386,7 +383,10 @@ pub(super) fn load(store: &ConfigStore) -> Result<Vec<LoadedCodexProvider>, Prof
         if !ids.insert(provider.file.profile.id.as_str())
             || provider.file.position <= previous_position
         {
-            return Err(ProfileStoreError::Unsupported);
+            return Err(ProfileStoreError::invalid(
+                &directory.join(format!("{}.json", provider.file.profile.id)),
+                "供应商标识重复或排序位置无效",
+            ));
         }
         previous_position = provider.file.position;
     }

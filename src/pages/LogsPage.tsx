@@ -26,6 +26,7 @@ const ACTION_LABEL: Record<RuntimeLogAction, MessageKey> = {
   codexSubagentSettingsApplied: "backup.action.codexSubagentSettingsApplied",
   providersSqlImported: "backup.action.providersSqlImported",
   applicationDataRepaired: "backup.action.applicationDataRepaired",
+  configurationReadFailed: "backup.action.configurationReadFailed",
   profileCreated: "backup.action.profileCreated",
   profileUpdated: "backup.action.profileUpdated",
   profileDeleted: "backup.action.profileDeleted",
@@ -74,6 +75,12 @@ function logColumns(t: TFunction): Array<TableColumn<RuntimeLogEntry>> {
       header: t("backup.col.errorCode"),
       cellClassName: "asb-code",
       render: (entry) => entry.errorCode ?? "—",
+    },
+    {
+      key: "configurationPath",
+      header: t("backup.col.configurationPath"),
+      cellClassName: "asb-code",
+      render: (entry) => entry.configurationPath ?? "—",
     },
   ];
 }

@@ -1,6 +1,7 @@
 //! Backend-owned refresh cadence for both clients, independent of UI lifetime.
 
 use crate::config_store::{providers::load_provider_files, StoreOperationError};
+use crate::commands::{error::{operation_error, store_error, CommandError}, ConfigWriteGate};
 use crate::local_state::LocalState;
 use crate::{tray, usage_cache};
 use asb_core::contracts::{AppKind, ProviderProfile, RouteMode};
@@ -9,7 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::{Duration, Instant};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 const TICK: Duration = Duration::from_secs(60);
 
@@ -55,15 +56,20 @@ fn run_tick(app: &AppHandle) {
             return;
         }
     };
-    let profiles = profiles(&state);
+    let gate = app.state::<ConfigWriteGate>();
+    let profiles = match profiles(&state, &gate) {
+        Ok(profiles) => profiles,
+        Err(error) => { log::warn!("定时用量查询无法读取配置：{error}"); return; }
+    };
     thread::scope(|scope| {
         for profile in profiles {
             let state = &state;
+            let gate = &*gate;
             scope.spawn(move || {
                 let result = if profile.app == AppKind::Codex
                     && profile.route_mode == RouteMode::Official
                 {
-                    crate::commands::quota_refresh::refresh(state, &profile.id, false)
+                    crate::commands::quota_refresh::refresh(state, &profile.id, false, gate)
                         .map_err(|error| error.message)
                 } else {
                     let interval = profile.usage_query.as_ref()
@@ -71,7 +77,7 @@ fn run_tick(app: &AppHandle) {
                     if interval == 0 || !usage_cache::due(state, &profile, interval, chrono::Utc::now()) {
                         return;
                     }
-                    execute_once(state, &profile, false)
+                    execute_once(state, profile.app, &profile.id, false, gate).map_err(|error| error.message)
                 };
                 match result {
                     Ok(true) => tray::refresh(app),
@@ -88,13 +94,14 @@ fn run_tick(app: &AppHandle) {
 }
 
 /// Each store is independent: one client's invalid files cannot stop the other.
-fn profiles(state: &LocalState) -> Vec<ProviderProfile> {
+fn profiles(state: &LocalState, gate: &ConfigWriteGate) -> Result<Vec<ProviderProfile>, String> {
+    let _guard = gate.lock()?;
     let store = state.configuration();
     let mut profiles = Vec::new();
     for app in [AppKind::Claude, AppKind::Codex] {
         match load_provider_files(&store, app) {
             Ok(files) => profiles.extend(files.into_iter().map(|file| file.into_profile(app))),
-            Err(error) => log::warn!("{app:?} 定时用量查询无法读取供应商：{error}"),
+            Err(error) => { let error = store_error(error); log::warn!("{app:?} 定时用量查询无法读取供应商：{error}"); },
         }
     }
     match store.list_codex_providers() {
@@ -102,41 +109,48 @@ fn profiles(state: &LocalState) -> Vec<ProviderProfile> {
             for record in records {
                 match store.find_codex_provider_file(&record.profile.id) {
                     Ok(file) => profiles.push(file.client_projection().into_profile(AppKind::Codex)),
-                    Err(error) => log::warn!("定时用量查询无法读取 Codex 供应商：{error}"),
+                    Err(error) => { let error = store_error(error); log::warn!("定时用量查询无法读取 Codex 供应商：{error}"); },
                 }
             }
         }
-        Err(error) => log::warn!("定时用量查询无法读取 Codex 供应商列表：{error}"),
+        Err(error) => { let error = store_error(error); log::warn!("定时用量查询无法读取 Codex 供应商列表：{error}"); },
     }
-    profiles
+    Ok(profiles)
 }
 
 /// The cache orders completions by attempt start, including failed attempts.
 /// Query responses never become a second display source in the renderer.
-pub(crate) fn execute_once(state: &LocalState, profile: &ProviderProfile, force: bool) -> Result<bool, String> {
-    let lock = query_lock(state, &profile.id)?;
-    let _guard = lock.lock().map_err(|_| "用量查询锁不可用")?;
-    let profile = &usage_profile(state, profile.app, &profile.id).map_err(|error| error.to_string())?;
+pub(crate) fn execute_once(state: &LocalState, app: AppKind, id: &str, force: bool,
+    gate: &ConfigWriteGate) -> Result<bool, CommandError> {
+    let failed = |message| CommandError::new("usage-query-failed", message);
+    let lock = query_lock(state, id).map_err(failed)?;
+    let _guard = lock.lock().map_err(|_| failed("用量查询锁不可用".to_string()))?;
+    let profile = &{
+        let _guard = gate.lock().map_err(failed)?;
+        usage_profile(state, app, id).map_err(|error| operation_error("profile-not-found", error))?
+    };
     let query = profile.usage_query.as_ref()
-        .ok_or_else(|| "该供应商尚未配置用量查询".to_string())?;
+        .ok_or_else(|| failed("该供应商尚未配置用量查询".to_string()))?;
     let interval = query.refresh_interval_minutes();
     if !force && (interval == 0 || !usage_cache::due(state, profile, interval, chrono::Utc::now())) {
         return Ok(false);
     }
     let upstream_protocol = profile.upstream_protocol
-        .ok_or_else(|| "供应商缺少上游 API 格式".to_string())?;
+        .ok_or_else(|| failed("供应商缺少上游 API 格式".to_string()))?;
     let attempted_at = chrono::Utc::now();
     let result = crate::usage_query::run_usage_query_with_connection(
         query, &profile.api_key, profile.base_url.as_deref(), upstream_protocol,
         profile.authentication, &profile.connection,
     );
-    let current = usage_profile(state, profile.app, &profile.id).map_err(|error| error.to_string())?;
+    let _guard = gate.lock().map_err(failed)?;
+    let current = usage_profile(state, profile.app, &profile.id)
+        .map_err(|error| operation_error("profile-not-found", error))?;
     if current != *profile {
-        return Err("供应商在查询期间已修改，本次结果已丢弃，请重新刷新".into());
+        return Err(failed("供应商在查询期间已修改，本次结果已丢弃，请重新刷新".into()));
     }
     match result {
         Ok(summary) => {
-            if usage_cache::record_success(state, profile, summary.clone(), attempted_at)? {
+            if usage_cache::record_success(state, profile, summary.clone(), attempted_at).map_err(failed)? {
                 if let Err(error) = crate::usage_history::record_provider(state, profile, &summary) {
                     log::warn!("用量查询成功，但无法保存趋势历史: {error}");
                 }
@@ -147,7 +161,7 @@ pub(crate) fn execute_once(state: &LocalState, profile: &ProviderProfile, force:
             if let Err(cache_error) = usage_cache::record_failure(state, profile, attempted_at, &error) {
                 log::warn!("用量查询失败，且无法记录尝试时间: {cache_error}");
             }
-            Err(error)
+            Err(failed(error))
         }
     }
 }

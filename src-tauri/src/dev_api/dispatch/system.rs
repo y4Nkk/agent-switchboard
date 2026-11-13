@@ -29,6 +29,7 @@ pub(super) async fn windows(app: &AppHandle, request: &InvokeRequest) -> Result<
             argument(&request.args, "extensions")?,
         )),
         "config_status" => command!(commands::status::config_status(app.clone())),
+        "tray_snapshot" => command!(crate::tray::tray_snapshot(app.clone())),
         "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
         "workspace_visible" => as_json(crate::workspace_visibility::workspace_visible(app.clone())),
         "read_resource_usage" => command!(commands::resource_usage::read_resource_usage(

@@ -4,7 +4,7 @@ import type { CommandError } from "../api/client";
 import type { ApplicationPreparation } from "../api/application-preparation";
 import { PreparationDetails } from "./ApplicationPreparation";
 import { useI18n } from "../i18n";
-import { commandErrorText, errorText } from "../i18n/errors";
+import { commandErrorText, errorDiagnosticText, errorText } from "../i18n/errors";
 import { Button } from "./Button";
 import { CloseIcon, TrashIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
@@ -80,10 +80,12 @@ function useInformationMessages({ error, settingsError, busy, preparation }: Pro
   if (settingsError && !settings.hidden) messages.push({
     id: "settings-error", kind: "error",
     title: t("shell.banner.settingsUnavailable", { detail: errorText(settingsError, t) }),
+    description: errorDiagnosticText(settingsError, t) ?? undefined,
     onDismiss: settings.dismiss,
   });
   if (error && !operation.hidden) messages.push({
     id: "operation-error", kind: "error", title: commandErrorText(error, t),
+    description: errorDiagnosticText(error, t) ?? undefined,
     onDismiss: operation.dismiss,
   });
   if (preparationId && !prepared.hidden) {

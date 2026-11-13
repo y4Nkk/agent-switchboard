@@ -72,7 +72,7 @@ pub(crate) use window::apply_desktop_settings;
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-/// Serializes the writers that replace client configuration files — switch,
+/// Serializes configuration snapshots and writers — switch,
 /// save-and-apply, restore/undo, gateway port changes, and retry-driven
 /// gateway recovery. Every writer also verifies an expected content hash,
 /// but hash checks alone leave a read-then-write window; this gate closes it
@@ -81,6 +81,20 @@ use std::sync::{Arc, Mutex, MutexGuard};
 pub(crate) struct ConfigWriteGate(Arc<Mutex<()>>);
 
 impl ConfigWriteGate {
+    /// Read-only IPCs and local store mutations must enter on the blocking pool,
+    /// under the same gate as preparation's staged directory replacement.
+    pub(crate) async fn run<T, F>(&self, task: F) -> Result<T, error::CommandError>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> Result<T, error::CommandError> + Send + 'static,
+    {
+        let gate = self.clone();
+        error::blocking(move || {
+            let _guard = gate.lock().map_err(|error| error::CommandError::new("config-write-gate-unavailable", error))?;
+            task()
+        }).await
+    }
+
     pub(crate) fn shared(&self) -> Arc<Mutex<()>> {
         Arc::clone(&self.0)
     }
@@ -91,6 +105,9 @@ impl ConfigWriteGate {
             .map_err(|_| "客户端配置写入闸门不可用".to_string())
     }
 }
+
+#[cfg(test)]
+mod configuration_gate_tests;
 
 pub use app_settings::*;
 pub use discovery::*;

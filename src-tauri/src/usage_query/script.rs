@@ -4,14 +4,15 @@ use asb_core::contracts::{ProviderConnectionOptions, UsageReadingInput, UsageSum
 use rquickjs::{Context, Runtime};
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const SCRIPT_MEMORY_LIMIT: usize = 2 * 1024 * 1024;
 const SCRIPT_STACK_LIMIT: usize = 256 * 1024;
 const SCRIPT_EXECUTION_LIMIT: Duration = Duration::from_millis(250);
 pub(super) const SCRIPT_PROGRAM_INVALID: &str =
-    "用量查询脚本必须计算为包含 request(input) 与 extract(input) 函数的对象";
+    "用量查询脚本初始化失败，请检查表达式及 request(input)、extract(input) 函数";
+const SCRIPT_RUNTIME_UNAVAILABLE: &str = "用量查询脚本运行环境初始化失败";
 pub(super) const SCRIPT_EXECUTION_FAILED: &str = "用量查询脚本执行失败";
 
 #[derive(Serialize)]
@@ -57,32 +58,42 @@ pub(super) struct ScriptProgram {
     context: Context,
     _runtime: Runtime,
     deadline: Arc<Mutex<Instant>>,
+    interrupted: Arc<AtomicBool>,
 }
 
 impl ScriptProgram {
     pub(super) fn new(source: &str) -> Result<Self, String> {
-        let runtime = Runtime::new().map_err(|_| SCRIPT_PROGRAM_INVALID.to_string())?;
+        let runtime = Runtime::new().map_err(|_| SCRIPT_RUNTIME_UNAVAILABLE.to_string())?;
         runtime.set_memory_limit(SCRIPT_MEMORY_LIMIT);
         runtime.set_max_stack_size(SCRIPT_STACK_LIMIT);
 
         let deadline = Arc::new(Mutex::new(Instant::now() + SCRIPT_EXECUTION_LIMIT));
         let interrupt_deadline = Arc::clone(&deadline);
+        let interrupted = Arc::new(AtomicBool::new(false));
+        let interrupt_flag = Arc::clone(&interrupted);
         runtime.set_interrupt_handler(Some(Box::new(move || match interrupt_deadline.lock() {
-            Ok(deadline) => Instant::now() >= *deadline,
+            Ok(deadline) => {
+                let exceeded = Instant::now() >= *deadline;
+                if exceeded { interrupt_flag.store(true, Ordering::Relaxed); }
+                exceeded
+            },
             Err(_) => true,
         })));
 
-        let context = Context::full(&runtime).map_err(|_| SCRIPT_PROGRAM_INVALID.to_string())?;
+        let context = Context::full(&runtime)
+            .map_err(|_| script_error(&interrupted, SCRIPT_RUNTIME_UNAVAILABLE))?;
         let program = Self {
             context,
             _runtime: runtime,
             deadline,
+            interrupted,
         };
         program.load(source)?;
         Ok(program)
     }
 
     fn reset_deadline(&self) {
+        self.interrupted.store(false, Ordering::Relaxed);
         if let Ok(mut deadline) = self.deadline.lock() {
             *deadline = Instant::now() + SCRIPT_EXECUTION_LIMIT;
         }
@@ -107,7 +118,7 @@ impl ScriptProgram {
         );
         self.context
             .with(|ctx| ctx.eval::<(), _>(initialization))
-            .map_err(|_| SCRIPT_PROGRAM_INVALID.to_string())
+            .map_err(|_| script_error(&self.interrupted, SCRIPT_PROGRAM_INVALID))
     }
 
     fn call_json<T: Serialize>(
@@ -150,7 +161,7 @@ impl ScriptProgram {
         let json: String = self
             .context
             .with(|ctx| ctx.eval(call))
-            .map_err(|_| SCRIPT_EXECUTION_FAILED.to_string())?;
+            .map_err(|_| script_error(&self.interrupted, SCRIPT_EXECUTION_FAILED))?;
         serde_json::from_str(&json).map_err(|_| invalid_output.to_string())
     }
 
@@ -188,6 +199,12 @@ impl ScriptProgram {
             .map_err(|_| "用量查询脚本 extract 返回值无效".to_string())?;
         normalize_readings(output.into_readings(), at)
     }
+}
+
+fn script_error(interrupted: &AtomicBool, fallback: &str) -> String {
+    if interrupted.load(Ordering::Relaxed) {
+        format!("用量查询脚本执行超过 {} 毫秒限额", SCRIPT_EXECUTION_LIMIT.as_millis())
+    } else { fallback.to_string() }
 }
 
 pub(super) fn parse_script_request(value: serde_json::Value) -> Result<ScriptRequest, String> {

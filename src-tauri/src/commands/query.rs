@@ -2,6 +2,7 @@ use super::error::{blocking, operation_error, state, CommandError};
 use crate::probe::ProbeResult;
 use asb_core::contracts::{ProviderConnectionOptions, UsageQuery, UsageSummary};
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -201,12 +202,10 @@ pub async fn query_profile_usage(
     profile_id: String,
 ) -> Result<(), CommandError> {
     let state = state(&app)?;
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
     let result = blocking(move || {
-        let profile = crate::usage_query::scheduler::usage_profile(&state, target, &profile_id)
-            .map_err(|error| operation_error("profile-not-found", error))?;
-        crate::usage_query::scheduler::execute_once(&state, &profile, true)
+        crate::usage_query::scheduler::execute_once(&state, target, &profile_id, true, &gate)
             .map(|_| ())
-            .map_err(|error| CommandError::new("usage-query-failed", error))
     })
     .await;
     crate::tray::refresh(&app);
@@ -222,7 +221,8 @@ pub async fn read_profile_usage(
     profile_id: String,
 ) -> Result<Option<asb_core::contracts::UsageSnapshot>, CommandError> {
     let state = state(&app)?;
-    blocking(move || {
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    gate.run(move || {
         let profile = crate::usage_query::scheduler::usage_profile(&state, target, &profile_id)
             .map_err(|error| operation_error("profile-not-found", error))?;
         crate::usage_cache::get(&state, &profile)

@@ -6,6 +6,7 @@ fn entry(at: &str, level: RuntimeLogSeverity, action: RuntimeLogAction) -> Runti
         at: at.to_string(),
         level,
         action,
+        configuration_path: None,
         error_code: (level == RuntimeLogSeverity::Error)
             .then(|| "operation-failed".to_string()),
     }
@@ -37,6 +38,22 @@ fn log_levels_apply_standard_thresholds() {
     assert!(!RuntimeLogLevel::Silent.allows(RuntimeLogSeverity::Info));
     assert!(!RuntimeLogLevel::Silent.allows(RuntimeLogSeverity::Warn));
     assert!(!RuntimeLogLevel::Silent.allows(RuntimeLogSeverity::Error));
+}
+
+#[test]
+fn configuration_failures_round_trip_only_allowlisted_relative_locations() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut failure = entry("2026-11-12T01:02:03.000Z", RuntimeLogSeverity::Error,
+        RuntimeLogAction::ConfigurationReadFailed);
+    failure.configuration_path = Some("configuration/client-settings/codex.json".into());
+    assert!(failure.is_valid());
+    fs::write(directory.path().join("agent-switchboard.log"), serde_json::to_vec(&failure).unwrap()).unwrap();
+    assert_eq!(list_from_dir(directory.path(), None).unwrap().entries, vec![failure.clone()]);
+    failure.configuration_path = Some("private-user/.codex/auth.json".into());
+    assert!(!failure.is_valid());
+    failure.configuration_path = Some("configuration/client-settings/codex.json".into());
+    failure.action = RuntimeLogAction::AppStarted;
+    assert!(!failure.is_valid());
 }
 
 #[test]

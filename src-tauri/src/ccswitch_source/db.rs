@@ -183,7 +183,7 @@ fn has_invalid_usage_query(proposal: &ccswitch::CcSwitchProposal) -> bool {
         // Official rows never carry a usage query.
         ccswitch::CcSwitchProviderDraft::CodexOfficial(_) => None,
     };
-    usage_query.is_some_and(|query| crate::usage_query::validate_persisted(query).is_err())
+    usage_query.is_some_and(|query| asb_core::validate::validate_usage_query(query).is_err())
 }
 
 fn clear_usage_query(proposal: &mut ccswitch::CcSwitchProposal) {

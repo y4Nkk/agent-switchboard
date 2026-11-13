@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ApplicationPreparation as Snapshot } from "../api/application-preparation";
 import { quitTray, openAppDataDir, openRuntimeLogDir, type CommandError } from "../api/client";
 import { useI18n, type MessageKey } from "../i18n";
-import { commandErrorText } from "../i18n/errors";
+import { CommandErrorLines } from "../app/notifications";
 import { isBrowserDevelopment } from "../lib/runtime";
 import { Button } from "./Button";
 import { WindowControls } from "./WindowControls";
@@ -30,7 +30,9 @@ function Elapsed({ snapshot }: { snapshot: Snapshot }) {
 export function PreparationDetails({ snapshot }: { snapshot: Snapshot }) {
   const { t } = useI18n();
   return <div className="asb-preparation-details">
-    {snapshot.issues.map((issue, index) => <p key={`${issue.code}-${index}`}>{commandErrorText(issue, t)}</p>)}
+    {snapshot.issues.map((issue, index) => <div className="asb-preparation-issue" key={`${issue.code}-${index}`}>
+      <CommandErrorLines error={issue} />
+    </div>)}
     {snapshot.preferencesReset && <p>{t("preparation.preferencesReset")}</p>}
     {snapshot.repairedFiles.length > 0 && <p>{t("preparation.repaired", { count: snapshot.repairedFiles.length })}</p>}
     {snapshot.backupPaths.map((path) => <p key={path}>{t("preparation.backup", { path })}</p>)}
@@ -69,9 +71,9 @@ export function ApplicationPreparation({ snapshot, error, onRecheck, overlay = f
       </>}
       {running && <div className="asb-preparation-progress" aria-hidden="true"><span /></div>}
       {snapshot && <Elapsed snapshot={snapshot} />}
-      {error && <p role="alert">{commandErrorText(error, t)}</p>}
+      {error && <div role="alert"><CommandErrorLines error={error} /></div>}
       {!running && snapshot && <PreparationDetails snapshot={snapshot} />}
-      {actionError && <p role="alert">{commandErrorText(actionError, t)}</p>}
+      {actionError && <div role="alert"><CommandErrorLines error={actionError} /></div>}
       <div className="asb-preparation-actions">
         {!running && <>
           <Button variant="secondary" onClick={onRecheck}>{t("preparation.recheck")}</Button>

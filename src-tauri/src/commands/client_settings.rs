@@ -239,7 +239,8 @@ pub async fn get_client_settings_editor(
     target: AppKind,
 ) -> Result<ClientSettingsEditor, CommandError> {
     let state = state(&app)?;
-    blocking(move || {
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    gate.run(move || {
         state
             .configuration()
             .get_client_settings(target)
@@ -281,7 +282,8 @@ pub async fn get_current_client_configuration(
     target: AppKind,
 ) -> Result<CurrentClientConfiguration, CommandError> {
     let state = state(&app)?;
-    blocking(move || {
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    gate.run(move || {
         let path = state
             .target(target)
             .map_err(|error| CommandError::new("config-path-unavailable", error))?;

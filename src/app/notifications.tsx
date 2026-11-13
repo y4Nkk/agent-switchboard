@@ -1,6 +1,6 @@
 import type { AppKind, LocalizedMessage } from "../api/client";
 import { useI18n } from "../i18n";
-import { errorText, localizedMessageText } from "../i18n/errors";
+import { errorDiagnosticText, errorText, localizedMessageText } from "../i18n/errors";
 import { toast, toastMessage, type ToastContent } from "../components/use-toast";
 import { ToastText } from "../components/ToastContent";
 import { clientName } from "../lib/client-name";
@@ -24,11 +24,11 @@ export function ToastWarningRows({ warnings }: { warnings: readonly LocalizedMes
  * scrubbed backend message as the diagnostic detail line. */
 export function CommandErrorLines({ error }: { error: unknown }) {
   const { t } = useI18n();
-  const diagnostic = error && typeof error === "object" && "messageKey" in error
-    && "message" in error && typeof error.message === "string" ? error.message : null;
+  const diagnostic = errorDiagnosticText(error, t);
+  const message = errorText(error, t);
   return (
     <>
-      <div>{errorText(error, t)}</div>
+      <div>{message}</div>
       {diagnostic ? <div className="asb-scope-note">{diagnostic}</div> : null}
     </>
   );

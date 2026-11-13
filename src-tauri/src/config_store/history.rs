@@ -70,7 +70,7 @@ impl ConfigStore {
         app: AppKind,
     ) -> Result<Vec<ConfigWriteRecord>, ProfileStoreError> {
         let mut records = Vec::new();
-        self.visit_history(app, |record| { records.push(record); Ok(()) }).map_err(store_error)?;
+        self.visit_history(app, |record| { records.push(record); Ok(()) }).map_err(|error| store_error(error, &self.history_path(app)))?;
         Ok(records)
     }
 
@@ -111,13 +111,16 @@ impl ConfigStore {
         app: AppKind,
     ) -> Result<Option<ConfigWriteRecord>, ProfileStoreError> {
         let mut latest = None;
-        self.visit_history(app, |record| { latest = Some(record); Ok(()) }).map_err(store_error)?;
+        self.visit_history(app, |record| { latest = Some(record); Ok(()) }).map_err(|error| store_error(error, &self.history_path(app)))?;
         Ok(latest)
     }
 }
 
-fn store_error(error: StoreOperationError) -> ProfileStoreError {
-    match error { StoreOperationError::Store(error) => error, _ => ProfileStoreError::Unsupported }
+fn store_error(error: StoreOperationError, path: &std::path::Path) -> ProfileStoreError {
+    match error {
+        StoreOperationError::Store(error) => error,
+        StoreOperationError::Invalid(reason) => ProfileStoreError::invalid(path, reason),
+    }
 }
 
 #[cfg(test)]
@@ -199,7 +202,7 @@ mod tests {
             store
                 .latest_config_write(AppKind::Codex)
                 .expect_err("malformed record must fail"),
-            ProfileStoreError::Unsupported
+            ProfileStoreError::invalid(&store.history_path(AppKind::Codex), "配置写入记录的内容哈希无效")
         );
 
         std::fs::write(
@@ -207,12 +210,9 @@ mod tests {
             "{\"records\":[{\"app\":\"codex\",\"profileId\":null,\"profileName\":null,\"contentHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"backupId\":\"b\",\"at\":\"2026-09-01T08:00:00Z\",\"operation\":\"projection\",\"legacyField\":true}]}",
         )
         .unwrap();
-        assert_eq!(
-            store
-                .latest_config_write(AppKind::Codex)
-                .expect_err("unknown record members must fail"),
-            ProfileStoreError::Unsupported
-        );
+        assert!(matches!(store.latest_config_write(AppKind::Codex),
+            Err(ProfileStoreError::InvalidFile { path, .. })
+                if path == store.history_path(AppKind::Codex)));
     }
 
     #[test]

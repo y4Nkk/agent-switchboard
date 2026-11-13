@@ -3,13 +3,17 @@
 //! This module owns the only runtime-log contract. It emits closed, non-secret
 //! events through the application logger and reads back only this application's
 //! rotated JSON-line files for the renderer. It never receives configuration
-//! text, credentials, paths, request bodies, or error messages.
+//! text, credentials, absolute paths, request bodies, or error messages.
+//! Configuration failures may retain only allowlisted store-relative locations.
 
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::AppHandle;
+
+mod configuration;
+pub(crate) use configuration::location as configuration_location;
 
 const LOG_FILE_STEM: &str = "agent-switchboard";
 const LOG_TARGET: &str = "agent-switchboard.runtime";
@@ -90,6 +94,7 @@ pub enum RuntimeLogAction {
     AppSettingsSaved,
     OutboundProxySaved,
     ApplicationDataRepaired,
+    ConfigurationReadFailed,
     ProfileCreated,
     ProfileUpdated,
     ProfileDeleted,
@@ -126,6 +131,8 @@ pub struct RuntimeLogEntry {
     /// Stable typed command error code, present only for failed actions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub configuration_path: Option<String>,
 }
 
 /// Registers the app-owned runtime logger before command setup. The same
@@ -159,11 +166,11 @@ pub fn plugin<R: tauri::Runtime>(directory: PathBuf) -> tauri::plugin::TauriPlug
 }
 
 pub fn record_started() {
-    record(RuntimeLogSeverity::Info, RuntimeLogAction::AppStarted, None);
+    record(RuntimeLogSeverity::Info, RuntimeLogAction::AppStarted, None, None);
 }
 
 pub fn record_success(action: RuntimeLogAction) {
-    record(RuntimeLogSeverity::Info, action, None);
+    record(RuntimeLogSeverity::Info, action, None, None);
 }
 
 pub fn record_failure(action: RuntimeLogAction, error_code: &str) {
@@ -171,7 +178,13 @@ pub fn record_failure(action: RuntimeLogAction, error_code: &str) {
         RuntimeLogSeverity::Error,
         action,
         Some(error_code.to_string()),
+        None,
     );
+}
+
+pub(crate) fn record_configuration_failure(error_code: &str, location: Option<String>) {
+    record(RuntimeLogSeverity::Error, RuntimeLogAction::ConfigurationReadFailed,
+        Some(error_code.to_string()), location.filter(|value| configuration::is_valid(value)));
 }
 
 /// Applies a successfully persisted application setting to future writes.
@@ -190,7 +203,7 @@ fn active_level() -> RuntimeLogLevel {
     }
 }
 
-fn record(level: RuntimeLogSeverity, action: RuntimeLogAction, error_code: Option<String>) {
+fn record(level: RuntimeLogSeverity, action: RuntimeLogAction, error_code: Option<String>, configuration_path: Option<String>) {
     if !active_level().allows(level) {
         return;
     }
@@ -200,6 +213,7 @@ fn record(level: RuntimeLogSeverity, action: RuntimeLogAction, error_code: Optio
         level,
         action,
         error_code,
+        configuration_path,
     };
     let Ok(payload) = serde_json::to_string(&entry) else {
         return;
@@ -240,6 +254,11 @@ fn is_runtime_log_file(path: &Path) -> bool {
 
 impl RuntimeLogEntry {
     fn is_valid(&self) -> bool {
+        if self.configuration_path.as_deref().is_some_and(|value| !configuration::is_valid(value))
+            || (self.configuration_path.is_some() && self.action != RuntimeLogAction::ConfigurationReadFailed)
+            || (self.action == RuntimeLogAction::ConfigurationReadFailed && self.level != RuntimeLogSeverity::Error) {
+            return false;
+        }
         if !self.at.ends_with('Z') || DateTime::parse_from_rfc3339(&self.at).is_err() {
             return false;
         }

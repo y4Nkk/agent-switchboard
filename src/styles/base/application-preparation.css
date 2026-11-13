@@ -37,7 +37,7 @@
 .asb-preparation-copy { max-width: 48ch; margin: 0; color: var(--asb-text-muted); }
 .asb-preparation-elapsed { margin: 0; color: var(--asb-text-muted); font-variant-numeric: tabular-nums; }
 .asb-preparation-details { max-width: 100%; overflow-wrap: anywhere; text-align: start; }
-.asb-preparation-details p { margin: 0 0 var(--asb-space-2); }
+.asb-preparation-details p, .asb-preparation-issue { margin: 0 0 var(--asb-space-2); }
 .asb-preparation-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--asb-space-2); }
 .asb-preparation-progress { width: 160px; height: 3px; margin-block: var(--asb-space-2); overflow: hidden; background: var(--asb-hairline); }
 .asb-preparation-progress span { display: block; width: 45%; height: 100%; background: var(--asb-action); animation: asb-preparing 1.6s ease-in-out infinite; }

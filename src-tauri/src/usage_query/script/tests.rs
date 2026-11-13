@@ -1,5 +1,21 @@
 use super::*;
 
+#[test]
+fn initialization_and_request_timeouts_report_the_execution_budget() {
+    let expected = format!("用量查询脚本执行超过 {} 毫秒限额", SCRIPT_EXECUTION_LIMIT.as_millis());
+    let error = ScriptProgram::new("(() => { while (true) {} })()").err().unwrap();
+    assert_eq!(error, expected);
+    let program = ScriptProgram::new("({request() { while (true) {} }, extract() { return {}; }})").unwrap();
+    assert_eq!(program.request("isolated-key", None).unwrap_err(), expected);
+}
+
+#[test]
+fn initialization_exceptions_do_not_echo_script_values() {
+    let error = ScriptProgram::new("(() => { throw new Error('private-script-value'); })()").err().unwrap();
+    assert_eq!(error, SCRIPT_PROGRAM_INVALID);
+    assert!(!error.contains("private-script-value"));
+}
+
 fn extract(output: &str) -> Result<UsageSummary, String> {
     let source = format!("({{ request() {{ return {{}}; }}, extract() {{ return {output}; }} }})");
     ScriptProgram::new(&source)?.extract(&serde_json::json!({}), 200, "2026-09-21T00:00:00Z".into())

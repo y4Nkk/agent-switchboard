@@ -3,7 +3,7 @@
 //! or writes a real Codex or Claude Code configuration file.
 
 use super::{
-    content_revision, parse_strict, read_optional, write_json_atomic, ConfigStore,
+    content_revision, parse_file, read_optional, write_json_atomic, ConfigStore,
     ProfileStoreError, StoreOperationError,
 };
 use asb_core::contracts::{AppKind, ClientSettingsSnapshot, SettingsValues};
@@ -27,10 +27,10 @@ impl ConfigStore {
         let snapshot = match read_optional(&self.client_settings_path(app))? {
             None => snapshot_of(default_client_settings(app)),
             Some(text) => {
-                let settings: SettingsValues = parse_strict(&text)?;
+                let settings: SettingsValues = parse_file(&text, &self.client_settings_path(app))?;
                 settings
                     .validate_client_settings(app)
-                    .map_err(|_| ProfileStoreError::Unsupported)?;
+                    .map_err(|error| ProfileStoreError::invalid(&self.client_settings_path(app), error.to_string()))?;
                 ClientSettingsSnapshot {
                     settings_hash: content_revision(text.as_bytes()),
                     settings,
@@ -151,7 +151,7 @@ mod tests {
             store
                 .get_client_settings(AppKind::Claude)
                 .expect_err("partial file must fail"),
-            ProfileStoreError::Unsupported
+            ProfileStoreError::InvalidFile { .. }
         ));
 
         std::fs::write(
@@ -163,7 +163,7 @@ mod tests {
             store
                 .get_client_settings(AppKind::Claude)
                 .expect_err("host key must fail"),
-            ProfileStoreError::Unsupported
+            ProfileStoreError::InvalidFile { .. }
         ));
     }
 }

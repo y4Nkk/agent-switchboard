@@ -118,9 +118,9 @@ fn corrupt_codex_storage_is_not_reinterpreted_as_a_generic_missing_provider() {
     let store = ConfigStore::new(directory.path().join("state"));
     let record = store.create_codex_provider(draft(CodexUpstream::Responses, "https://provider.example/v1")).unwrap();
     let path = store.providers_dir(AppKind::Codex).join(format!("{}.json", record.profile.id));
-    std::fs::write(path, "{}").unwrap();
+    std::fs::write(&path, "{}").unwrap();
     assert!(matches!(store.resolve_saved_provider(&record.profile.id),
-        Err(StoreOperationError::Store(crate::config_store::ProfileStoreError::Unsupported))));
+        Err(StoreOperationError::Store(crate::config_store::ProfileStoreError::InvalidFile { path: failed, .. })) if failed == path));
     assert!(prepare(&ProviderRequests::default(), &store,
         ProviderRequestTarget::Saved { profile_id: record.profile.id }).is_err());
 }

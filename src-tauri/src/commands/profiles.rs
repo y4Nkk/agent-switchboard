@@ -1,5 +1,5 @@
 use super::discovery::{codex_import_source, discovery_report};
-use super::error::{blocking, observe, operation_error, state, store_error, CommandError};
+use super::error::{observe, operation_error, state, store_error, CommandError};
 use super::switching;
 use crate::local_state::LocalState;
 use crate::runtime_log::RuntimeLogAction;
@@ -19,7 +19,8 @@ pub struct CodexImportResult {
 #[tauri::command]
 pub async fn list_profiles(app: tauri::AppHandle) -> Result<Vec<ProviderRecord>, CommandError> {
     let state = state(&app)?;
-    blocking(move || state.configuration().list_providers().map_err(store_error)).await
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    gate.run(move || state.configuration().list_providers().map_err(store_error)).await
 }
 
 /// Lists only current-format third-party Codex profiles. This dedicated
@@ -30,7 +31,8 @@ pub async fn list_codex_profiles(
     app: tauri::AppHandle,
 ) -> Result<Vec<CodexProviderRecord>, CommandError> {
     let state = state(&app)?;
-    blocking(move || {
+    let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+    gate.run(move || {
         state
             .configuration()
             .list_codex_providers()
@@ -47,7 +49,8 @@ pub async fn create_codex_profile(
     let refresh_app = app.clone();
     let result = observe(RuntimeLogAction::ProfileCreated, async move {
         let state = state(&app)?;
-        blocking(move || {
+        let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+        gate.run(move || {
             if let Some(route) = &draft.subagent_route {
                 switching::validate_subagent_route_reference(&state, route)?;
             }
@@ -165,7 +168,8 @@ pub async fn delete_codex_profile(
             .state::<crate::gateway::GatewayController>()
             .inner()
             .clone();
-        blocking(move || {
+        let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+        gate.run(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.uses_profile(&profile_id) {
                 return Err(CommandError::keyed(
@@ -249,7 +253,8 @@ pub async fn reorder_codex_profiles(
     let refresh_app = app.clone();
     let result = observe(RuntimeLogAction::ProfilesReordered, async move {
         let state = state(&app)?;
-        blocking(move || {
+        let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+        gate.run(move || {
             state
                 .configuration()
                 .reorder_codex_profiles(&ordered_ids, &expected_file_hashes)
@@ -279,10 +284,7 @@ pub async fn delete_profile(
             .inner()
             .clone();
         let gate = app.state::<super::ConfigWriteGate>().inner().clone();
-        blocking(move || {
-            let _guard = gate
-                .lock()
-                .map_err(|e| CommandError::new("config-write-gate-unavailable", e))?;
+        gate.run(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.uses_profile(&profile_id) {
                 return Err(CommandError::keyed(
@@ -345,7 +347,8 @@ pub async fn reorder_claude_profiles(
     let refresh_app = app.clone();
     let result = observe(RuntimeLogAction::ProfilesReordered, async move {
         let state = state(&app)?;
-        blocking(move || {
+        let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+        gate.run(move || {
             switching::ensure_profile_save_recovered(&app)?;
             state
                 .configuration()
@@ -372,7 +375,8 @@ pub async fn import_discovered_claude_profile(
             .state::<crate::gateway::GatewayController>()
             .inner()
             .clone();
-        blocking(move || {
+        let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+        gate.run(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.has_active_route_for(AppKind::Claude) {
                 return Err(CommandError::keyed(
@@ -425,7 +429,8 @@ pub async fn import_discovered_codex_profile(
             .state::<crate::gateway::GatewayController>()
             .inner()
             .clone();
-        blocking(move || {
+        let gate = app.state::<super::ConfigWriteGate>().inner().clone();
+        gate.run(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.has_active_route_for(AppKind::Codex) {
                 return Err(CommandError::keyed(
