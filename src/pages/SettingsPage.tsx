@@ -10,8 +10,10 @@ import { ModuleHeader, WorkspaceHeader } from "../components/WorkspaceHeader";
 import { Tabs } from "../components/Tabs";
 import { UpdateSection } from "../components/UpdateSection";
 import { ChangelogHistory } from "../components/ChangelogHistory";
+import { PageErrorBoundary } from "../components/PageErrorBoundary";
 
 interface SettingsPageProps {
+  active: boolean;
   section: SettingsSection;
   onSectionChange: (section: SettingsSection) => void;
   onReturnToProviders?: () => void;
@@ -82,19 +84,21 @@ function AboutSettings(props: SettingsPageProps) {
   );
 }
 
-function SettingsPanel({ section, selected, id, labelledBy, children }: {
+function SettingsPanel({ section, selected, active, id, labelledBy, title, children }: {
   section: SettingsSection;
   selected: SettingsSection;
+  active: boolean;
   id: string;
   labelledBy: string;
+  title?: string;
   children: ReactNode;
 }) {
-  const { t } = useI18n();
-  const title = t(SETTINGS_SECTIONS.find((item) => item.value === section)!.labelKey);
   return (
-    <section className="asb-panel" id={id} role="tabpanel" aria-labelledby={labelledBy} hidden={selected !== section}>
-      <ModuleHeader title={title} />
-      {children}
+    <section className={title ? "asb-panel" : undefined} id={id} role="tabpanel" aria-labelledby={labelledBy} hidden={selected !== section}>
+      <PageErrorBoundary active={active && selected === section}>
+        {title && <ModuleHeader title={title} />}
+        {children}
+      </PageErrorBoundary>
     </section>
   );
 }
@@ -113,23 +117,27 @@ export function SettingsPage(props: SettingsPageProps) {
       } primaryActions={props.onReturnToProviders ? (
         <Button variant="secondary" onClick={props.onReturnToProviders}>{t("settings.page.backToProviders")}</Button>
       ) : undefined} />
-      <SettingsPanel section="application" selected={section}
+      <SettingsPanel section="application" selected={section} active={props.active} title={t("nav.section.application")}
         id={`${id}-application-panel`} labelledBy={`${id}-application-tab`}>
         <ApplicationSettings {...props} />
       </SettingsPanel>
-        <div id={`${id}-client-management-panel`} role="tabpanel" aria-labelledby={`${id}-client-management-tab`} hidden={section !== "client-management"}>
-          {props.clientManagement}
-        </div>
-      <div id={`${id}-backups-panel`} role="tabpanel" aria-labelledby={`${id}-backups-tab`} hidden={section !== "backups"}>
-          {props.backups}
-        </div>
-      <div id={`${id}-storage-panel`} role="tabpanel" aria-labelledby={`${id}-storage-tab`} hidden={section !== "storage"}>
+      <SettingsPanel section="client-management" selected={section} active={props.active}
+        id={`${id}-client-management-panel`} labelledBy={`${id}-client-management-tab`}>
+        {props.clientManagement}
+      </SettingsPanel>
+      <SettingsPanel section="backups" selected={section} active={props.active}
+        id={`${id}-backups-panel`} labelledBy={`${id}-backups-tab`}>
+        {props.backups}
+      </SettingsPanel>
+      <SettingsPanel section="storage" selected={section} active={props.active}
+        id={`${id}-storage-panel`} labelledBy={`${id}-storage-tab`}>
         {props.storage}
-      </div>
-      <div id={`${id}-diagnostics-panel`} role="tabpanel" aria-labelledby={`${id}-diagnostics-tab`} hidden={section !== "diagnostics"}>
+      </SettingsPanel>
+      <SettingsPanel section="diagnostics" selected={section} active={props.active}
+        id={`${id}-diagnostics-panel`} labelledBy={`${id}-diagnostics-tab`}>
         {props.diagnostics}
-      </div>
-      <SettingsPanel section="about" selected={section}
+      </SettingsPanel>
+      <SettingsPanel section="about" selected={section} active={props.active} title={t("nav.section.about")}
         id={`${id}-about-panel`} labelledBy={`${id}-about-tab`}>
         <AboutSettings {...props} />
       </SettingsPanel>

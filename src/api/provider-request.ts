@@ -58,6 +58,7 @@ export interface ProviderDiagnostic {
   transport: "http" | "websocket";
   status: number | null;
   requestId: string | null;
+  retryAfter: string | null;
   body: string | null;
   bodyTruncated: boolean;
   message: string;

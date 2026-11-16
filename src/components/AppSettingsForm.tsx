@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { AppSettings } from "../api/client";
 import { useI18n } from "../i18n";
+import { LOG_LEVEL_OPTIONS } from "../lib/runtime-log-labels";
 import { AppSegmentSetting, AppSettingRow } from "./AppPreferenceControls";
 import { AppPreviewSetting, CloseBehaviorPreview, LogLevelPreview, MotionPreview, StartupPagePreview } from "./AppPreviewCards";
 import { WindowScene } from "./preference-preview/WindowScene";
@@ -129,13 +130,8 @@ export function AppSettingsForm(props: Props) {
         <h3 id="log-settings" className="asb-section-title">{t("settings.group.log")}</h3>
         <AppPreviewSetting<AppSettings["runtimeLogLevel"]> label={t("settings.log.level")} detail={t("settings.log.level.detail")}
           value={settings.runtimeLogLevel} busy={busy}
-          options={[
-            { value: "debug", label: t("settings.log.level.debug"), description: t("settings.preview.log.debug") },
-            { value: "info", label: t("settings.log.level.info"), description: t("settings.preview.log.info") },
-            { value: "warn", label: t("settings.log.level.warn"), description: t("settings.preview.log.warn") },
-            { value: "error", label: t("settings.log.level.error"), description: t("settings.preview.log.error") },
-            { value: "silent", label: t("settings.log.level.silent"), description: t("settings.preview.log.silent") },
-          ]}
+          options={LOG_LEVEL_OPTIONS.map(({ value, labelKey }) => ({ value,
+            label: t(labelKey), description: t(`settings.preview.log.${value}`) }))}
           renderPreview={(level) => <LogLevelPreview level={level} />}
           onChange={(runtimeLogLevel) => void onPatch({ runtimeLogLevel })} />
       </section>

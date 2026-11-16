@@ -94,6 +94,7 @@ export const messages = {
   "providers.request.diag.endpoint": ["API 路径错误", "API path error"],
   "providers.request.diag.authentication": ["认证失败", "Authentication failed"],
   "providers.request.diag.requestParameters": ["请求参数错误", "Request parameter error"],
+  "providers.request.detail.retryAfter": ["上游重试指引（Retry-After）", "Upstream retry guidance (Retry-After)"],
   "providers.request.diag.modelNotFound": ["模型不存在", "Model not found"],
   "providers.request.diag.rateLimit": ["请求受限", "Request rate-limited"],
   "providers.request.diag.upstream": ["供应商上游错误", "Provider upstream error"],

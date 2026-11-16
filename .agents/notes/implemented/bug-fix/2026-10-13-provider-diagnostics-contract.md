@@ -16,6 +16,8 @@ SwitchPlan 显式拥有写入范围。供应商修复只投影 Provider 所有�
 
 诊断报告由共享 Table 展示检查项、状态、结论与处理建议，状态保留文字和语义颜色；窄窗口只在报告区域横向滚动，长结论完整换行。修复与撤回继续消费唯一 DiffView，DiffView 内部使用共享 Table 对齐配置项、变更前和变更后，切换、备份、客户端配置与扩展的直接消费者同步使用这一结构。差异值在所属列内换行，不引入横向滚动；无变更时不显示空表头。单次连接结果、说明、表单和配置原文保留原有语义，不为表格布局复制业务状态。
 
+请求结果的前端 ProviderDiagnostic 与后端完整字段一致，ProviderDiagnosticDetails 在 retryAfter 非空时以双语字段名展示脱敏后的原始上游指引，包括秒数字符串、零和 HTTP 日期；缺失时不展示空值，不转换单位或自动重试。[显示契约完整性](2026-11-16-renderer-contract-completeness.md)拥有此字段的跨语言夹具与页面隔离回归，不改变本篇请求和修复写入边界。
+
 ## Related decisions
 
 [当前客户端配置契约](../feature/2026-10-12-current-client-configuration-contract.md)部分重叠：目录与片段所有权继续有效，本篇补充供应商修复的范围限制。其他命中的[供应商存储修复](../feature/2026-09-23-provider-store-repair.md)面向应用存储损坏，目标无关，保持原决策；没有需要取代或归档的同主题笔记。

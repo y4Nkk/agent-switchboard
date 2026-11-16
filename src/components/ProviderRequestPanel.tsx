@@ -1,10 +1,9 @@
-import { useState } from "react";
-import type { ProviderDiagnostic, ProviderDiagnosticKind, ProviderRequestTarget, ProviderRequestOutcome } from "../api/client";
+import type { ProviderDiagnosticKind, ProviderRequestTarget, ProviderRequestOutcome } from "../api/client";
 import type { MessageKey } from "../i18n";
 import { useI18n } from "../i18n";
 import { protocolLabel } from "../lib/protocol";
 import { Button } from "./Button";
-import { CollapsibleSection } from "./Collapsible";
+import { ProviderDiagnosticDetails } from "./ProviderDiagnosticDetails";
 import { Input } from "./Input";
 import { ModelPicker } from "./ModelPicker";
 import { Time } from "./Time";
@@ -49,28 +48,6 @@ const PHASE_TITLES: Record<RequestView["phase"], MessageKey> = {
   cancelled: "providers.request.phase.cancelled",
 };
 
-function DiagnosticDetails({ diagnostic }: { diagnostic: ProviderDiagnostic }) {
-  const { t } = useI18n();
-  const [bodyOpen, setBodyOpen] = useState(false);
-  return (
-    <div className="asb-request-diagnostic">
-      <p>{diagnostic.message}</p>
-      <dl>
-        <div><dt>{t("providers.label.requestUrl")}</dt><dd>{diagnostic.endpoint}</dd></div>
-        <div><dt>{t("providers.request.detail.transport")}</dt><dd>{diagnostic.transport === "websocket" ? "WebSocket" : "HTTP/SSE"}</dd></div>
-        <div><dt>{t("providers.request.detail.httpStatus")}</dt><dd>{diagnostic.status === null ? t("providers.request.detail.noHttpResponse") : `HTTP ${diagnostic.status}`}</dd></div>
-        <div><dt>Request ID</dt><dd>{diagnostic.requestId ?? t("providers.request.detail.noRequestId")}</dd></div>
-      </dl>
-      {diagnostic.body !== null && <CollapsibleSection quiet open={bodyOpen} onOpenChange={setBodyOpen}
-        label={<>{t("providers.request.detail.upstreamBody")}{diagnostic.bodyTruncated ? t("providers.request.detail.bodyTruncated") : ""}</>}>
-        <ScrollArea className="asb-request-diagnostic-body" aria-label={t("providers.request.detail.upstreamBody")}>
-          <pre>{diagnostic.body || t("providers.request.detail.emptyBody")}</pre>
-        </ScrollArea>
-      </CollapsibleSection>}
-    </div>
-  );
-}
-
 function RequestReceipt({ view }: { view: RequestView }) {
   const { t } = useI18n();
   const { phase, result, error } = view;
@@ -92,7 +69,7 @@ function RequestReceipt({ view }: { view: RequestView }) {
       {success && <ScrollArea className="asb-request-reply" aria-label={t("providers.request.receipt.aria")}>
         <blockquote>{result.reply}</blockquote>
       </ScrollArea>}
-      {diagnostic ? <DiagnosticDetails diagnostic={diagnostic} /> : result?.error && <p>{result.error}</p>}
+      {diagnostic ? <ProviderDiagnosticDetails diagnostic={diagnostic} /> : result?.error && <p>{result.error}</p>}
       {result && <>
         <p className="asb-request-metrics">
           {!diagnostic && result.status !== null && <>HTTP {result.status} · </>}{result.latencyMs} ms

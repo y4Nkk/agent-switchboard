@@ -59,6 +59,8 @@ export const messages = {
   "ownership.option.maxEffortLevel.max": ["不设上限", "No ceiling"],
   "ownership.option.promptCacheTtl.5m": ["5 分钟", "5 minutes"],
   "ownership.option.promptCacheTtl.1h": ["1 小时", "1 hour"],
+  "ownership.option.subagentPromptCacheTtl.5m": ["5 分钟", "5 minutes"],
+  "ownership.option.subagentPromptCacheTtl.1h": ["1 小时", "1 hour"],
   "ownership.approval.sandbox_approval": ["允许命令权限审批提示", "Allow command permission prompts"],
   "ownership.approval.rules": ["允许执行规则触发的审批提示", "Allow execution-rule prompts"],
   "ownership.approval.mcp_elicitations": ["允许 MCP 信息请求提示", "Allow MCP elicitation prompts"],

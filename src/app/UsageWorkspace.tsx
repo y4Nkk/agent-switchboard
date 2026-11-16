@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { PageErrorBoundary } from "../components/PageErrorBoundary";
 import { CUSTOM_PROBE_QUESTION_ID, type CodexProbeGradingVersion, type CodexProbeQuestionSnapshot,
   type ModelUsageRange, type ProviderRecord, type CodexProviderRecord } from "../api/client";
 import { ProviderQuotaOverview } from "../components/ProviderQuotaOverview";
@@ -20,6 +21,14 @@ import { useModelUsageReport } from "../pages/use-model-usage-report";
 import { useRequestUsage } from "../pages/use-request-usage";
 import { UsageWorkspaceHeader } from "./UsageWorkspaceHeader";
 import type { UsageSection } from "./navigation";
+
+function UsagePanel({ id, section, selected, active, children }: {
+  id: string; section: UsageSection; selected: UsageSection; active: boolean; children: ReactNode;
+}) {
+  return <div id={`${id}-${section}-panel`} role="tabpanel" aria-labelledby={`${id}-${section}-tab`} hidden={section !== selected}>
+    <PageErrorBoundary active={active && section === selected}>{children}</PageErrorBoundary>
+  </div>;
+}
 
 function useProbeForm(probe: ReturnType<typeof useCodexProbe>, closeHistory: () => void) {
   const [questionId, setQuestionId] = useState<string | null>(null);
@@ -88,30 +97,32 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
           radar={{ active: radarActive, probe, form, onQuestionChange: setQuestionId,
             runCount, onRunCountChange: setRunCount,
             onOpenHistory: () => { setHistoryOpened(true); setHistoryOpen(true); } }} />
-        <div id={`${id}-consumption-panel`} role="tabpanel" aria-labelledby={`${id}-consumption-tab`} hidden={section !== "consumption"}>
+        <UsagePanel id={id} section="consumption" selected={section} active={active}>
           {consumptionActive && <UsagePage usage={usage} />}
-        </div>
-        <div id={`${id}-requestPerformance-panel`} role="tabpanel" aria-labelledby={`${id}-requestPerformance-tab`} hidden={section !== "requestPerformance"}>
+        </UsagePanel>
+        <UsagePanel id={id} section="requestPerformance" selected={section} active={active}>
           {performance.active && <RequestUsagePanel performance={performance} />}
-        </div>
-        <div id={`${id}-quota-panel`} role="tabpanel" aria-labelledby={`${id}-quota-tab`} hidden={section !== "quota"}>
+        </UsagePanel>
+        <UsagePanel id={id} section="quota" selected={section} active={active}>
           {quotaActive && <div className="asb-page-stack">
             <ProviderQuotaOverview profiles={quotaProfiles} />
             <CodexOfficialResetPanel read={officialReset} />
             <CodexResetPanel read={resetSignal} />
           </div>}
-        </div>
-        <div id={`${id}-radar-panel`} role="tabpanel" aria-labelledby={`${id}-radar-tab`} hidden={section !== "radar"}>
+        </UsagePanel>
+        <UsagePanel id={id} section="radar" selected={section} active={active && !showHistory}>
           {radarOpened && <CodexProbePanel probe={probe} form={form} active={radarActive && !showHistory} />}
-        </div>
-        <div id={`${id}-resources-panel`} role="tabpanel" aria-labelledby={`${id}-resources-tab`} hidden={section !== "resources"}>
+        </UsagePanel>
+        <UsagePanel id={id} section="resources" selected={section} active={active}>
           {showResources && <ResourceUsagePage resources={resources} />}
-        </div>
+        </UsagePanel>
       </div>
       {historyOpened && (
         <div className="asb-editor-route" hidden={!showHistory}>
-          <CodexProbeHistory active={radarActive && showHistory} probe={probe} onClose={() => setHistoryOpen(false)}
-            onReuseQuestion={reuseQuestion} onChanged={probe.refresh} />
+          <PageErrorBoundary active={active && showHistory}>
+            <CodexProbeHistory active={radarActive && showHistory} probe={probe} onClose={() => setHistoryOpen(false)}
+              onReuseQuestion={reuseQuestion} onChanged={probe.refresh} />
+          </PageErrorBoundary>
         </div>
       )}
     </section>

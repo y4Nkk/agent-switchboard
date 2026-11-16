@@ -7,11 +7,13 @@ import { RadioOption } from "../components/RadioOption";
 import { Select } from "../components/Select";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { RuntimeOverviewPanel } from "../components/RuntimeOverviewPanel";
+import { PageErrorBoundary } from "../components/PageErrorBoundary";
 import { Tabs } from "../components/Tabs";
 import { useI18n } from "../i18n";
 import { useWorkspaceVisible } from "../hooks/use-workspace-visible";
 import { LogsPage } from "./LogsPage";
-import { LEVEL_FILTERS, LOG_LEVEL_OPTIONS, useRuntimeLogs } from "./use-runtime-logs";
+import { LEVEL_FILTERS, LOG_LEVEL_OPTIONS } from "../lib/runtime-log-labels";
+import { useRuntimeLogs } from "./use-runtime-logs";
 
 interface DiagnosticsPageProps extends ConfigStatusPanelProps {
   active: boolean;
@@ -75,14 +77,18 @@ export function DiagnosticsPage(props: DiagnosticsPageProps) {
         ) : undefined}
       />
       <div id="diagnostics-configuration-panel" role="tabpanel" aria-labelledby="diagnostics-configuration-tab" hidden={section !== "configuration"}>
-        {opened("configuration") && <div className="asb-diagnostics-configuration">
-          <ConfigStatusPanel statuses={props.statuses} profiles={profiles} locks={props.locks}
-            busy={busy} onRecoverLock={props.onRecoverLock} />
-          <RuntimeOverviewPanel />
-        </div>}
+        <PageErrorBoundary active={active && section === "configuration"}>
+          {opened("configuration") && <div className="asb-diagnostics-configuration">
+            <ConfigStatusPanel statuses={props.statuses} profiles={profiles} locks={props.locks}
+              busy={busy} onRecoverLock={props.onRecoverLock} />
+            <RuntimeOverviewPanel />
+          </div>}
+        </PageErrorBoundary>
       </div>
       <div id="diagnostics-logs-panel" role="tabpanel" aria-labelledby="diagnostics-logs-tab" hidden={section !== "logs"}>
-        {logsOpened && <LogsPage logs={logs} />}
+        <PageErrorBoundary active={active && section === "logs"}>
+          {logsOpened && <LogsPage logs={logs} />}
+        </PageErrorBoundary>
       </div>
     </section>
   );

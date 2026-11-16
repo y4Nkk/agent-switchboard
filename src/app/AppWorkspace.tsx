@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { SessionManager } from "../components/SessionManager";
 import { ScrollArea } from "../components/ScrollArea";
+import { PageErrorBoundary } from "../components/PageErrorBoundary";
 import { useI18n } from "../i18n";
 import { pageLabelKey, type Page } from "./navigation";
 import { ClientConfigurationWorkspace } from "./ClientConfigurationWorkspace";
@@ -30,26 +31,40 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
   return (
     <ScrollArea as="main" className="asb-main" aria-label={pageName}>
       <div hidden={page !== "providers"} className="asb-page-stack">
-        <ConfigurationSurface ready={model.preparation.configurationReady}><ProvidersWorkspace model={model} active={page === "providers"} /></ConfigurationSurface>
+        <PageErrorBoundary active={page === "providers"}>
+          <ConfigurationSurface ready={model.preparation.configurationReady}><ProvidersWorkspace model={model} active={page === "providers"} /></ConfigurationSurface>
+        </PageErrorBoundary>
       </div>
       {visited("gateway") && <div hidden={page !== "gateway"} className="asb-page-stack">
-        <ConfigurationSurface ready={model.preparation.configurationReady}><GatewayWorkspace model={model} active={page === "gateway"} /></ConfigurationSurface>
+        <PageErrorBoundary active={page === "gateway"}>
+          <ConfigurationSurface ready={model.preparation.configurationReady}><GatewayWorkspace model={model} active={page === "gateway"} /></ConfigurationSurface>
+        </PageErrorBoundary>
       </div>}
       {visited("clientConfiguration") && <div hidden={page !== "clientConfiguration"} className="asb-page-stack">
-        <ConfigurationSurface ready={model.preparation.configurationReady}><ClientConfigurationWorkspace model={model} active={page === "clientConfiguration"} /></ConfigurationSurface>
+        <PageErrorBoundary active={page === "clientConfiguration"}>
+          <ConfigurationSurface ready={model.preparation.configurationReady}><ClientConfigurationWorkspace model={model} active={page === "clientConfiguration"} /></ConfigurationSurface>
+        </PageErrorBoundary>
       </div>}
       {visited("extensions") && <div hidden={page !== "extensions"} className="asb-page-stack">
-        <ExtensionsWorkspace model={model} active={page === "extensions"} />
+        <PageErrorBoundary active={page === "extensions"}>
+          <ExtensionsWorkspace model={model} active={page === "extensions"} />
+        </PageErrorBoundary>
       </div>}
       {visited("sessions") && <section className="asb-panel" hidden={page !== "sessions"} aria-label={t("shell.sessions.aria")}>
-        <SessionManager active={page === "sessions"} />
+        <PageErrorBoundary active={page === "sessions"}>
+          <SessionManager active={page === "sessions"} />
+        </PageErrorBoundary>
       </section>}
       {visited("usage") && <div hidden={page !== "usage"} className="asb-page-stack">
-        <UsageWorkspace active={page === "usage"} section={model.usageSection} onSectionChange={model.setUsageSection}
-          probe={model.probe} claudeRecords={model.snapshot.records} codexRecords={model.snapshot.codexRecords} />
+        <PageErrorBoundary active={page === "usage"}>
+          <UsageWorkspace active={page === "usage"} section={model.usageSection} onSectionChange={model.setUsageSection}
+            probe={model.probe} claudeRecords={model.snapshot.records} codexRecords={model.snapshot.codexRecords} />
+        </PageErrorBoundary>
       </div>}
       {visited("settings") && <div hidden={page !== "settings"} className="asb-page-stack">
-        <SettingsWorkspace model={model} active={page === "settings"} />
+        <PageErrorBoundary active={page === "settings"}>
+          <SettingsWorkspace model={model} active={page === "settings"} />
+        </PageErrorBoundary>
       </div>}
     </ScrollArea>
   );

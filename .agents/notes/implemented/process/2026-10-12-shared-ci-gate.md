@@ -10,6 +10,8 @@ GitHub 直接打包而 CNB 只跑 Rust 测试与前端构建，本地验证没�
 
 由 scripts/ci.mjs 顺序执行笔记门禁、Node 测试、锁定依赖的 Rust 工作区测试及前端构建，遇错即停。npm run ci 是开发机、GitHub 四个平台和 CNB 的共同入口；各平台继续拥有自己的系统依赖与原生打包步骤。.node-version 唯一拥有 Node 版本，笔记工具使用原生 TypeScript 执行，移除 npx tsx 路径。测试使用隔离配置目录，失败日志保留在忽略的 .tmp 内。
 
+[显示契约完整性](../bug-fix/2026-11-16-renderer-contract-completeness.md)由 Rust 工作区测试序列化真实日志枚举、设置目录及诊断，再以标准输入交给 Node 消费当前前端定义；ASB_TEST_NODE 固定为共用入口的 process.execPath，沿用同一隔离环境。前端构建同时检查该消费脚本与诊断夹具的 TypeScript 类型，不维护另一个契约快照或增加独立 CI 执行路径。
+
 Windows MSIX 打包接受 SDK 标准变量 WindowsSdkVerBinPath；设置该变量时只使用其指向的 SDK，不存在则明确失败。未设置时使用既有系统 SDK 安装位置。开发机可用微软独立 SDK 构建工具，不要求改变系统安装。
 
 发布矩阵由 .github/workflows/package.yml 唯一拥有。macOS Apple Silicon 使用 macos-15，Intel 使用 macos-15-intel，遵循[GitHub 当前托管运行器标签](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。macos-14 ARM 配置已被服务端拒绝为不受支持，删除该标签，不保留旧运行器回退；构建机版本与应用最低系统版本分别由各自配置拥有。

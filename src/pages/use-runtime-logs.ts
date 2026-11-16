@@ -4,39 +4,13 @@ import {
   openRuntimeLogDir,
   type CommandError,
   type RuntimeLogRead,
-  type RuntimeLogLevel,
   type RuntimeLogSeverity,
 } from "../api/client";
-import type { MessageKey } from "../i18n";
+import { RUNTIME_LOG_LEVEL_LABELS, type RuntimeLogFilter } from "../lib/runtime-log-labels";
 import { tr } from "../i18n/current";
 
-export type RuntimeLogFilter = "all" | RuntimeLogSeverity;
-
-export const LEVEL_FILTERS: ReadonlyArray<{ value: RuntimeLogFilter; labelKey: MessageKey }> = [
-  { value: "all", labelKey: "backup.level.all" },
-  { value: "debug", labelKey: "backup.level.debug" },
-  { value: "info", labelKey: "backup.level.info" },
-  { value: "warn", labelKey: "backup.level.warn" },
-  { value: "error", labelKey: "backup.level.error" },
-];
-
-export const LOG_LEVEL_OPTIONS: ReadonlyArray<{ value: RuntimeLogLevel; labelKey: MessageKey }> = [
-  { value: "debug", labelKey: "backup.level.debug" },
-  { value: "info", labelKey: "backup.level.info" },
-  { value: "warn", labelKey: "backup.level.warn" },
-  { value: "error", labelKey: "backup.level.error" },
-  { value: "silent", labelKey: "backup.level.silent" },
-];
-
-const SEVERITY_LABEL: Record<RuntimeLogSeverity, MessageKey> = {
-  debug: "backup.level.debug",
-  info: "backup.level.info",
-  warn: "backup.level.warn",
-  error: "backup.level.error",
-};
-
 export function levelLabel(level: RuntimeLogSeverity): string {
-  return tr(SEVERITY_LABEL[level]);
+  return tr(RUNTIME_LOG_LEVEL_LABELS[level]);
 }
 
 /** The log table's page size, matching the codebase's page-size convention. */

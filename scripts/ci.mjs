@@ -32,6 +32,7 @@ const paths = Object.fromEntries(["home", "appdata", "localappdata", "codex", "c
 for (const path of Object.values(paths)) mkdirSync(path, { recursive: true });
 const testEnvironment = {
   ...process.env,
+  ASB_TEST_NODE: process.execPath,
   // Retain build caches while isolating every default client/application path.
   CARGO_HOME: process.env.CARGO_HOME || join(homedir(), ".cargo"),
   RUSTUP_HOME: process.env.RUSTUP_HOME || join(homedir(), ".rustup"),

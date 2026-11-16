@@ -3,49 +3,8 @@ import { invoke } from "./client";
 import type { AppKind, UpstreamProtocol } from "./shared";
 import type { SettingsValues } from "./settings";
 import type { RouteState, ConfigWriteRecord } from "./switching";
-
-/** Closed, renderer-safe runtime events emitted by the application backend. */
-export type RuntimeLogAction =
-  | "appStarted"
-  | "webviewMemoryLow"
-  | "webviewMemoryNormal"
-  | "storageCacheMaintained"
-  | "storageHistoryArchived"
-  | "storageBackupsCleaned"
-  | "storageSessionsCleaned"
-  | "updateTempSwept"
-  | "appSettingsSaved"
-  | "outboundProxySaved"
-  | "codexSubagentSettingsApplied"
-  | "providersSqlImported"
-  | "applicationDataRepaired"
-  | "configurationReadFailed"
-  | "profileCreated"
-  | "profileUpdated"
-  | "profileDeleted"
-  | "profilesReordered"
-  | "profileImported"
-  | "globalPromptDocumentSaved"
-  | "configurationSwitched"
-  | "backupRestored"
-  | "switchUndone"
-  | "staleLockRecovered"
-  | "cloudBackupSettingsSaved"
-  | "cloudBackupConnectionTested"
-  | "cloudBackupUploaded"
-  | "cloudBackupRestored"
-  | "sessionResumed"
-  | "sessionDeleted"
-  | "codexSessionProvidersTransferred"
-  | "codexSessionProvidersRestored"
-  | "ccSwitchProfilesImported"
-  | "officialLoginCompleted";
-
-/** Persisted recording threshold. `silent` stops future event writes. */
-export type RuntimeLogLevel = "debug" | "info" | "warn" | "error" | "silent";
-
-/** Severity of one event already written to the application log. */
-export type RuntimeLogSeverity = Exclude<RuntimeLogLevel, "silent">;
+import type { RuntimeLogAction, RuntimeLogSeverity } from "../lib/runtime-log-labels";
+export type { RuntimeLogAction, RuntimeLogLevel, RuntimeLogSeverity } from "../lib/runtime-log-labels";
 
 /** One non-secret application runtime event from the app-owned log files. */
 export interface RuntimeLogEntry {

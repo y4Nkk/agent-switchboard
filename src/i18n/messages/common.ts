@@ -111,7 +111,7 @@ export const messages = {
   "pagination.status": ["第 {page} / {total} 页", "Page {page} of {total}"],
 
   "recovery.aria": ["界面恢复", "Interface recovery"],
-  "recovery.title": ["界面未能加载", "The interface failed to load"],
-  "recovery.body": ["重新加载可尝试恢复，未保存的编辑将丢失；已保存的配置不受影响。", "Reload to try to recover; unsaved edits are lost, saved configuration is untouched."],
-  "recovery.reload": ["重新加载界面", "Reload interface"],
+  "recovery.title": ["此页面未能加载", "This page failed to load"],
+  "recovery.body": ["可重新打开此页面，或切换到其他页面继续使用。此页面未保存的编辑可能丢失；已保存的配置不受影响。", "Reopen this page or switch to another page to continue. Unsaved edits on this page may be lost; saved configuration is untouched."],
+  "recovery.retry": ["重新打开此页面", "Reopen this page"],
 } as const satisfies Record<string, MessageEntry>;

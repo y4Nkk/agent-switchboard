@@ -9,7 +9,7 @@ import type { SwitchboardModel } from "./useSwitchboardModel";
 export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
   const { appSettingsState: settings, update, snapshot, operations, busy } = model;
   return (
-    <SettingsPage section={model.settingsSection} onSectionChange={model.setSettingsSection}
+    <SettingsPage active={active} section={model.settingsSection} onSectionChange={model.setSettingsSection}
       onReturnToProviders={model.settingsReturnToProviders ? model.returnToProviders : undefined}
       egress={<OutboundProxySettings active={active && model.settingsSection === "application"} busy={busy}
         revision={model.dataRevision} onBusy={model.setBusy} onError={model.reportError}

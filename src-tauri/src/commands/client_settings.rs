@@ -10,6 +10,10 @@ use asb_core::ownership::{
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
+#[cfg(test)]
+#[path = "client_settings/frontend_contract_tests.rs"]
+mod frontend_contract_tests;
+
 /// A catalog option available for a typed setting control.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

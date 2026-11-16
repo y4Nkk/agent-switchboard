@@ -25,6 +25,8 @@
     "allowImportingTsExtensions": true
   },
   "include": [
-    "src"
+    "src",
+    "tests/fixtures/provider-diagnostic.ts",
+    "tests/frontend-contract-consumer.ts"
   ]
 }

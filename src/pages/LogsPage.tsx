@@ -1,6 +1,5 @@
 import { commandErrorText } from "../i18n/errors";
 import {
-  type RuntimeLogAction,
   type RuntimeLogEntry,
 } from "../api/client";
 import { Pagination } from "../components/Pagination";
@@ -9,45 +8,9 @@ import { Time } from "../components/Time";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { ScrollTextIcon } from "../components/icons";
 import { Button } from "../components/Button";
-import { useI18n, type MessageKey, type TFunction } from "../i18n";
+import { useI18n, type TFunction } from "../i18n";
+import { RUNTIME_LOG_ACTION_LABELS } from "../lib/runtime-log-labels";
 import { RUNTIME_LOG_PAGE_SIZE, levelLabel, useRuntimeLogs } from "./use-runtime-logs";
-
-const ACTION_LABEL: Record<RuntimeLogAction, MessageKey> = {
-  appStarted: "backup.action.appStarted",
-  webviewMemoryLow: "backup.action.webviewMemoryLow",
-  webviewMemoryNormal: "backup.action.webviewMemoryNormal",
-  storageCacheMaintained: "backup.action.storageCacheMaintained",
-  storageHistoryArchived: "backup.action.storageHistoryArchived",
-  storageBackupsCleaned: "backup.action.storageBackupsCleaned",
-  storageSessionsCleaned: "backup.action.storageSessionsCleaned",
-  updateTempSwept: "backup.action.updateTempSwept",
-  appSettingsSaved: "backup.action.appSettingsSaved",
-  outboundProxySaved: "backup.action.outboundProxySaved",
-  codexSubagentSettingsApplied: "backup.action.codexSubagentSettingsApplied",
-  providersSqlImported: "backup.action.providersSqlImported",
-  applicationDataRepaired: "backup.action.applicationDataRepaired",
-  configurationReadFailed: "backup.action.configurationReadFailed",
-  profileCreated: "backup.action.profileCreated",
-  profileUpdated: "backup.action.profileUpdated",
-  profileDeleted: "backup.action.profileDeleted",
-  profilesReordered: "backup.action.profilesReordered",
-  profileImported: "backup.action.profileImported",
-  globalPromptDocumentSaved: "backup.action.globalPromptDocumentSaved",
-  configurationSwitched: "backup.action.configurationSwitched",
-  backupRestored: "backup.action.backupRestored",
-  switchUndone: "backup.action.switchUndone",
-  staleLockRecovered: "backup.action.staleLockRecovered",
-  cloudBackupSettingsSaved: "backup.action.cloudBackupSettingsSaved",
-  cloudBackupConnectionTested: "backup.action.cloudBackupConnectionTested",
-  cloudBackupUploaded: "backup.action.cloudBackupUploaded",
-  cloudBackupRestored: "backup.action.cloudBackupRestored",
-  sessionResumed: "backup.action.sessionResumed",
-  sessionDeleted: "backup.action.sessionDeleted",
-  codexSessionProvidersTransferred: "backup.action.codexSessionProvidersTransferred",
-  codexSessionProvidersRestored: "backup.action.codexSessionProvidersRestored",
-  ccSwitchProfilesImported: "backup.action.ccSwitchProfilesImported",
-  officialLoginCompleted: "backup.action.officialLoginCompleted",
-};
 
 function logColumns(t: TFunction): Array<TableColumn<RuntimeLogEntry>> {
   return [
@@ -68,7 +31,7 @@ function logColumns(t: TFunction): Array<TableColumn<RuntimeLogEntry>> {
       key: "action",
       header: t("backup.col.event"),
       cellClassName: "asb-runtime-log-action",
-      render: (entry) => t(ACTION_LABEL[entry.action]),
+      render: (entry) => t(RUNTIME_LOG_ACTION_LABELS[entry.action]),
     },
     {
       key: "errorCode",

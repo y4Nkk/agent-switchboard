@@ -81,11 +81,6 @@ export const messages = {
   "settings.group.log": ["日志", "Logs"],
   "settings.log.level": ["运行事件记录级别", "Runtime event level"],
   "settings.log.level.detail": ["低于该级别的新事件不再写入日志文件，保存后立即生效。", "New events below this level are no longer written to the log file; applies immediately after saving."],
-  "settings.log.level.debug": ["调试", "Debug"],
-  "settings.log.level.info": ["信息", "Info"],
-  "settings.log.level.warn": ["警告", "Warn"],
-  "settings.log.level.error": ["错误", "Error"],
-  "settings.log.level.silent": ["静默", "Silent"],
 
   "settings.group.performance": ["性能", "Performance"],
   "settings.performance.hardwareAcceleration": ["启用硬件加速", "Enable hardware acceleration"],

@@ -1,4 +1,3 @@
-import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AppShell } from "./app/AppShell";
 import { AppWorkspace } from "./app/AppWorkspace";
 import { useDevtoolsShortcut, useKeyboardFocusMarker, useScrollActivityMarker } from "./app/global-effects";
@@ -39,7 +38,7 @@ function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplic
         sidebar={model.sidebar}
         preparation={preparation.snapshot!} settingsError={appSettingsState.loadFailure}
         pin={appSettingsState.pin} update={update} onOpenUpdate={() => model.openSettings("about")}>
-        <AppErrorBoundary><AppWorkspace model={model} /></AppErrorBoundary>
+        <AppWorkspace model={model} />
       </AppShell>
       <OperationConfirmSheets operations={operations} providers={providers} busy={busy} />
       </div>
