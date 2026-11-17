@@ -8,9 +8,13 @@ Status: implemented
 
 ## Decision
 
-`ProviderAdvancedSettings` 统一拥有 Claude、Codex 第三方与官方登录表单的常驻高级设置区域。外层与内部 Responses 能力、供应商能力、备注移除 `details` / `summary`、展开状态与箭头，改为静态分组、标题和原有字段完整显示。协议和能力决定的字段适用条件、参数独立编辑页及现有草稿和保存流程保持同一所有者。
+`ProviderAdvancedSettings` 统一拥有 Claude、Codex 第三方与官方登录表单的常驻高级设置区域。外层与内部 Responses 能力、供应商能力、备注移除 `details` / `summary`、展开状态与箭头，改为静态分组、标题和适用值完整显示。协议和能力决定的字段适用条件、参数独立编辑页及现有草稿和保存流程保持同一所有者。
 
 高级设置布局复用全局表单原语、间距、实体内容面与浅层子模块。高级设置专属折叠样式及失去消费者的展开、按需配置、备注摘要文案被删除；`DESIGN.md` 拥有当前交互事实。连接测试与模型区的披露行为属于其他模块，不进入此简化。
+
+## Related decisions
+
+[供应商配置减负](../feature/2026-11-16-provider-configuration-relief.md)部分取代原逐项控件，保留本篇常显原则；模型能力只在条目编辑，供应商总能力由条目汇总，独立操作和备注继续完整显示。
 
 ## Alternatives considered
 

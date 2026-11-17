@@ -31,9 +31,30 @@ namespace AgentSwitchboard.Installer
             get { return T("准备安装", "Ready to install"); }
         }
 
-        internal string ReadySummary
+        internal string ReadyInstructions(bool update)
         {
-            get { return T("在本机统一管理 Codex 与 Claude Code 的供应商和配置。", "Manage Codex and Claude Code providers and configuration on this PC."); }
+            return update
+                ? T("确认下方安装位置后，点击“更新”。完成后可选择立即重启或稍后打开。", "Confirm the location below, then choose Update. When it finishes, you can restart now or open the app later.")
+                : T("确认下方安装位置后，点击“安装”。安装完成后可选择是否立即打开应用。", "Confirm the location below, then choose Install. When it finishes, you can choose whether to open the app now.");
+        }
+
+        internal string StepsHeading { get { return T("安装步骤", "Installation steps"); } }
+        internal string StepCurrent { get { return T("当前步骤", "Current step"); } }
+        internal string StepCompleted { get { return T("已完成", "Completed"); } }
+        internal string StepPending { get { return T("待进行", "Upcoming"); } }
+        internal string StepAttention { get { return T("需处理", "Needs attention"); } }
+
+        internal string StepTitle(int step, bool update)
+        {
+            string label;
+            switch (step)
+            {
+                case 1: label = T("确认位置", "Confirm location"); break;
+                case 2: label = update ? T("安装更新", "Install update") : T("安装应用", "Install app"); break;
+                case 3: label = update ? T("重启应用", "Restart app") : T("打开应用", "Open app"); break;
+                default: throw new ArgumentOutOfRangeException("step");
+            }
+            return step.ToString(CultureInfo.CurrentCulture) + ". " + label;
         }
 
         internal string InstallLocation
@@ -86,11 +107,6 @@ namespace AgentSwitchboard.Installer
             get { return T("再试一次", "Try again"); }
         }
 
-        internal string Finish
-        {
-            get { return T("完成", "Done"); }
-        }
-
         internal string InstallingTitle
         {
             get { return T("正在安装", "Installing"); }
@@ -101,19 +117,29 @@ namespace AgentSwitchboard.Installer
             get { return T("正在安装 Agent Switchboard。请保持此窗口打开。", "Installing Agent Switchboard. Keep this window open."); }
         }
 
-        internal string CompleteTitle
+        internal string CompleteTitle(bool update)
         {
-            get { return T("安装完成", "Installation complete"); }
+            return update ? T("更新完成", "Update complete") : T("安装完成", "Installation complete");
         }
 
-        internal string CompleteStatus
+        internal string CompletionPrompt(bool update)
         {
-            get { return T("Agent Switchboard 已准备就绪。", "Agent Switchboard is ready to use."); }
+            return update
+                ? T("更新已安装。选择“立即重启”打开新版，或选择“稍后”关闭安装程序。", "The update is installed. Choose Restart now to open the new version, or Later to close the installer.")
+                : T("安装已完成。选择“打开应用”立即使用，或选择“稍后”关闭安装程序。", "Installation is complete. Choose Open app to start using it, or Later to close the installer.");
         }
 
-        internal string LaunchWhenFinished
+        internal string LaunchAction(bool update, bool retry)
         {
-            get { return T("现在打开 Agent Switchboard", "Open Agent Switchboard now"); }
+            if (retry) return update ? T("重试重启", "Retry restart") : T("重试打开", "Retry opening");
+            return update ? T("立即重启", "Restart now") : T("打开应用", "Open app");
+        }
+
+        internal string Later { get { return T("稍后", "Later"); } }
+
+        internal string LaunchingStatus
+        {
+            get { return T("正在打开 Agent Switchboard，请稍候。", "Opening Agent Switchboard. Please wait."); }
         }
 
         internal string InstallingCannotClose
@@ -231,21 +257,19 @@ namespace AgentSwitchboard.Installer
             }
         }
 
-        internal string FailureDiagnostic(Exception error)
+        internal string Diagnostic(Exception error)
         {
             var installerError = error as InstallerException;
-            if (installerError == null || !installerError.ExitCode.HasValue) return String.Empty;
-            return T("安装引擎返回代码：", "Installation engine exit code: ") + installerError.ExitCode.Value;
+            string code = installerError != null && installerError.ExitCode.HasValue
+                ? T("安装引擎返回代码：", "Installation engine exit code: ")
+                    + installerError.ExitCode.Value + Environment.NewLine
+                : String.Empty;
+            return code + T("详细信息：", "Details: ") + error.ToString();
         }
 
         internal string LaunchFailureStatus
         {
-            get { return T("已完成安装，但无法自动打开应用。", "Installed, but the app could not open automatically."); }
-        }
-
-        internal string LaunchFailureDiagnostic(string detail)
-        {
-            return T("详细信息：", "Details: ") + detail;
+            get { return T("已完成安装，但无法打开应用。", "Installed, but the app could not open."); }
         }
 
         internal string StartupFailure(Exception error)

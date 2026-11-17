@@ -6,7 +6,7 @@ import { CommandErrorLines } from "../app/notifications";
 import { isBrowserDevelopment } from "../lib/runtime";
 import { Button } from "./Button";
 import { WindowControls } from "./WindowControls";
-import appIcon from "../assets/app-icon.svg";
+import { AppLogo } from "./AppLogo";
 
 const stages = {
   preferences: "preparation.stage.preferences", configuration: "preparation.stage.configuration",
@@ -60,7 +60,7 @@ export function ApplicationPreparation({ snapshot, error, onRecheck, overlay = f
       {!isBrowserDevelopment && <WindowControls />}
     </header>
     <div ref={content} tabIndex={overlay ? -1 : undefined} className="asb-preparation-content">
-      <img className="asb-preparation-logo" src={appIcon} alt="" />
+      <AppLogo className="asb-preparation-logo" />
       {!snapshot?.settings && running ? <div className="asb-settings-skeleton" role="status" aria-label="Agent Switchboard">
         <div className="asb-skeleton" /><div className="asb-skeleton" />
       </div> : <>

@@ -21,8 +21,9 @@ export function AppDialogSuspension({ suspended, children }: {
   suspended: boolean;
   children: ReactNode;
 }) {
+  const parentSuspended = useContext(AppDialogSuspensionContext);
   return (
-    <AppDialogSuspensionContext.Provider value={suspended}>
+    <AppDialogSuspensionContext.Provider value={parentSuspended || suspended}>
       {children}
     </AppDialogSuspensionContext.Provider>
   );
@@ -40,10 +41,10 @@ export function AppDialog({ title, busy, onClose, children, footer, wide = false
   return (
     <ModalOverlay
       isOpen
-      isDismissable={!busy}
-      isKeyboardDismissDisabled={busy}
+      isDismissable={!busy && !suspended}
+      isKeyboardDismissDisabled={busy || suspended}
       onOpenChange={(open) => {
-        if (!open && !busy) onClose();
+        if (!open && !busy && !suspended) onClose();
       }}
       aria-hidden={suspended || undefined}
       className={`asb-dialog-backdrop${suspended ? " is-suspended" : ""}`}
@@ -54,7 +55,7 @@ export function AppDialog({ title, busy, onClose, children, footer, wide = false
             <Heading slot="title" className="asb-dialog-title">
               {title}
             </Heading>
-            <Button variant="icon" disabled={busy} aria-label={t("window.closeDialog")} onClick={onClose}>
+            <Button variant="icon" disabled={busy || suspended} aria-label={t("window.closeDialog")} onClick={onClose}>
               <CloseIcon />
             </Button>
           </header>

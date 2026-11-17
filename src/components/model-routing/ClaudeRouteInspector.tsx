@@ -1,78 +1,72 @@
 import type { ClaudeModelRoute } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { claudeOptions } from "../../lib/provider-drafts";
-import { Checkbox } from "../Checkbox";
 import { Input } from "../Input";
 import { ModelPicker } from "../ModelPicker";
-import { RadioOption } from "../RadioOption";
 import { Select } from "../Select";
+import { ProviderValue } from "../provider-editor/ProviderValue";
 import { claudeModels, claudeTargetIssue, type RouteDocument } from "./model";
 import type { RouteInspectorProps } from "./RouteInspector";
 
 type Props = RouteInspectorProps & { document: Extract<RouteDocument, { kind: "profile" }> };
 
-export function ClaudeRouteInspector({ document, role, sources, disabled, onChange }: Props) {
-  const { t } = useI18n();
+function claudeRouteState({ document, role, sources, onChange }: Props) {
   const draft = document.draft;
-  if (draft.routeMode === "official") return <p className="asb-field-help">{t("modelRoutes.official")}</p>;
   const options = claudeOptions(draft.modelOptions, {});
-  if (options.kind !== "claude") return null;
+  if (options.kind !== "claude") throw new Error("Claude routing requires Claude model options");
   const route = role === "main" ? null : options.routes[role];
   const selected = route?.mode === "provider" ? sources.find((source) => source.kind === "profile" && source.record.profile.id === route.profileId) : null;
-  const target = route?.mode === "provider" ? route.profileId === document.profileId ? draft : selected?.kind === "profile" ? selected.record.profile : undefined : draft;
-  const models = [...new Set([
-    ...(target ? claudeModels(target, route?.mode === "provider" ? route.profileId : document.profileId) : []),
-  ])];
+  const target = route?.mode === "provider" ? route.profileId === document.profileId ? draft
+    : selected?.kind === "profile" ? selected.record.profile : undefined : draft;
+  const models = target ? claudeModels(target, route?.mode === "provider" ? route.profileId : document.profileId) : [];
   const value = role === "main" ? draft.model ?? "" : route?.model ?? "";
   const changeRoute = (next: ClaudeModelRoute | null) => {
-    if (role === "main") return;
-    onChange({ ...document, draft: { ...draft, modelOptions: { ...options, routes: { ...options.routes, [role]: next } } } });
+    if (role !== "main") onChange({ ...document, draft: { ...draft,
+      modelOptions: { ...options, routes: { ...options.routes, [role]: next } },
+    } });
   };
-  const changeModel = (model: string) => {
-    if (role === "main") onChange({ ...document, draft: { ...draft, model: model.trim() || null,
-      modelOptions: { ...options, primaryOneM: !!model.trim() && options.primaryOneM } } });
-    else changeRoute(model.trim() ? { ...(route ?? { mode: "primary", oneM: false }), model: model.trim() }
-      : route ? { ...route, model: "", oneM: false } : null);
-  };
+  const changeModel = (model: string) => changeRoute(model.trim()
+    ? { ...(route ?? { mode: "primary", oneM: false }), model: model.trim() }
+    : route ? { ...route, model: "", oneM: false } : null);
+  const changeOneM = (oneM: boolean) => role === "main"
+    ? onChange({ ...document, draft: { ...draft, modelOptions: { ...options, primaryOneM: oneM } } })
+    : route && changeRoute({ ...route, oneM });
+  return { draft, options, route, target, models, value, changeRoute, changeModel, changeOneM };
+}
+
+export function ClaudeRouteInspector(props: Props) {
+  const { t } = useI18n();
+  const { document, role, sources, disabled } = props;
+  const { draft, options, route, target, models, value, changeRoute, changeModel, changeOneM } = claudeRouteState(props);
+  if (draft.routeMode === "official") return <p className="asb-field-help">{t("modelRoutes.official")}</p>;
   const native = !!draft.connection?.claudeNative;
+  const mode = route?.mode === "provider" ? `provider:${route.profileId}` : route?.mode ?? "automatic";
   return <>
-    <p className="asb-field-help">{t("modelRoutes.mainOwner", { name: draft.name })}</p>
-    {role !== "main" && <div className="asb-segments" role="radiogroup" aria-label={t("modelRoutes.routeMode")}>
-      <RadioOption name="claude-route-mode" checked={!route} disabled={disabled}
-        label={t(role === "fable" && options.routes.opus ? "modelRoutes.inheritOpus" : "modelRoutes.purposeDefault")}
-        onChange={() => changeRoute(null)} />
-      <RadioOption name="claude-route-mode" checked={route?.mode === "primary"} disabled={disabled}
-        label={t("modelRoutes.primaryModelMode")} onChange={() => changeRoute({ mode: "primary", model: "", oneM: false })} />
-      <RadioOption name="claude-route-mode" checked={route?.mode === "provider"} disabled={disabled || native}
-        label={t("modelRoutes.specify")} onChange={() => changeRoute({ mode: "provider", profileId: "", model: "", oneM: false })} />
+    {role !== "main" && <label className="asb-field"><span>{t("modelRoutes.targetProvider")}</span>
+      <Select value={mode} ariaLabel={t("modelRoutes.targetProvider")} disabled={disabled} options={[
+        { value: "automatic", label: t(role === "fable" && options.routes.opus ? "modelRoutes.inheritOpus" : "modelRoutes.purposeDefault") },
+        { value: "primary", label: t("modelRoutes.primaryModelMode") },
+        ...(!native && !claudeTargetIssue(draft) ? [{ value: `provider:${document.profileId}`,
+          label: t("providerEditor.selfTarget", { name: draft.name }) }] : []),
+        ...(!native ? sources.filter((source) => source.kind === "profile" && source.record.profile.id !== document.profileId
+          && !claudeTargetIssue(source.record.profile)).map(({ record }) => ({ value: `provider:${record.profile.id}`, label: record.profile.name })) : []),
+      ]} onChange={(next) => changeRoute(next === "automatic" ? null : next === "primary"
+        ? { mode: "primary", model: "", oneM: false }
+        : { mode: "provider", profileId: next.slice("provider:".length), model: "", oneM: false })} />
+    </label>}
+    {(role === "main" || route) && <div className="asb-field"><span>{t("modelRoutes.model")}</span>
+      {role === "main" ? <p className="asb-field-help">{value || t("modelRoutes.clientDefault")}</p> : <div className="asb-input-with-picker">
+        <Input code value={value} readOnly={route?.mode === "provider"} aria-label={t("modelRoutes.model")}
+          disabled={disabled} placeholder={t("modelRoutes.clientDefault")} onChange={(event) => changeModel(event.target.value)} />
+        {models.length > 0 && <ModelPicker models={models.map((model) => ({ value: model, label: model, group: target?.name ?? "" }))}
+          current={value || null} ariaLabel={t("modelRoutes.pickSavedModel")} disabled={disabled} onSelect={changeModel} />}
+      </div>}
+      <ProviderValue label={t("modelRoutes.oneM")} value={String(role === "main" ? options.primaryOneM : route?.oneM ?? false)}
+        display={`1M · ${t((role === "main" ? options.primaryOneM : route?.oneM) ? "providerSetup.enabled" : "providerSetup.disabled")}`}
+        disabled={disabled || !value.trim()} options={[
+          { value: "false", label: t("providerSetup.disabled") }, { value: "true", label: t("providerSetup.enabled") },
+        ]} onChange={(next) => changeOneM(next === "true")} />
     </div>}
-    {native && role !== "main" && <p className="asb-field-help">{t("modelRoutes.unsupportedTarget")}</p>}
-    {route?.mode === "provider" && <>
-      <label className="asb-field"><span>{t("modelRoutes.targetProvider")}</span>
-        <Select value={route.profileId || null} placeholder={t("modelRoutes.chooseProvider")}
-          options={[
-            ...(!claudeTargetIssue(draft) ? [{ value: document.profileId,
-              label: t("providerEditor.selfTarget", { name: draft.name }) }] : []),
-            ...sources.filter((source) => source.kind === "profile" && source.record.profile.id !== document.profileId
-              && !claudeTargetIssue(source.record.profile))
-              .map(({ record }) => ({ value: record.profile.id, label: record.profile.name })),
-          ]}
-          ariaLabel={t("modelRoutes.targetProvider")} disabled={disabled}
-          onChange={(profileId) => changeRoute({ ...route, profileId, model: "", oneM: false })} />
-      </label>
-      <p className="asb-field-help">{t("modelRoutes.subagentHelp")}</p>
-    </>}
-    <div className="asb-field"><span>{t("modelRoutes.model")}</span><div className="asb-input-with-picker">
-      <Input code value={value} readOnly={route?.mode === "provider"} aria-label={t("modelRoutes.model")}
-        disabled={disabled} placeholder={t("modelRoutes.clientDefault")} onChange={(event) => changeModel(event.target.value)} />
-      {models.length > 0 && <ModelPicker models={models.map((model) => ({ value: model, label: model, group: target?.name ?? "" }))}
-        current={value || null} ariaLabel={t("modelRoutes.pickSavedModel")} disabled={disabled} onSelect={changeModel} />}
-      <Checkbox label="1M" ariaLabel={t("modelRoutes.oneM")}
-        checked={role === "main" ? options.primaryOneM : route?.oneM ?? false} disabled={disabled || !value.trim()}
-        onChange={(oneM) => role === "main"
-          ? onChange({ ...document, draft: { ...draft, modelOptions: { ...options, primaryOneM: oneM } } })
-          : route && changeRoute({ ...route, oneM })} />
-    </div></div>
-    {!route && role !== "main" && <p className="asb-field-help">{t("modelRoutes.followHelp")}</p>}
+    {role !== "main" && <p className="asb-field-help">{t(route ? "modelRoutes.subagentHelp" : "modelRoutes.followHelp")}</p>}
   </>;
 }

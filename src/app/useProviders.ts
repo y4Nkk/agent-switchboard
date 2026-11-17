@@ -229,7 +229,7 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
 /** Editor identity remains independent of the current list selection and refreshed records. */
 export function useProviders(deps: ProvidersDeps) {
   const { setEditorSession, editorSessionVersion, ...editor } = useProviderEditorSession(deps);
-  const saves = useProviderSaves(deps, editor.editorSession, setEditorSession, editorSessionVersion);
+  const saves = useProviderSaves(deps, editor.editorSession, setEditorSession, editorSessionVersion, editor.conversionSave);
   const metadata = useProviderMetadata(deps);
   const removal = useProviderRemoval(deps, setEditorSession);
   return { ...editor, ...saves, ...metadata, ...removal };

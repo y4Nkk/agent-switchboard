@@ -8,6 +8,7 @@ import type { ProviderEditorSession, ProvidersDeps, SetEditorSession } from "./u
 import { routeDocument, type RouteInventory } from "../components/model-routing/model";
 import { providerSaveReview } from "./provider-save-review";
 import { restoreProviderEditorFocus } from "./provider-editor-focus";
+import type { ConversionSaveLifecycle } from "./provider-conversion-batch";
 
 type Preparation = ReturnType<typeof useProfileSavePreparation<PendingProfileSave>>;
 type Saved = (app: AppKind, id: string, sessionRevision: string) => Promise<void>;
@@ -35,13 +36,15 @@ function useProviderSaveContext(deps: ProvidersDeps, session: ProviderEditorSess
 }
 
 /** Claude and Codex official profiles share the same generic save boundary. */
-function useGenericSave(deps: ProvidersDeps, session: ProviderEditorSession | null, pending: Preparation, saved: Saved, sessionVersion: () => string) {
+function useGenericSave(deps: ProvidersDeps, session: ProviderEditorSession | null, pending: Preparation, saved: Saved,
+  sessionVersion: () => string, conversionSave: ConversionSaveLifecycle) {
   const { busy, setBusy, clearError, onError, invalidateCandidates } = deps;
   const saving = useRef(false);
   return useCallback(async (draft: ProviderDraft) => {
     if (busy || saving.current || !session || session.app !== draft.app) return;
     if (session.app === "codex" && session.source?.kind !== "official") return;
     saving.current = true;
+    conversionSave.begin(session.profileId);
     const sessionRevision = sessionVersion();
     const request = pending.checkpoint();
     const record = session.app === "claude" ? session.record
@@ -72,17 +75,19 @@ function useGenericSave(deps: ProvidersDeps, session: ProviderEditorSession | nu
       if (prepared.kind !== "noChange") invalidateCandidates();
       await saved(result.profile.app, result.profile.id, sessionRevision);
     } catch (cause) { onError(cause as CommandError); }
-    finally { saving.current = false; setBusy(false); }
-  }, [busy, session, setBusy, clearError, onError, invalidateCandidates, pending, saved, sessionVersion]);
+    finally { conversionSave.finish(session.profileId); saving.current = false; setBusy(false); }
+  }, [busy, session, setBusy, clearError, onError, invalidateCandidates, pending, saved, sessionVersion, conversionSave]);
 }
 
 /** Codex third-party records keep their strict store and draft contract. */
-function useCodexSave(deps: ProvidersDeps, session: ProviderEditorSession | null, pending: Preparation, saved: Saved, sessionVersion: () => string) {
+function useCodexSave(deps: ProvidersDeps, session: ProviderEditorSession | null, pending: Preparation, saved: Saved,
+  sessionVersion: () => string, conversionSave: ConversionSaveLifecycle) {
   const { busy, setBusy, clearError, onError, invalidateCandidates } = deps;
   const saving = useRef(false);
   return useCallback(async (draft: CodexProviderDraft) => {
     if (busy || saving.current || session?.app !== "codex" || session.source?.kind === "official") return;
     saving.current = true;
+    conversionSave.begin(session.profileId);
     const sessionRevision = sessionVersion();
     const request = pending.checkpoint();
     setBusy(true);
@@ -116,11 +121,12 @@ function useCodexSave(deps: ProvidersDeps, session: ProviderEditorSession | null
       if (prepared.kind !== "noChange") invalidateCandidates();
       await saved("codex", result.profile.id, sessionRevision);
     } catch (cause) { onError(cause as CommandError); }
-    finally { saving.current = false; setBusy(false); }
-  }, [busy, session, setBusy, clearError, onError, invalidateCandidates, pending, saved, sessionVersion]);
+    finally { conversionSave.finish(session.profileId); saving.current = false; setBusy(false); }
+  }, [busy, session, setBusy, clearError, onError, invalidateCandidates, pending, saved, sessionVersion, conversionSave]);
 }
 
-export function useProviderSaves(deps: ProvidersDeps, session: ProviderEditorSession | null, setSession: SetEditorSession, editorVersion: () => number) {
+export function useProviderSaves(deps: ProvidersDeps, session: ProviderEditorSession | null, setSession: SetEditorSession,
+  editorVersion: () => number, conversionSave: ConversionSaveLifecycle) {
   const [pendingSaveError, setPendingSaveError] = useState<unknown>(null);
   const { busy, setBusy, clearError, invalidateCandidates, onError, setAppFilter, refresh, setTargetProfile } = deps;
   const report = useCallback((cause: unknown) => onError(cause as CommandError), [onError]);
@@ -136,6 +142,12 @@ export function useProviderSaves(deps: ProvidersDeps, session: ProviderEditorSes
   }, [saveContext.context, deps.active, unconfirmed, report]);
   const sessionVersion = useCallback(() => `${editorVersion()}:${deps.workspaceVersion()}`, [editorVersion, deps.workspaceVersion]);
   const saved = useCallback(async (app: AppKind, id: string, sessionRevision: string) => {
+    // The batch accepts completion only for its still-owned editor. This can
+    // finish a hidden item without touching a replacement draft or navigating.
+    if (session && conversionSave.complete(session.profileId)) {
+      await refresh();
+      return;
+    }
     if (sessionRevision !== sessionVersion() || !saveContext.isCurrent()) { await refresh(); return; }
     setAppFilter(app);
     setSession(null);
@@ -148,9 +160,9 @@ export function useProviderSaves(deps: ProvidersDeps, session: ProviderEditorSes
       await refresh();
       if (session?.returnTo === "providers" && completedVersion === sessionVersion()) restoreProviderEditorFocus(id, session.section);
     }
-  }, [saveContext, session, sessionVersion, deps.returnToGateway, setAppFilter, setSession, refresh, setTargetProfile]);
-  const saveGenericProfile = useGenericSave(deps, session, preparation, saved, sessionVersion);
-  const saveCodexProfile = useCodexSave(deps, session, preparation, saved, sessionVersion);
+  }, [saveContext, session, sessionVersion, conversionSave, deps.returnToGateway, setAppFilter, setSession, refresh, setTargetProfile]);
+  const saveGenericProfile = useGenericSave(deps, session, preparation, saved, sessionVersion, conversionSave);
+  const saveCodexProfile = useCodexSave(deps, session, preparation, saved, sessionVersion, conversionSave);
   const runPendingSave = useCallback(async () => {
     if (busy) return;
     const pendingSave = preparation.take();

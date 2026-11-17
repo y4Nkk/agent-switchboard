@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import type { AppSettings } from "../api/client";
-import appIcon from "../assets/app-icon.svg";
+import { AppLogo } from "../components/AppLogo";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
 import type { ApplicationUpdateControl } from "../app/update-state";
 import { useI18n } from "../i18n";
@@ -72,7 +72,7 @@ function AboutSettings(props: SettingsPageProps) {
   return (
     <div className="asb-app-settings">
       <div className="asb-about-product">
-        <img className="asb-about-logo" src={appIcon} alt="" />
+        <AppLogo className="asb-about-logo" />
         <div className="asb-about-copy">
           <h3 className="asb-section-title">Agent Switchboard</h3>
           <p className="asb-field-help">{t("settings.about.tagline")}</p>

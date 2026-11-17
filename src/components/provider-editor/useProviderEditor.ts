@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { AppKind, ProviderDraft, ProviderProfile, SettingsValues } from "../../api/client";
 import { draftFrom, prepareDraft, responsesOptionsValid } from "./draft";
 import { useProviderConnection } from "./useProviderConnection";
@@ -8,11 +8,6 @@ import { providerDraftFromConversion } from "../../lib/provider-conversion";
 export function useProviderEditor(profile: ProviderProfile | null, initialApp: AppKind, busy: boolean, seed?: ProviderDraft) {
   const [draft, setDraft] = useState(() => seed ? providerDraftFromConversion(seed) : draftFrom(profile, initialApp));
   const baseline = useRef(draft);
-  const savedModelsText = draft.modelOptions?.kind === "claude" ? (draft.modelOptions.availableModels ?? []).join("\n") : "";
-  const [availableModelsText, setAvailableModelsText] = useState(savedModelsText);
-  useEffect(() => {
-    setAvailableModelsText((current) => current.split("\n").map((id) => id.trim()).filter(Boolean).join("\n") === savedModelsText ? current : savedModelsText);
-  }, [savedModelsText]);
   const [loginDone, setLoginDone] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -35,7 +30,7 @@ export function useProviderEditor(profile: ProviderProfile | null, initialApp: A
     if (value) onSave(value);
   };
   return { draft, setDraft, dirty: JSON.stringify(draft) !== JSON.stringify(baseline.current), loginDone, setLoginDone,
-    headingRef, viewportRef, connection, parameters, availableModelsText, setAvailableModelsText, canSave, save };
+    headingRef, viewportRef, connection, parameters, canSave, save };
 }
 
 export type ProviderEditorState = ReturnType<typeof useProviderEditor>;

@@ -19,8 +19,13 @@
 }
 
 .asb-mcp-create .asb-select-trigger {
-  min-width: 0;
   width: 100%;
+}
+
+.asb-mcp-slot-name > .asb-input,
+.asb-mcp-slot-value > .asb-input {
+  width: 100%;
+  min-width: 0;
 }
 
 .asb-mcp-client-field,

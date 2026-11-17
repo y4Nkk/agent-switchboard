@@ -82,6 +82,15 @@
   background: var(--asb-content-muted);
 }
 .asb-ext-binding-actions { justify-content: flex-start; }
+.asb-skill-file-create > .asb-input,
+.asb-skill-dependency > :is(.asb-input, .asb-select-trigger) {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.asb-skill-file-create > .asb-btn,
+.asb-skill-dependency > .asb-btn { flex: none; }
+.asb-skill-file > .asb-btn { min-width: 0; max-width: 100%; }
+.asb-skill-file > .asb-btn > code { min-width: 0; overflow-wrap: anywhere; }
 .asb-skill-file.is-active {
   background: var(--asb-row-selected);
   border-color: var(--asb-action);

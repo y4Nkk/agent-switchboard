@@ -24,17 +24,19 @@
 .asb-provider-endpoint .asb-fact-row { margin-top: var(--asb-space-1); }
 
 .asb-provider-model-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: var(--asb-space-3);
 }
 
-.asb-provider-model-toolbar > .asb-field { min-width: 0; }
+.asb-provider-model-toolbar > .asb-field { flex: 1 1 22rem; min-width: 0; }
 
 .asb-provider-model-actions {
   display: flex;
+  flex-wrap: wrap;
   flex: none;
+  max-width: 100%;
   align-items: center;
   align-self: end;
   gap: var(--asb-space-1);
@@ -45,46 +47,9 @@
   padding-top: var(--asb-space-2);
 }
 
-.asb-provider-catalog-row-head > .asb-btn-icon {
-  flex: none;
-}
-
-.asb-provider-catalog { display: grid; gap: var(--asb-space-3); }
-.asb-provider-catalog-row {
-  display: grid;
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-3);
-  border: 0;
-}
-.asb-provider-catalog-row-head { display: flex; align-items: flex-end; gap: var(--asb-space-2); }
-.asb-provider-catalog-row-head .asb-field { flex: 1; min-width: 0; }
-.asb-provider-catalog-row-levels { display: grid; gap: var(--asb-space-2); }
-.asb-catalog-levels-label { font: var(--asb-text-label); color: var(--asb-text-muted); }
-.asb-catalog-levels-options { display: flex; flex-wrap: wrap; gap: var(--asb-space-2) var(--asb-space-4); }
-.asb-provider-catalog-row-flags { display: flex; flex-wrap: wrap; gap: var(--asb-space-2) var(--asb-space-4); }
-.asb-provider-mapping-list { display: grid; gap: var(--asb-space-2); }
-.asb-provider-mapping-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--asb-space-2);
-}
-.asb-provider-mapping-arrow { color: var(--asb-text-muted); }
-.asb-provider-chat-reasoning { padding-top: var(--asb-space-2); }
-
-/* Model-mapping folds close flush inside the fields grid: the section's own
-   gap separates the fold body from the fields above it. */
-.asb-editor-section-fields .asb-collapsible-body {
-  padding-bottom: 0;
-}
-
 @media (max-width: 580px) {
   .asb-provider-field-grid { grid-template-columns: minmax(0, 1fr); }
-  .asb-provider-model-toolbar { grid-template-columns: minmax(0, 1fr); align-items: start; }
   .asb-provider-model-actions { align-self: start; }
-  .asb-collapsible-section .asb-collapsible-summary { flex-wrap: wrap; }
-  .asb-provider-mapping-row { grid-template-columns: minmax(0, 1fr); }
-  .asb-provider-mapping-arrow { display: none; }
   .asb-provider-advanced-action { align-items: stretch; flex-direction: column; }
   .asb-provider-advanced-action > .asb-btn { width: 100%; }
 }

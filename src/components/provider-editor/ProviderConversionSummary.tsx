@@ -2,18 +2,7 @@ import type { ProviderConversion, UsageQuery } from "../../api/client";
 import { selectedConversionUsage } from "../../lib/provider-conversion";
 import { useI18n } from "../../i18n";
 import { localizedMessageText } from "../../i18n/errors";
-import { AppDialog } from "../AppDialog";
 import { Checkbox } from "../Checkbox";
-
-export function ProviderConversionBlocked({ conversion, onClose }: {
-  conversion: ProviderConversion; onClose: () => void;
-}) {
-  const { t } = useI18n();
-  return <AppDialog title={t("providers.conversion.unavailable")} busy={false} narrow onClose={onClose}>
-    <p>{conversion.source.name}</p>
-    {conversion.blockedReason && <p>{localizedMessageText(conversion.blockedReason, t)}</p>}
-  </AppDialog>;
-}
 
 export function ProviderConversionSummary({ conversion, busy, usageQuery, onUsageChange }: {
   conversion: ProviderConversion; busy: boolean; usageQuery: UsageQuery | null;

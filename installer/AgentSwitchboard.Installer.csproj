@@ -45,6 +45,7 @@
   <ItemGroup>
     <Compile Include="InstallationRequest.cs" />
     <Compile Include="InstallerEngine.cs" />
+    <Compile Include="InstallerInstallationLookup.cs" />
     <Compile Include="InstallerFailure.cs" />
     <Compile Include="InstallerInvocation.cs" />
     <Compile Include="InstallerText.cs" />

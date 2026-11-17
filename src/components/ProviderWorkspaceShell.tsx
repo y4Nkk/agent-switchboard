@@ -49,6 +49,7 @@ interface ProviderWorkspaceShellProps {
   profiles: readonly ActiveProfileRef[];
   locks: Partial<Record<AppKind, LockStatus>>;
   onImport: () => void;
+  onConvert: () => void;
   onNew: () => void;
   /** App-specific actions appended between 导入 / 导出 and 新建供应商. */
   extraActions?: ReactNode;
@@ -67,6 +68,7 @@ export function ProviderWorkspaceShell({
   profiles,
   locks,
   onImport,
+  onConvert,
   onNew,
   extraActions,
   children,
@@ -97,6 +99,9 @@ export function ProviderWorkspaceShell({
                 {t("providers.workspace.importExport")}
               </Button>
               {extraActions}
+              <Button variant="secondary" disabled={busy} data-provider-conversion-app={app} onClick={onConvert}>
+                {t("providers.conversion.open")}
+              </Button>
               <Button variant="plus" disabled={busy} onClick={onNew}>
                 <PlusIcon />
                 {t("providers.workspace.newProvider")}

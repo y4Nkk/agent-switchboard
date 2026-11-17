@@ -7,22 +7,23 @@ import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
 import { Input } from "../Input";
-import { Select } from "../Select";
+import { ProviderValue } from "../provider-editor/ProviderValue";
+import { providerPreset } from "../../lib/provider-catalog";
 import { Textarea } from "../Textarea";
 import { ProviderCredentialField } from "../provider-editor/ProviderCredentialField";
 import { ProviderEndpointField } from "../provider-editor/ProviderEndpointField";
-import { reconcileCodexUpstream } from "./draft";
+import { applyCodexPreset, reconcileCodexUpstream } from "./draft";
 import type { CodexEditorState } from "./useCodexProviderEditor";
 
-interface Props { editor: CodexEditorState; busy: boolean }
+interface Props { editor: CodexEditorState; busy: boolean; autoFill?: boolean }
 
 function ProtocolField({ editor, busy }: Props) {
   const { t } = useI18n();
   const { draft, setDraft } = editor;
   return (
-    <label className="asb-field">
+    <div className="asb-field">
       <span>{t("codex.connection.apiFormat")}</span>
-      <Select ariaLabel={t("codex.connection.apiFormat")} value={draft.upstream} disabled={busy}
+      <ProviderValue label={t("codex.connection.apiFormat")} value={draft.upstream} disabled={busy}
         options={[
           { value: "responses", label: "Responses (/responses)" },
           { value: "chatCompletions", label: "Chat Completions (/chat/completions)" },
@@ -30,7 +31,7 @@ function ProtocolField({ editor, busy }: Props) {
         ]}
         onChange={(value) => setDraft((current) =>
           reconcileCodexUpstream(current, value as CodexUpstream))} />
-    </label>
+    </div>
   );
 }
 
@@ -113,7 +114,7 @@ function parseBody(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-export function CodexConnectionFields({ editor, busy }: Props) {
+export function CodexConnectionFields({ editor, busy, autoFill }: Props) {
   const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
   const gatewayRoute = requiresGateway({
@@ -137,7 +138,11 @@ export function CodexConnectionFields({ editor, busy }: Props) {
         <ProviderEndpointField busy={busy} baseUrl={draft.endpoint} protocol={draft.upstream}
           endpoints={connection.endpoints} endpointError={connection.endpointError}
           resolvingEndpoint={connection.resolvingEndpoint}
-          onChange={(value) => setDraft((current) => ({ ...current, endpoint: value }))} />
+          onChange={(value) => setDraft((current) => {
+            const preset = autoFill && !current.catalog.length ? providerPreset(value) : undefined;
+            if (!preset || preset.protocol === "geminiGenerateContent") return { ...current, endpoint: value };
+            return { ...applyCodexPreset(current, preset), endpoint: value };
+          })} />
         <ProviderCredentialField busy={busy} value={draft.apiKey} protocol={draft.upstream}
           authentication={draft.authentication}
           onChange={(value) => setDraft((current) => ({ ...current, apiKey: value }))} />

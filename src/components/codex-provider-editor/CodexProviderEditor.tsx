@@ -1,9 +1,11 @@
 import { useId, useState } from "react";
-import type { AppKind, CodexProviderDraft, ProviderDraft, ProviderRecord, LocalizedMessage } from "../../api/client";
+import type { CodexProviderDraft, ProviderDraft, ProviderRecord, LocalizedMessage } from "../../api/client";
 import type { CodexEditorSource } from "../../app/useProviders";
 import { useI18n } from "../../i18n";
 import { ProviderConversionSummary } from "../provider-editor/ProviderConversionSummary";
-import { Checkbox } from "../Checkbox";
+import { Button } from "../Button";
+import { ProviderPresetField } from "../provider-editor/ProviderPresetField";
+import { applyCodexPreset } from "./draft";
 import { ProviderConnectionTest } from "../provider-editor/ProviderConnectionTest";
 import { ProviderDiagnosticsEntry } from "../provider-diagnostics/ProviderDiagnosticsEntry";
 import { ProviderEditorFrame } from "../provider-editor/ProviderEditorFrame";
@@ -36,7 +38,6 @@ interface Props extends ProviderEditorNavigation {
   onSaveOfficial: (draft: ProviderDraft) => void;
   onSwitchAccessMode: (official: boolean, existing: ProviderRecord | null) => void;
   onCancel: () => void;
-  onSwitchClient: (app: AppKind) => void;
 }
 
 type Navigation = ReturnType<typeof useProviderEditorSections>;
@@ -49,8 +50,10 @@ function ConnectionSection({ editor, props }: { editor: CodexEditorState; props:
     {!editing && !editor.conversion && <CodexAccessMode busy={props.busy} onSwitchAccessMode={(official) => props.onSwitchAccessMode(official, null)} />}
     {editor.conversion && <ProviderConversionSummary conversion={editor.conversion} busy={props.busy}
       usageQuery={draft.usageQuery} onUsageChange={(usageQuery) => setDraft((current) => ({ ...current, usageQuery }))} />}
-    <CodexIdentityFields draft={draft} busy={props.busy} editing={editing} setDraft={setDraft} onSwitchClient={props.onSwitchClient} />
-    <CodexConnectionFields editor={editor} busy={props.busy} />
+    {!editing && !editor.conversion && <ProviderPresetField app="codex" disabled={props.busy}
+      onSelect={(preset) => setDraft((current) => applyCodexPreset(current, preset))} />}
+    <CodexIdentityFields draft={draft} busy={props.busy} setDraft={setDraft} />
+    <CodexConnectionFields editor={editor} busy={props.busy} autoFill={!editing && !editor.conversion} />
     <ProviderConnectionTest app="codex" busy={props.busy} active={props.active}
       baseUrl={draft.endpoint} apiKey={draft.apiKey} upstreamProtocol={draft.upstream}
       connection={draft.connection} authentication={draft.authentication}
@@ -70,15 +73,15 @@ function ConversionReview({ editor, busy }: { editor: CodexEditorState; busy: bo
     <div className="asb-editor-section-fields">
       {!editor.limitsComplete && <p className="asb-field-error" role="status">{t("providers.conversion.limitsRequired")}</p>}
       <p className="asb-field-help">{t("providers.conversion.capabilitiesRequired")}</p>
-      <Checkbox label={t("providers.conversion.capabilitiesConfirm")} checked={editor.capabilitiesReviewed}
-        disabled={busy} onChange={editor.setCapabilitiesReviewed} />
+      <Button variant="secondary" disabled={busy || editor.capabilitiesReviewed}
+        onClick={() => editor.setCapabilitiesReviewed(true)}>{t(editor.capabilitiesReviewed ? "providerSetup.reviewed" : "providerSetup.review")}</Button>
     </div>
   </section>;
 }
 
-function CodexForm({ editor, props, formId, navigation, route, onChange, catalogOpen, onCatalogOpen, revealRevision, onSubmit }: {
+function CodexForm({ editor, props, formId, navigation, route, onChange, showProblems, onSubmit }: {
   editor: CodexEditorState; props: Props; formId: string; navigation: Navigation; route: RouteDocument;
-  onChange: (document: RouteDocument) => void; catalogOpen: boolean; onCatalogOpen: (open: boolean) => void; revealRevision: number;
+  onChange: (document: RouteDocument) => void; showProblems: boolean;
   onSubmit: (form: HTMLFormElement) => void;
 }) {
   const { t } = useI18n();
@@ -88,18 +91,17 @@ function CodexForm({ editor, props, formId, navigation, route, onChange, catalog
     <div className="asb-provider-form asb-provider-editor-section" role="tabpanel" id={`${formId}-connection-panel`}
       aria-labelledby={`${formId}-connection-tab`} data-editor-section="connection" hidden={section !== "connection"}>
       <ConnectionSection editor={editor} props={{ ...props, active: props.active && section === "connection",
-        onSwitchClient: (app) => leave.request(() => props.onSwitchClient(app)),
         onSwitchAccessMode: (official, existing) => leave.request(() => props.onSwitchAccessMode(official, existing)) }} />
     </div>
     <div className="asb-provider-form asb-provider-editor-section" role="tabpanel" id={`${formId}-models-panel`}
       aria-labelledby={`${formId}-models-tab`} data-editor-section="models" hidden={section !== "models"}>
+      <CodexModelSection editor={editor} busy={props.busy} userConfigModel={props.userConfigModel}
+        userConfigWarnings={props.userConfigWarnings} />
       <ProviderRoutingPanel document={route} inventory={props.inventory} role={navigation.role} onRole={navigation.setRole}
         onChange={onChange} busy={props.busy} />
-      <CodexModelSection editor={editor} busy={props.busy} userConfigModel={props.userConfigModel}
-        userConfigWarnings={props.userConfigWarnings} open={catalogOpen} onOpenChange={onCatalogOpen} revealRevision={revealRevision} />
       <CodexCapabilitiesSection editor={editor} busy={props.busy} />
       <ConversionReview editor={editor} busy={props.busy} />
-      {editor.problems.length > 0 && <div className="asb-field-error" role="status">
+      {showProblems && editor.problems.length > 0 && <div className="asb-field-error" role="status">
         {editor.problems.map((problem) => <p key={problem}>{problem}</p>)}
       </div>}
     </div>
@@ -116,7 +118,6 @@ function CodexProviderEditorSession(props: Props) {
   const { t } = useI18n();
   const editor = useCodexProviderEditor(props.source, props.busy);
   const navigation = useProviderEditorSections({ ...props, app: "codex", official: false, dirty: editor.dirty, viewportRef: editor.viewportRef });
-  const [catalogOpen, setCatalogOpen] = useState(!editor.draft.catalog.length || Boolean(editor.conversion));
   const [invalid, setInvalid] = useState(0);
   const formId = useId();
   const route: RouteDocument = { kind: "codex", profileId: props.profileId, draft: editor.draft };
@@ -126,10 +127,10 @@ function CodexProviderEditorSession(props: Props) {
   };
   const submit = (form: HTMLFormElement) => {
     if (navigation.stale) return;
-    if (!validateEditorForm(form, (section) => { navigation.selectSection(section); if (section === "models") { setCatalogOpen(true); setInvalid((revision) => revision + 1); } })) return;
+    if (!validateEditorForm(form, (section) => { navigation.selectSection(section); if (section === "models") setInvalid((revision) => revision + 1); })) return;
     const issueRole = routeIssueRole(route, props.inventory);
     if (issueRole || !editor.canSave) {
-      navigation.selectSection("models"); navigation.setRole(issueRole ?? "main"); setCatalogOpen(true); setInvalid((revision) => revision + 1); return;
+      navigation.selectSection("models"); navigation.setRole(issueRole ?? "main"); setInvalid((revision) => revision + 1); return;
     }
     setInvalid(0); editor.save(props.onSave);
   };
@@ -142,7 +143,7 @@ function CodexProviderEditorSession(props: Props) {
     saveLabel={editor.conversion ? t("providers.conversion.save", { target: "Codex" }) : undefined}>
     <ProviderEditorStale stale={navigation.stale} busy={props.busy} onReload={() => props.onReload(navigation.section, navigation.role)} />
     <CodexForm editor={editor} props={props} formId={formId} navigation={navigation} route={route} onChange={change}
-      catalogOpen={catalogOpen} onCatalogOpen={setCatalogOpen} revealRevision={invalid} onSubmit={submit} />
+      showProblems={invalid > 0} onSubmit={submit} />
     {invalid > 0 && <p className="asb-field-error" role="alert">{t("providerEditor.invalidDraft")}</p>}
     {props.source?.kind === "record" && navigation.section === "connection" && <ProviderDiagnosticsEntry profileId={props.profileId}
       name={props.source.record.profile.name} active={props.active} disabled={props.busy} />}

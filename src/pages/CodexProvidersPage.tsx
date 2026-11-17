@@ -46,8 +46,7 @@ interface Props {
   editorNavigation: ProviderEditorNavigation;
   onNew: () => void;
   onEdit: (record: CodexProviderRecord) => void;
-  onConvert: (record: CodexProviderRecord) => void;
-  onConvertOfficial: (profile: ProviderProfile) => void;
+  onConvert: () => void;
   onRoutes: (profileId: string) => void;
   /** Opens the official-login editor arm; null record creates the entry. */
   onEditOfficial: (record: ProviderRecord | null) => void;
@@ -55,7 +54,6 @@ interface Props {
   onSave: (draft: CodexProviderDraft) => void;
   onSaveOfficial: (draft: ProviderDraft) => void;
   onSwitchAccessMode: (official: boolean, existing: ProviderRecord | null) => void;
-  onSwitchClient: (app: AppKind) => void;
   /** Persists the official record's subscription-quota refresh interval. */
   onSaveOfficialQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   /** Persisted profile ids whose usage details are expanded; all other
@@ -160,7 +158,6 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
             return (
               <CodexOfficialRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)} quotaOpen={state.quotaOpen}
                 onEdit={() => { state.clearCandidates(); props.onEditOfficial(row.record); }}
-                onConvert={() => props.onConvertOfficial(row.record.profile)} busy={props.busy}
                 onRoutes={() => props.onRoutes(row.record.profile.id)}
                 onDelete={() => props.onDeleteOfficial(row.record)}
                 onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
@@ -177,7 +174,6 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
               onToggleUsage={() => props.onToggleUsage(row.record.profile.id)}
               onConfigureUsage={() => state.setUsageRecord(row.record)}
               onEdit={() => { state.clearCandidates(); props.onEdit(row.record); }}
-              onConvert={() => props.onConvert(row.record)} busy={props.busy}
               onRoutes={() => props.onRoutes(row.record.profile.id)}
               onDelete={() => props.onDelete(row.record)}>
               {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
@@ -199,7 +195,7 @@ export function CodexProvidersPage(props: Props) {
         userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings}
         onSave={props.onSave} onSaveOfficial={props.onSaveOfficial}
         onSwitchAccessMode={props.onSwitchAccessMode} onCancel={props.onCloseEditor}
-        onSwitchClient={props.onSwitchClient} />
+        />
     </div>
   );
   const usageRecord = state.usageRecord;
@@ -230,6 +226,7 @@ export function CodexProvidersPage(props: Props) {
       leaving={props.leaving} onSelectApp={props.onSelectApp} routeContentRef={props.routeContentRef}
       busy={props.busy} statuses={props.statuses} profiles={props.relayProfiles} locks={props.locks}
       onImport={() => { state.clearCandidates(); props.onImport(); }}
+      onConvert={() => { state.clearCandidates(); props.onConvert(); }}
       onNew={() => { state.clearCandidates(); props.onNew(); }}>
       <CodexProvidersList props={props} state={state} />
     </ProviderWorkspaceShell>

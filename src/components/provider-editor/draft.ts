@@ -6,6 +6,7 @@ import type {
   UpstreamProtocol,
 } from "../../api/client";
 import type { MessageKey } from "../../i18n";
+import type { ProviderPreset } from "../../lib/provider-catalog";
 import { NATIVE_PROTOCOL } from "../../lib/protocol";
 import { normalizeUsageQuery } from "../../lib/usage-query";
 
@@ -114,4 +115,11 @@ export function responsesOptionsValid(draft: ProviderEditorDraft): boolean {
 export function optional(value: string): string | null {
   const normalized = value.trim();
   return normalized || null;
+}
+
+export function applyProviderPreset(draft: ProviderEditorDraft, preset: ProviderPreset): ProviderEditorDraft {
+  return { ...draft, name: draft.name || preset.name, websiteUrl: draft.websiteUrl || preset.website,
+    baseUrl: preset.endpoint, upstreamProtocol: preset.protocol, authentication: null,
+    responsesOptions: preset.protocol === "responses" ? { requestMode: "standard" } : null,
+  };
 }

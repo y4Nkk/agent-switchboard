@@ -21,7 +21,7 @@
 
 .asb-usage-paths {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--asb-space-2);
 }
 
@@ -61,12 +61,6 @@
   gap: var(--asb-space-2);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
-}
-
-@media (max-width: 720px) {
-  .asb-usage-paths {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 /* Scope-of-effect notes on overview and backups */

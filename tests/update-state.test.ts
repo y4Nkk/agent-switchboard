@@ -89,10 +89,16 @@ test("start and check failures survive without fabricating a download task or hi
 });
 
 test("installed and restarting remain visible after the candidate is cleared", () => {
-  assert.equal(applicationUpdateView(updateSnapshot({ task: updateTask("installed") })).canRestart, false);
-  assert.equal(applicationUpdateView(updateSnapshot({ restartRequired: true })).phase, "installed");
-  assert.equal(applicationUpdateView(updateSnapshot({ restartRequired: true, restarting: true })).phase, "restarting");
+  const installed = updateSnapshot({ task: updateTask("installed") });
+  assert.equal(applicationUpdateView(installed).canRestart, true);
+  assert.equal(applicationUpdateView(installed).phase, "installed");
+  assert.equal(applicationUpdateView({ ...installed, restarting: true }).phase, "restarting");
   assert.equal(applicationUpdateView(updateSnapshot({ task: updateTask("installed"), checkError: updateError })).phase, "installed");
+  for (const phase of ["downloading", "verifying", "installing", "cancelled", "failed"] as const) {
+    const view = applicationUpdateView(updateSnapshot({ task: updateTask(phase), restarting: true }));
+    assert.equal(view.phase, phase);
+    assert.equal(view.canRestart, false);
+  }
 });
 
 test("Store updates open details and never offer a manual check or download progress", () => {
@@ -154,13 +160,13 @@ test("terminal results discard old read/cancel failures and installation never o
 });
 
 test("restart failure preserves installed state and only allows the restart operation", () => {
-  const view = applicationUpdateView(updateSnapshot({ restartRequired: true, restartError }));
+  const view = applicationUpdateView(updateSnapshot({ task: updateTask("installed"), restartError }));
   assert.equal(view.phase, "installed");
   assert.equal(view.error, restartError);
   assert.equal(view.canRestart, true);
   assert.equal(view.canInstall, false);
   assert.equal(view.canCheck, false);
-  const pending = applicationUpdateView(updateSnapshot({ restartRequired: true, restarting: true, restartError }));
+  const pending = applicationUpdateView(updateSnapshot({ task: updateTask("installed"), restarting: true, restartError }));
   assert.equal(pending.phase, "restarting");
   assert.equal(pending.canRestart, false);
   assert.equal(pending.error, null);

@@ -10,7 +10,6 @@ export interface ApplicationUpdateSnapshot extends UpdateDownloadSnapshot {
   checking: boolean;
   checkError: unknown;
   lastCheckedAt: string | null;
-  restartRequired: boolean;
   restarting: boolean;
   restartError: unknown;
 }
@@ -20,7 +19,10 @@ export interface ApplicationUpdateControl {
   onCheck: () => void;
   onInstall: () => void;
   onCancel: () => void;
-  onRestart: () => void;
+  onRequestRestart: () => void;
+  restartConfirmationOpen: boolean;
+  onConfirmRestart: () => void;
+  onDismissRestart: () => void;
 }
 
 export type ApplicationUpdatePhase = UpdateDownloadDisplayPhase | "idle" | "initializing" | "channelFailed"
@@ -38,8 +40,7 @@ export const UPDATE_PHASE_LABELS = {
 function phaseOf(state: ApplicationUpdateSnapshot, download: ReturnType<typeof updateDownloadView>): ApplicationUpdatePhase {
   if (state.updateChannel === null) return state.channelError != null ? "channelFailed" : "initializing";
   if (state.updateChannel === "microsoftStore") return "storeManaged";
-  if (state.restarting) return "restarting";
-  if (state.restartRequired || state.task?.phase === "installed") return "installed";
+  if (state.task?.phase === "installed") return state.restarting ? "restarting" : "installed";
   if (state.checking) return "checking";
   if (state.checkError != null) return "checkFailed";
   return download.phase ?? (state.updateCheck ? "available" : state.lastCheckedAt ? "current" : "idle");
@@ -60,7 +61,7 @@ export function applicationUpdateView(state: ApplicationUpdateSnapshot) {
   return { phase, busy, installed, download, error, tone,
     canCheck: githubReady || phase === "channelFailed",
     canInstall: githubReady && state.updateCheck !== null && state.checkError == null,
-    canRestart: phase === "installed" && state.restartRequired,
+    canRestart: phase === "installed",
     showDetails: !["idle", "current", "checking", "initializing"].includes(phase),
     version: state.task?.version ?? state.updateCheck?.latestVersion ?? null };
 }

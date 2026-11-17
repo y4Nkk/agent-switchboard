@@ -17,9 +17,10 @@ export function useApplicationUpdate({ onError }: { onError: (error: CommandErro
   const { readChannel, ...environment } = useUpdateEnvironment();
   const onInstalled = useCallback(() => setUpdateCheck(null), []);
   const download = useUpdateDownload(operation, onInstalled, onError);
+  const installed = download.state.task?.phase === "installed";
   const resetDownload = download.reset;
   const runCheck = useCallback(async (source: "manual" | "startup") => {
-    if (environment.updateChannel !== "github" || operation.current || download.state.restartRequired) return;
+    if (environment.updateChannel !== "github" || operation.current || installed) return;
     operation.current = true;
     setChecking(true); setCheckError(null); resetDownload();
     try {
@@ -31,7 +32,7 @@ export function useApplicationUpdate({ onError }: { onError: (error: CommandErro
     } catch (error) {
       if (mounted.current) { setCheckError(() => error); if (source === "manual") onError(error as CommandError); }
     } finally { operation.current = false; if (mounted.current) setChecking(false); }
-  }, [environment.updateChannel, download.state.restartRequired, resetDownload, onError]);
+  }, [environment.updateChannel, installed, resetDownload, onError]);
   useEffect(() => {
     if (environment.updateChannel === "github" && !automaticCheckStarted.current) {
       automaticCheckStarted.current = true;
@@ -52,5 +53,6 @@ export function useApplicationUpdate({ onError }: { onError: (error: CommandErro
     onInstall: () => {
       if (view.canInstall && updateCheck && !operation.current) { setCheckError(null); void download.start(updateCheck); }
     },
-    onCancel: download.cancel, onRestart: download.restart };
+    onCancel: download.cancel, onRequestRestart: download.requestRestart, restartConfirmationOpen: download.restartConfirmationOpen,
+    onConfirmRestart: download.confirmRestart, onDismissRestart: download.dismissRestart };
 }

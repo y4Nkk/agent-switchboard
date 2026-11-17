@@ -45,12 +45,14 @@ import { messages as resources } from "./messages/resources.ts";
 import { messages as modelRoutes } from "./messages/modelRoutes.ts";
 import { messages as gatewayOverview } from "./messages/gateway-overview.ts";
 import { messages as providerRoutingEditor } from "./messages/provider-routing-editor.ts";
+import { messages as providerSetup } from "./messages/provider-setup.ts";
 
 export const messages = Object.freeze({
   ...preparation,
   ...modelRoutes,
   ...gatewayOverview,
   ...providerRoutingEditor,
+  ...providerSetup,
   ...backup,
   ...clientConfig,
   ...clientSoftware,

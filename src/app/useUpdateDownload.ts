@@ -17,6 +17,7 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
   const taskId = useRef<string | null>(null);
   const cancelRequested = useRef(false);
   const restart = useUpdateRestart(task, operation, mounted, onInstalled, onError);
+  const installed = task?.phase === "installed";
   const accept = useCallback((next: UpdateDownloadState) => {
     if (mounted.current && taskId.current === next.id) setTask((current) => latestDownloadState(current, next));
   }, []);
@@ -30,7 +31,7 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
     finally { if (mounted.current && taskId.current === id) setCancelling(false); }
   }, [accept, onError]);
   const start = useCallback(async (update: UpdateCheck) => {
-    if (operation.current || restart.restartRequired) return;
+    if (operation.current || installed) return;
     operation.current = true;
     cancelRequested.current = false;
     taskId.current = null;
@@ -48,7 +49,7 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
       cancelRequested.current = false;
       if (mounted.current) { setCancelling(false); setStartError(error as CommandError); onError(error as CommandError); }
     } finally { if (mounted.current) setStarting(false); }
-  }, [operation, restart.restartRequired, accept, sendCancel, setReadError, onError]);
+  }, [operation, installed, accept, sendCancel, setReadError, onError]);
   const cancel = useCallback(() => {
     if ((!task && !starting) || (task && !["downloading", "verifying"].includes(task.phase))) return;
     if (cancelRequested.current) return;
@@ -79,6 +80,7 @@ export function useUpdateDownload(operation: RefObject<boolean>, onInstalled: ()
     };
   }, []);
   return { state: { task, starting, cancelling, startError, readError, cancelError,
-    restartRequired: restart.restartRequired, restarting: restart.restarting, restartError: restart.restartError },
-    start, cancel, reset, restart: restart.restart };
+    restarting: restart.restarting, restartError: restart.restartError },
+    start, cancel, reset, requestRestart: restart.requestRestart, restartConfirmationOpen: restart.restartConfirmationOpen,
+    confirmRestart: restart.confirmRestart, dismissRestart: restart.dismissRestart };
 }

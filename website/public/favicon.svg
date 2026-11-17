@@ -1,16 +1,116 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Agent Switchboard</title>
-  <desc id="desc">Two opposing folded routes form an S, flowing from blue and violet through pink to orange.</desc>
+  <desc id="desc">Two opposing folded routes form an S in translucent liquid glass, flowing from blue and violet through pink to orange.</desc>
+  <style>
+    .asb-icon-flow { animation: asb-icon-flow 7s ease-in-out infinite; }
+    .asb-icon-flow-alt { animation-delay: -3.5s; }
+    .asb-icon-flow-b { opacity: 0; animation: asb-icon-flow 7s ease-in-out infinite, asb-icon-color-swap 9s ease-in-out infinite; animation-delay: -2.3s, 0s; }
+    @keyframes asb-icon-flow {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(-144px, 104px); }
+    }
+    @keyframes asb-icon-color-swap {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .asb-icon-flow, .asb-icon-flow-alt, .asb-icon-flow-b { animation: none; }
+    }
+    :root[data-motion="reduce"] .asb-icon-flow { animation: none; }
+    @media (forced-colors: active) {
+      .asb-icon-glass { display: none; }
+      .asb-icon-outline { fill: CanvasText; stroke: none; }
+      .asb-icon-shadow { filter: none; }
+    }
+  </style>
   <defs>
-    <linearGradient id="route" x1="104" y1="408" x2="400" y2="104" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#3279F6"/>
-      <stop offset=".36" stop-color="#8055ED"/>
-      <stop offset=".68" stop-color="#ED68AB"/>
-      <stop offset="1" stop-color="#FFB36B"/>
+    <path id="asb-route-a" d="M360 64H224C144.47 64 80 128.47 80 208V232C80 267.35 108.65 296 144 296H184L264 216H168V208C168 172.65 196.65 144 232 144H360C382.09 144 400 126.09 400 104S382.09 64 360 64Z"/>
+    <path id="asb-route-b" d="M152 448H288C367.53 448 432 383.53 432 304V280C432 244.65 403.35 216 368 216H328L248 296H344V304C344 339.35 315.35 368 280 368H152C129.91 368 112 385.91 112 408S129.91 448 152 448Z"/>
+    <clipPath id="asb-icon-clip">
+      <use href="#asb-route-a"/>
+      <use href="#asb-route-b"/>
+    </clipPath>
+    <filter id="asb-glass-shadow" x="-24%" y="-24%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#071725" flood-opacity="0.12"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#071725" flood-opacity="0.14"/>
+    </filter>
+    <filter id="asb-icon-soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <linearGradient id="asb-route-body" x1="104" y1="408" x2="400" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3279F6" stop-opacity=".82"/>
+      <stop offset=".36" stop-color="#8055ED" stop-opacity=".62"/>
+      <stop offset=".68" stop-color="#ED68AB" stop-opacity=".68"/>
+      <stop offset="1" stop-color="#FFB36B" stop-opacity=".8"/>
     </linearGradient>
+    <linearGradient id="asb-route-spectrum" x1="0" y1="512" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4C8DFF" stop-opacity=".62"/>
+      <stop offset=".22" stop-color="#8B7CFF" stop-opacity=".55"/>
+      <stop offset=".44" stop-color="#ED68AB" stop-opacity=".52"/>
+      <stop offset=".66" stop-color="#FFB36B" stop-opacity=".58"/>
+      <stop offset=".85" stop-color="#8B7CFF" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#4C8DFF" stop-opacity=".62"/>
+    </linearGradient>
+    <linearGradient id="asb-icon-sheen" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".34"/>
+      <stop offset=".4" stop-color="#EDE6FF" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="asb-icon-inner-glow" x1="48" y1="48" x2="464" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".65"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="asb-icon-rim" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF" stop-opacity=".95"/>
+      <stop offset=".3" stop-color="#FFFFFF" stop-opacity=".45"/>
+      <stop offset=".6" stop-color="#B9A5FF" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".75"/>
+    </linearGradient>
+    <linearGradient id="asb-icon-fold-light" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#FFFFFF" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="asb-icon-reflection" x1="80" y1="64" x2="300" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".82"/>
+      <stop offset=".38" stop-color="#FFFFFF" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="asb-icon-caustic" cx=".75" cy=".75" r=".7">
+      <stop stop-color="#FFFFFF" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <path id="asb-icon-reflection-band" d="M224 72H360C375 72 387 81 392 94C351 83 294 88 234 92C164 96 112 144 96 207C91 226 94 244 101 258C91 246 88 237 88 220V208C88 133 149 72 224 72Z"/>
   </defs>
-  <g fill="url(#route)">
-    <path d="M360 64H224C144.47 64 80 128.47 80 208V232C80 267.35 108.65 296 144 296H184L264 216H168V208C168 172.65 196.65 144 232 144H360C382.09 144 400 126.09 400 104S382.09 64 360 64Z"/>
-    <path d="M152 448H288C367.53 448 432 383.53 432 304V280C432 244.65 403.35 216 368 216H328L248 296H344V304C344 339.35 315.35 368 280 368H152C129.91 368 112 385.91 112 408S129.91 448 152 448Z"/>
+  <g class="asb-icon-shadow" filter="url(#asb-glass-shadow)">
+    <g class="asb-icon-glass" clip-path="url(#asb-icon-clip)">
+      <g fill="url(#asb-route-body)" opacity=".25">
+        <use href="#asb-route-a"/>
+        <use href="#asb-route-b"/>
+      </g>
+      <rect class="asb-icon-flow" x="-256" y="-256" width="1024" height="1024" fill="url(#asb-route-body)"/>
+      <rect class="asb-icon-flow asb-icon-flow-b" x="-256" y="-256" width="1024" height="1024" fill="url(#asb-route-spectrum)" opacity="0"/>
+      <rect class="asb-icon-flow asb-icon-flow-alt" x="-256" y="-256" width="1024" height="1024" fill="url(#asb-icon-sheen)"/>
+      <g fill="none" stroke="url(#asb-route-body)" stroke-width="18" opacity=".38">
+        <use href="#asb-route-a"/>
+        <use href="#asb-route-b"/>
+      </g>
+      <g fill="none" stroke="url(#asb-icon-inner-glow)" stroke-width="12" stroke-linejoin="round">
+        <use href="#asb-route-a"/>
+        <use href="#asb-route-b"/>
+      </g>
+      <use href="#asb-icon-reflection-band" fill="url(#asb-icon-reflection)"/>
+      <use href="#asb-icon-reflection-band" transform="rotate(180 256 256)" fill="url(#asb-icon-reflection)" opacity=".45"/>
+      <g stroke-linecap="round" fill="none">
+        <path d="M192 286 L252 226 M320 226 L260 286" stroke="url(#asb-icon-fold-light)" stroke-width="3"/>
+        <path d="M224 73H358" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="2.5"/>
+        <path d="M154 439H280C350 439 414 388 422 320" stroke="url(#asb-icon-caustic)" stroke-width="12" filter="url(#asb-icon-soft)"/>
+      </g>
+    </g>
+    <g class="asb-icon-outline" fill="none" stroke="url(#asb-icon-rim)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <use href="#asb-route-a"/>
+      <use href="#asb-route-b"/>
+    </g>
   </g>
 </svg>

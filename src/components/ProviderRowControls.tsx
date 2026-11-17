@@ -38,7 +38,6 @@ interface Props {
   name: string;
   profileId: string;
   onRoutes?: () => void;
-  conversion?: { target: string; id: string; onConvert: () => void; busy?: boolean };
   onEdit?: () => void;
   onDelete?: () => void;
   test?: { id: string; open: boolean; onToggle: () => void; trigger: Ref<HTMLButtonElement> };
@@ -46,7 +45,7 @@ interface Props {
 }
 
 /** Both clients use the same actions and disclosure semantics. */
-export function ProviderRowActions({ name, profileId, onRoutes, onEdit, onDelete, conversion, test, usage }: Props) {
+export function ProviderRowActions({ name, profileId, onRoutes, onEdit, onDelete, test, usage }: Props) {
   const { t } = useI18n();
   const testLabel = test?.open ? t("providers.row.testCollapse", { name }) : t("providers.row.test", { name });
   const usageLabel = !usage?.configured ? t("providers.row.usageConfigure", { name })
@@ -54,10 +53,6 @@ export function ProviderRowActions({ name, profileId, onRoutes, onEdit, onDelete
   const editLabel = t("providers.row.edit", { name });
   const deleteLabel = t("providers.row.delete", { name });
   return <>
-    {conversion && <Button variant="secondary" size="compact" disabled={conversion.busy}
-      data-provider-conversion-id={conversion.id}
-      aria-label={t("providers.conversion.actionAria", { name, target: conversion.target })}
-      onClick={conversion.onConvert}>{t("providers.conversion.action", { target: conversion.target })}</Button>}
     {onRoutes && <Tooltip label={t("modelRoutes.open", { name })}>
       <Button variant="icon" data-provider-routing-id={profileId} aria-label={t("modelRoutes.open", { name })} onClick={onRoutes}><GatewayIcon /></Button>
     </Tooltip>}

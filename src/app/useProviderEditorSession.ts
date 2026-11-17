@@ -62,17 +62,16 @@ export function useProviderEditorSession(deps: ProvidersDeps) {
     setAppFilter("codex");
     setEditorSession({ ...createEditorContext(), app: "codex", source: { kind: "official", record: null } });
   };
-  /** Changing the list client clears the execution target and both preview states, not the editor session. */
+  /** Changing list clients ends conversion and clears execution previews; ordinary editor drafts remain independent. */
   const selectApp = useCallback(
     (app: AppKind) => {
+      conversion.cancelConversion();
       clearCandidates();
       setAppFilter(app);
       setTargetProfileId(null);
     },
-    [clearCandidates, setAppFilter, setTargetProfileId],
+    [clearCandidates, setAppFilter, setTargetProfileId, conversion.cancelConversion],
   );
-  return { editorSession, setEditorSession, editorSessionVersion: conversion.editorSessionVersion, ...stored, openCodexOfficialEditor,
-    switchCodexAccessMode, newEditor, newEditorFor, closeEditor, selectApp,
-    convertProfile: conversion.convertProfile, convertCodexProfile: conversion.convertCodexProfile,
-    blockedConversion: conversion.blockedConversion, dismissConversion: conversion.dismissConversion };
+  return { ...conversion, editorSession, ...stored, openCodexOfficialEditor,
+    switchCodexAccessMode, newEditor, newEditorFor, closeEditor, selectApp };
 }

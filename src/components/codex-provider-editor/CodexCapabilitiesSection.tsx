@@ -1,132 +1,66 @@
-import type { CodexCapabilities, CodexChatReasoning } from "../../api/client";
-import type { MessageKey } from "../../i18n";
+import type { CodexChatReasoning } from "../../api/client";
 import { useI18n } from "../../i18n";
-import { Checkbox } from "../Checkbox";
-import { RadioOption } from "../RadioOption";
-import { Select } from "../Select";
-import { reconcileCodexCapabilities } from "./draft";
+import { Table } from "../Table";
+import { ProviderValue } from "../provider-editor/ProviderValue";
 import type { CodexEditorState } from "./useCodexProviderEditor";
 
-type ConfiguredChatReasoning = Extract<CodexChatReasoning, { kind: "configured" }>;
+const operations = [
+  ["models", "codex.capability.models"], ["chatCompletions", "codex.capability.chatCompletions"],
+  ["alphaSearch", "codex.capability.alphaSearch"], ["imageGeneration", "codex.capability.imageGeneration"],
+  ["imageEdit", "codex.capability.imageEdit"],
+] as const;
 
-interface Props { editor: CodexEditorState; busy: boolean }
-
-const CAPABILITY_LABELS: Array<{ key: keyof Omit<CodexCapabilities, "chatReasoning">; labelKey: MessageKey }> = [
-  { key: "compact", labelKey: "codex.capability.compact" },
-  { key: "models", labelKey: "codex.capability.models" },
-  { key: "chatCompletions", labelKey: "codex.capability.chatCompletions" },
-  { key: "alphaSearch", labelKey: "codex.capability.alphaSearch" },
-  { key: "imageGeneration", labelKey: "codex.capability.imageGeneration" },
-  { key: "imageEdit", labelKey: "codex.capability.imageEdit" },
-  { key: "functionTools", labelKey: "codex.capability.functionTools" },
-  { key: "customTools", labelKey: "codex.capability.customTools" },
-  { key: "toolSearch", labelKey: "codex.capability.toolSearch" },
-  { key: "reasoning", labelKey: "codex.capability.reasoning" },
-];
-
-function ChatReasoningControls({ editor, busy }: Props) {
+function ChatReasoning({ editor, busy }: { editor: CodexEditorState; busy: boolean }) {
   const { t } = useI18n();
-  const { draft, setDraft } = editor;
-  const chatReasoning = draft.capabilities.chatReasoning;
-  const configured = chatReasoning.kind === "configured";
-  const patch = (patchFields: Partial<ConfiguredChatReasoning>) =>
-    setDraft((current) => current.capabilities.chatReasoning.kind === "configured"
-      ? { ...current, capabilities: { ...current.capabilities,
-          chatReasoning: { ...current.capabilities.chatReasoning, ...patchFields } } }
-      : current);
-  return (
-    <div className="asb-field">
-      <span>{t("codex.chatReasoning.title")}</span>
-      <div className="asb-segments" role="radiogroup" aria-label={t("codex.chatReasoning.title")}>
-        <RadioOption name="chat-reasoning" checked={!configured} disabled={busy} label={t("codex.chatReasoning.unused")}
-          onChange={() => setDraft((current) => reconcileCodexCapabilities(current,
-            { ...current.capabilities, chatReasoning: { kind: "unsupported" } }))} />
-        <RadioOption name="chat-reasoning" checked={configured} disabled={busy} label={t("codex.chatReasoning.configure")}
-          onChange={() => setDraft((current) => ({ ...current, capabilities: { ...current.capabilities,
-            chatReasoning: { kind: "configured", thinkingParameter: "none", separateOutput: false, effortParameter: "none", effortMode: "passthrough" } } }))} />
-      </div>
-      {chatReasoning.kind === "configured" && (
-        <div className="asb-provider-field-grid asb-provider-chat-reasoning">
-          <label className="asb-field">
-            <span>{t("codex.chatReasoning.thinkingParam")}</span>
-            <Select ariaLabel={t("codex.chatReasoning.thinkingParam")} value={chatReasoning.thinkingParameter} disabled={busy}
-              options={[
-                { value: "none", label: t("codex.chatReasoning.noMapping") },
-                { value: "thinking", label: "thinking" },
-                { value: "enableThinking", label: "enable_thinking" },
-              ]}
-              onChange={(value) => patch({ thinkingParameter: value as ConfiguredChatReasoning["thinkingParameter"] })} />
-          </label>
-          <Checkbox checked={chatReasoning.separateOutput} disabled={busy}
-            label={t("codex.chatReasoning.separateOutput")}
-            onChange={(separateOutput) => patch({ separateOutput })} />
-          <label className="asb-field">
-            <span>{t("codex.chatReasoning.effortParam")}</span>
-            <Select ariaLabel={t("codex.chatReasoning.effortParam")} value={chatReasoning.effortParameter} disabled={busy}
-              options={[
-                { value: "none", label: t("codex.chatReasoning.noMapping") },
-                { value: "reasoningEffort", label: "reasoning_effort" },
-                { value: "reasoningObject", label: t("codex.chatReasoning.reasoningObject") },
-              ]}
-              onChange={(value) => patch({ effortParameter: value as ConfiguredChatReasoning["effortParameter"] })} />
-          </label>
-          <label className="asb-field">
-            <span>{t("codex.chatReasoning.effortMode")}</span>
-            <Select ariaLabel={t("codex.chatReasoning.effortMode")} value={chatReasoning.effortMode} disabled={busy}
-              options={[
-                { value: "passthrough", label: t("codex.chatReasoning.passthrough") },
-                { value: "lowHigh", label: t("codex.chatReasoning.lowHigh") },
-                { value: "deepSeek", label: "DeepSeek" },
-                { value: "openRouter", label: "OpenRouter" },
-                { value: "catalog", label: t("codex.chatReasoning.catalogLevels") },
-              ]}
-              onChange={(value) => patch({ effortMode: value as ConfiguredChatReasoning["effortMode"] })} />
-          </label>
-        </div>
-      )}
-      <p className="asb-scope-note">{t("codex.chatReasoning.note")}</p>
+  const value = editor.draft.capabilities.chatReasoning;
+  const update = (next: CodexChatReasoning) => editor.setDraft((current) => ({ ...current,
+    capabilities: { ...current.capabilities, chatReasoning: next },
+  }));
+  const patch = (key: string, next: string) => {
+    if (value.kind === "configured") update({ ...value, [key]: key === "separateOutput" ? next === "true" : next });
+  };
+  const label = (option: string) => {
+    if (option === "true" || option === "false") return t(option === "true" ? "providerSetup.enabled" : "providerSetup.disabled");
+    return ({ none: "—", enableThinking: "enable_thinking", reasoningEffort: "reasoning_effort",
+      reasoningObject: "reasoning.effort", deepSeek: "DeepSeek", openRouter: "OpenRouter" } as Record<string, string>)[option] ?? option;
+  };
+  return <div className="asb-provider-advanced-group">
+    <div className="asb-field"><span>{t("codex.chatReasoning.title")}</span>
+      <ProviderValue label={t("codex.chatReasoning.title")} value={value.kind} disabled={busy}
+        display={t(value.kind === "configured" ? "providerSetup.configured" : "codex.chatReasoning.unused")}
+        options={[{ value: "unsupported", label: t("codex.chatReasoning.unused") }, { value: "configured", label: t("codex.chatReasoning.configure") }]}
+        onChange={(kind) => update(kind === "unsupported" ? { kind } : { kind: "configured", thinkingParameter: "none",
+          separateOutput: false, effortParameter: "none", effortMode: "passthrough" })} />
     </div>
-  );
+    {value.kind === "configured" && <Table ariaLabel={t("codex.chatReasoning.title")}
+      rows={[
+        { key: "thinkingParameter", label: t("codex.chatReasoning.thinkingParam"), value: value.thinkingParameter, options: ["none", "thinking", "enableThinking"] },
+        { key: "separateOutput", label: t("codex.chatReasoning.separateOutput"), value: String(value.separateOutput), options: ["true", "false"] },
+        { key: "effortParameter", label: t("codex.chatReasoning.effortParam"), value: value.effortParameter, options: ["none", "reasoningEffort", "reasoningObject"] },
+        { key: "effortMode", label: t("codex.chatReasoning.effortMode"), value: value.effortMode, options: ["passthrough", "lowHigh", "deepSeek", "openRouter", "catalog"] },
+      ]} rowKey={({ key }) => key} columns={[
+        { key: "label", header: t("providerSetup.parameter"), render: (row) => row.label },
+        { key: "value", header: t("providerSetup.value"), render: (row) => <ProviderValue label={row.label} value={row.value}
+          display={label(row.value)} disabled={busy} options={row.options.map((option) => ({ value: option, label: label(option) }))}
+          onChange={(next) => patch(row.key, next)} /> },
+      ]} />}
+    <p className="asb-field-help">{t("codex.chatReasoning.note")}</p>
+  </div>;
 }
 
-/** Explicit capability declaration; entries generated from /models only ever
- * narrow against what is declared here. */
-export function CodexCapabilitiesSection({ editor, busy }: Props) {
+export function CodexCapabilitiesSection({ editor, busy }: { editor: CodexEditorState; busy: boolean }) {
   const { t } = useI18n();
   const { draft, setDraft } = editor;
-  const enabledCount = CAPABILITY_LABELS.filter(({ key }) => draft.capabilities[key]).length;
-  return (
-    <section className="asb-provider-advanced-group" aria-label={t("codex.capabilities.title")}>
-      <h4 className="asb-provider-advanced-heading">
-        <span>{t("codex.capabilities.title")}</span>
-        <span className="asb-provider-advanced-value">
-          {t("codex.capabilities.enabledCount", { count: enabledCount })}
-        </span>
-      </h4>
-      <p className="asb-scope-note">{t("codex.capabilities.note")}</p>
-      <div className="asb-provider-field-grid">
-        <div className="asb-field">
-          <span>{t("codex.capabilities.basic")}</span>
-          <div className="asb-catalog-levels-options" role="group" aria-label={t("codex.capabilities.basic")}>
-            <Checkbox label="Responses" checked disabled
-              onChange={() => undefined} />
-          </div>
-          <p className="asb-scope-note">{t("codex.capabilities.alwaysOn")}</p>
-        </div>
-        <div className="asb-field">
-          <span>{t("codex.capabilities.operations")}</span>
-          <div className="asb-catalog-levels-options" role="group" aria-label={t("codex.capabilities.operations")}>
-            {CAPABILITY_LABELS.map(({ key, labelKey }) => (
-              <Checkbox key={key} label={t(labelKey)} checked={draft.capabilities[key]} disabled={busy}
-                onChange={(checked) => setDraft((current) => reconcileCodexCapabilities(current,
-                  { ...current.capabilities, [key]: checked }))} />
-            ))}
-          </div>
-        </div>
-      </div>
-      {draft.upstream === "chatCompletions" && draft.capabilities.reasoning
-        ? <ChatReasoningControls editor={editor} busy={busy} />
-        : <p className="asb-scope-note">{t("codex.capabilities.chatReasoningOffNote")}</p>}
-    </section>
-  );
+  return <section className="asb-provider-advanced-group" aria-label={t("codex.capabilities.title")}>
+    <h4 className="asb-provider-advanced-heading">{t("codex.capabilities.title")}</h4>
+    <p className="asb-field-help">{t("providerSetup.capabilityHelp")}</p>
+    <Table ariaLabel={t("codex.capabilities.operations")} rows={[...operations]} rowKey={([key]) => key} columns={[
+      { key: "name", header: t("providerSetup.parameter"), render: ([, label]) => t(label) },
+      { key: "value", header: t("providerSetup.value"), render: ([key, label]) => <ProviderValue label={t(label)} disabled={busy}
+        value={String(draft.capabilities[key])} display={t(draft.capabilities[key] ? "providerSetup.enabled" : "providerSetup.disabled")}
+        options={[{ value: "true", label: t("providerSetup.enabled") }, { value: "false", label: t("providerSetup.disabled") }]}
+        onChange={(value) => setDraft((current) => ({ ...current, capabilities: { ...current.capabilities, [key]: value === "true" } }))} /> },
+    ]} />
+    {draft.upstream === "chatCompletions" && draft.capabilities.reasoning && <ChatReasoning editor={editor} busy={busy} />}
+  </section>;
 }

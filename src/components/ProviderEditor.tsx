@@ -2,10 +2,11 @@ import { useId, useState } from "react";
 import type { AppKind, ProviderDraft, ProviderProfile, ProviderConversion, LocalizedMessage } from "../api/client";
 import { useI18n } from "../i18n";
 import { localizedMessageText } from "../i18n/errors";
-import { claudeOptions } from "../lib/provider-drafts";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderDiagnosticsEntry } from "./provider-diagnostics/ProviderDiagnosticsEntry";
-import { AvailableModelsField } from "./provider-editor/AvailableModelsField";
+import { ClaudeModelCatalog } from "./provider-editor/ClaudeModelCatalog";
+import { applyProviderPreset } from "./provider-editor/draft";
+import { ProviderPresetField } from "./provider-editor/ProviderPresetField";
 import { ProviderAdvancedSettings } from "./provider-editor/ProviderAdvancedSettings";
 import { ProviderConnectionFields } from "./provider-editor/ProviderConnectionFields";
 import { ProviderConnectionTest } from "./provider-editor/ProviderConnectionTest";
@@ -20,8 +21,6 @@ import { ProviderEditorTabs } from "./provider-editor/ProviderEditorTabs";
 import { ProviderRoutingPanel } from "./provider-editor/ProviderRoutingPanel";
 import { validateEditorForm, useProviderEditorSections, type ProviderEditorNavigation } from "./provider-editor/useProviderEditorSections";
 import { routeIssueRole, type RouteDocument } from "./model-routing/model";
-import { CollapsibleSection } from "./Collapsible";
-import { Button } from "./Button";
 import "../styles/base/provider-editor.css";
 
 interface Props extends ProviderEditorNavigation {
@@ -33,7 +32,6 @@ interface Props extends ProviderEditorNavigation {
   busy: boolean;
   officialTakenApps: AppKind[];
   onOpenOfficial: (app: AppKind) => void;
-  onSwitchClient: (app: AppKind) => void;
   userConfigModel: string | null;
   userConfigWarnings: LocalizedMessage[];
   onSave: (draft: ProviderDraft) => void;
@@ -51,12 +49,14 @@ function ConnectionSection({ editor, ...props }: Props & { editor: Editor }) {
       officialTakenApps={props.officialTakenApps} onOpenOfficial={props.onOpenOfficial} />}
     {props.conversion && <ProviderConversionSummary conversion={props.conversion} busy={props.busy}
       usageQuery={draft.usageQuery ?? null} onUsageChange={(usageQuery) => setDraft((current) => ({ ...current, usageQuery }))} />}
-    <ProviderIdentityFields editor={editor} busy={props.busy} editing={Boolean(props.profile)} onSwitchClient={props.onSwitchClient} />
+    {!props.profile && !props.conversion && !official && <ProviderPresetField app={draft.app} disabled={props.busy}
+      onSelect={(preset) => setDraft((current) => applyProviderPreset(current, preset))} />}
+    <ProviderIdentityFields editor={editor} busy={props.busy} />
     {official ? <section className="asb-editor-section" aria-label={t("providers.label.officialLogin")}>
       <h3 className="asb-section-title">{t("providers.label.officialLogin")}</h3>
       <div className="asb-editor-section-fields"><OfficialLoginPanel app={draft.app} onFinished={editor.setLoginDone} /></div>
     </section> : <>
-      <ProviderConnectionFields editor={editor} busy={props.busy} />
+      <ProviderConnectionFields editor={editor} busy={props.busy} autoFill={!props.profile && !props.conversion} />
       <ProviderConnectionTest app={draft.app} busy={props.busy} active={props.active}
         baseUrl={draft.baseUrl} apiKey={draft.apiKey} upstreamProtocol={draft.upstreamProtocol}
         connection={draft.connection} authentication={draft.authentication}
@@ -69,27 +69,6 @@ function ConnectionSection({ editor, ...props }: Props & { editor: Editor }) {
         onChange={(notes) => setDraft((current) => ({ ...current, notes }))} />
     </ProviderAdvancedSettings>
   </>;
-}
-
-function ModelCatalog({ editor, busy }: { editor: Editor; busy: boolean }) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const { setDraft, connection } = editor;
-  const fetch = async () => {
-    const models = await connection.fetchModels();
-    if (models) setDraft((current) => ({ ...current, modelOptions: claudeOptions(current.modelOptions, {
-      availableModels: [...new Set([...(current.modelOptions?.kind === "claude" ? current.modelOptions.availableModels ?? [] : []),
-        ...models.map(({ id }) => id)])],
-    }) }));
-  };
-  return <CollapsibleSection open={open} onOpenChange={setOpen} label={t("providers.editor.availableModels")}>
-    <div className="asb-provider-form">
-      <Button variant="secondary" disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
-        onClick={() => void fetch()}>{t("providerEditor.fetchModels")}</Button>
-      {connection.modelsError && <p className="asb-warn-text" role="alert">{connection.modelsError}</p>}
-      <AvailableModelsField busy={busy} setDraft={setDraft} text={editor.availableModelsText} onTextChange={editor.setAvailableModelsText} />
-    </div>
-  </CollapsibleSection>;
 }
 
 function ParametersSection({ editor, busy, profile }: { editor: Editor; busy: boolean; profile: ProviderProfile | null }) {
@@ -133,13 +112,12 @@ function ProviderEditorSession(props: Props) {
       <div className="asb-provider-form asb-provider-editor-section" id={`${formId}-connection-panel`} role="tabpanel"
         aria-labelledby={`${formId}-connection-tab`} data-editor-section="connection" hidden={section !== "connection"}>
         <ConnectionSection {...props} editor={editor} active={props.active && section === "connection"}
-          onSwitchClient={(app) => leave.request(() => props.onSwitchClient(app))}
           onOpenOfficial={props.onOpenOfficial} />
       </div>
       {!official && <div className="asb-provider-form asb-provider-editor-section" id={`${formId}-models-panel`} role="tabpanel"
         aria-labelledby={`${formId}-models-tab`} data-editor-section="models" hidden={section !== "models"}>
+        <ClaudeModelCatalog editor={editor} busy={props.busy} />
         <ProviderRoutingPanel document={route} inventory={props.inventory} role={role} onRole={setRole} onChange={changeRoute} busy={props.busy} />
-        <ModelCatalog editor={editor} busy={props.busy} />
         {props.userConfigModel && <p className="asb-scope-note">{t("providers.editor.userConfigModel", { model: props.userConfigModel })}</p>}
         {props.userConfigWarnings.map((warning) => <p key={warning.key} className="asb-scope-note asb-warn-text">{localizedMessageText(warning, t)}</p>)}
       </div>}

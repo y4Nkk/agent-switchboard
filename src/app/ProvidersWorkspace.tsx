@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { useI18n } from "../i18n";
 import { CodexProvidersPage } from "../pages/CodexProvidersPage";
 import { ProviderImportPage } from "../pages/ProviderImportPage";
-import { ProviderConversionBlocked } from "../components/provider-editor/ProviderConversionSummary";
+import { ProviderConversionPicker } from "../components/provider-editor/ProviderConversionPicker";
+import { ProviderConversionBatchView } from "../components/provider-editor/ProviderConversionBatchView";
 import { ProvidersPage } from "../pages/ProvidersPage";
 import { useClientRouteTransition } from "./useClientRouteTransition";
 import type { SwitchboardModel } from "./useSwitchboardModel";
@@ -18,7 +19,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       profiles: [...snapshot.records, ...snapshot.codexOfficialRecords], activeIds: { codex: activeProfileId("codex"), claude: activeProfileId("claude") } } };
   return (
     <div ref={route.workspaceRef} className="asb-client-route-workspace">
-      {providers.blockedConversion && <ProviderConversionBlocked conversion={providers.blockedConversion} onClose={providers.dismissConversion} />}
+      <ProviderConversionFlow model={model} active={active && !importing} />
       {providers.pendingReleaseError != null && <p className="asb-field-help" role="status">{t("operations.save.retryRelease")}</p>}
       {importing && <div className="asb-editor-route" hidden={!active}>
         <ProviderImportPage appFilter={appFilter} discovery={discoveryState.discovery} busy={busy}
@@ -41,12 +42,12 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
         onDelete={(record) => providers.setDeletePending({ kind: "codexThirdParty", record })}
         onDeleteOfficial={(record) => providers.setDeletePending({ kind: "generic", profile: record.profile })}
-        onConvert={providers.convertCodexProfile} onConvertOfficial={providers.convertProfile}
+        onConvert={providers.openConversion}
         editorNavigation={editorNavigation} editorSession={codexEditorSession} onNew={providers.newEditor} onEdit={providers.openCodexEditor}
         onRoutes={(id) => providers.openRoutes("codex", id)}
         onEditOfficial={providers.openCodexOfficialEditor} onCloseEditor={providers.closeEditor}
         onSave={providers.saveCodexProfile} onSaveOfficial={providers.saveGenericProfile}
-        onSwitchAccessMode={providers.switchCodexAccessMode} onSwitchClient={providers.newEditorFor}
+        onSwitchAccessMode={providers.switchCodexAccessMode}
         onSaveOfficialQuotaInterval={providers.saveOfficialQuotaInterval}
         expandedUsageIds={appSettingsState.appSettings?.expandedUsageIds ?? []}
         onToggleUsage={(profileId) => appSettingsState.toggleUsageExpanded(profileId)}
@@ -63,7 +64,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       activationCandidate={providerSwitch.activationCandidate}
       onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
       onCloseEditor={providers.closeEditor} onSave={providers.saveGenericProfile}
-      onSwitchClient={providers.newEditorFor}
+
       onSaveUsageQuery={async (profile, query) => {
         const saved = await providers.saveProfileUsageQuery(profile, query);
         if (saved) {
@@ -78,12 +79,23 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       onConfirmSwitch={() => void operations.runSwitch()}
       onCancelActivation={providerSwitch.clearCandidates}
       onEdit={providers.openEditor}
-      onConvert={providers.convertProfile}
+      onConvert={providers.openConversion}
       onRoutes={(profile) => providers.openRoutes("claude", profile.id)}
       onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })}
       onRefresh={async () => { await snapshot.refresh(); }} />
     </div>
   );
+}
+
+function ProviderConversionFlow({ model, active }: { model: SwitchboardModel; active: boolean }) {
+  const { providers, appFilter, busy } = model;
+  if (!active) return null;
+  return <>
+    {providers.conversionSelection?.sourceApp === appFilter && <ProviderConversionPicker app={appFilter}
+      sources={providers.conversionSelection.sources} busy={busy} onStart={providers.startConversion} onClose={providers.endConversion} />}
+    {providers.conversionBatch && <ProviderConversionBatchView batch={providers.conversionBatch}
+      busy={busy} onSkip={providers.skipConversion} onRetry={providers.retryConversion} onEnd={providers.endConversion} />}
+  </>;
 }
 
 function useProvidersWorkspaceRoute(model: SwitchboardModel, active: boolean) {

@@ -8,6 +8,7 @@
     ],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,

@@ -16,8 +16,6 @@ import { useCachedQuery } from "./use-cached-query";
 
 interface RowProps {
   onRoutes?: () => void;
-  onConvert?: () => void;
-  busy?: boolean;
   active: boolean;
   confirmationOpen: boolean;
   onActivate: () => void;
@@ -51,7 +49,6 @@ export function CodexProviderRow({ record, usageOpen, onToggleUsage, onConfigure
     summary={usage ? <ProviderUsageSummary name={name} usage={usage} /> : undefined}
     primaryAction={!props.active ? <ProviderActivateButton name={name} onActivate={props.onActivate} /> : undefined}
     actions={<ProviderRowActions name={name} profileId={id}
-      conversion={props.onConvert ? { target: "Claude", id, busy: props.busy, onConvert: props.onConvert } : undefined}
       onRoutes={props.onRoutes} onEdit={props.onEdit} onDelete={props.onDelete}
       test={{ id: testId, open: testOpen, trigger: testTriggerRef, onToggle: () => setTestOpen((open) => !open) }}
       usage={{ id: usageId, configured: hasUsageQuery, open: usageOpen,
@@ -97,7 +94,6 @@ export function CodexOfficialRow(props: OfficialRowProps) {
       secondaryAction={<ProviderLoginButton name={profile.name} open={reloginOpen} controlsId={`codex-official-relogin-${profile.id}`}
         onToggle={() => setReloginOpen((open) => !open)} />}
       actions={<ProviderRowActions name={profile.name} profileId={profile.id}
-        conversion={props.onConvert ? { target: "Claude", id: profile.id, busy: props.busy, onConvert: props.onConvert } : undefined}
         onRoutes={props.onRoutes} onEdit={props.onEdit} onDelete={props.onDelete}
         usage={{ id: `codex-official-quota-${profile.id}`, configured: true, open: props.quotaOpen, onOpen: props.onToggleQuota }} />}>
       <Collapsible open={reloginOpen} id={`codex-official-relogin-${profile.id}`}>

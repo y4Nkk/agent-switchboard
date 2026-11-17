@@ -21,17 +21,7 @@ namespace AgentSwitchboard.Installer
 
         internal InstallerInvocationKind Kind { get; private set; }
 
-        internal bool StartsImmediately
-        {
-            get { return Kind == InstallerInvocationKind.Updater; }
-        }
-
         internal bool IsUpdate
-        {
-            get { return Kind == InstallerInvocationKind.Updater; }
-        }
-
-        internal bool RestartAfterInstall
         {
             get { return Kind == InstallerInvocationKind.Updater; }
         }
@@ -65,7 +55,8 @@ namespace AgentSwitchboard.Installer
         private static bool IsCurrentUpdaterInvocation(string[] arguments)
         {
             // tauri-plugin-updater 2.11.0 emits this exact Windows NSIS protocol for
-            // the product's configured passive update, empty custom-argument, and restart flow. This is a
+            // the product's configured passive update and restart request. The
+            // installer confirms that request after installation. This is a
             // current integration contract, not a general NSIS command-line parser.
             return arguments.Length >= 4
                 && String.Equals(arguments[0], "/P", StringComparison.Ordinal)

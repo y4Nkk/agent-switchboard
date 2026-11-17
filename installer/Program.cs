@@ -18,9 +18,10 @@ namespace AgentSwitchboard.Installer
             }
             catch (Exception error)
             {
+                System.Diagnostics.Trace.TraceWarning("Installer startup: " + error);
                 var text = new InstallerText();
                 MessageBox.Show(
-                    text.StartupFailure(error),
+                    text.StartupFailure(error) + Environment.NewLine + Environment.NewLine + text.Diagnostic(error),
                     text.WindowTitle,
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);

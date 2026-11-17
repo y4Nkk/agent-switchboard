@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import type { InterfaceScale, ThemePreference } from "../../api/client";
-import appIcon from "../../assets/app-icon.svg";
+import { AppLogo } from "../AppLogo";
 
 const PREVIEW_SIZE = { width: 400, height: 248 } as const;
 
@@ -28,7 +28,7 @@ export function PreviewCanvas({ children }: { children: ReactNode }) {
 }
 
 export function AppMark({ x, y, size }: { x: number; y: number; size: number }) {
-  return <image href={appIcon} x={x} y={y} width={size} height={size} />;
+  return <AppLogo x={x} y={y} width={size} height={size} />;
 }
 
 export function DetailPanel({ x, y, width, height, children }: {

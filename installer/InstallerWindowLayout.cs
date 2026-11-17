@@ -92,6 +92,7 @@ namespace AgentSwitchboard.Installer
                 Margin = new Thickness(0, 22, 0, 20),
             };
             body.Children.Add(BuildHero());
+            body.Children.Add(BuildSteps());
             locationCard = BuildLocationCard();
             body.Children.Add(locationCard);
             body.Children.Add(BuildProgressArea());
@@ -112,7 +113,7 @@ namespace AgentSwitchboard.Installer
             title.HorizontalAlignment = HorizontalAlignment.Center;
             hero.Children.Add(title);
 
-            summary = Text(copy.ReadySummary, "LeadSize");
+            summary = Text(String.Empty, "LeadSize");
             summary.Foreground = Brush("Muted");
             summary.LineHeight = 23;
             summary.TextAlignment = TextAlignment.Center;
@@ -128,6 +129,30 @@ namespace AgentSwitchboard.Installer
             version.Margin = new Thickness(0, 10, 0, 0);
             hero.Children.Add(version);
             return hero;
+        }
+
+        private FrameworkElement BuildSteps()
+        {
+            var steps = new Grid { Margin = new Thickness(0, 0, 0, 24) };
+            AutomationProperties.SetName(steps, copy.StepsHeading);
+            for (int index = 0; index < stepTitles.Length; index++)
+            {
+                steps.ColumnDefinitions.Add(new ColumnDefinition());
+                var item = new StackPanel { Margin = new Thickness(6, 0, 6, 0) };
+                var label = Text(String.Empty, "LabelSize");
+                label.TextAlignment = TextAlignment.Center;
+                stepTitles[index] = label;
+                item.Children.Add(label);
+                var status = Text(String.Empty, "CaptionSize");
+                status.TextAlignment = TextAlignment.Center;
+                status.Foreground = Brush("Muted");
+                status.Margin = new Thickness(0, 5, 0, 0);
+                stepStatuses[index] = status;
+                item.Children.Add(status);
+                Grid.SetColumn(item, index);
+                steps.Children.Add(item);
+            }
+            return steps;
         }
 
         private FrameworkElement BuildLocationCard()
@@ -210,14 +235,6 @@ namespace AgentSwitchboard.Installer
             };
             content.Children.Add(copyDiagnostic);
 
-            launch = new CheckBox
-            {
-                Content = copy.LaunchWhenFinished,
-                IsChecked = true,
-                Visibility = Visibility.Collapsed,
-                Margin = new Thickness(0, 10, 0, 0),
-            };
-            content.Children.Add(launch);
             return content;
         }
 

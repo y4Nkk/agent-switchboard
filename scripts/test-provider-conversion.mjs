@@ -41,7 +41,7 @@ const steps = [
   ["core", "cargo", ["test", "-p", "asb-core", "--offline", "--locked", "provider_conversion", "--", "--test-threads=1"]],
   ["native", "cargo", [...native, "provider_conversion::tests::", "--", "--include-ignored", "--test-threads=1"]],
   ["claude-models", "cargo", [...native, "gateway::transform::claude_model", "--", "--test-threads=1"]],
-  ["frontend", process.execPath, ["--test", "tests/provider-conversion.test.ts", "tests/model-routing.test.ts", "tests/i18n.test.ts"]],
+  ["frontend", process.execPath, ["--test", "tests/provider-conversion.test.ts", "tests/provider-setup.test.ts", "tests/model-routing.test.ts", "tests/i18n.test.ts"]],
   ["ui", process.execPath, ["scripts/test-provider-conversion-ui.mjs"]],
 ];
 const requested = new Set(process.argv.slice(2));

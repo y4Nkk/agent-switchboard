@@ -6,6 +6,8 @@ import { useSwitchboardModel } from "./app/useSwitchboardModel";
 
 import { ApplicationPreparation as PreparationScreen } from "./components/ApplicationPreparation";
 import { useApplicationPreparation } from "./app/useApplicationPreparation";
+import { UpdateRestartDialog } from "./components/UpdateRestartDialog";
+import { AppDialogSuspension } from "./components/AppDialog";
 
 export default function App() {
   const preparation = useApplicationPreparation();
@@ -34,13 +36,16 @@ function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplic
   return (
     <>
       <div className="asb-prepared-app" inert={suspended}>
-      <AppShell page={page} onPageChange={setPage} error={error} busy={busy}
-        sidebar={model.sidebar}
-        preparation={preparation.snapshot!} settingsError={appSettingsState.loadFailure}
-        pin={appSettingsState.pin} update={update} onOpenUpdate={() => model.openSettings("about")}>
-        <AppWorkspace model={model} />
-      </AppShell>
-      <OperationConfirmSheets operations={operations} providers={providers} busy={busy} />
+        <AppDialogSuspension suspended={suspended || update.restartConfirmationOpen}>
+          <AppShell page={page} onPageChange={setPage} error={error} busy={busy}
+            sidebar={model.sidebar}
+            preparation={preparation.snapshot!} settingsError={appSettingsState.loadFailure}
+            pin={appSettingsState.pin} update={update} onOpenUpdate={() => model.openSettings("about")}>
+            <AppWorkspace model={model} />
+          </AppShell>
+          <OperationConfirmSheets operations={operations} providers={providers} busy={busy} />
+        </AppDialogSuspension>
+        {!suspended && <UpdateRestartDialog update={update} />}
       </div>
       {suspended &&
         <PreparationScreen snapshot={preparation.snapshot} error={preparation.error} overlay

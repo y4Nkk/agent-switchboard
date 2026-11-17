@@ -22,7 +22,7 @@ function UpdateActions({ update, busy }: { update: ApplicationUpdateControl; bus
   const { state } = update;
   const view = applicationUpdateView(state);
   return <div className="asb-panel-actions">
-    {view.installed ? <Button variant="primary" disabled={!view.canRestart} onClick={update.onRestart}>
+    {view.installed ? <Button variant="primary" disabled={!view.canRestart} onClick={update.onRequestRestart}>
       {t("backup.update.restart")}
     </Button> : state.updateCheck && !view.busy ? <Button variant="primary" disabled={busy || !view.canInstall} onClick={update.onInstall}>
       {t(view.download.retry ? "backup.update.retryDownload" : "backup.update.downloadInstall")}

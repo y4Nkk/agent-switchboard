@@ -3,8 +3,7 @@ import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { ClientLogo } from "../ClientLogo";
 import { Input } from "../Input";
-import { RadioOption } from "../RadioOption";
-import { Select } from "../Select";
+import { Button } from "../Button";
 import { Textarea } from "../Textarea";
 import { defaultConnection } from "./draft";
 import type { ProviderEditorState } from "./useProviderEditor";
@@ -12,10 +11,6 @@ import type { ProviderEditorState } from "./useProviderEditor";
 interface IdentityProps {
   editor: ProviderEditorState;
   busy: boolean;
-  editing: boolean;
-  /** Switching to Codex replaces the editor session; a Claude draft never
-   * mutates into a Codex draft. */
-  onSwitchClient: (app: AppKind) => void;
 }
 
 interface AccessModeProps {
@@ -28,66 +23,24 @@ interface AccessModeProps {
 export function ProviderAccessMode({ editor, busy, officialTakenApps, onOpenOfficial }: AccessModeProps) {
   const { t } = useI18n();
   const { draft, setDraft, setLoginDone } = editor;
-  return (
-    <section className="asb-editor-section" aria-label={t("providers.label.accessMode")}>
-      <h3 className="asb-section-title">{t("providers.label.accessMode")}</h3>
-      <div className="asb-editor-section-fields">
-        <div className="asb-field">
-          <span>{t("providers.editor.chooseConnectionType")}</span>
-          <div className="asb-segments" role="radiogroup" aria-label={t("providers.label.accessMode")}>
-            <RadioOption name="access-mode" checked={draft.routeMode === "custom"}
-              disabled={busy} label={t("providers.editor.access.custom")} onChange={() => {
-                setDraft((current) => ({ ...current, routeMode: "custom", ...defaultConnection(current.app) }));
-                setLoginDone(false);
-              }} />
-            <RadioOption name="access-mode" checked={draft.routeMode === "official"}
-              disabled={busy} label={t("providers.label.officialLogin")} onChange={() => {
-                if (officialTakenApps.includes(draft.app)) { onOpenOfficial(draft.app); return; }
-                setDraft((current) => ({
-                  ...current,
-                  routeMode: "official",
-                  name: current.name.trim() || t("providers.editor.officialDefaultName", { client: clientName(current.app) }),
-                  model: null,
-                  baseUrl: null,
-                  apiKey: "",
-                  upstreamProtocol: null,
-                  authentication: null,
-                  responsesOptions: null,
-                  maxOutputTokens: null,
-                  modelOptions: null,
-                  usageQuery: null,
-                  officialQuotaRefreshIntervalMinutes: null,
-                }));
-                setLoginDone(false);
-              }} />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+  const official = draft.routeMode === "official";
+  const change = () => {
+    if (!official && officialTakenApps.includes(draft.app)) { onOpenOfficial(draft.app); return; }
+    setDraft((current) => ({ ...current, routeMode: official ? "custom" : "official",
+      ...defaultConnection(current.app), apiKey: "", baseUrl: null, model: null, modelOptions: null,
+      authentication: null, usageQuery: null, officialQuotaRefreshIntervalMinutes: null,
+      name: current.name || (official ? "" : t("providers.editor.officialDefaultName", { client: clientName(current.app) })),
+    }));
+    setLoginDone(false);
+  };
+  return <Button variant="ghost" disabled={busy} onClick={change}>{t(official ? "providerSetup.thirdParty" : "providerSetup.official")}</Button>;
 }
 
-function ClientField({ editor, busy, editing, onSwitchClient }: IdentityProps) {
+function ClientField({ editor }: IdentityProps) {
   const { t } = useI18n();
-  const { draft } = editor;
-  if (editing) {
-    return <>
-      <div className="asb-field"><span>{t("providers.editor.client")}</span>
-        <p className="asb-provider-identity-value"><ClientLogo app={draft.app} className="asb-edit-logo" />{clientName(draft.app)}</p>
-      </div>
-      <div className="asb-field"><span>{t("providers.label.accessMode")}</span>
-        <p className="asb-provider-identity-value">{draft.routeMode === "official" ? t("providers.label.officialLogin") : t("providers.editor.access.custom")}</p>
-      </div>
-    </>;
-  }
-  return <label className="asb-field"><span>{t("providers.editor.client")}</span>
-    <div className="asb-client-control">
-      <ClientLogo app={draft.app} className="asb-edit-logo" />
-      <Select ariaLabel={t("providers.editor.client")} value={draft.app} disabled={busy}
-        options={[{ value: "codex", label: "Codex" }, { value: "claude", label: "Claude" }]}
-        onChange={(app) => { if (app !== draft.app) onSwitchClient(app as AppKind); }} />
-    </div>
-  </label>;
+  return <div className="asb-field"><span>{t("providers.editor.client")}</span>
+    <p className="asb-provider-identity-value"><ClientLogo app={editor.draft.app} className="asb-edit-logo" />{clientName(editor.draft.app)}</p>
+  </div>;
 }
 
 export function ProviderIdentityFields(props: IdentityProps) {

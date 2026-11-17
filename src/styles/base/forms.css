@@ -333,15 +333,13 @@
   .asb-editor-frame > .asb-editor-footer > .asb-btn { flex: 1; }
 }
 
-/* Editor section card — the module recipe every EditorFrame form composes
-   (provider editors and the usage query workspace): white content surface,
-   hairline frame, control radius, a title column beside a fields column. */
+/* Editor modules keep headings and content on separate full-width rows. */
 .asb-editor-section {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(9.5rem, 12rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: var(--asb-space-4);
+  gap: var(--asb-space-3);
   padding: var(--asb-space-4);
   border-radius: var(--asb-radius-group);
   background: var(--asb-content-muted);
@@ -352,6 +350,10 @@
   color: var(--asb-text);
   font: var(--asb-text-section);
   letter-spacing: -0.01em;
+}
+
+.asb-editor-section > .asb-btn {
+  justify-self: start;
 }
 
 .asb-editor-section-fields {
@@ -398,14 +400,6 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--asb-space-2);
-}
-
-/* Section columns collapse and tighten on one shared rhythm. */
-@media (max-width: 820px) {
-  .asb-editor-section {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--asb-space-3);
-  }
 }
 
 @media (max-width: 580px) {

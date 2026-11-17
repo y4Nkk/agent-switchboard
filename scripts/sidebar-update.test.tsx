@@ -9,7 +9,8 @@ import { applyLanguagePreference, tr } from "../src/i18n";
 import { candidate, updateExamples, updateError, updateSnapshot } from "../tests/fixtures/update-state";
 
 const noop = () => undefined;
-const control = (state: ApplicationUpdateSnapshot) => ({ state, onCheck: noop, onInstall: noop, onCancel: noop, onRestart: noop });
+const control = (state: ApplicationUpdateSnapshot) => ({ state, onCheck: noop, onInstall: noop, onCancel: noop,
+  onRequestRestart: noop, restartConfirmationOpen: false, onConfirmRestart: noop, onDismissRestart: noop });
 
 function sidebar(state: ApplicationUpdateSnapshot, collapsed: boolean) {
   return renderToStaticMarkup(<UpdateButton update={control(state)} collapsed={collapsed} onOpen={noop} />);

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ArrowUpRight, LogOut } from "lucide-react";
 import { openTrayMain, quitTray, type TraySnapshot } from "../api/client";
-import appIcon from "../assets/app-icon.svg";
+import { AppLogo } from "../components/AppLogo";
 import { Button } from "@/components/Button";
 import { ClientLogo } from "@/components/ClientLogo";
 import { applyAppAppearance } from "@/lib/app-appearance";
@@ -66,7 +66,7 @@ function TrayPanelContent({ snapshot, readError, initialized, refresh }: {
   return (
     <div ref={panel} className="tray-panel" aria-label={t("tray.panel.aria")}>
       <header className="tray-header">
-        <img src={appIcon} alt="" className="tray-app-logo" aria-hidden="true" />
+        <AppLogo className="tray-app-logo" />
         <span className="tray-app-name">Agent Switchboard</span>
       </header>
       {error && <div role="alert" className="tray-error">{error}

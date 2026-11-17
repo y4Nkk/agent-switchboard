@@ -29,7 +29,7 @@ html, body, #root { background: transparent; overflow: hidden; }
   gap: var(--asb-space-2);
   padding: var(--asb-space-2) var(--asb-space-3);
 }
-.tray-app-logo { width: 24px; height: 24px; object-fit: contain; }
+.tray-app-logo { width: 24px; height: 24px; }
 .tray-app-name {
   color: var(--asb-text);
   font: var(--asb-text-section);

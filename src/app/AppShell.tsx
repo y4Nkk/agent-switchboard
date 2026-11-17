@@ -9,7 +9,7 @@ import { PinTopButton } from "../components/PinTopButton";
 import { GlobalInformation } from "../components/GlobalInformation";
 import { WindowControls } from "../components/WindowControls";
 import { isBrowserDevelopment } from "../lib/runtime";
-import appIcon from "../assets/app-icon.svg";
+import { AppLogo } from "../components/AppLogo";
 
 interface AppShellProps {
   page: Page;
@@ -51,7 +51,7 @@ export function AppShell({
         onToggle={sidebar.onToggle} pending={sidebar.pending} update={update} onOpenUpdate={onOpenUpdate} />
       <header className="asb-titlebar" data-tauri-drag-region>
         <span className="asb-titlebar-brand" data-tauri-drag-region>
-          <img className="asb-titlebar-icon" src={appIcon} alt="" data-tauri-drag-region />
+          <AppLogo className="asb-titlebar-icon" data-tauri-drag-region />
           <span className="asb-titlebar-name" data-tauri-drag-region>Agent Switchboard</span>
         </span>
         <GlobalInformation error={error} settingsError={settingsError} busy={busy}

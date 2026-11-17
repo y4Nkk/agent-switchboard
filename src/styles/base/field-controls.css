@@ -38,11 +38,13 @@
   display: flex;
   align-items: stretch;
   gap: var(--asb-space-2);
+  width: 100%;
+  min-width: 0;
 }
 
 .asb-input-with-picker .asb-input {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 16rem;
 }
 
 .asb-input-with-picker .asb-model-picker {
@@ -128,6 +130,8 @@ input.asb-input {
   justify-content: space-between;
   gap: var(--asb-space-2);
   min-height: var(--asb-touch-target);
+  min-width: 0;
+  max-width: 100%;
   padding: var(--asb-space-1) var(--asb-space-2);
   border: 1px solid var(--asb-hairline-strong);
   border-radius: var(--asb-radius);
@@ -137,6 +141,14 @@ input.asb-input {
   text-align: left;
   cursor: pointer;
   transition: border-color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .asb-select-trigger:hover:not(:disabled) {
@@ -170,6 +182,8 @@ input.asb-input {
 
 .asb-select-content {
   z-index: 60;
+  min-width: min(var(--radix-select-trigger-width), var(--radix-select-content-available-width), calc(100vw - 2 * var(--asb-space-2)));
+  max-width: min(var(--radix-select-content-available-width), calc(100vw - 2 * var(--asb-space-2)));
   max-height: min(24rem, var(--radix-select-content-available-height));
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
@@ -182,7 +196,7 @@ input.asb-input {
 .asb-select-viewport {
   display: flex;
   flex-direction: column;
-  min-width: var(--radix-select-trigger-width);
+  min-width: 0;
   padding: var(--asb-space-1);
 }
 
@@ -198,6 +212,11 @@ input.asb-input {
   color: var(--asb-text);
   cursor: pointer;
   outline: none;
+}
+
+.asb-select-item > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .asb-select-item[data-highlighted] {

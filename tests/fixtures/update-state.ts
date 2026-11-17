@@ -20,7 +20,7 @@ export function updateTask(phase: UpdateDownloadState["phase"] = "downloading",
 export function updateSnapshot(patch: Partial<ApplicationUpdateSnapshot> = {}): ApplicationUpdateSnapshot {
   return { updateChannel: "github", channelError: null, appVersion: "0.3.23", updateCheck: null, checking: false, checkError: null, lastCheckedAt: null,
     task: null, starting: false, cancelling: false, startError: null, readError: null, cancelError: null,
-    restartRequired: false, restarting: false, restartError: null, ...patch };
+    restarting: false, restartError: null, ...patch };
 }
 
 export function updateExamples(): [string, ApplicationUpdateSnapshot][] {
@@ -45,8 +45,7 @@ export function updateExamples(): [string, ApplicationUpdateSnapshot][] {
     ["installing", native("installing")],
     ["install-wins-cancel", updateSnapshot({ task: updateTask("installing"), cancelling: true })],
     ["installed", native("installed")],
-    ["restart-required", updateSnapshot({ restartRequired: true })],
-    ["restarting", updateSnapshot({ restartRequired: true, restarting: true })],
+    ["restarting", updateSnapshot({ task: updateTask("installed"), restarting: true })],
     ["cancelled", native("cancelled")],
     ["failed", updateSnapshot({ task: updateTask("failed", { error: updateError }) })],
     ["start-failed", updateSnapshot({ updateCheck: candidate, startError: updateError })],
@@ -58,7 +57,7 @@ export function updateExamples(): [string, ApplicationUpdateSnapshot][] {
     ["stale-cancelling", updateSnapshot({ task: updateTask("cancelling"), readError })],
     ["stale-cancel-pending", updateSnapshot({ task: updateTask(), cancelling: true, readError })],
     ["cancel-failed", updateSnapshot({ task: updateTask(), cancelError })],
-    ["restart-failed", updateSnapshot({ task: updateTask("installed"), restartRequired: true, restartError })],
+    ["restart-failed", updateSnapshot({ task: updateTask("installed"), restartError })],
     ["terminal-discards-old-errors", updateSnapshot({ task: updateTask("cancelled"), readError, cancelError })],
     ["store-managed", updateSnapshot({ updateChannel: "microsoftStore" })],
   ];

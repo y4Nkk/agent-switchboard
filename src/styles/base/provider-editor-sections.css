@@ -3,9 +3,12 @@
 .asb-provider-editor-section > .asb-provider-form,
 .asb-provider-editor-section.asb-provider-form { gap: var(--asb-space-4); }
 .asb-provider-routing { gap: var(--asb-space-3); }
-.asb-provider-routing > .asb-model-route-graph { grid-column: 1 / -1; }
-.asb-provider-routing .asb-model-route-scene { padding-top: 0; }
+.asb-provider-value { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-2); min-width: 0; }
+.asb-provider-value > span { overflow-wrap: anywhere; }
+.asb-provider-value > .asb-input,
+.asb-provider-value > .asb-select-trigger { flex: 1; min-width: 10ch; width: auto; }
+.asb-provider-parameter-value { display: grid; gap: var(--asb-space-1); }
+.asb-provider-catalog-table .asb-table-cell { vertical-align: top; }
 @media (max-width: 600px) {
-  .asb-provider-routing .asb-model-route-fields { grid-template-columns: minmax(0, 1fr); }
   .asb-provider-editor .asb-tabs { max-width: 100%; }
 }

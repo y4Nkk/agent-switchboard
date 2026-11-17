@@ -213,8 +213,6 @@ export const messages = {
   "providers.editor.configureParameters": ["配置运行参数", "Configure runtime parameters"],
 
   // Editor: identity.
-  "providers.editor.chooseConnectionType": ["选择连接类型", "Choose the connection type"],
-  "providers.editor.access.custom": ["自定义 API 中继", "Custom API relay"],
   "providers.editor.officialDefaultName": ["{client} 官方登录", "{client} official login"],
   "providers.editor.client": ["客户端", "Client"],
   "providers.editor.name": ["名称", "Name"],

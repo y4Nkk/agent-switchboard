@@ -38,7 +38,6 @@ interface Props {
   onCancelActivation: () => void;
   onEdit?: (profile: ProviderProfile) => void;
   onRoutes?: (profile: ProviderProfile) => void;
-  onConvert?: (profile: ProviderProfile) => void;
   /** Opens the dedicated usage-query workspace for this profile. */
   onConfigureUsage?: (profile: ProviderProfile) => void;
   onDelete?: (profile: ProviderProfile) => void;
@@ -46,8 +45,6 @@ interface Props {
 
 interface RowProps {
   onRoutes?: (profile: ProviderProfile) => void;
-  onConvert?: (profile: ProviderProfile) => void;
-  busy: boolean;
   profile: ProviderProfile;
   active: boolean;
   userConfigModel: string | null;
@@ -82,7 +79,7 @@ function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
   const hasUsageQuery = Boolean(profile.usageQuery);
   const testId = `provider-test-${profile.id}`;
   const usageId = `provider-usage-${profile.id}`;
-  const hasActions = Boolean(props.onConvert || props.onRoutes || props.onEdit || props.onDelete || (!official && (profile.baseUrl || hasUsageQuery || props.onConfigureUsage)));
+  const hasActions = Boolean(props.onRoutes || props.onEdit || props.onDelete || (!official && (profile.baseUrl || hasUsageQuery || props.onConfigureUsage)));
   return <ProviderRowShell id={profile.id} name={profile.name} active={active}
     confirmationOpen={confirmation !== undefined} sortable={sortable}
     model={<span title={modelTitle}>{modelText}</span>}
@@ -92,7 +89,6 @@ function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
     secondaryAction={official ? <ProviderLoginButton name={profile.name} open={reloginOpen}
       controlsId={`provider-relogin-${profile.id}`} onToggle={() => setReloginOpen((open) => !open)} /> : undefined}
     actions={hasActions ? <ProviderRowActions name={profile.name} profileId={profile.id}
-      conversion={props.onConvert ? { target: "Codex", id: profile.id, busy: props.busy, onConvert: () => props.onConvert?.(profile) } : undefined}
       onRoutes={props.onRoutes ? () => props.onRoutes?.(profile) : undefined}
       onEdit={props.onEdit ? () => props.onEdit?.(profile) : undefined}
       onDelete={props.onDelete ? () => props.onDelete?.(profile) : undefined}
@@ -132,7 +128,6 @@ export function ProviderList({
   onCancelActivation,
   onEdit,
   onRoutes,
-  onConvert,
   onConfigureUsage,
   onDelete,
 }: Props) {
@@ -145,7 +140,6 @@ export function ProviderList({
         return <Row
           key={profile.id}
           profile={profile}
-          busy={busy}
           active={profile.id === activeProfileId}
           userConfigModel={userConfigModel}
           usageOpen={Boolean(profile.usageQuery) && expandedUsageIds.includes(profile.id)}
@@ -160,7 +154,6 @@ export function ProviderList({
           onActivate={onActivate}
           onEdit={onEdit}
           onRoutes={onRoutes}
-          onConvert={onConvert}
           onConfigureUsage={onConfigureUsage}
           onDelete={onDelete}
         />;

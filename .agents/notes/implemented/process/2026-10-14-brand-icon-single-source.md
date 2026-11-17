@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-src/assets/app-icon.svg 继续作为唯一母版，使用两条旋转对称的折返路径形成 S，中部斜向留白表达切换，透明背景上共享蓝紫粉橙线性渐变，不引入滤镜、字体或第三方图形。
+src/assets/app-icon.svg 继续作为唯一母版，使用两条旋转对称的折返路径形成 S，中部斜向留白表达切换，透明背景上共享蓝紫粉橙线性渐变，不引入字体或第三方图形；2026-11-17 起母版改为[液态玻璃材质](../feature/2026-11-17-liquid-glass-brand-icon.md)并引入滤镜与内嵌 CSS 动画，"不引入滤镜"的旧事实由该篇取代，生成链与本篇其余决定不变。
 
 scripts/sync-app-icons.mjs 在既有原生图标生成成功后，同时复制原生 SVG 与官网 favicon。Windows 安装器将生成的 128x128@2x.png 作为嵌入资源，由现有 WPF Image 与 PNG 解码器显示，删除 SwitchPath 和只供旧标记使用的 BrandBlue/Violet 画刷。执行文件图标仍使用同批生成的 ICO，不复制矢量几何。
 

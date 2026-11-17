@@ -51,7 +51,6 @@ interface ProvidersPageProps {
   onCloseEditor: () => void;
   onSave: (draft: ProviderDraft) => Promise<void>;
   /** Replaces the editor session when the user picks Codex from the editor. */
-  onSwitchClient: (app: AppKind) => void;
   onSaveUsageQuery: (
     profile: ProviderProfile,
     usageQuery: UsageQuery | null,
@@ -65,7 +64,7 @@ interface ProvidersPageProps {
   /** Discards the pending switch candidate without writing. */
   onCancelActivation: () => void;
   onEdit: (profile: ProviderProfile) => void;
-  onConvert: (profile: ProviderProfile) => void;
+  onConvert: () => void;
   onRoutes: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
   /** Refreshes the provider snapshot after a management-dialog change. */
@@ -100,7 +99,7 @@ function ProviderEditView(props: ProvidersPageProps) {
       userConfigModel={props.userConfigModel}
       userConfigWarnings={props.userConfigWarnings}
       onSave={props.onSave}
-      onSwitchClient={props.onSwitchClient}
+
       onCancel={props.onCloseEditor}
     />
   );
@@ -126,6 +125,7 @@ function ProviderListView({
       profiles={props.relayProfiles}
       locks={props.locks}
       onImport={props.onImport}
+      onConvert={props.onConvert}
       onNew={props.onNew}
     >
       <ProviderList
@@ -142,7 +142,6 @@ function ProviderListView({
         onConfirmSwitch={props.onConfirmSwitch}
         onCancelActivation={props.onCancelActivation}
         onEdit={props.onEdit}
-        onConvert={props.onConvert}
         onRoutes={props.onRoutes}
         onConfigureUsage={onConfigureUsage}
         onDelete={props.onDelete}

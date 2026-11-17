@@ -42,7 +42,8 @@ export function Select({ value, options, onChange, placeholder, ariaLabel, disab
       }}
     >
       <SelectPrimitive.Trigger ref={trigger} className="asb-select-trigger" aria-label={ariaLabel}>
-        <SelectPrimitive.Value placeholder={placeholder} />
+        {/* Radix Value discards className, so its wrapper owns truncation. */}
+        <span className="asb-select-value"><SelectPrimitive.Value placeholder={placeholder} /></span>
         <SelectPrimitive.Icon className="asb-select-chevron">
           <ChevronDownIcon />
         </SelectPrimitive.Icon>

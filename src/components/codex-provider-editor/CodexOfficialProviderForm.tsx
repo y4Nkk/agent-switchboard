@@ -4,7 +4,8 @@ import { useI18n } from "../../i18n";
 import { ProviderAdvancedSettings } from "../provider-editor/ProviderAdvancedSettings";
 import { ProviderNotesField } from "../provider-editor/ProviderIdentityFields";
 import { ParametersLoadStatus, ProviderParametersPage } from "../provider-editor/ProviderParametersPage";
-import { RadioOption } from "../RadioOption";
+import { Button } from "../Button";
+import { ProviderValue } from "../provider-editor/ProviderValue";
 import type { ProviderEditorSection } from "../provider-editor/useProviderEditorSections";
 import type { useCodexOfficialEditor } from "./useCodexOfficialEditor";
 
@@ -26,11 +27,8 @@ function BasicDetails({ busy, editing, editor, onSwitchAccessMode }: Pick<Props,
     <div className="asb-editor-section-fields">
       <div className="asb-provider-field-grid">
         <div className="asb-field"><span>{t("codex.identity.accessMode")}</span>
-          {editing ? <p className="asb-provider-identity-value">{t("codex.identity.official")}</p> : <div className="asb-segments" role="radiogroup" aria-label={t("codex.identity.accessMode")}>
-            <RadioOption name="codex-access-mode" checked={false} label={t("codex.identity.thirdParty")}
-              disabled={busy} onChange={onSwitchAccessMode} />
-            <RadioOption name="codex-access-mode" checked label={t("codex.identity.official")} disabled={busy} onChange={() => undefined} />
-          </div>}
+          <p className="asb-provider-identity-value">{t("codex.identity.official")}</p>
+          {!editing && <Button variant="ghost" disabled={busy} onClick={onSwitchAccessMode}>{t("providerSetup.thirdParty")}</Button>}
         </div>
         <label className="asb-field"><span>{t("codex.identity.name")}</span>
           <Input value={draft.name} required disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
@@ -47,13 +45,13 @@ function BasicDetails({ busy, editing, editor, onSwitchAccessMode }: Pick<Props,
 function SubscriptionSettings({ busy, editor }: Pick<Props, "busy" | "editor">) {
   const { t } = useI18n();
   return <div className="asb-provider-advanced-group">
-    <label className="asb-field"><span>{t("codex.official.quotaInterval")}</span>
-      <Input type="number" min="0" step="1" value={String(editor.draft.officialQuotaRefreshIntervalMinutes ?? 0)} disabled={busy}
-        onChange={(event) => {
-          const parsed = Number(event.target.value.trim());
+    <div className="asb-field"><span>{t("codex.official.quotaInterval")}</span>
+      <ProviderValue label={t("codex.official.quotaInterval")} numeric min={0} value={String(editor.draft.officialQuotaRefreshIntervalMinutes ?? 0)} disabled={busy}
+        onChange={(value) => {
+          const parsed = Number(value.trim());
           editor.setDraft((current) => ({ ...current, officialQuotaRefreshIntervalMinutes: Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null }));
         }} />
-    </label>
+    </div>
     <p className="asb-scope-note">{t("codex.official.quotaIntervalNote")}</p>
   </div>;
 }

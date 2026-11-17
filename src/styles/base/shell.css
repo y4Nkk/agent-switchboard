@@ -252,7 +252,6 @@
   flex: none;
   width: var(--asb-icon-size-xl);
   height: var(--asb-icon-size-xl);
-  object-fit: contain;
 }
 
 .asb-titlebar-name {

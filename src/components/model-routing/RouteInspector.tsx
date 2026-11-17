@@ -2,7 +2,6 @@ import type { CodexProviderRecord } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Input } from "../Input";
 import { ModelPicker } from "../ModelPicker";
-import { RadioOption } from "../RadioOption";
 import { Select } from "../Select";
 import { ClaudeRouteInspector } from "./ClaudeRouteInspector";
 import type { RouteDocument, RouteRole, RouteRecord } from "./model";
@@ -37,27 +36,20 @@ function CodexInspector(props: RouteInspectorProps & { document: Extract<RouteDo
   return <>
     {role === "main" ? <>
       <p className="asb-field-help">{t("modelRoutes.mainOwner", { name: document.draft.name })}</p>
-      <CatalogModelField value={document.draft.defaultModel} label={t("modelRoutes.model")} disabled={disabled}
-        models={document.draft.catalog} provider={document.draft.name} onSelect={(defaultModel) => change({ defaultModel })} />
+      <p className="asb-field-help">{document.draft.defaultModel || t("providerSetup.chooseModel")}</p>
     </> : <>
-      <div className="asb-segments" role="radiogroup" aria-label={t("modelRoutes.subagentMode")}>
-        <RadioOption name="model-route-mode" checked={!route} disabled={disabled} label={t("modelRoutes.automatic")}
-          onChange={() => change({ subagentRoute: null })} />
-        <RadioOption name="model-route-mode" checked={!!route} disabled={disabled} label={t("modelRoutes.specify")}
-          onChange={() => change({ subagentRoute: { profileId: "", model: "" } })} />
-      </div>
+      <label className="asb-field"><span>{t("modelRoutes.targetProvider")}</span>
+        <Select value={route?.profileId || "automatic"} ariaLabel={t("modelRoutes.targetProvider")} disabled={disabled}
+          options={[
+            { value: "automatic", label: t("modelRoutes.automatic") },
+            ...(!document.draft.connection?.authBinding ? [{ value: document.profileId,
+              label: t("providerEditor.selfTarget", { name: document.draft.name }) }] : []),
+            ...codex.filter(({ profile }) => profile.id !== document.profileId && !profile.connection?.authBinding)
+              .map(({ profile }) => ({ value: profile.id, label: profile.name })),
+          ]}
+          onChange={(profileId) => change({ subagentRoute: profileId === "automatic" ? null : { profileId, model: "" } })} />
+      </label>
       {route && <>
-        <label className="asb-field"><span>{t("modelRoutes.targetProvider")}</span>
-          <Select value={route.profileId || null} placeholder={t("modelRoutes.chooseProvider")}
-            options={[
-              ...(!document.draft.connection?.authBinding ? [{ value: document.profileId,
-                label: t("providerEditor.selfTarget", { name: document.draft.name }) }] : []),
-              ...codex.filter(({ profile }) => profile.id !== document.profileId && !profile.connection?.authBinding)
-                .map(({ profile }) => ({ value: profile.id, label: profile.name })),
-            ]}
-            ariaLabel={t("modelRoutes.targetProvider")} disabled={disabled}
-            onChange={(profileId) => change({ subagentRoute: { profileId, model: "" } })} />
-        </label>
         {target?.catalog.length ? <CatalogModelField value={route.model} label={t("modelRoutes.targetModel")} disabled={disabled}
           models={target.catalog} provider={target.name} onSelect={(model) => change({ subagentRoute: { ...route, model } })} />
           : <p className="asb-field-help">{t("modelRoutes.chooseProviderFirst")}</p>}

@@ -32,7 +32,7 @@ export function SkillFiles({ files, busy }: { files: ReturnType<typeof useSkillF
         {modified && <span className="asb-scope-note">{t("extensions.workbench.modified")}</span>}
         {binary && stored && <span className="asb-pill-status">{t("extensions.workbench.binary", { size: formatBytes(stored.size) })}</span>}</li>;
     })}</ul>
-    <div className="asb-ext-actions"><Input value={path} disabled={busy} aria-label={t("extensions.workbench.newPathAria")}
+    <div className="asb-ext-actions asb-skill-file-create"><Input value={path} disabled={busy} aria-label={t("extensions.workbench.newPathAria")}
       placeholder={t("extensions.workbench.newPathPlaceholder")} onChange={(event) => setPath(event.target.value)} />
       <Button variant="secondary" disabled={busy || !validPath} onClick={() => {
         const name = path.trim(); files.change(name, ""); files.select(name); setPath("");
@@ -85,7 +85,7 @@ export function SkillDependencies({ deps, options, busy, onReload }: { deps: Ret
   return <section className="asb-editor-section"><p className="asb-scope-note">{t("extensions.workbench.depsNote")}</p>
     {deps.stale && <div className="asb-banner" role="alert">{t("extensions.workbench.sourceChanged")}
       <Button variant="secondary" disabled={busy} onClick={onReload}>{t("extensions.library.reload")}</Button></div>}
-    <ul className="asb-ext-binding-list">{deps.draft.map((row, index) => <li key={index} className="asb-ext-binding">
+    <ul className="asb-ext-binding-list">{deps.draft.map((row, index) => <li key={index} className="asb-ext-binding asb-skill-dependency">
       <Input value={row.name} aria-label={t("extensions.workbench.depNameAria")} disabled={busy}
         onChange={(event) => patch(index, { name: event.target.value })} />
       <Select value={row.resourceId ?? ""} options={selectOptions} disabled={busy}

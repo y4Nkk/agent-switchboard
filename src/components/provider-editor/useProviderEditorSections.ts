@@ -29,10 +29,12 @@ export function useProviderEditorSections(props: ProviderEditorNavigation & {
     positions.current[section] = props.viewportRef.current?.scrollTop ?? 0;
     updateSection(props.official && next === "models" ? "connection" : next);
   };
-  const focusInspector = () => requestAnimationFrame(() => {
-    const inspector = props.viewportRef.current?.querySelector<HTMLElement>(".asb-model-route-inspector");
+  const focusInspector = (requestedRole: RouteRole = role) => requestAnimationFrame(() => {
+    const inspector = props.viewportRef.current?.querySelector<HTMLElement>(requestedRole === "main"
+      ? "[data-provider-model-entry]" : ".asb-model-route-inspector");
     inspector?.scrollIntoView({ block: "nearest" });
-    inspector?.querySelector<HTMLElement>("input,button")?.focus({ preventScroll: true });
+    if (inspector?.matches("input,button")) inspector.focus({ preventScroll: true });
+    else inspector?.querySelector<HTMLElement>("input,button")?.focus({ preventScroll: true });
   });
   useEffect(() => {
     props.viewportRef.current?.scrollTo({ top: positions.current[section] ?? 0 });
@@ -50,7 +52,7 @@ export function useProviderEditorSections(props: ProviderEditorNavigation & {
     if (!request.reload && request.app === props.app && request.profileId === props.profileId) {
       selectSection(request.section);
       setRole(request.role ?? "main");
-      if (request.section === "models" && !props.official) focusInspector();
+      if (request.section === "models" && !props.official) focusInspector(request.role ?? "main");
     } else leave.request(() => props.onReplaceSession(request));
   }, [props.request, props.busy, props.active]);
   return { section, selectSection, role, setRole, leave, stale };

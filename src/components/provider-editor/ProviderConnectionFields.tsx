@@ -4,20 +4,22 @@ import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
 import { Input } from "../Input";
-import { Select } from "../Select";
+import { ProviderValue } from "./ProviderValue";
+import { applyProviderPreset } from "./draft";
+import { providerPreset } from "../../lib/provider-catalog";
 import { ProviderCredentialField } from "./ProviderCredentialField";
 import { ProviderEndpointField } from "./ProviderEndpointField";
 import type { ProviderEditorState } from "./useProviderEditor";
 
-interface Props { editor: ProviderEditorState; busy: boolean }
+interface Props { editor: ProviderEditorState; busy: boolean; autoFill?: boolean }
 
 function ProtocolField({ editor, busy }: Props) {
   const { t } = useI18n();
   const { draft, setDraft } = editor;
   return (
-    <label className="asb-field">
+    <div className="asb-field">
       <span>{t("providers.label.apiFormat")}</span>
-      <Select ariaLabel={t("providers.label.apiFormat")} value={draft.upstreamProtocol} disabled={busy}
+      <ProviderValue label={t("providers.label.apiFormat")} value={draft.upstreamProtocol ?? ""} disabled={busy}
         options={[
           { value: "anthropicMessages", label: "Anthropic Messages (/v1/messages)" },
           { value: "chatCompletions", label: "Chat Completions (/chat/completions)" },
@@ -35,7 +37,7 @@ function ProtocolField({ editor, busy }: Props) {
               ? { requestMode: "standard" } : null,
           }));
         }} />
-    </label>
+    </div>
   );
 }
 
@@ -51,7 +53,7 @@ function RouteNotice({ editor }: Pick<Props, "editor">) {
   );
 }
 
-export function ProviderConnectionFields({ editor, busy }: Props) {
+export function ProviderConnectionFields({ editor, busy, autoFill }: Props) {
   const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
   return (
@@ -64,7 +66,10 @@ export function ProviderConnectionFields({ editor, busy }: Props) {
         <ProviderEndpointField busy={busy} required={!draft.connection?.claudeNative} baseUrl={draft.baseUrl} protocol={draft.upstreamProtocol}
           endpoints={connection.endpoints} endpointError={connection.endpointError}
           resolvingEndpoint={connection.resolvingEndpoint}
-          onChange={(value) => setDraft((current) => ({ ...current, baseUrl: value }))} />
+          onChange={(value) => setDraft((current) => {
+            const preset = autoFill && !current.model ? providerPreset(value) : undefined;
+            return preset ? { ...applyProviderPreset(current, preset), baseUrl: value } : { ...current, baseUrl: value };
+          })} />
         <ProviderCredentialField key={`credential-${draft.app}`} busy={busy}
           value={draft.apiKey} protocol={draft.upstreamProtocol}
           authentication={draft.authentication}
