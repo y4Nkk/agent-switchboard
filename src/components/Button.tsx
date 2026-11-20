@@ -4,6 +4,7 @@ const VARIANT_CLASS = {
   primary: "asb-btn-primary",
   secondary: "asb-btn-secondary",
   ghost: "asb-btn-ghost",
+  dangerText: "asb-btn-ghost asb-btn-danger-text",
   danger: "asb-btn-danger",
   icon: "asb-btn-icon",
   dangerIcon: "asb-btn-icon asb-btn-icon-danger",

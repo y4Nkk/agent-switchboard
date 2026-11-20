@@ -3,12 +3,60 @@
 .asb-provider-editor-section > .asb-provider-form,
 .asb-provider-editor-section.asb-provider-form { gap: var(--asb-space-4); }
 .asb-provider-routing { gap: var(--asb-space-3); }
-.asb-provider-value { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-2); min-width: 0; }
-.asb-provider-value > span { overflow-wrap: anywhere; }
-.asb-provider-value > .asb-input,
-.asb-provider-value > .asb-select-trigger { flex: 1; min-width: 10ch; width: auto; }
 .asb-provider-parameter-value { display: grid; gap: var(--asb-space-1); }
-.asb-provider-catalog-table .asb-table-cell { vertical-align: top; }
+.asb-provider-switch-rows { display: grid; gap: var(--asb-space-2); min-width: 0; }
+.asb-provider-switch-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-3); min-width: 0; }
+.asb-provider-switch-row > span:first-child { flex: 1 1 auto; min-width: 0; }
+.asb-provider-switch-row .asb-switch,
+.asb-provider-switch-row .asb-select-trigger { flex: none; width: auto; min-width: 10ch; }
+/* Membership chips: the pressed state is the value — one click flips it and
+   scanning reads the same pixels. Selected language mirrors the primary pill. */
+.asb-chip-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.asb-chip {
+  min-height: var(--asb-control-height-compact);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-canvas);
+  color: var(--asb-text);
+  font: var(--asb-text-caption);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.asb-chip:hover:not(:disabled) { border-color: var(--asb-action); }
+.asb-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--asb-row-selected);
+  color: color-mix(in srgb, var(--asb-action) 75%, var(--asb-text));
+  font-weight: 600;
+}
+.asb-chip:disabled { opacity: 0.45; cursor: default; }
+/* Model cards: every control lives on the card — no row editor, no edit state. */
+.asb-provider-model-card {
+  display: grid;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-canvas);
+}
+.asb-provider-model-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-2); min-width: 0; }
+.asb-provider-model-card-head > code { overflow-wrap: anywhere; font: var(--asb-text-label); }
+.asb-provider-model-card-head .asb-provider-model-actions { margin-inline-start: auto; }
+.asb-provider-model-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--asb-space-2); }
+.asb-provider-model-meta { display: grid; gap: var(--asb-space-1); }
+.asb-provider-model-meta .asb-chip-row { gap: var(--asb-space-1); }
+.asb-provider-model-meta .asb-select-trigger { width: auto; min-width: 8ch; }
+.asb-model-picker-dialog { display: grid; gap: var(--asb-space-3); min-width: 0; }
+.asb-model-picker-dialog-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-2); }
+.asb-model-picker-dialog-list { display: grid; gap: var(--asb-space-1); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.asb-model-picker-dialog-list li { display: flex; align-items: center; gap: var(--asb-space-2); min-width: 0; }
+.asb-model-picker-dialog-list .asb-checkbox { flex: 1 1 auto; min-width: 0; }
+.asb-model-picker-dialog-list .asb-checkbox-label { overflow-wrap: anywhere; }
+.asb-model-picker-dialog-list .asb-field-help { flex: none; white-space: nowrap; }
+@media (max-width: 600px) {
+  .asb-provider-model-card-head .asb-provider-model-actions { margin-inline-start: 0; }
+}
 @media (max-width: 600px) {
   .asb-provider-editor .asb-tabs { max-width: 100%; }
 }

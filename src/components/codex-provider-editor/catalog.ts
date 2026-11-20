@@ -41,6 +41,23 @@ export function addCatalogModel(draft: CodexEditorDraft, id: string): CodexEdito
   return next;
 }
 
+/** Removing a model also clears its primary role and name mappings. */
+export function removeCatalogModel(draft: CodexEditorDraft, id: string): CodexEditorDraft {
+  return withCatalog({ ...draft,
+    defaultModel: draft.defaultModel === id ? "" : draft.defaultModel,
+    modelRoutes: draft.modelRoutes.filter(({ clientModel }) => clientModel !== id),
+  }, draft.catalog.filter((entry) => entry.id !== id));
+}
+
+/** Applies a whole id set at once: additions auto-fill from the catalog,
+ * removals take their primary role and mappings with them. */
+export function applyCatalogModels(draft: CodexEditorDraft, ids: ReadonlySet<string>): CodexEditorDraft {
+  let next = draft;
+  for (const entry of draft.catalog) if (!ids.has(entry.id)) next = removeCatalogModel(next, entry.id);
+  for (const id of ids) if (!next.catalog.some((entry) => entry.id === id)) next = addCatalogModel(next, id);
+  return next;
+}
+
 export function modelSource(draft: CodexEditorDraft, entry: EditableCodexCatalogEntry): "catalogSource" | "savedSource" {
   const known = catalogEntry(draft, entry.id);
   return catalogModel(draft.endpoint, draft.upstream, entry.id)

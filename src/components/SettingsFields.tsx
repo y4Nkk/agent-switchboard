@@ -272,7 +272,7 @@ function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: Pr
         <span className="asb-setting-actual" aria-live="polite">{t("clientConfig.settings.currentSetting", { value: choiceLabel(spec, baseline, t) })}</span>
       </div>
       <div className="asb-choice-controls">
-        <ProviderParameterControl spec={spec} value={value} display={choiceLabel(spec, value, t)} busy={busy} onChange={onChange} />
+        <ProviderParameterControl spec={spec} value={value} busy={busy} onChange={onChange} />
       </div>
       {changed && <p className="asb-setting-pending" role="status">{pendingSettingMessage(spec, value, false, t)}</p>}
     </div>

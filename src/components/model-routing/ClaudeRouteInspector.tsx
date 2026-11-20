@@ -4,7 +4,6 @@ import { claudeOptions } from "../../lib/provider-drafts";
 import { Input } from "../Input";
 import { ModelPicker } from "../ModelPicker";
 import { Select } from "../Select";
-import { ProviderValue } from "../provider-editor/ProviderValue";
 import { claudeModels, claudeTargetIssue, type RouteDocument } from "./model";
 import type { RouteInspectorProps } from "./RouteInspector";
 
@@ -61,11 +60,13 @@ export function ClaudeRouteInspector(props: Props) {
         {models.length > 0 && <ModelPicker models={models.map((model) => ({ value: model, label: model, group: target?.name ?? "" }))}
           current={value || null} ariaLabel={t("modelRoutes.pickSavedModel")} disabled={disabled} onSelect={changeModel} />}
       </div>}
-      <ProviderValue label={t("modelRoutes.oneM")} value={String(role === "main" ? options.primaryOneM : route?.oneM ?? false)}
-        display={`1M · ${t((role === "main" ? options.primaryOneM : route?.oneM) ? "providerSetup.enabled" : "providerSetup.disabled")}`}
-        disabled={disabled || !value.trim()} options={[
-          { value: "false", label: t("providerSetup.disabled") }, { value: "true", label: t("providerSetup.enabled") },
-        ]} onChange={(next) => changeOneM(next === "true")} />
+      <div className="asb-provider-switch-row">
+        <span>{t("modelRoutes.oneM")}</span>
+        <Select ariaLabel={t("modelRoutes.oneM")} value={String(role === "main" ? options.primaryOneM : route?.oneM ?? false)}
+          disabled={disabled || !value.trim()} options={[
+            { value: "false", label: t("providerSetup.disabled") }, { value: "true", label: t("providerSetup.enabled") },
+          ]} onChange={(next) => changeOneM(next === "true")} />
+      </div>
     </div>}
     {role !== "main" && <p className="asb-field-help">{t(route ? "modelRoutes.subagentHelp" : "modelRoutes.followHelp")}</p>}
   </>;

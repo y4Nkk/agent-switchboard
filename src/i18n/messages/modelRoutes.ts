@@ -12,7 +12,6 @@ export const messages = {
   "modelRoutes.runtime": ["查看实际连接与最近请求", "View actual connections and recent requests"],
   "modelRoutes.editNode": ["配置{role}的供应商与模型", "Configure provider and model for {role}"],
   "modelRoutes.configureRole": ["配置：{role}", "Configure: {role}"],
-  "modelRoutes.edit": ["点击配置", "Configure"],
   "modelRoutes.unmatched": ["尚未匹配到已保存档案", "No saved profile matched"],
   "modelRoutes.automatic": ["自动", "Automatic"],
   "modelRoutes.clientDefault": ["使用客户端默认设置", "Use client defaults"],

@@ -4,7 +4,7 @@ import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
 import { Input } from "../Input";
-import { ProviderValue } from "./ProviderValue";
+import { Select } from "../Select";
 import { applyProviderPreset } from "./draft";
 import { providerPreset } from "../../lib/provider-catalog";
 import { ProviderCredentialField } from "./ProviderCredentialField";
@@ -19,7 +19,7 @@ function ProtocolField({ editor, busy }: Props) {
   return (
     <div className="asb-field">
       <span>{t("providers.label.apiFormat")}</span>
-      <ProviderValue label={t("providers.label.apiFormat")} value={draft.upstreamProtocol ?? ""} disabled={busy}
+      <Select ariaLabel={t("providers.label.apiFormat")} value={draft.upstreamProtocol} disabled={busy}
         options={[
           { value: "anthropicMessages", label: "Anthropic Messages (/v1/messages)" },
           { value: "chatCompletions", label: "Chat Completions (/chat/completions)" },

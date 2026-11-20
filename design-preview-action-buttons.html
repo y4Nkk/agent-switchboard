@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>动作按钮方案对比 · Agent Switchboard</title>
+<style>
+  /* ===== 应用真实 token（src/styles/tokens.css）===== */
+  :root {
+    --action: #0a84ff;
+    --danger: #d70015;
+    --ink: #14161b;
+    --text: var(--ink);
+    --text-muted: rgba(20, 22, 27, 0.62);
+    --hairline: rgba(20, 22, 27, 0.12);
+    --hairline-strong: rgba(20, 22, 27, 0.2);
+    --content: hsl(0 0% 98%);
+    --content-muted: hsl(240 16% 96%);
+    --row-hover: color-mix(in srgb, var(--text) 3%, var(--content));
+    --row-selected: color-mix(in srgb, var(--action) 8%, white);
+    --diff-remove-bg: rgba(215, 0, 21, 0.08);
+    --surface-rail: var(--content-muted);
+    --radius: 12px;
+    --radius-pill: 999px;
+    --font-ui: "Segoe UI Variable", "MiSans", system-ui, sans-serif;
+    --font-code: "Maple Mono", "Cascadia Mono", ui-monospace, monospace;
+    --text-body: 400 15px/1.55 var(--font-ui);
+    --text-label: 400 13px/1.4 var(--font-ui);
+    --text-caption: 400 12px/1.4 var(--font-ui);
+    --text-code: 400 13px/1.6 var(--font-code);
+    --control-h: 40px;
+    --control-h-compact: 36px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 24px 64px;
+    background: color-mix(in srgb, var(--content) 72%, var(--content-muted));
+    font: var(--text-body); color: var(--text);
+  }
+  .page { max-width: 1200px; margin: 0 auto; }
+  h1 { font: 600 24px/1.3 var(--font-ui); margin: 0 0 6px; }
+  .intro { color: var(--text-muted); margin: 0 0 36px; }
+
+  /* ===== 方案面板 ===== */
+  .panel { background: var(--content); border: 1px solid var(--hairline); border-radius: 16px; padding: 24px 24px 20px; margin-bottom: 28px; }
+  .panel-title { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .panel-title h2 { font: 600 17px/1.3 var(--font-ui); margin: 0; }
+  .tag { font: var(--text-caption); padding: 2px 10px; border-radius: var(--radius-pill); border: 1px solid var(--hairline-strong); color: var(--text-muted); }
+  .tag.now { border-color: rgba(215,0,21,.35); color: var(--danger); }
+  .tag.a { border-color: rgba(10,132,255,.4); color: var(--action); }
+  .panel-sub { color: var(--text-muted); font-size: 13px; margin: 0 0 18px; }
+  .demo-label { font: var(--text-caption); color: var(--text-muted); margin: 18px 0 8px; }
+
+  /* ===== 表格（tables-backups.css 契约）===== */
+  .table-frame { border: 1px solid var(--hairline); border-radius: var(--radius); overflow-x: auto; background: var(--content); }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font: var(--text-body); font-variant-numeric: tabular-nums; min-width: 980px; }
+  th { padding: 12px 16px; background: var(--content-muted); font: var(--text-label); color: var(--text-muted); text-align: left; white-space: nowrap; }
+  td { padding: 16px; vertical-align: top; overflow-wrap: anywhere; }
+  tbody tr:hover { background: var(--row-hover); }
+  code { font: var(--text-code); }
+  .muted { color: var(--text-muted); }
+  .cell-help { font: var(--text-caption); color: var(--text-muted); margin: 2px 0 0; }
+
+  /* ===== 按钮（buttons.css 契约）===== */
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h-compact); border: 0; border-radius: var(--radius); background: transparent; color: var(--text); font: var(--text-body); cursor: pointer; }
+  .btn:disabled, .btn[aria-disabled="true"] { opacity: .45; cursor: default; }
+  /* 现状 ghost：padding 0，悬停面贴字 */
+  .btn-ghost-now { padding: 0; }
+  .btn-ghost-now:hover:not(:disabled) { background: var(--row-hover); }
+  /* 方向 A ghost：横向呼吸 6px，负外边距保持文字原位 */
+  .btn-ghost-a { padding: 0 6px; margin: 0 -6px; }
+  .btn-ghost-a:hover:not(:disabled) { background: var(--row-hover); }
+  /* 方向 A 危险文字变体 */
+  .btn-ghost-danger { color: var(--danger); margin-left: 10px; position: relative; }
+  .btn-ghost-danger::before { content: ""; position: absolute; left: -11px; top: 50%; transform: translateY(-50%); width: 1px; height: 14px; background: var(--hairline); }
+  .btn-ghost-danger:hover:not(:disabled) { background: var(--diff-remove-bg); }
+  /* 图标按钮（⋯ 更多）*/
+  .btn-icon { width: var(--control-h-compact); height: var(--control-h-compact); padding: 0; min-width: 0; position: relative; }
+  .btn-icon:hover { background: var(--surface-rail); }
+  .actions { display: flex; align-items: center; gap: 12px; }
+  .actions-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  /* 状态胶囊（主模型）*/
+  .pill { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 1px 10px; border-radius: var(--radius-pill); background: var(--row-selected); color: color-mix(in srgb, var(--action) 75%, var(--text)); font: var(--text-caption); font-weight: 600; white-space: nowrap; }
+
+  /* ===== 更多菜单（ActionMenu 形态）===== */
+  .menu-anchor { position: relative; }
+  .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 168px; background: var(--content); border: 1px solid var(--hairline); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(20,22,27,.12); padding: 4px; display: none; }
+  .menu.open { display: block; }
+  .menu button { display: flex; align-items: center; width: 100%; min-height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; font: var(--text-label); color: var(--text); cursor: pointer; text-align: left; }
+  .menu button:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .menu button.danger { color: var(--danger); }
+  .menu button.danger:hover { background: var(--diff-remove-bg); }
+  .menu .sep { height: 1px; background: var(--hairline); margin: 4px 6px; }
+
+  /* ===== 运行参数行（SettingsFields 行结构）===== */
+  .param-row { border: 1px solid var(--hairline); border-radius: var(--radius); padding: 16px; max-width: 720px; }
+  .param-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  .param-title { font-weight: 600; }
+  .param-detail { font: var(--text-label); color: var(--text-muted); margin-top: 2px; }
+  .param-actual { font: var(--text-label); color: var(--text-muted); white-space: nowrap; }
+  .param-value { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+  .param-note { font: var(--text-caption); color: var(--text-muted); margin-top: 8px; }
+  .param-note.ghosted { opacity: .55; }
+
+  /* ===== 标注 ===== */
+  .notes { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .notes li { font: var(--text-label); color: var(--text-muted); display: flex; gap: 8px; align-items: baseline; }
+  .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 1px; }
+  .dot.bad { background: var(--danger); }
+  .dot.good { background: #1d8a4e; }
+  .dot.info { background: var(--action); }
+  mark { background: color-mix(in srgb, var(--action) 12%, transparent); color: inherit; padding: 0 3px; border-radius: 4px; }
+  mark.bad { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+  .verdict { margin-top: 8px; font-size: 13px; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>动作按钮：现状 vs 方向 A vs 方向 B</h1>
+  <p class="intro">全部使用应用真实 token 与组件几何（ghost = 36px 高、纯文字；表格 = 灰带表头 + 无边框行）。悬停可试反馈；方向 B 的「⋯」可点开菜单。</p>
+
+  <!-- ============ 现状 ============ -->
+  <section class="panel">
+    <div class="panel-title"><h2>现状</h2><span class="tag now">问题基准</span></div>
+    <p class="panel-sub">Codex 供应商 · 模型与路由 → 模型目录（CodexModelSection.tsx:84-90），加一条运行参数行（ProviderParameterControl.tsx:18-24）。</p>
+
+    <div class="table-frame"><table>
+      <thead><tr>
+        <th>模型标识</th><th>上下文窗口</th><th>输出上限</th><th style="width:26%">能力声明</th><th>来源</th><th><mark class="bad">点击配置</mark></th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><code>gpt-6-astra</code><p class="cell-help">主模型</p></td>
+          <td><span>372000</span> <button class="btn btn-ghost-now" style="font-size:15px">修改</button></td>
+          <td><span>128000</span> <button class="btn btn-ghost-now" style="font-size:15px">修改</button></td>
+          <td class="muted" style="font-size:14px">函数工具 · none, minimal, low, medium, high, xhigh, max, ultra · 图片输入 · 自定义工具 · 工具搜索 · 压缩</td>
+          <td class="muted">当前配置</td>
+          <td><div class="actions">
+            <button class="btn btn-ghost-now" disabled>用作主模型</button>
+            <button class="btn btn-ghost-now">修改</button>
+            <button class="btn btn-ghost-now">删除</button>
+          </div></td>
+        </tr>
+        <tr>
+          <td><code>claude-3-5-sonnet-20241022</code></td>
+          <td><span>128000</span> <button class="btn btn-ghost-now" style="font-size:15px">修改</button></td>
+          <td><span>8192</span> <button class="btn btn-ghost-now" style="font-size:15px">修改</button></td>
+          <td class="muted" style="font-size:14px">函数工具 · none, minimal, low, medium, high, xhigh, max, ultra · 图片输入 · 自定义工具 · 工具搜索 · 压缩</td>
+          <td class="muted">当前配置</td>
+          <td><div class="actions">
+            <button class="btn btn-ghost-now">用作主模型</button>
+            <button class="btn btn-ghost-now">修改</button>
+            <button class="btn btn-ghost-now">删除</button>
+          </div></td>
+        </tr>
+      </tbody>
+    </table></div>
+
+    <div class="demo-label">运行参数 · 模型行为（一条）</div>
+    <div class="param-row">
+      <div class="param-head">
+        <div><div class="param-title">在界面中隐藏推理摘要</div><div class="param-detail">自动时遵循此供应商默认行为；开启或关闭会随供应商一起保存。</div></div>
+        <span class="param-actual">当前设置：自动</span>
+      </div>
+      <div class="param-value"><span>客户端默认</span><button class="btn btn-ghost-now">修改</button></div>
+      <p class="param-note ghosted">客户端默认 <span style="opacity:.8">← 重复</span></p>
+    </div>
+
+    <ul class="notes">
+      <li><span class="dot bad"></span><span><b>P1</b>：删除 = 修改 = 用作主模型，同色同重零分隔；删除还连带清空该模型的路由映射，无确认无提示（CodexModelSection.tsx:35-41）。</span></li>
+      <li><span class="dot bad"></span><span><b>P2</b>：列头「点击配置」是交互指令不是内容名；Claude 目录那列只有删除，头和内容对不上（modelRoutes.ts:15）。</span></li>
+      <li><span class="dot bad"></span><span><b>P3</b>：自动模式下「当前设置：自动 / 客户端默认 / 客户端默认」同一事实说三遍。</span></li>
+      <li><span class="dot bad"></span><span><b>P4</b>：主模型状态两处表达（禁用按钮 + 模型列下小字）；Claude 目录又是另一种表达。</span></li>
+      <li><span class="dot bad"></span><span><b>P5</b>：ghost 悬停面 padding 0，高亮贴字。</span></li>
+    </ul>
+  </section>
+
+  <!-- ============ 方向 A ============ -->
+  <section class="panel">
+    <div class="panel-title"><h2>方向 A · 渐进优化</h2><span class="tag a">推荐</span></div>
+    <p class="panel-sub">ghost 纯文字契约不动、动作仍在行尾列；只修语义层。对应 P1–P5 逐条修复。</p>
+
+    <div class="table-frame"><table>
+      <thead><tr>
+        <th>模型标识</th><th>上下文窗口</th><th>输出上限</th><th style="width:26%">能力声明</th><th>来源</th><th><mark>操作</mark></th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><code>gpt-6-astra</code></td>
+          <td><span>372000</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td><span>128000</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td class="muted" style="font-size:14px">函数工具 · none, minimal, low, medium, high, xhigh, max, ultra · 图片输入 · 自定义工具 · 工具搜索 · 压缩</td>
+          <td class="muted">当前配置</td>
+          <td><div class="actions">
+            <span class="pill">✓ 主模型</span>
+            <button class="btn btn-ghost-a">修改</button>
+            <button class="btn btn-ghost-a btn-ghost-danger">删除</button>
+          </div></td>
+        </tr>
+        <tr>
+          <td><code>claude-3-5-sonnet-20241022</code></td>
+          <td><span>128000</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td><span>8192</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td class="muted" style="font-size:14px">函数工具 · none, minimal, low, medium, high, xhigh, max, ultra · 图片输入 · 自定义工具 · 工具搜索 · 压缩</td>
+          <td class="muted">当前配置</td>
+          <td><div class="actions">
+            <button class="btn btn-ghost-a">用作主模型</button>
+            <button class="btn btn-ghost-a">修改</button>
+            <button class="btn btn-ghost-a btn-ghost-danger">删除</button>
+          </div></td>
+        </tr>
+      </tbody>
+    </table></div>
+
+    <div class="demo-label">运行参数 · 模型行为（自动模式，caption 已删）</div>
+    <div class="param-row">
+      <div class="param-head">
+        <div><div class="param-title">在界面中隐藏推理摘要</div><div class="param-detail">自动时遵循此供应商默认行为；开启或关闭会随供应商一起保存。</div></div>
+        <span class="param-actual">当前设置：自动</span>
+      </div>
+      <div class="param-value"><span>客户端默认</span><button class="btn btn-ghost-a">修改</button></div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="dot good"></span><span><b>修 P1</b>：删除 → 危险红文字 + 1px 发丝分隔线 + 红底悬停（复用 --asb-danger / --asb-diff-remove-bg，与 dangerIcon 同源）。改动落在 ghost 变体旁新增一个「危险文字」变体，补上 DESIGN.md L98 的契约缺口。删除确认弹窗另议（草稿态可恢复 vs 连带清路由的不可见性）。</span></li>
+      <li><span class="dot good"></span><span><b>修 P2</b>：列头「点击配置」→「操作」；Claude 目录同步换。</span></li>
+      <li><span class="dot good"></span><span><b>修 P3</b>：自动模式的「客户端默认」caption 删除；仅显式自定义时显示「自定义」。</span></li>
+      <li><span class="dot good"></span><span><b>修 P4</b>：主模型统一为动作列内的状态胶囊（主模型行显示胶囊、其他行显示「用作主模型」）；模型列下的小字「主模型」删除。与 Claude 目录的表达收敛为同一种。</span></li>
+      <li><span class="dot good"></span><span><b>修 P5</b>：ghost 悬停面加 6px 横向呼吸（负外边距抵消，文字原位不动）。悬停「修改」试试。</span></li>
+    </ul>
+    <p class="verdict">代价：几乎为零——不新增组件、不改信息架构，全部是现有契约内的语义修补。删除仍是无确认直删，只是至少<strong>看得见它是删除</strong>。</p>
+  </section>
+
+  <!-- ============ 方向 B ============ -->
+  <section class="panel">
+    <div class="panel-title"><h2>方向 B · 动作收敛</h2><span class="tag">结构重塑</span></div>
+    <p class="panel-sub">主模型升级为独立状态列；动作列收缩为「修改 + ⋯ 更多」，删除与设主模型进菜单（ActionMenu，DESIGN.md L102 已有契约）。点「⋯」试试。</p>
+
+    <div class="table-frame"><table>
+      <thead><tr>
+        <th>模型标识</th><th>上下文窗口</th><th>输出上限</th><th style="width:24%">能力声明</th><th>来源</th><th><mark>主模型</mark></th><th>操作</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><code>gpt-6-astra</code></td>
+          <td><span>372000</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td><span>128000</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td class="muted" style="font-size:14px">函数工具 · none, minimal, low, medium, high, xhigh, max, ultra · 图片输入 · 自定义工具 · 工具搜索 · 压缩</td>
+          <td class="muted">当前配置</td>
+          <td><span class="pill">✓ 主模型</span></td>
+          <td><div class="actions">
+            <button class="btn btn-ghost-a">修改</button>
+            <span class="menu-anchor">
+              <button class="btn btn-icon" onclick="toggleMenu(this)" aria-label="更多动作" aria-expanded="false">⋯</button>
+              <div class="menu">
+                <button>用作主模型</button>
+                <div class="sep"></div>
+                <button class="danger">删除</button>
+              </div>
+            </span>
+          </div></td>
+        </tr>
+        <tr>
+          <td><code>claude-3-5-sonnet-20241022</code></td>
+          <td><span>128000</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td><span>8192</span> <button class="btn btn-ghost-a" style="font-size:15px">修改</button></td>
+          <td class="muted" style="font-size:14px">函数工具 · none, minimal, low, medium, high, xhigh, max, ultra · 图片输入 · 自定义工具 · 工具搜索 · 压缩</td>
+          <td class="muted">当前配置</td>
+          <td class="muted">—</td>
+          <td><div class="actions">
+            <button class="btn btn-ghost-a">修改</button>
+            <span class="menu-anchor">
+              <button class="btn btn-icon" onclick="toggleMenu(this)" aria-label="更多动作" aria-expanded="false">⋯</button>
+              <div class="menu">
+                <button>用作主模型</button>
+                <div class="sep"></div>
+                <button class="danger">删除</button>
+              </div>
+            </span>
+          </div></td>
+        </tr>
+      </tbody>
+    </table></div>
+
+    <ul class="notes">
+      <li><span class="dot info"></span><span>动作列从 3 个文字按钮降到 1+1；删除天然与修改隔离，菜单内可用危险红条目。</span></li>
+      <li><span class="dot info"></span><span>主模型成为扫描列：状态一眼可查（胶囊 / —），不改值不产生按钮。</span></li>
+      <li><span class="dot bad"></span><span>代价：设主模型、删除各多一次点击（高频动作被收进低频容器）；「设为主模型」在菜单里看不到行内状态变化动线；表格多一列，窄容器更容易横向滚动。扩展页/会话页的 ActionMenu 先例是低频动作，模型目录的删除频率未必匹配。</span></li>
+    </ul>
+    <p class="verdict">判断：动作收敛解决了 P1 的误触风险，但对一个<strong>通常只有几行</strong>的模型目录来说，是把高频操作推向低频容器——我仍认为 A 更匹配这个表格的规模。</p>
+  </section>
+
+  <p class="intro" style="margin-top:8px">两案共用：列头「操作」、自动模式删冗余 caption、ghost 悬停呼吸。差异只在删除的危险表达与动作位结构。看完回复「A」「B」或「不动手」。</p>
+</div>
+
+<script>
+  function toggleMenu(btn) {
+    const menu = btn.nextElementSibling;
+    const open = menu.classList.contains("open");
+    document.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open"));
+    document.querySelectorAll('[aria-expanded="true"]').forEach((b) => b.setAttribute("aria-expanded", "false"));
+    if (!open) { menu.classList.add("open"); btn.setAttribute("aria-expanded", "true"); }
+  }
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".menu-anchor")) toggleMenu(null);
+  });
+</script>
+</body>
+</html>

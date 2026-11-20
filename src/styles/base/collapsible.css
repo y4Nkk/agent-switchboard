@@ -49,6 +49,9 @@
   font: inherit;
   font-weight: 600;
   text-align: start;
+  /* Fold rows stay flush with their body content: ghost's inline breathing
+     would offset the label, and a stretched row needs no hover inset. */
+  padding-inline: 0;
 }
 
 .asb-collapsible-trigger-label {

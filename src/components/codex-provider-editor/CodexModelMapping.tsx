@@ -25,7 +25,7 @@ export function CodexModelMapping({ editor, busy }: { editor: CodexEditorState; 
         { key: "upstream", header: t("providerSetup.upstreamModel"), render: (row) => <Input code required disabled={busy}
           aria-label={t("codex.model.mappingUpstreamAria", { index: row.index + 1 })} value={row.upstreamModel}
           onChange={(event) => update(row.index, { upstreamModel: event.target.value })} /> },
-        { key: "remove", header: t("modelRoutes.edit"), render: (row) => <Button variant="ghost" size="compact" disabled={busy}
+        { key: "remove", header: t("providerSetup.actions"), render: (row) => <Button variant="dangerText" size="compact" disabled={busy}
           aria-label={t("codex.model.mappingDeleteAria", { index: row.index + 1 })}
           onClick={() => setDraft((current) => ({ ...current, modelRoutes: current.modelRoutes.filter((_, index) => index !== row.index) }))}>
           {t("providerSetup.remove")}</Button> },

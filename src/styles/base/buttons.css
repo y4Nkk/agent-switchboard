@@ -47,7 +47,9 @@ button:disabled {
 .asb-btn-ghost {
   appearance: none;
   min-width: 0;
-  padding: 0;
+  /* Inline breathing keeps the hover surface off the glyphs while the text
+     stays put: the padding lives inside the button, no margin tricks. */
+  padding: 0 calc(var(--asb-space-unit) + var(--asb-space-hairline));
   border: 0;
   background: transparent;
   color: var(--asb-text);
@@ -55,6 +57,26 @@ button:disabled {
 
 .asb-btn-ghost:hover:not(:disabled) {
   background: var(--asb-row-hover);
+}
+
+/* Danger text actions ride the ghost geometry: the danger hue and a removal
+   tint on hover separate destructive text ops from safe ones, and a hairline
+   divider splits them from the preceding action (never shown leading). */
+.asb-btn-danger-text {
+  color: var(--asb-danger);
+}
+
+.asb-btn-danger-text:hover:not(:disabled) {
+  background: var(--asb-diff-remove-bg);
+}
+
+.asb-btn-danger-text:not(:first-child)::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: var(--asb-space-3);
+  margin-inline-end: var(--asb-space-1);
+  background: var(--asb-hairline);
 }
 
 .asb-btn-danger {

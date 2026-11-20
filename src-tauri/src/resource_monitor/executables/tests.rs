@@ -111,6 +111,15 @@ fn helpers_services_and_generic_runtimes_are_not_candidate_engine_roots() {
 }
 
 #[test]
+fn browser_hosts_match_by_exact_image_name_distinct_from_the_interface_runtime() {
+    for name in ["msedge.exe", "Chrome", "FIREFOX.EXE", "chromium", "brave", "opera", "vivaldi"] {
+        assert!(browser_host(name), "{name}");
+    }
+    for name in ["msedgewebview2.exe", "chrome-native-host.exe", "codex.exe",
+        "agent-switchboard.exe", "notepad.exe"] { assert!(!browser_host(name), "{name}"); }
+}
+
+#[test]
 fn unreadable_or_oversized_package_metadata_keeps_the_identity_unknown() {
     let catalog = catalog();
     let (directory, process) = package(r#"{"name":"chatgpt","publisher":"openai"}"#, "bin/windows-x86_64/codex");

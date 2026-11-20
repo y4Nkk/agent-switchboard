@@ -2,60 +2,144 @@ import { useId, useState } from "react";
 import type { LocalizedMessage } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { localizedMessageText } from "../../i18n/errors";
-import { providerPreset } from "../../lib/provider-catalog";
+import { formatCompactTokenCount } from "../../lib/token-format";
+import { catalogModel, providerPreset } from "../../lib/provider-catalog";
 import { Button } from "../Button";
 import { Input } from "../Input";
-import { Table } from "../Table";
-import { ProviderValue } from "../provider-editor/ProviderValue";
-import { addCatalogModel, modelSource, withCatalog } from "./catalog";
-import { CodexCatalogDetails } from "./CodexCatalogDetails";
+import { Select } from "../Select";
+import { ToggleChip } from "../ToggleChip";
+import { ModelPickerDialog, type PickerCandidate } from "../provider-editor/ModelPickerDialog";
+import { addCatalogModel, applyCatalogModels, modelSource, removeCatalogModel, withCatalog } from "./catalog";
 import { CodexModelMapping } from "./CodexModelMapping";
-import type { EditableCodexCatalogEntry } from "./draft";
+import { REASONING_LEVELS, REASONING_LEVEL_LABELS, type EditableCodexCatalogEntry } from "./draft";
 import type { CodexEditorState } from "./useCodexProviderEditor";
 
-function useModelCatalog(editor: CodexEditorState) {
-  const { draft, setDraft, connection } = editor;
-  const [pending, setPending] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
-  const listId = useId();
-  const known = providerPreset(draft.endpoint);
-  const suggestions = [...new Map([
-    ...(connection.models ?? []).map(({ id }) => [id, id] as const),
-    ...(known?.protocol === draft.upstream ? known.models.map(({ id, name }) => [id, name] as const) : []),
-  ])];
-  const update = (id: string, patch: Partial<EditableCodexCatalogEntry>) => setDraft((current) =>
-    withCatalog(current, current.catalog.map((entry) => entry.id === id ? { ...entry, ...patch } : entry)));
-  const add = () => {
-    const id = pending.trim();
-    if (!id) return;
-    setDraft((current) => addCatalogModel(current, id));
-    if (!known || known.protocol !== draft.upstream || !known.models.some((model) => model.id === id)) setSelected(id);
-    setPending("");
+const capabilityFlags = [
+  ["functionTools", "codex.capability.functionTools"], ["customTools", "codex.capability.customTools"],
+  ["toolSearch", "codex.capability.toolSearch"], ["reasoning", "codex.capability.reasoning"],
+  ["images", "codex.model.imageInput"], ["compact", "codex.model.compact"],
+] as const;
+
+/** Preset chips align exactly with catalog snapshot values, so auto-filled
+ * limits light a chip up; other values stay freely typable. */
+const contextPresets = [
+  [128_000, "128K"], [200_000, "200K"], [256_000, "256K"], [400_000, "400K"], [1_000_000, "1M"],
+] as const;
+const outputPresets = [
+  [8_192, "8K"], [16_384, "16K"], [32_768, "32K"], [65_536, "64K"], [128_000, "128K"],
+] as const;
+
+function ModelCard({ entry, primary, busy, onChange, onPrimary, onRemove, sourceLabel }: {
+  entry: EditableCodexCatalogEntry; primary: boolean; busy: boolean;
+  onChange: (patch: Partial<EditableCodexCatalogEntry>) => void;
+  onPrimary: () => void; onRemove: () => void; sourceLabel: string;
+}) {
+  const { t } = useI18n();
+  const levels = entry.supportedReasoningLevels;
+  const toggleLevel = (level: (typeof REASONING_LEVELS)[number]) => {
+    const next = levels.includes(level) ? levels.filter((item) => item !== level) : [...levels, level];
+    const ordered = REASONING_LEVELS.filter((item) => next.includes(item));
+    const supported = ordered.length ? ordered : ["none" as const];
+    onChange({
+      supportedReasoningLevels: supported,
+      defaultReasoningLevel: supported.includes(entry.defaultReasoningLevel)
+        ? entry.defaultReasoningLevel
+        : supported.includes("medium") ? "medium" : supported[0],
+    });
   };
-  const remove = (id: string) => {
-    setDraft((current) => withCatalog({ ...current,
-      defaultModel: current.defaultModel === id ? "" : current.defaultModel,
-      modelRoutes: current.modelRoutes.filter(({ clientModel }) => clientModel !== id),
-    }, current.catalog.filter((entry) => entry.id !== id)));
-    if (selected === id) setSelected(null);
+  const limitField = (key: "contextWindow" | "maxOutputTokens", labelKey: "codex.model.contextWindow" | "codex.model.maxOutput",
+      presets: typeof contextPresets | typeof outputPresets) => {
+    const value = entry[key];
+    return <label className="asb-field"><span>{t(labelKey)}</span>
+      <Input type="number" min={1} step={1} required code disabled={busy} value={value ?? ""}
+        placeholder={t("providerSetup.unconfirmed")}
+        aria-label={t(key === "contextWindow" ? "codex.model.contextWindowAria" : "codex.model.maxOutputAria", { model: entry.id })}
+        onChange={(event) => onChange({ [key]: event.target.value ? Number(event.target.value) : null })} />
+      <div className="asb-chip-row">
+        {presets.map(([tokens, label]) => <ToggleChip key={label} pressed={value === tokens} label={label}
+          ariaLabel={`${entry.id} ${t(labelKey)} ${label}`} disabled={busy}
+          onClick={() => onChange({ [key]: tokens })} />)}
+      </div>
+    </label>;
   };
-  const entry = draft.catalog.find(({ id }) => id === selected);
-  return { draft, setDraft, connection, pending, setPending, listId, suggestions, update, add, remove, entry, setSelected };
+  return <section className="asb-provider-model-card" aria-label={t("providerSetup.modelCapabilities", { model: entry.id })}>
+    <div className="asb-provider-model-card-head">
+      <code>{entry.id}</code>
+      <span className="asb-field-help">{sourceLabel}</span>
+      <div className="asb-provider-model-actions">
+        {primary
+          ? <span className="asb-provider-primary-pill">{t("providerSetup.primary")}</span>
+          : <Button variant="ghost" size="compact" disabled={busy} onClick={onPrimary}>{t("providerSetup.usePrimary")}</Button>}
+        <Button variant="dangerText" size="compact" disabled={busy} aria-label={t("codex.model.deleteModel", { model: entry.id })}
+          onClick={onRemove}>{t("providerSetup.remove")}</Button>
+      </div>
+    </div>
+    <div className="asb-provider-model-limits">
+      {limitField("contextWindow", "codex.model.contextWindow", contextPresets)}
+      {limitField("maxOutputTokens", "codex.model.maxOutput", outputPresets)}
+    </div>
+    <div className="asb-provider-model-meta">
+      <div className="asb-chip-row" role="group" aria-label={t("providerSetup.capabilities")}>
+        {capabilityFlags.map(([key, labelKey]) => <ToggleChip key={key} pressed={entry[key]} label={t(labelKey)}
+          ariaLabel={`${entry.id} ${t(labelKey)}`} disabled={busy}
+          onClick={() => onChange(key === "reasoning" && entry[key]
+            ? { reasoning: false, supportedReasoningLevels: ["none"], defaultReasoningLevel: "none" }
+            : { [key]: !entry[key] })} />)}
+      </div>
+      {entry.reasoning && <>
+        <div className="asb-chip-row" role="group" aria-label={t("providerSetup.levels")}>
+          {REASONING_LEVELS.map((level) => <ToggleChip key={level} pressed={levels.includes(level)}
+            label={t(REASONING_LEVEL_LABELS[level])} ariaLabel={`${entry.id} ${t(REASONING_LEVEL_LABELS[level])}`}
+            disabled={busy} onClick={() => toggleLevel(level)} />)}
+        </div>
+        <div className="asb-setting-input-row"><span>{t("codex.model.defaultLevel")}</span>
+          <Select ariaLabel={`${entry.id} ${t("codex.model.defaultLevel")}`} value={entry.defaultReasoningLevel} disabled={busy}
+            options={levels.map((level) => ({ value: level, label: t(REASONING_LEVEL_LABELS[level]) }))}
+            onChange={(defaultReasoningLevel) => onChange({ defaultReasoningLevel: defaultReasoningLevel as EditableCodexCatalogEntry["defaultReasoningLevel"] })} />
+        </div>
+      </>}
+    </div>
+  </section>;
 }
 
 export function CodexModelSection({ editor, busy, userConfigModel, userConfigWarnings }: {
   editor: CodexEditorState; busy: boolean; userConfigModel: string | null; userConfigWarnings: LocalizedMessage[];
 }) {
   const { t } = useI18n();
-  const { draft, setDraft, connection, pending, setPending, listId, suggestions, update, add, remove, entry, setSelected } = useModelCatalog(editor);
-  const limit = (row: EditableCodexCatalogEntry, key: "contextWindow" | "maxOutputTokens") =>
-    <ProviderValue label={t(key === "contextWindow" ? "codex.model.contextWindowAria" : "codex.model.maxOutputAria", { model: row.id })} disabled={busy} required numeric min={1}
-      value={row[key]?.toString() ?? ""} onChange={(raw) => update(row.id, { [key]: raw ? Number(raw) : null })} />;
+  const { draft, setDraft, connection } = editor;
+  const [pending, setPending] = useState("");
+  const [picking, setPicking] = useState(false);
+  const listId = useId();
+  const known = providerPreset(draft.endpoint);
+  const suggestions = [...new Map([
+    ...(connection.models ?? []).map(({ id }) => [id, id] as const),
+    ...(known?.protocol === draft.upstream ? known.models.map(({ id, name }) => [id, name] as const) : []),
+  ])];
+  const candidates: PickerCandidate[] = suggestions.map(([id]) => {
+    const model = catalogModel(draft.endpoint, draft.upstream, id);
+    if (!model) return { id };
+    const hint = [model.contextWindow ? `${formatCompactTokenCount(model.contextWindow)} ${t("codex.model.contextWindow")}` : null,
+      model.reasoning ? t("codex.capability.reasoning") : null, model.images ? t("codex.model.imageInput") : null]
+      .filter(Boolean).join(" · ");
+    return hint ? { id, hint } : { id };
+  });
+  const update = (id: string, patch: Partial<EditableCodexCatalogEntry>) => setDraft((current) =>
+    withCatalog(current, current.catalog.map((entry) => entry.id === id ? { ...entry, ...patch } : entry)));
+  const add = () => {
+    const id = pending.trim();
+    if (!id) return;
+    setDraft((current) => addCatalogModel(current, id));
+    setPending("");
+  };
   return <section className="asb-editor-section" aria-label={t("providerSetup.catalog")}>
     <h3 className="asb-section-title">{t("providerSetup.catalog")}</h3>
     <p className="asb-field-help">{t("providerSetup.catalogHelp")}</p>
     <div className="asb-editor-section-fields">
       <div className="asb-provider-model-toolbar">
+        <div className="asb-provider-model-actions">
+          <Button variant="secondary" disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
+            onClick={() => void connection.fetchModels().then(() => setPicking(true))}>{t("providerEditor.fetchModels")}</Button>
+        </div>
         <label className="asb-field"><span>{t("providerSetup.addModel")}</span>
           <Input data-provider-model-entry="" code value={pending} list={listId} disabled={busy}
             onChange={(event) => setPending(event.target.value)}
@@ -64,35 +148,22 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
         </label>
         <div className="asb-provider-model-actions">
           <Button variant="secondary" disabled={busy || !pending.trim()} onClick={add}>{t("providerSetup.add")}</Button>
-          <Button variant="secondary" disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
-            onClick={() => void connection.fetchModels()}>{t("providerEditor.fetchModels")}</Button>
         </div>
       </div>
       {connection.modelsError && <p className="asb-field-error" role="alert">{connection.modelsError}</p>}
       {connection.modelsEndpointError && <p className="asb-field-help">{connection.modelsEndpointError}</p>}
-      {draft.catalog.length ? <Table className="asb-provider-catalog-table" ariaLabel={t("providerSetup.catalog")} rows={draft.catalog} rowKey={({ id }) => id}
-        columns={[
-          { key: "model", header: t("codex.model.idLabel"), render: (row) => <div><code>{row.id}</code>
-            {row.id === draft.defaultModel && <p className="asb-field-help">{t("providerSetup.primary")}</p>}</div> },
-          { key: "context", header: t("codex.model.contextWindow"), render: (row) => limit(row, "contextWindow") },
-          { key: "output", header: t("codex.model.maxOutput"), render: (row) => limit(row, "maxOutputTokens") },
-          { key: "capabilities", header: t("providerSetup.capabilities"), render: (row) => <span>
-            {[row.functionTools && t("codex.capability.functionTools"), row.reasoning && row.supportedReasoningLevels.join(", "),
-              row.images && t("codex.model.imageInput"), row.customTools && t("codex.capability.customTools"),
-              row.toolSearch && t("codex.capability.toolSearch"), row.compact && t("codex.model.compact")].filter(Boolean).join(" · ") || t("providerSetup.disabled")}</span> },
-          { key: "source", header: t("providerSetup.source"), render: (row) => t(`providerSetup.${modelSource(draft, row)}`) },
-          { key: "actions", header: t("modelRoutes.edit"), render: (row) => <div className="asb-provider-model-actions">
-            <Button variant="ghost" size="compact" disabled={busy || row.id === draft.defaultModel}
-              onClick={() => setDraft((current) => ({ ...current, defaultModel: row.id }))}>{t("providerSetup.usePrimary")}</Button>
-            <Button variant="ghost" size="compact" disabled={busy} onClick={() => setSelected(row.id)}>{t("providerSetup.edit")}</Button>
-            <Button variant="ghost" size="compact" disabled={busy} aria-label={t("codex.model.deleteModel", { model: row.id })}
-              onClick={() => remove(row.id)}>{t("providerSetup.remove")}</Button>
-          </div> },
-        ]} /> : <p className="asb-field-help">{t("providerSetup.noModels")}</p>}
-      {entry && <CodexCatalogDetails key={entry.id} entry={entry} busy={busy} onChange={(patch) => update(entry.id, patch)} />}
+      {draft.catalog.length ? draft.catalog.map((entry) => <ModelCard key={entry.id} entry={entry} busy={busy}
+          primary={entry.id === draft.defaultModel} sourceLabel={t(`providerSetup.${modelSource(draft, entry)}`)}
+          onChange={(patch) => update(entry.id, patch)}
+          onPrimary={() => setDraft((current) => ({ ...current, defaultModel: entry.id }))}
+          onRemove={() => setDraft((current) => removeCatalogModel(current, entry.id))} />)
+        : <p className="asb-field-help">{t("providerSetup.noModels")}</p>}
       <CodexModelMapping editor={editor} busy={busy} />
       {userConfigModel && <p className="asb-field-help">{t("codex.model.userConfigModel", { model: userConfigModel })}</p>}
       {userConfigWarnings.map((warning) => <p key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</p>)}
     </div>
+    {picking && <ModelPickerDialog title={t("providerSetup.pickerTitle")} candidates={candidates} busy={busy}
+      selected={new Set(draft.catalog.map(({ id }) => id))}
+      onApply={(ids) => setDraft((current) => applyCatalogModels(current, ids))} onClose={() => setPicking(false)} />}
   </section>;
 }

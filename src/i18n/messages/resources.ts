@@ -21,7 +21,7 @@ export const messages = {
   "resources.metric.warming": ["正在采样", "Sampling"],
   "resources.identified": ["已识别进程合计", "Identified processes only"],
   "resources.table.aria": ["软件资源占用", "Software resource usage"],
-  "resources.scope": ["统计当前系统用户可确认归属的本机编码进程及其任务子进程；约每 2 秒更新。编辑器和桌面外壳、WSL、容器及远端进程不整体计入。离开或隐藏页面后暂停读取。", "Counts attributable local coding processes and their task children for the current OS user; updates about every 2 seconds. Editor and desktop shells, WSL, containers, and remote processes are not counted as a whole. Reading pauses when this page is inactive or hidden."],
+  "resources.scope": ["统计当前系统用户可确认归属的本机编码进程及其任务子进程；约每 2 秒更新。浏览器、编辑器和桌面外壳、WSL、容器及远端进程不整体计入。离开或隐藏页面后暂停读取。", "Counts attributable local coding processes and their task children for the current OS user; updates about every 2 seconds. Browsers, editor and desktop shells, WSL, containers, and remote processes are not counted as a whole. Reading pauses when this page is inactive or hidden."],
   "resources.memoryNote": ["CPU 以整机在线逻辑处理器容量为 100%。驻留内存统计各进程的专用工作集（独占的物理内存页），合计不重复计页，也不代表关闭后可释放的容量。", "CPU is normalized to 100% of the machine’s online logical processors. Resident memory counts each process’s private working set (exclusively owned physical pages); process sums do not double-count pages and are not a promise of memory released on exit."],
   "resources.memoryNoteSharedPages": ["CPU 以整机在线逻辑处理器容量为 100%。驻留内存包含共享页，多进程合计并非去重后的物理内存，也不代表关闭后可释放的容量。", "CPU is normalized to 100% of the machine’s online logical processors. Resident memory includes shared pages; process sums are not deduplicated physical memory or a promise of memory released on exit."],
   "resources.previousReading": ["表中保留上次读数，请留意采样时间。", "The table retains the previous reading; check its sample time."],

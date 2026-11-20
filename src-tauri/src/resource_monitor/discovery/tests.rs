@@ -107,3 +107,32 @@ fn coverage_errors_stop_at_an_excluded_or_unverified_engine_boundary() {
     assert_eq!(affected_group(5, &entries, &roots, &boundaries), None);
     assert_eq!(affected_group(6, &entries, &roots, &boundaries), None);
 }
+
+#[test]
+fn a_browser_host_opened_by_the_app_bounds_its_subtree_without_touching_engine_roots() {
+    let own_pid = std::process::id();
+    let ids = [u32::MAX - 20, u32::MAX - 19, u32::MAX - 18, u32::MAX - 17];
+    let entries: HashMap<_, _> = [entry(own_pid, 0, "switchboard", ProcessUser::Current),
+        entry(ids[0], own_pid, "codex.exe", ProcessUser::Current),
+        entry(ids[1], own_pid, "msedge.exe", ProcessUser::Current),
+        entry(ids[2], ids[1], "renderer", ProcessUser::Current),
+        entry(ids[3], ids[2], "native-host", ProcessUser::Current)]
+        .into_iter().map(|entry| (entry.pid, entry)).collect();
+    let observed: Vec<_> = [entries[&own_pid].clone(), entries[&ids[0]].clone()].iter().map(observation).collect();
+    let previous = observed.iter().filter_map(|process| {
+        let group = executables::named_group(&process.name)?;
+        Some((process.key, TrackedProcess { owner: Owner { group, evidence: Evidence::Executable },
+            executable: process.executable.clone(), cpu_ns: process.cpu_ns, at: process.at }))
+    }).collect();
+    let mut scan = scan(&entries, observed);
+    scan.identify(&interface(), &previous);
+    scan.descendants(&previous);
+    assert!(scan.boundaries.contains(&ids[1]));
+    assert!(!scan.observed.contains_key(&ids[1]));
+    assert!(!scan.observed.contains_key(&ids[2]));
+    assert!(!scan.observed.contains_key(&ids[3]));
+    let owner = ownership::resolve(&scan.observed[&ids[0]], &scan.observed, &scan.roots,
+        &scan.boundaries, &previous).unwrap();
+    assert_eq!((owner.group, owner.evidence), (Group::Codex, Evidence::Executable));
+    assert!(scan.issues.is_empty());
+}

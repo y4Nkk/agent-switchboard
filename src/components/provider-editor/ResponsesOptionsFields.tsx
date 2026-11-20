@@ -1,6 +1,6 @@
 import type { ResponsesOptions } from "../../api/client";
 import { useI18n } from "../../i18n";
-import { ProviderValue } from "./ProviderValue";
+import { Select } from "../Select";
 
 interface Props {
   options: ResponsesOptions | null;
@@ -25,8 +25,7 @@ export function ResponsesOptionsFields({ options, busy, onChange }: Props) {
         : <div className="asb-provider-field-grid">
           <div className="asb-field">
             <span>{t("providers.editor.responses.requestMode")}</span>
-            <ProviderValue label={t("providers.editor.responses.requestMode")} value={options.requestMode} disabled={busy}
-              display={t(minimal ? "providers.editor.responses.minimal" : "providers.editor.responses.standard")}
+            <Select ariaLabel={t("providers.editor.responses.requestMode")} value={options.requestMode} disabled={busy}
               options={[{ value: "standard", label: t("providers.editor.responses.standard") }, { value: "minimal", label: t("providers.editor.responses.minimal") }]}
               onChange={(value) => {
                 const requestMode = value as ResponsesOptions["requestMode"];

@@ -12,6 +12,17 @@ pub fn outside_scope(process: &Observation) -> bool {
     process.executable.as_deref().is_some_and(|path| installations::desktop_shell(&normalize(path)))
 }
 
+/// Browser hosts the app opened (a website link) become child processes, but
+/// they live on as the user's own session. Ownership stops at the host: its
+/// subtree must not climb to a software root. Exact image names, deliberately
+/// excluding `msedgewebview2`, which stays a verified interface root.
+/// Note: 契约见 .agents/notes/implemented/bug-fix/2026-11-20-browser-host-ownership-boundary.md
+pub fn browser_host(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    let name = name.strip_suffix(".exe").unwrap_or(&name);
+    matches!(name, "msedge" | "chrome" | "chromium" | "firefox" | "brave" | "opera" | "vivaldi")
+}
+
 impl Executables {
     pub fn new() -> Self {
         let mut directories: Vec<_> = std::env::var_os("PATH").map(|path|

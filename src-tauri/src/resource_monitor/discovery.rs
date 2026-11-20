@@ -56,6 +56,7 @@ impl Scan<'_> {
     fn inspect(&mut self, pid: u32) {
         if !self.visited.insert(pid) { return; }
         let Some(entry) = self.entries.get(&pid) else { self.failures.insert(pid, Issue::ProcessExited); return; };
+        if executables::browser_host(&entry.name) { self.boundaries.insert(pid); return; }
         match entry.user {
             ProcessUser::Other => return,
             ProcessUser::Unverified => { self.failures.insert(pid, Issue::EnumerationRestricted); return; }

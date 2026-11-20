@@ -35,7 +35,7 @@ export function ProviderRoutingPanel({ document, inventory, role, onRole, onChan
         return <span>{t(inherited ? "modelRoutes.inheritOpus" : !description.target ? "modelRoutes.automatic"
           : description.mode === "provider" ? "modelRoutes.specify" : "modelRoutes.primaryModelMode")}{description.oneM ? " · 1M" : ""}</span>;
       } },
-      { key: "edit", header: t("modelRoutes.edit"), render: (item) => <Button variant="ghost" size="compact" disabled={busy}
+      { key: "edit", header: t("providerSetup.actions"), render: (item) => <Button variant="ghost" size="compact" disabled={busy}
         aria-label={t("modelRoutes.editNode", { role: t(`modelRoutes.role.${item}`) })} aria-pressed={role === item} aria-controls={item === "main" ? undefined : id} onClick={() => select(item)}>{t("providerSetup.edit")}</Button> },
     ]} />
     <section className="asb-model-route-inspector" id={id} aria-labelledby={`${id}-title`}>

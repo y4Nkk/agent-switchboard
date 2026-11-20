@@ -11,7 +11,7 @@ Status: implemented
 `src/components/Collapsible.tsx` 是软件内全部展开收起的唯一原语，`styles/base/collapsible.css` 是折叠语法的唯一拥有者（高度、位移、透明度、visibility 时序、箭头旋转、reduced-motion 覆盖全部只在此一处）：
 
 - `Collapsible`：受控动画容器，供触发器在别处（行动作按钮、工具栏入口、横幅）的场合使用。挂载契约全局唯一——内容打开时挂载、保持挂载至收起动画结束、随后卸载（`transitionend` + 时长感知定时器双兜底，减少动态效果下立即卸载）。收起后无隐藏 DOM、无残留布局。`onClosed` 在卸载时刻触发一次，供"预览与完整阅读器互斥"的调用方（会话长消息）在收起完成后让截断预览回归。
-- `CollapsibleTrigger`：带文字的折叠入口，统一拥有 `open`、`onOpenChange`、目标 ID、标签、尾随弱化值和箭头；复用 `Button` 的 `ghost` 变体与 standard / compact 尺寸，不再用 `unstyled` 加页面私有样式拼接按钮。原生外观重置、透明静态底、悬停面和尺寸由 buttons.css 拥有，键盘焦点继续由全局 root.css 拥有。行内入口默认为 compact，箭头位于标签前；摘要行只决定文字层级、宽度和箭头位置。
+- `CollapsibleTrigger`：带文字的折叠入口，统一拥有 `open`、`onOpenChange`、目标 ID、标签、尾随弱化值和箭头；复用 `Button` 的 `ghost` 变体与 standard / compact 尺寸，不再用 `unstyled` 加页面私有样式拼接按钮。原生外观重置、透明静态底、悬停面和尺寸由 buttons.css 拥有，键盘焦点继续由全局 root.css 拥有。ghost 后来引入的悬停呼吸内边距在触发器上以 `padding-inline: 0` 抵消（折叠行保持贴边、标签与正文同基线，见[目录动作按钮笔记](../feature/2026-11-20-provider-catalog-action-buttons.md)）。行内入口默认为 compact，箭头位于标签前；摘要行只决定文字层级、宽度和箭头位置。
 - `CollapsibleSection`：自带摘要行的折叠区块，取代一切 `<details>`。受控 API（`open` + `onOpenChange`，初始状态由调用方 `useState` 携带，如"已有模型映射默认展开"）；摘要复用 `CollapsibleTrigger`，不保留第二套按钮和 aria 接线。两种既有版式保持明确：标准色调为整行折叠行、箭头钉行尾（编辑器折叠模块、扩展能力盒）；quiet 色调为次要证据的紧凑文本行、行宽贴合并箭头紧随标签（代码证据、更新日志、资源事实）。箭头位置归摘要行上下文所有（`.asb-collapsible-summary >`），不写在箭头本体上——否则横幅等外部触发器里的文字会被 auto 边距推离原位。
 - `CollapsibleChevron`：唯一箭头语法（单个 ChevronDown 旋转 180°），取代上/下箭头互换与 CSS 伪元素箭头。
 

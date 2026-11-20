@@ -5,7 +5,6 @@ import { ProviderAdvancedSettings } from "../provider-editor/ProviderAdvancedSet
 import { ProviderNotesField } from "../provider-editor/ProviderIdentityFields";
 import { ParametersLoadStatus, ProviderParametersPage } from "../provider-editor/ProviderParametersPage";
 import { Button } from "../Button";
-import { ProviderValue } from "../provider-editor/ProviderValue";
 import type { ProviderEditorSection } from "../provider-editor/useProviderEditorSections";
 import type { useCodexOfficialEditor } from "./useCodexOfficialEditor";
 
@@ -46,9 +45,10 @@ function SubscriptionSettings({ busy, editor }: Pick<Props, "busy" | "editor">) 
   const { t } = useI18n();
   return <div className="asb-provider-advanced-group">
     <div className="asb-field"><span>{t("codex.official.quotaInterval")}</span>
-      <ProviderValue label={t("codex.official.quotaInterval")} numeric min={0} value={String(editor.draft.officialQuotaRefreshIntervalMinutes ?? 0)} disabled={busy}
-        onChange={(value) => {
-          const parsed = Number(value.trim());
+      <Input type="number" min={0} step={1} disabled={busy} value={editor.draft.officialQuotaRefreshIntervalMinutes ?? 0}
+        aria-label={t("codex.official.quotaInterval")}
+        onChange={(event) => {
+          const parsed = Number(event.target.value.trim());
           editor.setDraft((current) => ({ ...current, officialQuotaRefreshIntervalMinutes: Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null }));
         }} />
     </div>

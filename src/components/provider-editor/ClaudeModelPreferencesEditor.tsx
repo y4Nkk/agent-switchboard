@@ -4,7 +4,7 @@ import { useI18n } from "../../i18n";
 import { catalogText } from "../../i18n/errors";
 import { Button } from "../Button";
 import { Input } from "../Input";
-import { ProviderValue } from "./ProviderValue";
+import { Select } from "../Select";
 import { modeledPreferences, object, withModelPreference, type Fragment, type ModelPreference } from "./claude-model-preferences";
 
 interface Props {
@@ -29,18 +29,16 @@ function ModelPreferencesRow({ model, preferences, catalog, busy, onChange }: Ro
   return <div className="asb-model-preferences-fields">
     {(["effortLevel", "maxEffortLevel"] as const).map((key) => <div className="asb-setting-input-row" key={key}>
       <span>{t(key === "effortLevel" ? "clientConfig.models.effort" : "clientConfig.models.cap")}</span>
-      <ProviderValue disabled={busy} value={typeof preferences[key] === "string" ? String(preferences[key]) : "inherit"}
-        display={typeof preferences[key] === "string" ? String(preferences[key]) : t("clientConfig.models.inherit")}
-        label={t("clientConfig.models.field", { model, field: t(key === "effortLevel" ? "clientConfig.models.effort" : "clientConfig.models.cap") })}
+      <Select ariaLabel={t("clientConfig.models.field", { model, field: t(key === "effortLevel" ? "clientConfig.models.effort" : "clientConfig.models.cap") })}
+        disabled={busy} value={typeof preferences[key] === "string" ? String(preferences[key]) : "inherit"}
         options={[inherited, ...(key === "effortLevel" ? catalog.effortOptions : catalog.capOptions)
           .map((option) => ({ value: option.value, label: catalogText(option.label, t) }))]}
         onChange={(value) => onChange(key, value === "inherit" ? undefined : value)} />
     </div>)}
     <div className="asb-setting-input-row">
       <span>{t("clientConfig.models.window")}</span>
-      <ProviderValue disabled={busy} value={window === "auto" ? "auto" : typeof window === "number" ? "custom" : "inherit"}
-        display={typeof window === "number" ? String(window) : t(window === "auto" ? "clientConfig.models.nativeAuto" : "clientConfig.models.inherit")}
-        label={t("clientConfig.models.field", { model, field: t("clientConfig.models.window") })}
+      <Select ariaLabel={t("clientConfig.models.field", { model, field: t("clientConfig.models.window") })}
+        disabled={busy} value={window === "auto" ? "auto" : typeof window === "number" ? "custom" : "inherit"}
         options={[inherited, { value: "auto", label: t("clientConfig.models.nativeAuto") },
           { value: "custom", label: t("clientConfig.models.customWindow") }]}
         onChange={(value) => onChange("autoCompactWindow", value === "inherit" ? undefined : value === "auto" ? "auto" : catalog.autoCompactMin)} />
