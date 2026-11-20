@@ -60,14 +60,28 @@ pub(super) fn restore_catalog(intent: &SwitchIntent) -> Result<(), String> {
     }
 }
 
+pub(super) fn verify_catalog_before(intent: &SwitchIntent) -> Result<(), String> {
+    verify_catalog_snapshot(intent, |catalog| &catalog.before,
+        "Codex 模型目录已变化，保留回填恢复记录")
+}
+
 pub(super) fn verify_catalog_after(intent: &SwitchIntent) -> Result<(), String> {
+    verify_catalog_snapshot(intent, |catalog| &catalog.after,
+        "Codex 模型目录文件与已提交客户端配置不一致，保留事务等待恢复")
+}
+
+fn verify_catalog_snapshot(
+    intent: &SwitchIntent,
+    snapshot: impl FnOnce(&CatalogArtifact) -> &Option<String>,
+    message: &str,
+) -> Result<(), String> {
     let Some(catalog) = &intent.catalog else {
         return Ok(());
     };
-    match (&catalog.after, std::fs::read_to_string(&catalog.path)) {
+    match (snapshot(catalog), std::fs::read_to_string(&catalog.path)) {
         (Some(expected), Ok(content)) if content == *expected => Ok(()),
         (None, Err(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        _ => Err("Codex 模型目录文件与已提交客户端配置不一致，保留事务等待恢复".to_string()),
+        _ => Err(message.into()),
     }
 }
 

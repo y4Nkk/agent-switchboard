@@ -23,7 +23,8 @@ export function ClaudeModelCatalog({ editor, busy }: { editor: ProviderEditorSta
     ...(preset?.protocol === draft.upstreamProtocol ? preset.models.map((model) => [model.id, model.name] as const) : []),
   ])];
   const candidates: PickerCandidate[] = suggestions.map(([model]) => {
-    const known = draft.upstreamProtocol ? catalogModel(draft.baseUrl, draft.upstreamProtocol, model) : undefined;
+    const known = draft.baseUrl && draft.upstreamProtocol
+      ? catalogModel(draft.baseUrl, draft.upstreamProtocol, model) : undefined;
     if (!known) return { id: model };
     const hint = [known.contextWindow ? `${formatCompactTokenCount(known.contextWindow)} ${t("codex.model.contextWindow")}` : null,
       known.reasoning ? t("codex.capability.reasoning") : null, known.images ? t("codex.model.imageInput") : null]

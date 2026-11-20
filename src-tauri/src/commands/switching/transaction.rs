@@ -4,6 +4,8 @@ mod journal;
 mod intent;
 mod application;
 mod settings;
+#[cfg(test)]
+mod backfill_tests;
 
 use application::{complete, rollback_application, restore_application_snapshot};
 pub(super) use intent::{begin, begin_with_codex_backfill_and_auth, begin_restore};
@@ -20,7 +22,7 @@ use asb_core::{AppKind, ConfigWriteRecord, WriteOperation};
 use asb_switch::{FsIo, PendingConfigWrite, SwitchIo};
 #[cfg(test)]
 pub(super) use catalog::apply_catalog_artifact;
-use catalog::{restore_catalog, validate_catalog_target, verify_catalog_after};
+use catalog::{restore_catalog, validate_catalog_target, verify_catalog_after, verify_catalog_before};
 pub(super) use catalog::{stage_catalog, CatalogArtifact};
 use journal::{clear, error, load, path, read_target};
 use serde::{Deserialize, Serialize};
@@ -188,6 +190,24 @@ pub(super) fn recover(state: &LocalState, gateway: &GatewayController) -> Result
         .latest_config_write(intent.app)
         .map_err(|e| e.to_string())?
         == intent.previous_write;
+    if let Some(backfill) = &intent.codex_backfill {
+        if !is_hex_revision(&backfill.before_hash, 16) {
+            return Err("Codex 回填的原档案版本无效，保留恢复记录".into());
+        }
+        if !is_hex_revision(&backfill.after_hash, 16) {
+            if !is_hex_revision(&backfill.after_hash, 64)
+                || pending.is_some()
+                || !unchanged_application
+                || hash != intent.before_hash
+                || !existed
+                || existed != intent.before_existed
+                || !auth_before
+            {
+                return Err("旧 Codex 回填已不符合安全回滚条件，保留恢复记录".into());
+            }
+            return recover_interrupted_backfill(state, gateway, &intent, backfill);
+        }
+    }
     if pending.is_none()
         && unchanged_application
         && hash == intent.before_hash
@@ -221,6 +241,49 @@ pub(super) fn recover(state: &LocalState, gateway: &GatewayController) -> Result
             "配置与事务前后快照均不符；保留恢复记录，请在备份列表显式恢复事务备份 {backup}"
         ));
     }
+    clear(state)
+}
+
+fn is_hex_revision(value: &str, length: usize) -> bool {
+    value.len() == length && value.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+// The old comparison failed before staging the catalog or entering the
+// executor. Consume only that interruption, without replaying the switch.
+fn recover_interrupted_backfill(
+    state: &LocalState,
+    gateway: &GatewayController,
+    intent: &SwitchIntent,
+    backfill: &CodexBackfillIntent,
+) -> Result<(), String> {
+    let Some(route) = &intent.previous_route.route else {
+        return Err("旧 Codex 回填缺少原网关路由，保留恢复记录".into());
+    };
+    if intent.app != AppKind::Codex
+        || intent.operation != WriteOperation::Projection
+        || intent.client_settings.is_some()
+        || !intent.profile_id.as_ref().is_some_and(|id| {
+            id != &backfill.profile_id && uuid::Uuid::parse_str(id).is_ok()
+        })
+        || backfill.before.profile.id != backfill.profile_id
+        || route.profile_id != backfill.profile_id
+        || crate::gateway::codex_route_fingerprint(&backfill.before)? != route.revision
+        || state.configuration().pending_profile_save().map_err(|e| e.to_string())?.is_some()
+    {
+        return Err("旧 Codex 回填与切换记录不匹配，保留恢复记录".into());
+    }
+    reject_orphan(state)?;
+    verify_catalog_before(intent)?;
+    // On restart the gateway may already have discarded the old route,
+    // whose stored profile no longer matched the route revision.
+    let current = gateway.snapshot_activation(AppKind::Codex)?;
+    if current.route.as_ref().is_some_and(|active| active != route) {
+        return Err("Codex 网关路由已发生额外变化，保留恢复记录".into());
+    }
+    state.configuration().restore_interrupted_codex_backfill(
+        &backfill.before, &backfill.before_hash, &backfill.after_hash,
+    ).map_err(|e| e.to_string())?;
+    gateway.restore_activation_snapshot(state, &intent.previous_route)?;
     clear(state)
 }
 
@@ -348,6 +411,11 @@ fn finish_pending(
 }
 
 fn validate_pending(intent: &SwitchIntent, pending: &PendingConfigWrite) -> Result<(), String> {
+    if intent.codex_backfill.as_ref().is_some_and(|backfill| {
+        !is_hex_revision(&backfill.before_hash, 16) || !is_hex_revision(&backfill.after_hash, 16)
+    }) {
+        return Err("Codex 回填记录与执行器事务不匹配，保留恢复记录".into());
+    }
     if pending.backup.target_path != intent.target
         || pending.backup.content_hash != intent.before_hash
         || pending.backup.target_existed != intent.before_existed

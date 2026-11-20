@@ -16,7 +16,6 @@ export function ProviderParameterControl({ spec, value, busy, onChange }: {
     ? [{ value: "true", label: t("providerSetup.enabled") }, { value: "false", label: t("providerSetup.disabled") }]
     : spec.control === "slider" || spec.control === "segment"
       ? spec.options.map((option) => ({ value: option.value, label: catalogText(option.label, t) })) : null;
-  const numeric = spec.control === "integer" || spec.control === "stringInteger";
   return <div className="asb-provider-parameter-value">
     {choices ? <Select ariaLabel={catalogText(spec.label, t)} disabled={busy}
         value={value.mode === "automatic" ? "automatic" : String(value.value)}

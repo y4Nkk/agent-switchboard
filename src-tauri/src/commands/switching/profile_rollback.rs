@@ -60,9 +60,8 @@ pub(super) fn save_codex(
     config_before_hash: &str,
     config_after_hash: &str,
 ) -> Result<(), String> {
-    let candidate_json =
-        serde_json::to_string_pretty(candidate).map_err(|_| "Codex 供应商候选无法序列化")?;
-    let expected_after_hash = crate::config_store::content_revision(candidate_json.as_bytes());
+    let expected_after_hash = crate::config_store::ConfigStore::codex_provider_revision(candidate)
+        .map_err(|error| error.to_string())?;
     let text = serde_json::to_string(&ProfilePreimage {
         expected_after_hash,
         target: state.target(AppKind::Codex)?.to_string_lossy().into_owned(),

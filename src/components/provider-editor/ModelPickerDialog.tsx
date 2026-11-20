@@ -49,7 +49,7 @@ export function ModelPickerDialog({ title, candidates, selected, busy, onApply, 
   return <AppDialog title={title} busy={busy} onClose={onClose}
     footer={<>
       <Button variant="secondary" disabled={busy} onClick={onClose}>{t("clientConfig.common.cancel")}</Button>
-      <Button disabled={busy} onClick={() => { onApply(checked); onClose(); }}>{t("providerSetup.pickerApply")}</Button>
+      <Button variant="primary" disabled={busy} onClick={() => { onApply(checked); onClose(); }}>{t("providerSetup.pickerApply")}</Button>
     </>}>
     <div className="asb-model-picker-dialog">
       <label className="asb-field"><span>{t("providerSetup.pickerSearch")}</span>

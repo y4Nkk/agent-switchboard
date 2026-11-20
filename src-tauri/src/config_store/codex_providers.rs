@@ -158,6 +158,38 @@ impl ConfigStore {
         Ok(file.record(hash))
     }
 
+    pub(crate) fn codex_provider_revision(file: &CodexProviderFile) -> Result<String, StoreOperationError> {
+        Ok(content_revision(encode(file)?.as_bytes()))
+    }
+
+    /// Compensates a pre-executor backfill whose old intent recorded the
+    /// SHA-256 of the written bytes instead of the store revision.
+    pub(crate) fn restore_interrupted_codex_backfill(
+        &self,
+        before: &CodexProviderFile,
+        before_revision: &str,
+        written_sha256: &str,
+    ) -> Result<(), StoreOperationError> {
+        let (current, revision) = self.find_codex_provider_with_revision(&before.profile.id)?;
+        if revision == before_revision && current == *before {
+            return Ok(());
+        }
+        let json = encode(before)?;
+        if current.position != before.position || content_revision(json.as_bytes()) != before_revision {
+            return Err("Codex 回填前像与档案版本或排序不符，保留恢复记录".into());
+        }
+        let path = self.providers_dir(asb_core::contracts::AppKind::Codex)
+            .join(format!("{}.json", before.profile.id));
+        // Check the raw bytes at the write boundary, not a re-encoded profile
+        // or its shorter store revision. The caller holds the shared write gate.
+        let raw = read_optional(&path)?;
+        if !raw.is_some_and(|text| asb_switch::sha256_hex(&text) == written_sha256) {
+            return Err("回填后的 Codex 供应商已被额外修改，拒绝覆盖".into());
+        }
+        write_json_atomic(&path, &json)?;
+        Ok(())
+    }
+
     /// Restores a previously validated Codex provider preimage. This is
     /// deliberately crate-visible: only the active-save recovery transaction
     /// and the provider-transfer import may overwrite a specialized provider
@@ -399,13 +431,17 @@ pub(super) fn load(store: &ConfigStore) -> Result<Vec<LoadedCodexProvider>, Prof
     Ok(loaded)
 }
 
+fn encode(file: &CodexProviderFile) -> Result<String, StoreOperationError> {
+    file.validate()?;
+    serde_json::to_string_pretty(file)
+        .map_err(|_| StoreOperationError::Invalid("Codex 供应商文件序列化失败".into()))
+}
+
 pub(super) fn write(
     store: &ConfigStore,
     file: &CodexProviderFile,
 ) -> Result<String, StoreOperationError> {
-    file.validate()?;
-    let json =
-        serde_json::to_string_pretty(file).map_err(|_| "Codex 供应商文件序列化失败".to_string())?;
+    let json = encode(file)?;
     store.initialize_current_layout()?;
     let path = store
         .providers_dir(asb_core::contracts::AppKind::Codex)

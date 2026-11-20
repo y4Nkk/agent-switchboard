@@ -4,6 +4,7 @@
 //! provider-owned values that can be read without credentials are adopted.
 
 use crate::commands::error::CommandError;
+use crate::config_store::{ConfigStore, ProfileStoreError};
 use crate::gateway::GatewayController;
 use crate::local_state::LocalState;
 use asb_core::contracts::{CodexProviderFile, ConfigValue, SettingValue, SettingsValues};
@@ -65,27 +66,16 @@ pub(super) fn prepare(
     if profile_id == selected_profile_id {
         return Ok(None);
     }
-    let before = state
+    let (before, before_hash) = state
         .configuration()
-        .find_codex_provider_file(&profile_id)
-        .map_err(|error| {
-            CommandError::new("codex-live-backfill-profile-failed", error.to_string())
-        })?;
-    let before_hash = state
-        .configuration()
-        .list_codex_providers()
-        .map_err(|error| {
-            CommandError::new("codex-live-backfill-profile-failed", error.to_string())
-        })?
-        .into_iter()
-        .find(|record| record.profile.id == profile_id)
-        .map(|record| record.file_hash)
-        .ok_or_else(|| {
-            CommandError::keyed(
+        .find_codex_provider_with_revision(&profile_id)
+        .map_err(|error| match error {
+            ProfileStoreError::NotFound { .. } => CommandError::keyed(
                 "codex-live-backfill-profile-failed",
                 "errors.sw.codexLiveProfileMissing",
                 "当前 Codex 网关路由找不到对应供应商档案",
-            )
+            ),
+            error => CommandError::new("codex-live-backfill-profile-failed", error.to_string()),
         })?;
     let candidate = merge_live(&before, &text).map_err(|error| {
         CommandError::localized(
@@ -98,12 +88,13 @@ pub(super) fn prepare(
     if candidate == before {
         return Ok(None);
     }
-    let after_hash = serialized_revision(&candidate).map_err(|error| {
+    let after_hash = ConfigStore::codex_provider_revision(&candidate).map_err(|error| {
+        let detail = error.to_string();
         CommandError::localized(
             "codex-live-backfill-invalid",
             "errors.sw.codexBackfillRevisionFailed",
-            format!("无法计算 Codex 供应商回填版本：{error}"),
-            serde_json::json!({ "error": error }),
+            format!("无法计算 Codex 供应商回填版本：{detail}"),
+            serde_json::json!({ "error": detail }),
         )
     })?;
     Ok(Some(PreparedCodexBackfill {
@@ -139,22 +130,20 @@ pub(super) fn apply(
 }
 
 pub(super) fn restore(state: &LocalState, backfill: &AppliedCodexBackfill) -> Result<(), String> {
-    let current = state
+    let (current, revision) = state
         .configuration()
-        .list_codex_providers()
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .find(|record| record.profile.id == backfill.profile_id)
-        .ok_or_else(|| "回填的 Codex 供应商已不存在".to_string())?;
-    if current.file_hash == backfill.before_hash {
+        .find_codex_provider_with_revision(&backfill.profile_id)
+        .map_err(|error| error.to_string())?;
+    if revision == backfill.before_hash && current == backfill.before {
         return Ok(());
     }
-    if current.file_hash != backfill.after_hash {
+    if revision != backfill.after_hash || backfill.before.profile.id != backfill.profile_id {
         return Err("回填后的 Codex 供应商已被额外修改，拒绝覆盖".into());
     }
     state
         .configuration()
-        .overwrite_codex_provider_file(backfill.before.clone())
+        .update_codex_provider_file(backfill.before.clone(), &revision)
+        .map(|_| ())
         .map_err(|error| error.to_string())
 }
 
@@ -276,11 +265,6 @@ fn top_positive_integer(document: &DocumentMut, key: &str) -> Option<u64> {
         .and_then(Item::as_integer)
         .and_then(|value| u64::try_from(value).ok())
         .filter(|value| *value > 0)
-}
-
-fn serialized_revision(file: &CodexProviderFile) -> Result<String, String> {
-    let json = serde_json::to_string_pretty(file).map_err(|error| error.to_string())?;
-    Ok(asb_switch::sha256_hex(&json))
 }
 
 #[cfg(test)]
