@@ -1,5 +1,6 @@
 use super::*;
 use crate::config_store::ConfigStore;
+use asb_core::contracts::CodexSubagentRoute;
 use std::fs;
 
 struct Fixture {
@@ -20,15 +21,25 @@ impl Fixture {
         let state = LocalState::from_root(state_dir.path().join("state"));
         let gateway = GatewayController::start(&state);
         let store = state.configuration();
-        let create = |name: &str| {
-            let mut draft = crate::codex_common::test_draft();
-            draft.name = name.into();
+        let create = |draft: asb_core::contracts::CodexProviderDraft| {
             let id = uuid::Uuid::new_v4().to_string();
             store.create_codex_provider(id.clone(), draft).unwrap();
             store.find_codex_provider_file(&id).unwrap()
         };
-        let source = create("Original provider");
-        let next = create("Next provider");
+        let next = {
+            let mut draft = crate::codex_common::test_draft();
+            draft.name = "Next provider".into();
+            create(draft)
+        };
+        // A subagent route forces the gateway projection, so the live config
+        // points at the loopback route the backfill must recognize.
+        let mut source_draft = crate::codex_common::test_draft();
+        source_draft.name = "Original provider".into();
+        source_draft.subagent_route = Some(CodexSubagentRoute {
+            profile_id: next.profile.id.clone(),
+            model: "relay-model".into(),
+        });
+        let source = create(source_draft);
         let target = state.target(AppKind::Codex).unwrap();
         fs::write(&target, "model_provider = 'openai'\n").unwrap();
         fs::write(target.with_file_name("auth.json"),
