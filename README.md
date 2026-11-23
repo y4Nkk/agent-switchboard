@@ -15,7 +15,7 @@ Save models, connection details, and runtime parameters as provider profiles, th
 
 ## Download and install
 
-- 供应商配置以减负为先：内置 11 家服务商和模型目录，按完整 API 地址与协议补全已知参数；模型、用途和运行参数常显结果，主动修改值即可，无需逐项勾选。未知模型限制明确要求补全，已有设置和转换种子不会被目录静默覆盖。维护目录使用 `node scripts/update-provider-catalog.mjs`（从公开 models.dev 更新，或传入已下载的 API JSON 路径），生成源为 `src/lib/provider-catalog.generated.json`。
+- Agent Switchboard 使用自己的内置目录和匹配规则，按完整 API 地址与协议补全已知模型参数。Codex 的「获取模型」直接读取所配置的上游，并检查搜索和图像接口。Chat 兼容按供应商与协议填充，手动值随档案保存。维护目录使用 `node scripts/update-provider-catalog.mjs <本地快照> <来源>` 离线导入 models.dev 数据。
 
 
 Download an installer for your system and processor from [GitHub Releases](https://github.com/y4Nkk/agent-switchboard/releases). The table lists the project's packaging platforms; check the selected release's Assets for available files. This README describes the current source; consult the corresponding release notes for features in a published version.
@@ -126,7 +126,7 @@ Select a saved profile independently of the active provider, then edit its main 
 | Sessions | Full-text search and message navigation, project groups, pins, tags, local aliases, time filters, and bulk organization; resume or delete sessions, export Markdown, and save prompts or answers as snippets |
 | Usage | Inspect consumption, request performance, quotas, reset times, and local coding-process resources; run degradation radar and browse probe history |
 | Settings → Client tools | Save and restore Codex work scenarios; manage Claude client integration |
-| Settings → Preferences | Follow the system, Simplified Chinese, or English for the interface; select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, and choose the startup page |
+| Settings → Preferences | Follow the system, Simplified Chinese, or English for the interface; select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, choose the startup page, and choose how the window appears at login |
 | Settings → Diagnostics | Inspect configuration or environment issues and runtime logs |
 | Settings → About | Check for signed updates, track or cancel downloads, and browse bundled release history by version and publication date |
 
@@ -284,6 +284,8 @@ Configuration, caches, sessions, probe history, and diagnostics are stored local
 | Provider SQL export | Complete configuration of all provider profiles, for import within the app on another device; files may contain authentication details and should be handled as credentials |
 | Encrypted cloud backup | Provider profiles, client settings, and switch records from the application's configuration store; excludes local sessions, radar history, and local file backups |
 
+Third-party Codex profiles use format version 2. Application startup upgrades local version 1 profiles through configuration repair and retains the original directory and switch values. SQL import and cloud restore require version 2 for third-party Codex profiles.
+
 Open **Settings → Backups → Encrypted cloud backup** and follow the in-app guide to configure your own Supabase project, Publishable key, and project Auth user. A separate backup password encrypts the backup on this device before upload. Each upload replaces that account's existing cloud backup. Login and backup passwords are not persisted; restoration requires the original backup password.
 
 Cloud restoration replaces the application's provider profiles, client settings, and switch records. It does not directly change the active Codex / Claude Code configuration or delete local file backups. Activating a restored profile still requires a preview and confirmed switch.
@@ -356,6 +358,8 @@ The workspace version in [Cargo.toml](Cargo.toml) owns the application version. 
 
 Every release heading in [CHANGELOG.md](CHANGELOG.md) includes its publication date as `YYYY-MM-DD`. GitHub release notes and in-app update notes derive the displayed date from that heading; missing or invalid dates block release-note generation. All Rust workspace package versions in `Cargo.lock` must match the workspace version and tag before publishing.
 
+Update urgency is publisher-authored in [release/update-advisories.json](release/update-advisories.json) and carried into `latest.json` as `asb_advisories`. Each cumulative record marks `severity` (`important` or `urgent`), the affected range `[affected_from, fixed_in)` with canonical stable SemVer strings (`X.Y.Z`), and short `reason_zh`/`reason_en` sentences. Malformed records block publishing. When the manifest supplies the advisory array, the client shows the level beside the offered version. A matching urgent record takes precedence over an important record, and an update with no matching record is routine. Affected installations still receive the advisory when a later candidate includes the fix. Records can be removed once no affected installation can update directly.
+
 ### Local build caches and verification data
 
 Development and test builds use smaller debug information and disable incremental compilation to slow growth in `target/` and `target-dev/`; the release profile is unchanged. Set `CARGO_PROFILE_DEV_DEBUG=full` for a single build when variable-level debugging is needed. Small Rust edits may take longer to rebuild without incremental compilation.
@@ -374,5 +378,9 @@ On Windows, `npm run prune:local` previews cache sizes and eligible stale direct
 ## License
 
 Source code and documentation written for Agent Switchboard in this repository are released under the [MIT License](LICENSE). Third-party dependencies and data remain under their respective licenses; this license grants no rights to third-party trademarks.
+
+The bundled model metadata comes from models.dev under its [MIT License](public/licenses/models.dev.txt).
+
+The bundled WenQuanYi Zen Hei font ships with its [license, corresponding source, and conversion instructions](src-tauri/vendor/wqy-zenhei/NOTICE.md).
 
 `Codex`, `Claude Code`, and related trademarks belong to their respective owners. Agent Switchboard is not affiliated with, endorsed by, or connected to OpenAI or Anthropic.

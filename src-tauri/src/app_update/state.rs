@@ -1,3 +1,4 @@
+use super::advisory::{self, UpdateAdvisory};
 use crate::commands::error::CommandError;
 use serde::Serialize;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -10,6 +11,7 @@ pub(crate) struct UpdateCheck {
     pub id: String,
     pub latest_version: String,
     pub release_notes: Option<String>,
+    pub advisory: Option<UpdateAdvisory>,
     pub checked_at: String,
 }
 
@@ -76,6 +78,7 @@ impl UpdateManager {
         let candidate = update.map(|update| Candidate { metadata: UpdateCheck {
             id: uuid::Uuid::new_v4().to_string(), latest_version: update.version.clone(),
             release_notes: update.body.as_deref().map(str::trim).filter(|body| !body.is_empty()).map(str::to_owned),
+            advisory: advisory::resolve(&update.raw_json, &update.current_version, &update.version),
             checked_at: chrono::Utc::now().to_rfc3339(),
         }, update });
         let metadata = candidate.as_ref().map(|candidate| candidate.metadata.clone());

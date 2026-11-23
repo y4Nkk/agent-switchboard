@@ -16,6 +16,8 @@ GitHub Release 正文此前只有 CHANGELOG.md 提取的版本段落，用户要
 
 发布版本校验同时检查 `Cargo.toml`、标签与三个 Rust 工作区包的锁文件版本。只替换 `Cargo.lock` 中第一个版本会留下其余 `version.workspace` 包的旧值，使四平台 `--locked` 门禁失败；发布时使用 Cargo 同步工作区版本，保持第三方依赖版本与校验和不变。失败的 `v0.3.19` 标签不改写，其未完成发布的内容合并入 `v0.3.20`。
 
+`latest.json` 自 2026-11-22 起恒携带 `asb_advisories` 数组（`manifest` 命令必传 `--advisories-file release/update-advisories.json`）：内容与档位判定契约由[应用更新的三档紧迫标签](../feature/2026-11-22-update-advisory-levels.md)拥有。
+
 ## Related decisions
 
 - [应用内更新日志渲染](../feature/2026-10-14-changelog-section-display.md)确立 CHANGELOG.md 是更新说明唯一来源——本篇不改变它：release 正文说明部分仍由 `updater-release.mjs release-notes` 从 CHANGELOG.md 提取，表格只是追加段，latest.json 保持纯 changelog。

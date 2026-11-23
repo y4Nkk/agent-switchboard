@@ -205,6 +205,68 @@ async function assertWorkspaceLockVersions(cargoManifest, version) {
   }
 }
 
+const ADVISORY_KEYS = ["affected_from", "fixed_in", "reason_en", "reason_zh", "severity"];
+const ADVISORY_SEVERITIES = new Set(["important", "urgent"]);
+const MAX_SEMVER_COMPONENT = (1n << 64n) - 1n;
+
+function parseCatalogVersion(version) {
+  if (typeof version !== "string") return null;
+  const match = /^(0|[1-9]\d{0,19})\.(0|[1-9]\d{0,19})\.(0|[1-9]\d{0,19})$/.exec(version);
+  if (!match) return null;
+  // Rust's semver::Version stores each component as a u64.
+  const components = match.slice(1).map(BigInt);
+  return components.every((component) => component <= MAX_SEMVER_COMPONENT) ? components : null;
+}
+
+function compareCatalogVersions(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1;
+  }
+  return 0;
+}
+
+/** The catalog is cumulative and stable-only: every record stays until no
+ * affected install can update directly, and versions are plain X.Y.Z. */
+export async function readUpdateAdvisories(catalogFile) {
+  let catalog;
+  try {
+    catalog = JSON.parse(await readFile(catalogFile, "utf8"));
+  } catch {
+    throw new Error(`Update advisories catalog must be valid JSON: ${catalogFile}`);
+  }
+  if (!Array.isArray(catalog)) {
+    throw new Error(`Update advisories catalog must be an array: ${catalogFile}`);
+  }
+  return catalog.map((record, index) => {
+    const label = `Update advisory ${index} in ${catalogFile}`;
+    if (typeof record !== "object" || record === null || Array.isArray(record)) {
+      throw new Error(`${label} must be an object`);
+    }
+    if (Object.keys(record).length !== ADVISORY_KEYS.length
+      || !ADVISORY_KEYS.every((key) => Object.hasOwn(record, key))) {
+      throw new Error(`${label} must have exactly the keys ${ADVISORY_KEYS.join(", ")}`);
+    }
+    if (!ADVISORY_SEVERITIES.has(record.severity)) {
+      throw new Error(`${label} severity must be important or urgent`);
+    }
+    const affectedFrom = parseCatalogVersion(record.affected_from);
+    const fixedIn = parseCatalogVersion(record.fixed_in);
+    if (!affectedFrom || !fixedIn) {
+      throw new Error(`${label} versions must be plain X.Y.Z releases with unsigned 64-bit components`);
+    }
+    if (compareCatalogVersions(affectedFrom, fixedIn) >= 0) {
+      throw new Error(`${label} affected_from must be lower than fixed_in`);
+    }
+    for (const reason of [record.reason_zh, record.reason_en]) {
+      if (typeof reason !== "string" || !reason.isWellFormed() || !/\P{White_Space}/u.test(reason)) {
+        throw new Error(`${label} must carry non-empty zh-CN and en-US reasons with valid Unicode`);
+      }
+    }
+    return { severity: record.severity, affected_from: record.affected_from,
+      fixed_in: record.fixed_in, reason_zh: record.reason_zh, reason_en: record.reason_en };
+  });
+}
+
 export async function readReleaseNotes({ changelogFile, version }) {
   assertVersion(version);
   const changelog = (await readFile(changelogFile, "utf8")).replaceAll("\r\n", "\n");
@@ -241,6 +303,7 @@ async function requireAsset(inputDirectory, assetName) {
 }
 
 export async function generateUpdaterManifest({
+  advisoriesFile,
   cargoManifest,
   inputDirectory,
   outputFile,
@@ -256,6 +319,7 @@ export async function generateUpdaterManifest({
   if (notes.length === 0) {
     throw new Error("Release notes must not be empty");
   }
+  const advisories = await readUpdateAdvisories(advisoriesFile);
   const platforms = {};
 
   for (const [platform, assetForVersion] of PLATFORM_ASSETS) {
@@ -275,6 +339,9 @@ export async function generateUpdaterManifest({
   const manifest = {
     version,
     notes,
+    // Presence of the array is itself a statement: an empty array says every
+    // update is routine, while older manifests without the field say nothing.
+    asb_advisories: advisories,
     pub_date: pubDate ?? new Date().toISOString(),
     platforms,
   };
@@ -327,6 +394,7 @@ async function main() {
   }
   if (command === "manifest") {
     await generateUpdaterManifest({
+      advisoriesFile: options.advisoriesFile,
       cargoManifest: options.cargoManifest,
       inputDirectory: options.inputDirectory,
       notesFile: options.notesFile,

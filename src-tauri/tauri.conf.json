@@ -64,7 +64,8 @@
     "homepage": "https://github.com/y4Nkk/agent-switchboard",
     "copyright": "Copyright (c) 2026 y4Nkk",
     "resources": {
-      "../CHANGELOG.md": "CHANGELOG.md"
+      "../CHANGELOG.md": "CHANGELOG.md",
+      "vendor/wqy-zenhei/": "licenses/wqy-zenhei/"
     },
     "icon": [
       "icons/32x32.png",

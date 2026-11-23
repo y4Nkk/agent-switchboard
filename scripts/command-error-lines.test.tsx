@@ -41,7 +41,7 @@ export function runChecks(nativeErrors: CommandError[]) {
       cases++;
       const snapshot: ApplicationPreparation = {
         sessionId: "isolated-error-feedback", runId: 1, revision: 1, status: "blocked", stage: "complete",
-        elapsedMs: 0, settings: null, configurationReady: false, preferencesReset: false,
+        elapsedMs: 0, settings: null, configurationReady: false, recoveryBackupId: null, preferencesReset: false,
         repairedFiles: [], backupPaths: [], issues: [{ ...error, messageKey: "common.operationFailed" }],
       };
       const preparation = renderToStaticMarkup(<PreparationDetails snapshot={snapshot} />);

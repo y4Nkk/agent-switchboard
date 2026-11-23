@@ -23,9 +23,8 @@ interface Props {
 }
 
 /**
- * Batch model picker: fetched and preset-suggested models as one checkbox
- * list (filter, select-all), so building a catalog is tick-tick-apply — the
- * manual id field stays as the fallback for endpoints without /models.
+ * Batch selection over the editor's current candidates. The editor owns
+ * discovery, catalog enrichment and the manual model field.
  */
 export function ModelPickerDialog({ title, candidates, selected, busy, onApply, onClose }: Props) {
   const { t } = useI18n();

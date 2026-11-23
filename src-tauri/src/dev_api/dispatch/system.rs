@@ -159,6 +159,7 @@ pub(super) async fn switching(app: &AppHandle, request: &InvokeRequest) -> Resul
             app.clone(),
             argument(&request.args, "backupId")?,
             argument(&request.args, "confirmWrite")?,
+            argument(&request.args, "transactionOnly")?,
         )),
         "undo_last_switch" => command!(commands::switching::undo_last_switch(
             app.clone(),

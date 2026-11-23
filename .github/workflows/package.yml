@@ -236,6 +236,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           node scripts/updater-release.mjs manifest \
+            --advisories-file release/update-advisories.json \
             --cargo-manifest Cargo.toml \
             --input-directory dist \
             --notes-file release-notes.md \

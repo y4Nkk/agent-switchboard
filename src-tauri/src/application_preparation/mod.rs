@@ -15,6 +15,7 @@ pub(crate) enum Stage { Preferences, Configuration, OutboundProxy, Services, Com
 pub(crate) struct Report {
     pub settings: Option<AppSettings>,
     pub configuration_ready: bool,
+    pub recovery_backup_id: Option<String>,
     pub preferences_reset: bool,
     pub repaired_files: Vec<String>,
     pub backup_paths: Vec<String>,

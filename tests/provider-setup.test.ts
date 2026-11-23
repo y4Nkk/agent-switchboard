@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { catalogModel, providerPreset, providerPresets } from "../src/lib/provider-catalog.ts";
 import { addCatalogModel, catalogEntry, withCatalog } from "../src/components/codex-provider-editor/catalog.ts";
 import { applyCodexPreset, codexDraftFrom, prepareCodexDraft } from "../src/components/codex-provider-editor/draft.ts";
+import { applyCodexDiscovery, reconcileCodexOperationDefaults, restoreCodexAutomaticOperation,
+  setCodexOperation } from "../src/components/codex-provider-editor/operations.ts";
 
 const modelId = "gpt-6.1-sol";
 function draft(endpoint = "https://api.openai.com/v1") {
@@ -38,7 +40,7 @@ test("preset changes keep user identity, credentials and model values while clea
   original.upstream = "chatCompletions";
   original.capabilities.chatReasoning = { kind: "configured", thinkingParameter: "thinking",
     separateOutput: true, effortParameter: "reasoningEffort", effortMode: "passthrough" };
-  const preset = providerPreset("https://api.anthropic.com/v1")!;
+  const preset = providerPreset("https://api.anthropic.com")!;
   const next = applyCodexPreset(original, preset);
   assert.equal(next.name, "Fixture");
   assert.equal(next.apiKey, "isolated-fixture-key");
@@ -87,4 +89,38 @@ test("model capabilities have one edit owner while independent provider operatio
   assert.equal(removed.capabilities.reasoning, false);
   assert.equal(removed.capabilities.imageEdit, true);
   assert.deepEqual(original.catalog, []);
+});
+
+test("discovery updates only automatic operations with evidence from the current connection", () => {
+  const original = codexDraftFrom(null);
+  const chat = reconcileCodexOperationDefaults(original, { ...original, endpoint: "https://api.z.ai/api/paas/v4",
+    upstream: "chatCompletions" });
+  const manual = setCodexOperation(setCodexOperation(chat, "imageEdit", true), "alphaSearch", false);
+  const detected = applyCodexDiscovery(manual, {
+    models: [{ id: "glm-5.3-flash", ownedBy: null }], confirmedOperations: ["alphaSearch", "imageGeneration"],
+  });
+  assert.equal(detected.capabilities.models, true);
+  assert.equal(detected.capabilities.chatCompletions, true);
+  assert.equal(detected.capabilities.alphaSearch, false);
+  assert.equal(detected.capabilities.imageGeneration, true);
+  assert.equal(detected.capabilities.imageEdit, true);
+
+  const changed = reconcileCodexOperationDefaults(detected, { ...detected, endpoint: "https://relay.invalid/v1", upstream: "responses" });
+  assert.equal(changed.capabilities.models, false);
+  assert.equal(changed.capabilities.chatCompletions, false);
+  assert.equal(changed.capabilities.imageGeneration, false);
+  assert.equal(changed.capabilities.imageEdit, true);
+});
+
+test("an empty automatic set keeps saved operations manual until an individual operation is restored", () => {
+  const original = draft();
+  const saved = { ...original, capabilities: { ...original.capabilities,
+    automaticOperations: [], models: true, imageEdit: true } };
+  assert.equal(applyCodexDiscovery(saved, null), saved);
+  const restored = restoreCodexAutomaticOperation(saved, "models");
+  assert.deepEqual(restored.capabilities.automaticOperations, ["models"]);
+  assert.equal(restored.capabilities.models, false);
+  assert.equal(restored.capabilities.imageEdit, true);
+  const manualAgain = setCodexOperation(restored, "models", true);
+  assert.deepEqual(manualAgain.capabilities.automaticOperations, []);
 });

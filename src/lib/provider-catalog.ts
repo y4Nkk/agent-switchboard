@@ -21,7 +21,7 @@ export interface ProviderPreset {
   models: CatalogModel[];
 }
 
-export const providerCatalog = snapshot as { source: string; generatedAt: string; providers: ProviderPreset[] };
+export const providerCatalog = snapshot as { source: string; sourceSha256: string; generatedAt: string; providers: ProviderPreset[] };
 export const providerPresets = (app: AppKind) => providerCatalog.providers
   .filter((preset) => app === "claude" || preset.protocol !== "geminiGenerateContent");
 
@@ -35,12 +35,31 @@ function endpointKey(raw: string): string | null {
   } catch { return null; }
 }
 
-export function providerPreset(endpoint: string | null | undefined): ProviderPreset | undefined {
+const presetsByEndpoint = new Map<string, ProviderPreset[]>();
+for (const preset of providerCatalog.providers) {
+  const key = endpointKey(preset.endpoint);
+  if (!key) continue;
+  const presets = presetsByEndpoint.get(key);
+  if (presets) presets.push(preset);
+  else presetsByEndpoint.set(key, [preset]);
+}
+
+export function providerPreset(endpoint: string | null | undefined, protocol?: UpstreamProtocol): ProviderPreset | undefined {
   const key = endpointKey(endpoint ?? "");
-  return key ? providerCatalog.providers.find((preset) => endpointKey(preset.endpoint) === key) : undefined;
+  return key ? presetsByEndpoint.get(key)?.find((preset) => !protocol || preset.protocol === protocol) : undefined;
 }
 
 export function catalogModel(endpoint: string, protocol: UpstreamProtocol, id: string): CatalogModel | undefined {
-  const preset = providerPreset(endpoint);
-  return preset?.protocol === protocol ? preset.models.find((model) => model.id === id) : undefined;
+  const key = endpointKey(endpoint);
+  const presets = key ? presetsByEndpoint.get(key) : undefined;
+  let match: CatalogModel | undefined;
+  for (const preset of presets ?? []) {
+    if (preset.protocol !== protocol) continue;
+    const model = preset.models.find((item) => item.id === id);
+    if (!model) continue;
+    // Some subscription plans publish the same API root with different limits.
+    if (match && JSON.stringify(match) !== JSON.stringify(model)) return undefined;
+    match = model;
+  }
+  return match;
 }

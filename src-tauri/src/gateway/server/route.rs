@@ -2,13 +2,14 @@ mod response;
 use super::super::ActiveRoute;
 use crate::gateway::http::Request;
 use asb_core::contracts::UpstreamProtocol;
+pub(crate) use asb_core::contracts::CodexOperation;
 use reqwest::header::{
     HeaderMap, HeaderName, HeaderValue, ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, CONTENT_TYPE,
 };
 pub(super) use response::StreamError;
 pub(crate) use response::UpstreamResponse;
 use std::time::Duration;
-use tiny_http::{Header, Method};
+use tiny_http::Header;
 
 const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -30,55 +31,6 @@ impl UpstreamClient {
                 .build()
                 .expect("先前已验证的网关客户端配置不会失效")
         })
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum CodexOperation {
-    Responses,
-    Compact,
-    Models,
-    ChatCompletions,
-    AlphaSearch,
-    ImageGeneration,
-    ImageEdit,
-}
-
-impl CodexOperation {
-    pub(crate) fn method(self) -> Method {
-        match self {
-            Self::Models => Method::Get,
-            Self::Responses
-            | Self::Compact
-            | Self::ChatCompletions
-            | Self::AlphaSearch
-            | Self::ImageGeneration
-            | Self::ImageEdit => Method::Post,
-        }
-    }
-
-    pub(crate) fn upstream_path(self) -> &'static str {
-        match self {
-            Self::Responses => "/responses",
-            Self::Compact => "/responses/compact",
-            Self::Models => "/models",
-            Self::ChatCompletions => "/chat/completions",
-            Self::AlphaSearch => "/alpha/search",
-            Self::ImageGeneration => "/images/generations",
-            Self::ImageEdit => "/images/edits",
-        }
-    }
-
-    pub(crate) fn is_responses(self) -> bool {
-        self == Self::Responses
-    }
-
-    pub(crate) fn is_compact(self) -> bool {
-        self == Self::Compact
-    }
-
-    pub(crate) fn requires_json(self) -> bool {
-        self != Self::Models
     }
 }
 
@@ -238,65 +190,10 @@ pub(crate) fn upstream_codex_operation_url(
     with_request_query(url, gateway_base, request_url)
 }
 
-fn codex_operation_endpoint(
-    route: &ActiveRoute,
-    operation: CodexOperation,
-) -> Result<String, String> {
-    if route.connection.is_full_url {
-        return rewrite_codex_full_url(&route.upstream_base_url, operation.upstream_path());
-    }
-    asb_core::endpoint::codex_endpoint(&route.upstream_base_url, operation.upstream_path())
-}
-
-/// Derives a typed Codex sibling endpoint from a full URL configuration.
-///
-/// Full-URL mode is exact for the primary request, but standalone operations
-/// still need their own paths. Only known API shapes are rewritten; opaque
-/// full URLs fail closed instead of sending a payload to an unrelated route.
-fn rewrite_codex_full_url(base_url: &str, target_path: &str) -> Result<String, String> {
-    asb_core::endpoint::validate_full_url(base_url)
-        .map_err(|_| "供应商上游请求地址无效".to_string())?;
-    let parsed = reqwest::Url::parse(base_url).map_err(|_| "供应商上游请求地址无效".to_string())?;
-    let source_path = parsed.path().trim_end_matches('/').to_ascii_lowercase();
-    let suffix = codex_full_url_suffixes(target_path)
-        .iter()
-        .find(|suffix| source_path.ends_with(**suffix))
-        .copied()
-        .ok_or_else(|| {
-            format!("无法从完整 Codex 地址推导 {target_path}，请填写 API 根地址或已知操作地址")
-        })?;
-    let without_query = base_url.split_once('?').map_or(base_url, |(url, _)| url);
-    let without_query = without_query.trim_end_matches('/');
-    let prefix_len = without_query
-        .len()
-        .checked_sub(suffix.len())
-        .ok_or_else(|| "供应商上游请求地址无效".to_string())?;
-    let query = base_url
-        .split_once('?')
-        .map(|(_, query)| query)
-        .filter(|query| !query.is_empty())
-        .map(|query| format!("?{query}"))
-        .unwrap_or_default();
-    Ok(format!(
-        "{}{target_path}{query}",
-        &without_query[..prefix_len]
-    ))
-}
-
-fn codex_full_url_suffixes(target_path: &str) -> &'static [&'static str] {
-    match target_path {
-        "/responses/compact" => &["/responses/compact", "/responses"],
-        "/alpha/search" => &["/responses/compact", "/responses"],
-        "/images/generations" | "/images/edits" => &[
-            "/images/generations",
-            "/images/edits",
-            "/chat/completions",
-            "/responses/compact",
-            "/responses",
-        ],
-        "/chat/completions" => &["/chat/completions", "/responses/compact", "/responses"],
-        _ => &[],
-    }
+fn codex_operation_endpoint(route: &ActiveRoute, operation: CodexOperation) -> Result<String, String> {
+    asb_core::endpoint::codex_operation_endpoint(
+        &route.upstream_base_url, route.connection.is_full_url, operation,
+    )
 }
 
 fn validate_upstream_url(url: &str, gateway_base: &str) -> Result<String, String> {
@@ -357,16 +254,7 @@ pub(crate) fn codex_request(path: &str) -> Option<CodexRequestPath<'_>> {
     if secret.len() != 64 || !secret.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
     }
-    let operation = match operation {
-        "v1/responses" => CodexOperation::Responses,
-        "v1/responses/compact" => CodexOperation::Compact,
-        "v1/models" => CodexOperation::Models,
-        "v1/chat/completions" => CodexOperation::ChatCompletions,
-        "v1/alpha/search" => CodexOperation::AlphaSearch,
-        "v1/images/generations" => CodexOperation::ImageGeneration,
-        "v1/images/edits" => CodexOperation::ImageEdit,
-        _ => return None,
-    };
+    let operation = CodexOperation::from_path(operation.strip_prefix("v1")?)?;
     Some(CodexRequestPath {
         capability: token,
         operation,

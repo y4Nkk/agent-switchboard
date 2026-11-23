@@ -1,14 +1,18 @@
-import type { CodexChatReasoning } from "../../api/client";
+import type { CodexAutomaticOperation, CodexChatReasoning } from "../../api/client";
 import { useI18n, type MessageKey, type TFunction } from "../../i18n";
+import { Button } from "../Button";
 import { Select } from "../Select";
 import { Switch } from "../Switch";
 import type { CodexEditorState } from "./useCodexProviderEditor";
+import { AUTOMATIC_OPERATIONS, restoreCodexAutomaticOperation, setCodexOperation } from "./operations";
 
-const operations = [
-  ["models", "codex.capability.models"], ["chatCompletions", "codex.capability.chatCompletions"],
-  ["alphaSearch", "codex.capability.alphaSearch"], ["imageGeneration", "codex.capability.imageGeneration"],
-  ["imageEdit", "codex.capability.imageEdit"],
-] as const;
+const operationLabels: Record<CodexAutomaticOperation, MessageKey> = {
+  models: "codex.capability.models",
+  chatCompletions: "codex.capability.chatCompletions",
+  alphaSearch: "codex.capability.alphaSearch",
+  imageGeneration: "codex.capability.imageGeneration",
+  imageEdit: "codex.capability.imageEdit",
+};
 
 function optionLabel(option: string, t: TFunction): string {
   if (option === "true" || option === "false") return t(option === "true" ? "providerSetup.enabled" : "providerSetup.disabled");
@@ -55,11 +59,19 @@ export function CodexCapabilitiesSection({ editor, busy }: { editor: CodexEditor
     <h4 className="asb-provider-advanced-heading">{t("codex.capabilities.title")}</h4>
     <p className="asb-field-help">{t("providerSetup.capabilityHelp")}</p>
     <div className="asb-provider-switch-rows">
-      {operations.map(([key, labelKey]) => <div className="asb-provider-switch-row" key={key}>
-        <span>{t(labelKey)}</span>
-        <Switch checked={draft.capabilities[key]} disabled={busy} label={t(labelKey)}
-          onChange={(on) => setDraft((current) => ({ ...current,
-            capabilities: { ...current.capabilities, [key]: on } }))} />
+      {AUTOMATIC_OPERATIONS.map((key) => <div className="asb-provider-switch-row" key={key}>
+        <span>{t(operationLabels[key])}</span>
+        <div className="asb-provider-operation-controls">
+          {draft.capabilities.automaticOperations.includes(key)
+            ? <span className="asb-field-help">{t("codex.capability.automatic")}</span>
+            : <Button variant="ghost" size="compact" disabled={busy || editor.connection.modelsBusy}
+              aria-label={t("codex.capability.restoreAutomaticFor", { operation: t(operationLabels[key]) })}
+              onClick={() => setDraft((current) => restoreCodexAutomaticOperation(current, key))}>
+              {t("codex.capability.restoreAutomatic")}
+            </Button>}
+          <Switch checked={draft.capabilities[key]} disabled={busy} label={t(operationLabels[key])}
+            onChange={(on) => setDraft((current) => setCodexOperation(current, key, on))} />
+        </div>
       </div>)}
     </div>
     {draft.upstream === "chatCompletions" && draft.capabilities.reasoning && <ChatReasoning editor={editor} busy={busy} />}

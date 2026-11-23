@@ -11,6 +11,7 @@ export interface ApplicationPreparation {
   elapsedMs: number;
   settings: AppSettings | null;
   configurationReady: boolean;
+  recoveryBackupId: string | null;
   preferencesReset: boolean;
   repairedFiles: string[];
   backupPaths: string[];

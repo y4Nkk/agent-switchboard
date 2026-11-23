@@ -1,9 +1,14 @@
 import type { CommandError } from "../../src/api/shared.ts";
-import type { UpdateDownloadState } from "../../src/api/updates.ts";
+import type { UpdateCheck, UpdateDownloadState } from "../../src/api/updates.ts";
 import type { ApplicationUpdateSnapshot } from "../../src/app/update-state.ts";
 
-export const candidate = { id: "release-one", latestVersion: "0.3.24", releaseNotes: null,
+export const candidate: UpdateCheck = { id: "release-one", latestVersion: "0.3.24", releaseNotes: null,
+  advisory: { severity: "important", reasonZh: "fixture 受影响原因", reasonEn: "fixture affected reason" },
   checkedAt: "2026-11-13T06:53:00Z" };
+export const urgentCandidate: UpdateCheck = { ...candidate, id: "release-urgent",
+  advisory: { severity: "urgent", reasonZh: "fixture 紧急原因", reasonEn: "fixture urgent reason" } };
+export const routineCandidate: UpdateCheck = { ...candidate, id: "release-routine", advisory: { severity: "routine" } };
+export const legacyCandidate: UpdateCheck = { ...candidate, id: "release-legacy", advisory: null };
 export const updateError: CommandError = { code: "fixture-updater-failure", message: "fixture connection refused",
   messageKey: "common.operationFailed" };
 
@@ -32,6 +37,9 @@ export function updateExamples(): [string, ApplicationUpdateSnapshot][] {
     ["checking", updateSnapshot({ checking: true })],
     ["current", updateSnapshot({ lastCheckedAt: candidate.checkedAt })],
     ["available", updateSnapshot({ updateCheck: candidate })],
+    ["available-urgent", updateSnapshot({ updateCheck: urgentCandidate })],
+    ["available-routine", updateSnapshot({ updateCheck: routineCandidate })],
+    ["available-legacy-manifest", updateSnapshot({ updateCheck: legacyCandidate })],
     ["starting", updateSnapshot({ updateCheck: candidate, starting: true })],
     ["cancel-before-start", updateSnapshot({ starting: true, cancelling: true })],
     ["download-zero", updateSnapshot({ task: updateTask("downloading", { downloadedBytes: 0 }) })],

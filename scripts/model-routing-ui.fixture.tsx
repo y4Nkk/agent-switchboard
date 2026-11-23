@@ -31,7 +31,7 @@ function codex(id: string, name: string, position: number): CodexProviderRecord 
     upstream: "responses", requestMode: "standard", defaultModel: "shared-model",
     catalog: ["shared-model", "other-model"].map(catalogEntry), modelRoutes: [], subagentRoute,
     capabilities: { responses: true, compact: false, models: true, chatCompletions: false,
-      alphaSearch: false, imageGeneration: false, imageEdit: false, functionTools: false,
+      alphaSearch: false, imageGeneration: false, imageEdit: false, automaticOperations: [], functionTools: false,
       customTools: false, toolSearch: false, reasoning: false, chatReasoning: { kind: "unsupported" } } },
     position, fileHash: `fixture-${id}`, parameters: { settings: {} }, notes: null, websiteUrl: null, usageQuery: null };
 }

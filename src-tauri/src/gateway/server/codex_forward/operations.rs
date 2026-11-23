@@ -247,11 +247,7 @@ impl Operation {
         if operation != CodexOperation::Models {
             self.span.note_codex_attempt(&self.route, None, false);
         }
-        let method = match operation.method() {
-            Method::Get => reqwest::Method::GET,
-            Method::Post => reqwest::Method::POST,
-            _ => unreachable!("Codex operations only use GET and POST"),
-        };
+        let method = if operation.is_model_list() { reqwest::Method::GET } else { reqwest::Method::POST };
         match send_upstream_request(
             &self.client,
             &self.route,

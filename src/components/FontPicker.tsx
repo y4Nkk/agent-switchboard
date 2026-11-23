@@ -2,19 +2,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { listSystemFonts } from "../api/client";
 import { useI18n } from "../i18n";
 import { useMessageState } from "../i18n/use-message-state";
-import { quotedFontFamily } from "../lib/font-family";
+import {
+  interfaceFontFamily,
+  quotedFontFamily,
+  WENQUANYI_ZEN_HEI,
+  WENQUANYI_ZEN_HEI_ALIASES,
+} from "../lib/font-family";
 import { Input } from "./Input";
 import { Button } from "./Button";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 /** Web fonts bundled with the app: always offered and renderable, even when
  * the system list omits them or enumeration fails. */
-const BUNDLED_FONTS = ["Noto Sans SC"];
+const BUNDLED_FONTS = [WENQUANYI_ZEN_HEI, "Noto Sans SC"];
 
 /** Preview stack: the candidate family first, then the bundled default for
  * glyphs the candidate lacks (e.g. a Latin-only family showing the sample). */
 function previewStack(font: string): string {
-  return `${quotedFontFamily(font)}, ${quotedFontFamily(BUNDLED_FONTS[0])}, system-ui, sans-serif`;
+  return `${quotedFontFamily(font)}, var(--asb-font-default), system-ui, sans-serif`;
 }
 
 interface Props {
@@ -31,6 +36,9 @@ interface Props {
  */
 export function FontPicker({ value, busy, onChange }: Props) {
   const { t } = useI18n();
+  const selected = interfaceFontFamily(value);
+  const fontLabel = (font: string) =>
+    font === WENQUANYI_ZEN_HEI ? t("settings.font.wenquanyiZenHei") : font;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
@@ -90,16 +98,18 @@ export function FontPicker({ value, busy, onChange }: Props) {
 
   const fonts = useMemo(() => {
     const seen = new Set<string>();
-    const merged = [...BUNDLED_FONTS, ...systemFonts].filter((font) => {
+    const merged = [...BUNDLED_FONTS, ...systemFonts].map(interfaceFontFamily).filter((font) => {
       const key = font.toLocaleLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
     const needle = query.trim().toLocaleLowerCase();
-    return needle
-      ? merged.filter((font) => font.toLocaleLowerCase().includes(needle))
-      : merged;
+    if (!needle) return merged;
+    return merged.filter((font) => {
+      if (font.toLocaleLowerCase().includes(needle)) return true;
+      return font === WENQUANYI_ZEN_HEI && WENQUANYI_ZEN_HEI_ALIASES.some((name) => name.includes(needle));
+    });
   }, [systemFonts, query]);
 
   const onMenuKeyDown = (event: React.KeyboardEvent) => {
@@ -139,8 +149,8 @@ export function FontPicker({ value, busy, onChange }: Props) {
         disabled={busy}
         onClick={() => (open ? close(false) : setOpen(true))}
       >
-        <span className="asb-font-name" style={{ fontFamily: previewStack(value) }}>
-          {value}
+        <span className="asb-font-name" style={{ fontFamily: previewStack(selected) }}>
+          {fontLabel(selected)}
         </span>
         <span className="asb-select-chevron" aria-hidden="true">
           <ChevronDownIcon />
@@ -175,19 +185,19 @@ export function FontPicker({ value, busy, onChange }: Props) {
                 <Button
                   variant="unstyled"
                   role="option"
-                  aria-selected={font === value}
+                  aria-selected={font === selected}
                   className="asb-font-option"
                   key={font}
                   onClick={() => selectFont(font)}
                 >
                   <span className="asb-font-option-name" style={{ fontFamily: previewStack(font) }}>
-                    {font}
+                    {fontLabel(font)}
                   </span>
                   <span className="asb-font-option-sample" style={{ fontFamily: previewStack(font) }}>
                     中文 Aa 012
                   </span>
                   <span className="asb-font-check" aria-hidden="true">
-                    {font === value && <CheckIcon />}
+                    {font === selected && <CheckIcon />}
                   </span>
                 </Button>
               ))

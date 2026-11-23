@@ -100,6 +100,7 @@ fn dependency_notice() -> crate::contracts::LocalizedMessage {
 fn conservative_capabilities() -> CodexCapabilities {
     CodexCapabilities { responses: true, compact: false, models: false, chat_completions: false,
         alpha_search: false, image_generation: false, image_edit: false, function_tools: false,
+        automatic_operations: Default::default(),
         custom_tools: false, tool_search: false, reasoning: false, chat_reasoning: CodexChatReasoning::Unsupported }
 }
 

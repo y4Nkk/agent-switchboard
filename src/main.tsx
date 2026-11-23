@@ -1,8 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-// Bundled interface default (OFL): family "Noto Sans SC", the weights the
-// token typography uses. Subsets load lazily via unicode-range.
+// Noto Sans SC remains available for saved and newly selected preferences.
 import "./styles/fonts.css";
 import "./styles/tokens.css";
 import "./styles/base.css";

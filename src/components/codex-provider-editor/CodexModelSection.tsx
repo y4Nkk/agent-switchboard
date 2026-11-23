@@ -106,16 +106,15 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
   editor: CodexEditorState; busy: boolean; userConfigModel: string | null; userConfigWarnings: LocalizedMessage[];
 }) {
   const { t } = useI18n();
-  const { draft, setDraft, connection } = editor;
+  const { draft, setDraft, connection, fetchModels } = editor;
   const [pending, setPending] = useState("");
   const [picking, setPicking] = useState(false);
   const listId = useId();
-  const known = providerPreset(draft.endpoint);
-  const suggestions = [...new Map([
-    ...(connection.models ?? []).map(({ id }) => [id, id] as const),
-    ...(known?.protocol === draft.upstream ? known.models.map(({ id, name }) => [id, name] as const) : []),
-  ])];
-  const candidates: PickerCandidate[] = suggestions.map(([id]) => {
+  const known = providerPreset(draft.endpoint, draft.upstream);
+  const suggestions = connection.models?.map(({ id }) => [id, catalogModel(draft.endpoint, draft.upstream, id)?.name ?? id] as const)
+    ?? known?.models.map(({ id, name }) => [id, name] as const) ?? [];
+  const candidateIds = new Set([...suggestions.map(([id]) => id), ...draft.catalog.map(({ id }) => id)]);
+  const candidates: PickerCandidate[] = [...candidateIds].map((id) => {
     const model = catalogModel(draft.endpoint, draft.upstream, id);
     if (!model) return { id };
     const hint = [model.contextWindow ? `${formatCompactTokenCount(model.contextWindow)} ${t("codex.model.contextWindow")}` : null,
@@ -138,7 +137,9 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
       <div className="asb-provider-model-toolbar">
         <div className="asb-provider-model-actions">
           <Button variant="secondary" disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
-            onClick={() => void connection.fetchModels().then(() => setPicking(true))}>{t("providerEditor.fetchModels")}</Button>
+            onClick={() => void fetchModels().then((models) => {
+              if (models !== null) setPicking(true);
+            })}>{t("providerEditor.fetchModels")}</Button>
         </div>
         <label className="asb-field"><span>{t("providerSetup.addModel")}</span>
           <Input data-provider-model-entry="" code value={pending} list={listId} disabled={busy}

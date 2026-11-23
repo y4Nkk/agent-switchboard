@@ -9,9 +9,7 @@ pub(super) fn classify(
 > {
     let operation = codex_request(request.url()).map(|path| path.operation);
     let protocol = client_protocol(request.url());
-    let method = operation
-        .map(CodexOperation::method)
-        .unwrap_or(Method::Post);
+    let method = if operation.is_some_and(CodexOperation::is_model_list) { Method::Get } else { Method::Post };
     if request.method() != &method {
         return Err((protocol, 405, "此本机协议网关操作不接受该 HTTP 方法"));
     }

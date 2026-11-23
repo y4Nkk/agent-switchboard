@@ -73,6 +73,7 @@ $resolvedCargoManifest = (Resolve-Path -LiteralPath $CargoManifest -ErrorAction 
 $repositoryRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $identityPath = Join-Path $repositoryRoot 'src-tauri\windows\store-identity.json'
 $iconPath = Join-Path $repositoryRoot 'src-tauri\icons\icon.png'
+$fontLicensePath = Join-Path $repositoryRoot 'src-tauri\vendor\wqy-zenhei'
 $msixScript = Join-Path $PSScriptRoot 'msix-release.mjs'
 $version = (& node (Join-Path $PSScriptRoot 'updater-release.mjs') workspace-version --cargo-manifest $resolvedCargoManifest).Trim()
 $assetName = (& node $msixScript package-name --version $version).Trim()
@@ -89,6 +90,8 @@ $validationRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-switchboard-msix-
 
 try {
   New-Item -ItemType Directory -Path (Join-Path $stageRoot 'Assets') -Force | Out-Null
+  $licenseDirectory = New-Item -ItemType Directory -Path (Join-Path $stageRoot 'licenses')
+  Copy-Item -LiteralPath $fontLicensePath -Destination $licenseDirectory.FullName -Recurse
   Copy-Item -LiteralPath $resolvedExecutable -Destination (Join-Path $stageRoot 'agent-switchboard.exe')
   Copy-Item -LiteralPath $resolvedLoader -Destination (Join-Path $stageRoot 'WebView2Loader.dll')
   New-ScaledPng -Source $iconPath -Destination (Join-Path $stageRoot 'Assets\StoreLogo.png') -Size 50
@@ -114,6 +117,11 @@ try {
     'AppxManifest.xml',
     'agent-switchboard.exe',
     'WebView2Loader.dll',
+    'licenses\wqy-zenhei\COPYING',
+    'licenses\wqy-zenhei\NOTICE.md',
+    'licenses\wqy-zenhei\UPSTREAM-README.txt',
+    'licenses\wqy-zenhei\convert.py',
+    'licenses\wqy-zenhei\fonts-wqy-zenhei_0.9.45.orig.tar.gz',
     'Assets\StoreLogo.png',
     'Assets\Square150x150Logo.png',
     'Assets\Square44x44Logo.png'

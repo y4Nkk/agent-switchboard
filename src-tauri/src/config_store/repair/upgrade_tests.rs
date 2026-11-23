@@ -295,13 +295,49 @@ fn direct_codex_mapping_upgrade_changes_only_the_derived_route_mode() {
     let mut draft = crate::codex_common::test_draft();
     draft.model_routes = vec![asb_core::contracts::CodexModelRoute {client_model:draft.default_model.clone(), upstream_model:"upstream-model".into()}];
     let file = draft.into_file(Uuid::new_v4().to_string(), 100);
-    let mut old = serde_json::to_value(&file).unwrap(); old["profile"]["routeMode"] = json!("direct");
+    let mut old = serde_json::to_value(&file).unwrap();
+    old["schemaVersion"] = json!(1);
+    old["profile"]["routeMode"] = json!("direct");
     let path = store.providers_dir(AppKind::Codex).join(format!("{}.json",file.profile.id));
     fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
     assert!(store.list_codex_providers().is_err());
     let report = store.repair().unwrap(); assert_eq!(report.repaired_files.len(),1);
     assert_eq!(store.find_codex_provider_file(&file.profile.id).unwrap(),file);
     assert!(store.repair().unwrap().repaired_files.is_empty());
+}
+
+#[test]
+fn version_one_codex_capabilities_become_explicit_manual_choices_after_staged_repair() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = ConfigStore::new(directory.path().join("state"));
+    let mut draft = crate::codex_common::test_draft();
+    draft.capabilities.models = false;
+    draft.capabilities.image_edit = true;
+    let file = draft.into_file(Uuid::new_v4().to_string(), 100);
+    let path = store.providers_dir(AppKind::Codex).join(format!("{}.json", file.profile.id));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut old = serde_json::to_value(&file).unwrap();
+    old["schemaVersion"] = json!(1);
+    old["profile"]["capabilities"].as_object_mut().unwrap().remove("automaticOperations");
+    let original = serde_json::to_string(&old).unwrap();
+    fs::write(&path, &original).unwrap();
+    assert!(store.list_codex_providers().is_err());
+
+    let report = store.repair().unwrap();
+    assert_eq!(report.repaired_files.len(), 1);
+    let backup = PathBuf::from(report.backup_path.unwrap());
+    let relative = path.strip_prefix(store.configuration_dir()).unwrap();
+    assert_eq!(fs::read_to_string(backup.join(relative)).unwrap(), original);
+    assert_eq!(store.find_codex_provider_file(&file.profile.id).unwrap(), file);
+    let mut current: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(current["profile"]["capabilities"]["automaticOperations"], json!([]));
+    assert!(store.repair().unwrap().repaired_files.is_empty());
+
+    current["profile"]["capabilities"].as_object_mut().unwrap().remove("automaticOperations");
+    let malformed = serde_json::to_string(&current).unwrap();
+    fs::write(&path, &malformed).unwrap();
+    assert!(store.repair().is_err());
+    assert_eq!(fs::read_to_string(&path).unwrap(), malformed);
 }
 
 #[test]

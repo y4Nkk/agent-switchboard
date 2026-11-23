@@ -282,6 +282,14 @@ export const messages = {
 		"{detail}；客户端事务恢复失败：{recovery}",
 		"{detail}; the client transaction recovery failed: {recovery}",
 	],
+	"errors.sw.transactionBackupMismatch": [
+		"所选备份与当前未完成事务不匹配。请重新检查应用数据，再选择标为事务备份的记录。",
+		"The selected backup does not match the current unfinished transaction. Recheck the application data and select Restore transaction on the matching backup.",
+	],
+	"warnings.backup.preparationRecheckFailed": [
+		"事务备份已恢复。无法重新检查应用数据，请重启应用。{detail}",
+		"The transaction backup was restored. Restart the application to recheck its data. {detail}",
+	],
 	"errors.sw.policyRecoveryFailed": [
 		"{detail}；策略恢复失败：{recovery}",
 		"{detail}; the policy recovery failed: {recovery}",
@@ -333,10 +341,6 @@ export const messages = {
 	"errors.sw.configCompensationIncomplete": [
 		"{failure}；配置补偿未完成，保留事务和备份",
 		"{failure}; configuration compensation did not complete; the transaction and backups are preserved.",
-	],
-	"errors.sw.transactionTargetClientMismatch": [
-		"事务目标不属于当前客户端",
-		"The transaction target does not belong to the current client.",
 	],
 	"errors.sw.saveTransactionMismatch": [
 		"供应商保存与配置事务不匹配",

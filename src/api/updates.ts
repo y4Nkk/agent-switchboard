@@ -6,8 +6,18 @@ export interface UpdateCheck {
   id: string;
   latestVersion: string;
   releaseNotes: string | null;
+  /** null means the release manifest made no level statement at all. */
+  advisory: UpdateAdvisory | null;
   checkedAt: string;
 }
+
+/** Publisher-authored urgency: routine says "whenever convenient";
+ * important and urgent carry the release's own reason in both languages. */
+export type UpdateAdvisory = { severity: "routine" } | {
+  severity: "important" | "urgent";
+  reasonZh: string;
+  reasonEn: string;
+};
 
 export type UpdateChannel = "github" | "microsoftStore";
 export type UpdateDownloadPhase = "downloading" | "verifying" | "cancelling" | "installing"

@@ -88,7 +88,7 @@ pub enum LanguagePreference {
 }
 
 /// Bundled web font shipped with the app; also the interface-font default.
-pub(crate) const DEFAULT_INTERFACE_FONT: &str = "Noto Sans SC";
+pub(crate) const DEFAULT_INTERFACE_FONT: &str = "WenQuanYi Zen Hei";
 
 /// Application-owned desktop preferences, stored separately from configuration
 /// data. This is a strict complete current contract.
@@ -100,7 +100,7 @@ pub struct AppSettings {
     pub motion: MotionPreference,
     pub always_on_top: bool,
     pub launch_at_login: bool,
-    /// Keeps the main window hidden at startup; the app starts in the tray.
+    /// Keeps the main window hidden when the app starts automatically at login.
     pub start_minimized: bool,
     pub hardware_acceleration: bool,
     pub interface_font: String,

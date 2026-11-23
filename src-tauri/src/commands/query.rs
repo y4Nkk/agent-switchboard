@@ -1,6 +1,7 @@
 use super::error::{blocking, operation_error, state, CommandError};
 use crate::probe::ProbeResult;
-use asb_core::contracts::{ProviderConnectionOptions, UsageQuery, UsageSummary};
+use asb_core::contracts::{CodexProbedOperation, ProviderConnectionOptions, UsageQuery, UsageSummary};
+use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
@@ -70,10 +71,9 @@ pub async fn probe_endpoint(url: String) -> Result<ProbeResult, CommandError> {
     .await
 }
 
-/// Models (id plus optional vendor) from the provider's configured
-/// API root's model-list endpoint. The current editor draft supplies its API key and
-/// protocol and optional authentication override. The
-/// key is never included in errors or persisted by this command.
+/// Fetches the model list and requested Codex route declarations. The editor
+/// supplies the authentication for this connection, and the command does not
+/// persist credentials or include them in errors.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ProviderModelsRequest {
@@ -84,18 +84,22 @@ pub(crate) struct ProviderModelsRequest {
     #[serde(default)]
     connection: ProviderConnectionOptions,
     authentication: Option<asb_core::AuthenticationScheme>,
+    probe_operations: BTreeSet<CodexProbedOperation>,
 }
 
 #[tauri::command]
 pub async fn fetch_provider_models(
     app: tauri::AppHandle,
     request: ProviderModelsRequest,
-) -> Result<Vec<crate::probe::ProviderModel>, CommandError> {
+) -> Result<crate::probe::ProviderModelDiscovery, CommandError> {
     let local = state(&app)?;
     blocking(move || fetch_models(&local, request)).await
 }
 
 fn validate_model_fetch_request(request: &ProviderModelsRequest) -> Result<(), CommandError> {
+    if request.app != asb_core::AppKind::Codex && !request.probe_operations.is_empty() {
+        return Err(CommandError::new("provider-endpoint-invalid", "只有 Codex 供应商可以检查这些接口"));
+    }
     if request.app == asb_core::AppKind::Codex
         && request.upstream_protocol == asb_core::UpstreamProtocol::GeminiGenerateContent
     {
@@ -140,17 +144,18 @@ fn fetch_managed_claude_models(
 fn fetch_models(
     local: &crate::local_state::LocalState,
     request: ProviderModelsRequest,
-) -> Result<Vec<crate::probe::ProviderModel>, CommandError> {
+) -> Result<crate::probe::ProviderModelDiscovery, CommandError> {
     validate_model_fetch_request(&request)?;
     if let Some(models) = fetch_managed_claude_models(local, &request)? {
-        return Ok(models);
+        return Ok(crate::probe::ProviderModelDiscovery { models, confirmed_operations: Vec::new() });
     }
-    crate::probe::fetch_models(
+    crate::probe::fetch_models_with_operations(
         &request.url,
         &request.api_key,
         request.upstream_protocol,
         request.authentication,
         &request.connection,
+        &request.probe_operations,
     )
     // The provider diagnostic already redacts credentials. Generic token
     // scrubbing would erase legitimate endpoint URLs and request ids.
@@ -291,6 +296,27 @@ mod endpoint_tests {
     }
 
     #[test]
+    fn model_discovery_requires_explicit_probe_operations_for_the_current_wire_contract() {
+        let mut request = serde_json::json!({
+            "app": "codex", "url": "https://relay.example/v1", "apiKey": "isolated-key",
+            "upstreamProtocol": "responses"
+        });
+        assert!(serde_json::from_value::<ProviderModelsRequest>(request.clone()).is_err());
+        request["automaticOperations"] = serde_json::json!([]);
+        request["probeOperations"] = serde_json::json!([]);
+        assert!(serde_json::from_value::<ProviderModelsRequest>(request.clone()).is_err());
+        request.as_object_mut().unwrap().remove("automaticOperations");
+        request["probeOperations"] = serde_json::json!(["models"]);
+        assert!(serde_json::from_value::<ProviderModelsRequest>(request.clone()).is_err());
+        request["probeOperations"] = serde_json::json!(["imageEdit"]);
+        let codex = serde_json::from_value::<ProviderModelsRequest>(request.clone()).unwrap();
+        assert!(validate_model_fetch_request(&codex).is_ok());
+        request["app"] = serde_json::json!("claude");
+        let claude = serde_json::from_value::<ProviderModelsRequest>(request).unwrap();
+        assert!(validate_model_fetch_request(&claude).is_err());
+    }
+
+    #[test]
     fn model_list_command_keeps_upstream_details_without_generic_scrubbing() {
         let upstream = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let base = format!("http://{}/tenant/openai", upstream.server_addr());
@@ -328,6 +354,7 @@ mod endpoint_tests {
                 api_key: "isolated-model-key".into(),
                 upstream_protocol: asb_core::contracts::UpstreamProtocol::Responses,
                 connection: Default::default(),
+                probe_operations: Default::default(),
             },
         )
         .unwrap_err();

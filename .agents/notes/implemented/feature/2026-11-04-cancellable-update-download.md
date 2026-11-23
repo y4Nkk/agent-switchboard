@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-原生 app_update 模块统一拥有更新候选和唯一下载任务，复用当前钉死的 Tauri updater Rust API 检查发布、下载、验证和安装。前端只接收候选身份、实际字节和任务阶段；旧 JS updater 资源、downloadAndInstall 路径、依赖和权限已移除。桌面与浏览器开发分发使用同一份 JSON 契约，界面不提交下载 URL、签名或安装数据。
+原生 app_update 模块统一拥有更新候选和唯一下载任务，复用当前钉死的 Tauri updater Rust API 检查发布、下载、验证和安装。前端只接收候选身份、实际字节和任务阶段；旧 JS updater 资源、downloadAndInstall 路径、依赖和权限已移除。桌面与浏览器开发分发使用同一份 JSON 契约，界面不提交下载 URL、签名或安装数据。`UpdateCheck` 自 2026-11-22 起另携带可空 `advisory` 档位（三态：未表态/常规/重要或紧急），事实与判定属主见[应用更新的三档紧迫标签](2026-11-22-update-advisory-levels.md)。
 
 Windows x64 的更新目标固定为发布所有者已有的 `windows-x86_64-nsis`，不依赖运行程序的安装器标记推断。公开 v0.3.21 清单只含此精确平台键；无安装器标记的程序默认只查 `windows-x86_64`，插件在判断版本相同之前也会解析平台，因而会把“已是最新版本”变成检查失败。客户端明确选用现行目标，不给清单增加通用别名或第二条回退路径。其他平台继续由其实际包类型选择已有发布资产，Store 更新渠道继续由系统管理。
 

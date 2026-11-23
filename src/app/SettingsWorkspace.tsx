@@ -18,6 +18,7 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         onArchived={() => { void snapshot.refresh(); }} />}
       backups={<BackupsPage records={snapshot.backups} busy={busy} lastSwitch={model.lastSwitchOverall}
         recoveryRequest={model.backupRecoveryRequest}
+        configurationReady={model.preparation.configurationReady} recoveryBackupId={model.preparation.recoveryBackupId}
         active={active && model.settingsSection === "backups"}
         cloudBackup={model.cloudBackup} onRestore={operations.runRestore} onUndo={operations.requestUndo}
         onOpenDir={model.openBackupFolder} onCleaned={() => { void snapshot.refresh(); }} />}

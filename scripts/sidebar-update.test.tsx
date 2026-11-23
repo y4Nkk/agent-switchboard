@@ -83,6 +83,23 @@ function checkSection(state: ApplicationUpdateSnapshot, busy = false) {
   assert.ok((html.match(/class="asb-btn asb-btn-primary(?: |")/g) ?? []).length <= 1);
   if (view.phase === "storeManaged") assert.doesNotMatch(html, /<button|role="progressbar"/);
   if (view.phase === "channelFailed") assert.ok(html.includes(tr("backup.update.retryChannel")));
+  if (view.phase === "available") {
+    const advisory = state.updateCheck?.advisory ?? null;
+    if (advisory) {
+      assert.ok(html.includes(`data-advisory="${advisory.severity}"`));
+      assert.ok(html.includes(tr(`backup.update.advisory.${advisory.severity}`)));
+    } else {
+      assert.doesNotMatch(html, /data-advisory=/);
+    }
+    if (advisory && "reasonZh" in advisory) {
+      assert.match(html, /class="asb-update-advisory-reason is-(?:important|urgent)"/);
+      assert.equal((html.split(advisory.reasonZh).length - 1) + (html.split(advisory.reasonEn).length - 1), 1);
+    } else {
+      assert.doesNotMatch(html, /asb-update-advisory-reason/);
+    }
+  } else {
+    assert.doesNotMatch(html, /data-advisory=|asb-update-advisory-reason/);
+  }
 }
 
 function checkPrimaryActions() {

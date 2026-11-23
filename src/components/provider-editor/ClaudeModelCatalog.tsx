@@ -15,12 +15,12 @@ export function ClaudeModelCatalog({ editor, busy }: { editor: ProviderEditorSta
   const [pending, setPending] = useState("");
   const [picking, setPicking] = useState(false);
   const id = useId();
-  const preset = providerPreset(draft.baseUrl);
+  const preset = draft.upstreamProtocol ? providerPreset(draft.baseUrl, draft.upstreamProtocol) : undefined;
   const models = [...new Set([...(draft.model ? [draft.model] : []),
     ...(draft.modelOptions?.kind === "claude" ? draft.modelOptions.availableModels ?? [] : [])])];
   const suggestions = [...new Map([
     ...(connection.models ?? []).map((model) => [model.id, model.id] as const),
-    ...(preset?.protocol === draft.upstreamProtocol ? preset.models.map((model) => [model.id, model.name] as const) : []),
+    ...(preset?.models.map((model) => [model.id, model.name] as const) ?? []),
   ])];
   const candidates: PickerCandidate[] = suggestions.map(([model]) => {
     const known = draft.baseUrl && draft.upstreamProtocol
@@ -46,7 +46,9 @@ export function ClaudeModelCatalog({ editor, busy }: { editor: ProviderEditorSta
     <div className="asb-provider-model-toolbar">
       <div className="asb-provider-model-actions">
         <Button variant="secondary" disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
-          onClick={() => void connection.fetchModels().then(() => setPicking(true))}>{t("providerEditor.fetchModels")}</Button>
+          onClick={() => void connection.fetchModels([]).then((models) => {
+            if (models !== null) setPicking(true);
+          })}>{t("providerEditor.fetchModels")}</Button>
       </div>
       <label className="asb-field"><span>{t("providerSetup.addModel")}</span>
         <Input data-provider-model-entry="" code list={id} value={pending} disabled={busy}

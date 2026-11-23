@@ -43,7 +43,7 @@ export function useSwitchboardModel(preparation: ApplicationPreparation, dataRev
   );
   const { page, setPage } = navigation;
   const configuration = useConfigurationModel({
-    operationContext: { ...operationContext, busy: busy || !preparation.configurationReady },
+    operationContext,
     appFilter, setAppFilter, page, setPage, setProviderView: navigation.setProviderView,
     workspaceVersion: navigation.pageVersion, preparation, dataRevision,
   });

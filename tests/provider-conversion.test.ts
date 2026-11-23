@@ -11,7 +11,7 @@ function seed(): CodexConversionDraft {
       functionTools: false, customTools: false, toolSearch: false, reasoning: false,
       defaultReasoningLevel: "none", supportedReasoningLevels: ["none"], images: false, compact: false }],
     modelRoutes: [], capabilities: { responses: true, compact: false, models: false,
-      chatCompletions: false, alphaSearch: false, imageGeneration: false, imageEdit: false,
+      chatCompletions: false, alphaSearch: false, imageGeneration: false, imageEdit: false, automaticOperations: [],
       functionTools: false, customTools: false, toolSearch: false, reasoning: false, chatReasoning: { kind: "unsupported" } },
     parameters: { settings: {} }, notes: null, websiteUrl: null, usageQuery: null,
   };

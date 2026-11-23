@@ -36,18 +36,26 @@ function UpdateActions({ update, busy }: { update: ApplicationUpdateControl; bus
 
 /** The shared state projection owns stages and action availability on both surfaces. */
 export function UpdateSection({ update, busy }: { update: ApplicationUpdateControl; busy: boolean }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { state } = update;
   const view = applicationUpdateView(state);
   const { updateCheck: result, appVersion, lastCheckedAt } = state;
   const store = view.phase === "storeManaged";
   const label = store ? t("backup.update.storeManaged") : view.phase === "available" && result
     ? t("backup.update.newVersion", { version: result.latestVersion }) : t(UPDATE_PHASE_LABELS[view.phase]);
+  const advisory = view.phase === "available" && result ? result.advisory : null;
+  const reason = advisory && advisory.severity !== "routine"
+    ? (language === "zh-CN" ? advisory.reasonZh : advisory.reasonEn) : null;
   return <section className="asb-app-settings-group" aria-labelledby="software-update">
     <h3 id="software-update" className="asb-section-title">{t("backup.update.title")}</h3>
     <div className="asb-app-setting-row asb-update-summary">
       <div className="asb-app-setting-copy">
-        <span className="asb-checkbox-label">{label}</span>
+        <span className="asb-checkbox-label">
+          {label}
+          {advisory && <span className={`asb-update-advisory is-${advisory.severity}`}
+            data-advisory={advisory.severity}>{t(`backup.update.advisory.${advisory.severity}`)}</span>}
+        </span>
+        {reason != null && <span className={`asb-update-advisory-reason is-${advisory?.severity}`}>{reason}</span>}
         {(appVersion || lastCheckedAt || store) && <span className="asb-app-setting-detail">
           {appVersion ? t("backup.update.currentVersion", { version: appVersion }) : null}
           {appVersion && (lastCheckedAt || store) ? " · " : null}

@@ -3,7 +3,7 @@
 //! OpenAI-compatible base URLs include the provider's complete API prefix.
 //! Anthropic base URLs are service roots, matching Claude Code's SDK contract.
 
-use crate::contracts::UpstreamProtocol;
+use crate::contracts::{CodexOperation, UpstreamProtocol};
 use url::Url;
 
 pub fn validate_base_url(base_url: &str, protocol: UpstreamProtocol) -> Result<(), String> {
@@ -42,16 +42,55 @@ pub fn compact_endpoint(base_url: &str) -> Result<String, String> {
     append(base_url, UpstreamProtocol::Responses, "/responses/compact")
 }
 
-/// A sibling endpoint exposed by a Codex-compatible OpenAI API root.
+/// Resolves the configured upstream target for a fixed Codex operation.
 ///
-/// The caller must supply one of its fixed protocol paths. Keeping URL
-/// assembly here prevents individual gateway operations from treating a
-/// configured API root as an arbitrary forwarding URL.
-pub fn codex_endpoint(base_url: &str, path: &str) -> Result<String, String> {
-    if !path.starts_with('/') || path.contains('?') || path.contains('#') {
-        return Err("Codex 操作路径无效".to_string());
+/// Full-URL mode is exact for the primary request, but standalone operations
+/// still need their own paths. Only known API shapes are rewritten; opaque
+/// full URLs fail closed instead of sending a payload to an unrelated route.
+pub fn codex_operation_endpoint(
+    base_url: &str, is_full_url: bool, operation: CodexOperation,
+) -> Result<String, String> {
+    let target_path = operation.upstream_path();
+    if !is_full_url {
+        return append(base_url, UpstreamProtocol::Responses, target_path);
     }
-    append(base_url, UpstreamProtocol::Responses, path)
+    validate_full_url(base_url)
+        .map_err(|_| "供应商上游请求地址无效".to_string())?;
+    let parsed = Url::parse(base_url).map_err(|_| "供应商上游请求地址无效".to_string())?;
+    let source_path = parsed.path().trim_end_matches('/').to_ascii_lowercase();
+    let suffix = codex_full_url_sources(operation)
+        .iter()
+        .map(|source| source.upstream_path())
+        .find(|suffix| source_path.ends_with(*suffix))
+        .ok_or_else(|| {
+            format!("无法从完整 Codex 地址推导 {target_path}，请填写 API 根地址或已知操作地址")
+        })?;
+    let without_query = base_url.split_once('?').map_or(base_url, |(url, _)| url);
+    let without_query = without_query.trim_end_matches('/');
+    let prefix_len = without_query
+        .len()
+        .checked_sub(suffix.len())
+        .ok_or_else(|| "供应商上游请求地址无效".to_string())?;
+    let query = base_url
+        .split_once('?')
+        .map(|(_, query)| query)
+        .filter(|query| !query.is_empty())
+        .map(|query| format!("?{query}"))
+        .unwrap_or_default();
+    Ok(format!(
+        "{}{target_path}{query}",
+        &without_query[..prefix_len]
+    ))
+}
+
+fn codex_full_url_sources(operation: CodexOperation) -> &'static [CodexOperation] {
+    use CodexOperation::*;
+    match operation {
+        Compact | AlphaSearch => &[Compact, Responses],
+        ImageGeneration | ImageEdit => &[ImageGeneration, ImageEdit, ChatCompletions, Compact, Responses],
+        ChatCompletions => &[ChatCompletions, Compact, Responses],
+        _ => &[],
+    }
 }
 
 pub fn models_endpoint(base_url: &str, protocol: UpstreamProtocol) -> Result<String, String> {
@@ -350,10 +389,12 @@ mod tests {
     #[test]
     fn codex_operation_endpoints_are_siblings_of_the_declared_api_root() {
         assert_eq!(
-            codex_endpoint("https://example.test/tenant/v1", "/images/generations").unwrap(),
+            codex_operation_endpoint("https://example.test/tenant/v1", false, CodexOperation::ImageGeneration).unwrap(),
             "https://example.test/tenant/v1/images/generations"
         );
-        assert!(codex_endpoint("https://example.test/v1", "models?all=true").is_err());
+        assert_eq!(codex_operation_endpoint("https://example.test/tenant/v1/responses?tenant=a", true,
+            CodexOperation::ImageGeneration).unwrap(), "https://example.test/tenant/v1/images/generations?tenant=a");
+        assert!(codex_operation_endpoint("https://example.test/v1/opaque", true, CodexOperation::ImageGeneration).is_err());
     }
 
     #[test]

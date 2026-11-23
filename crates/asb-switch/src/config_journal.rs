@@ -204,6 +204,16 @@ pub fn rollback_pending_config<Io: SwitchIo>(
     }
     let journal_path = config_journal_path(directory, pending.app);
     let result = (|| {
+        let content = crate::restore::read_verified_rollback_backup(io, &pending.backup)
+            .map_err(|reason| recovery_error(reason, &journal_path))?;
+        let auth = match &pending.auth {
+            Some(auth) => {
+                let content = crate::restore::read_verified_rollback_backup(io, &auth.backup)
+                    .map_err(|reason| recovery_error(&format!("认证备份校验失败。{reason}"), &journal_path))?;
+                Some((auth, content))
+            }
+            None => None,
+        };
         let (current, existed) = crate::executor::read_current_or_empty(io, target, pending.app)
             .map_err(|_| recovery_error("无法读取显式补偿前的配置", &journal_path))?;
         let pre_restore_backup = crate::restore::snapshot_before_restore(
@@ -214,7 +224,7 @@ pub fn rollback_pending_config<Io: SwitchIo>(
             existed,
         )?;
         prepare(&pre_restore_backup).map_err(|message| recovery_error(&message, &journal_path))?;
-        let restored = crate::restore::restore_backup_content(io, target, &pending.backup);
+        let restored = crate::restore::restore_verified_backup(io, target, &pending.backup, &content);
         if !matches!(restored, RecoveryOutcome::Restored { .. }) {
             return Err(SwitchError::CommitFailed {
                 stage: "transaction-recovery",
@@ -222,11 +232,12 @@ pub fn rollback_pending_config<Io: SwitchIo>(
                 recovery: restored,
             });
         }
-        if let Some(auth) = &pending.auth {
-            let restored_auth = crate::restore::restore_backup_content(
+        if let Some((auth, content)) = auth {
+            let restored_auth = crate::restore::restore_verified_backup(
                 io,
                 Path::new(&auth.backup.target_path),
                 &auth.backup,
+                &content,
             );
             if !matches!(restored_auth, RecoveryOutcome::Restored { .. }) {
                 return Err(SwitchError::CommitFailed {

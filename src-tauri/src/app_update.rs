@@ -1,4 +1,5 @@
 //! The native owner of checked releases and one cancellable update download.
+mod advisory;
 mod state;
 pub(crate) use state::UpdateManager;
 use state::{DownloadState, UpdateCheck};

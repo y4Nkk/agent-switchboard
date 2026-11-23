@@ -327,7 +327,7 @@ export interface AppSettings {
   motion: MotionPreference;
   alwaysOnTop: boolean;
   launchAtLogin: boolean;
-  /** Keeps the main window hidden at startup; the app starts in the tray. */
+  /** Keeps the main window hidden when the app starts automatically at login. */
   startMinimized: boolean;
   hardwareAcceleration: boolean;
   /** Font family for display and interface text; the value is quoted

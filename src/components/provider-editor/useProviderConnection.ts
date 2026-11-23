@@ -3,6 +3,7 @@ import { useMessageState } from "../../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchProviderModels, getGatewayStatus, resolveProviderEndpoints,
   type AppKind, type ProviderEndpoints, type ProviderModel,
+  type CodexProbedOperation, type ProviderModelDiscovery,
   type ProviderConnectionOptions, type ResponsesOptions, type UpstreamProtocol } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
@@ -115,9 +116,12 @@ export function useProviderConnection(input: ProviderConnectionInput) {
     return () => { modelsVersion.current += 1; modelsPending.current = null; };
   }, [baseUrl, input.app, input.upstreamProtocol, input.apiKey, input.authentication, input.connection]);
 
-  /** Fetches the upstream model list; resolves with the fetched models, or
-   * null when the request was skipped or superseded. */
-  const fetchModels = async (): Promise<ProviderModel[] | null> => {
+  /** Returns the models from a successful current request, or null when the
+   * request fails, is skipped, or is superseded. */
+  const fetchModels = async (
+    probeOperations: readonly CodexProbedOperation[],
+    onDiscovery?: (result: ProviderModelDiscovery | null) => void,
+  ): Promise<ProviderModel[] | null> => {
     if (isModelsPending() || !baseUrl || !input.upstreamProtocol) return null;
     if (modelsEndpointError) {
       setModelsError(input.connection?.isFullUrl && !input.connection.modelsUrl?.trim()
@@ -135,14 +139,19 @@ export function useProviderConnection(input: ProviderConnectionInput) {
         baseUrl,
         input.apiKey,
         input.upstreamProtocol,
+        probeOperations,
         modelAuthentication,
         modelConnection,
       );
-      if (current()) setModels(fetched);
-      return current() ? fetched : null;
+      if (!current()) return null;
+      setModels(fetched.models);
+      onDiscovery?.(fetched);
+      return fetched.models;
     } catch (caught) {
       if (current()) {
         setModelsError(caught);
+        if (input.app === "codex") setModels(null);
+        onDiscovery?.(null);
       }
       return null;
     } finally {

@@ -22,7 +22,7 @@ export const messages = {
   "providerSetup.enabled": ["启用", "Enabled"],
   "providerSetup.disabled": ["未启用", "Not enabled"],
   "providerSetup.modelCapabilities": ["{model}的能力", "Capabilities for {model}"],
-  "providerSetup.capabilityHelp": ["供应商的工具、推理和压缩能力由模型条目汇总，无需重复声明。未启用不等于上游不支持。", "Provider tool, reasoning and compaction capabilities come from model entries. No duplicate declaration is needed. Not enabled does not mean unsupported upstream."],
+  "providerSetup.capabilityHelp": ["工具、推理和压缩由模型条目汇总。获取模型时会检查上游接口。手动调整的开关会保留，恢复自动后可重新获取模型。", "Model entries define tool use, reasoning, and compaction. Fetching models also checks upstream routes. Manual choices are saved. After restoring automatic mode, fetch models again to recheck."],
   "providerSetup.levels": ["支持的推理等级", "Supported reasoning levels"],
   "providerSetup.limitsRequired": ["请补全 {model} 的实际上下文和输出上限。", "Enter actual context and output limits for {model}."],
   "providerSetup.invalidLevels": ["{model} 的推理等级无效。", "Invalid reasoning levels for {model}."],

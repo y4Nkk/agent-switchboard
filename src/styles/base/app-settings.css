@@ -47,6 +47,48 @@
   color: var(--asb-text-muted);
 }
 
+.asb-login-startup-mode {
+  padding-inline-start: var(--asb-space-4);
+}
+
+/* Update levels are publisher facts: one capsule beside the version carries
+   the level; tone carries urgency; the reason line repeats the winner's tone. */
+.asb-update-advisory {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: var(--asb-space-2);
+  padding: var(--asb-space-hairline) var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-content);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+  vertical-align: middle;
+}
+
+.asb-update-advisory.is-important {
+  border-color: var(--asb-warning);
+  color: var(--asb-warning);
+}
+
+.asb-update-advisory.is-urgent {
+  border-color: var(--asb-danger);
+  color: var(--asb-danger);
+}
+
+.asb-update-advisory-reason {
+  font: var(--asb-text-label);
+  color: var(--asb-text);
+}
+
+.asb-update-advisory-reason.is-important {
+  color: var(--asb-warning);
+}
+
+.asb-update-advisory-reason.is-urgent {
+  color: var(--asb-danger);
+}
+
 .asb-shortcut-setting { display: grid; gap: var(--asb-space-1); min-width: 0; }
 .asb-shortcut-controls { display: flex; flex-wrap: wrap; gap: var(--asb-space-1); }
 .asb-shortcut-controls > .asb-btn[aria-pressed="true"] {

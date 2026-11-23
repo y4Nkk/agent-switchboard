@@ -6,6 +6,7 @@ import { useI18n } from "../../i18n";
 import { useProviderConnection } from "../provider-editor/useProviderConnection";
 import { useProviderParameters } from "../provider-editor/useProviderParameters";
 import { codexDraftFrom, prepareCodexDraft, validateCodexDraft, type CodexEditorDraft } from "./draft";
+import { applyCodexDiscovery, isProbedOperation, reconcileCodexOperationDefaults, sameCodexDiscoveryConnection } from "./operations";
 
 function codexDraftFromSource(source: CodexEditorSource | null): CodexEditorDraft {
   if (source?.kind === "record") return codexDraftFrom(source.record);
@@ -17,7 +18,11 @@ function codexDraftFromSource(source: CodexEditorSource | null): CodexEditorDraf
 
 export function useCodexProviderEditor(source: CodexEditorSource | null, busy: boolean) {
   const { t } = useI18n();
-  const [draft, setDraft] = useState<CodexEditorDraft>(() => codexDraftFromSource(source));
+  const [draft, setEditorDraft] = useState<CodexEditorDraft>(() => codexDraftFromSource(source));
+  const setDraft = useCallback<SetCodexDraft>((update) => setEditorDraft((current) => {
+    const next = typeof update === "function" ? update(current) : update;
+    return reconcileCodexOperationDefaults(current, next);
+  }), []);
   const baseline = useRef(draft);
   const conversion = source?.kind === "conversion" ? source.conversion : null;
   const [reviewedCapabilities, setReviewedCapabilities] = useState<string | null>(null);
@@ -40,6 +45,9 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
     upstreamProtocol: draft.upstream,
     responsesOptions: draft.upstream === "responses" ? { requestMode: draft.requestMode } : null,
   });
+  const fetchModels = () => connection.fetchModels(draft.capabilities.automaticOperations.filter(isProbedOperation),
+    (result) => setDraft((current) => sameCodexDiscoveryConnection(current, draft)
+      ? applyCodexDiscovery(current, result) : current));
   const seedParameters = useCallback((defaults: SettingsValues) => {
     if (baseline.current.parameters === null) {
       baseline.current = { ...baseline.current, parameters: { settings: { ...defaults.settings } } };
@@ -47,7 +55,7 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
     setDraft((current) => current.parameters === null
       ? { ...current, parameters: { settings: { ...defaults.settings } } }
       : current);
-  }, []);
+  }, [setDraft]);
   const parameters = useProviderParameters("codex", draft.parameters, seedParameters);
   const problems = validateCodexDraft(draft, t);
   const limitsComplete = conversionLimitsComplete(draft);
@@ -59,7 +67,7 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
     if (value) onSave(value);
   };
   return { draft, setDraft, dirty: JSON.stringify(draft) !== JSON.stringify(baseline.current),
-    headingRef, viewportRef, connection, parameters, problems, canSave, save,
+    headingRef, viewportRef, connection, fetchModels, parameters, problems, canSave, save,
     conversion, capabilitiesReviewed, setCapabilitiesReviewed, limitsComplete };
 }
 

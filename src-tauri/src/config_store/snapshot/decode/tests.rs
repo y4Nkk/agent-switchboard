@@ -89,27 +89,16 @@ fn conflicting_and_invalid_previous_values_are_rejected() {
 }
 
 #[test]
-fn previous_codex_model_mapping_enters_gateway_but_current_direct_is_rejected() {
-    let mut draft = crate::codex_common::test_draft();
-    draft.model_routes = vec![asb_core::contracts::CodexModelRoute {
-        client_model: draft.default_model.clone(),
-        upstream_model: "vendor-mapped".into(),
-    }];
-    let file = draft.into_file("01234567-89ab-cdef-0123-456789abcdef".into(), 1);
+fn codex_files_in_backups_use_only_the_current_provider_schema() {
+    let file = crate::codex_common::test_draft().into_file("01234567-89ab-cdef-0123-456789abcdef".into(), 1);
     let mut value = snapshot();
     value["codexProviders"] = json!([file]);
-    value["codexProviders"][0]["profile"]["routeMode"] = json!("direct");
+    assert!(decode(&value).is_ok());
+    value["codexProviders"][0]["schemaVersion"] = json!(1);
+    value["codexProviders"][0]["profile"]["capabilities"].as_object_mut().unwrap().remove("automaticOperations");
     assert!(decode(&value).is_err());
     value["schemaVersion"] = json!(7);
-    let upgraded = decode(&value).unwrap();
-    assert_eq!(
-        upgraded.codex_providers[0].profile.route_mode,
-        CodexRouteMode::Gateway
-    );
-    assert_eq!(
-        upgraded.codex_providers[0].profile.model_routes[0].upstream_model,
-        "vendor-mapped"
-    );
+    assert!(decode(&value).is_err());
 }
 
 #[test]

@@ -1,4 +1,5 @@
 import type { MessageKey } from "../i18n";
+import { uiMessage } from "../i18n/errors";
 import { useCallback, useRef, useState } from "react";
 import {
   backupDiff,
@@ -18,6 +19,7 @@ import type { ActivationCandidate } from "./useProviderSwitchFlow";
 
 interface SwitchOperationDeps {
   busy: boolean;
+  restoreBusy: boolean;
   onError: (error: CommandError) => void;
   clearError: () => void;
   setBusy: (busy: boolean) => void;
@@ -38,6 +40,7 @@ interface SwitchOperationDeps {
  */
 export function useSwitchOperations({
   busy,
+  restoreBusy,
   onError,
   clearError,
   setBusy,
@@ -132,13 +135,13 @@ export function useSwitchOperations({
   ]);
 
   const runRestore = useCallback(
-    async (backupId: string) => {
-      if (busy) return;
+    async (backupId: string, transactionOnly: boolean) => {
+      if (restoreBusy) throw uiMessage("backup.history.restoreBusy");
       invalidateCandidates();
       setBusy(true);
       clearError();
       try {
-        const result = await restoreBackup(backupId, true);
+        const result = await restoreBackup(backupId, true, transactionOnly);
         await refresh();
         if (targetProfileId) await setTargetProfile(targetProfileId);
         const warnings = await refreshDiscoveryOrAppend(
@@ -146,17 +149,14 @@ export function useSwitchOperations({
           "operations.notify.discoveryStale.restored",
         );
         notifyWriteOutcome(toastMessage("operations.notify.restored"), result.preRestoreBackup.app, warnings);
-      } catch (caught) {
-        onError(caught as CommandError);
       } finally {
         setBusy(false);
       }
     },
     [
-      busy,
+      restoreBusy,
       clearError,
       invalidateCandidates,
-      onError,
       refresh,
       refreshDiscoveryOrAppend,
       setTargetProfile,

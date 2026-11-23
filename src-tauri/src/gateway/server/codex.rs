@@ -3,7 +3,7 @@
 use super::CodexOperation;
 use crate::gateway::{metrics::RequestSpan, ActiveRoute};
 use asb_core::contracts::{
-    codex_model_catalog_document, CodexCatalogEntry, CodexOperation as ContractOperation,
+    codex_model_catalog_document, CodexCatalogEntry,
     CodexRouteSnapshot, UpstreamProtocol,
 };
 use serde_json::{Map, Value};
@@ -31,7 +31,7 @@ pub(super) fn ensure_operation(
     if operation == CodexOperation::Models
         || snapshot
             .capabilities
-            .supports_operation(contract_operation(operation))
+            .supports_operation(operation)
     {
         Ok(())
     } else {
@@ -151,18 +151,6 @@ fn apply_anthropic_output_budget(
         ));
     }
     Ok(())
-}
-
-fn contract_operation(operation: CodexOperation) -> ContractOperation {
-    match operation {
-        CodexOperation::Responses => ContractOperation::Responses,
-        CodexOperation::Compact => ContractOperation::Compact,
-        CodexOperation::Models => ContractOperation::Models,
-        CodexOperation::ChatCompletions => ContractOperation::ChatCompletions,
-        CodexOperation::AlphaSearch => ContractOperation::AlphaSearch,
-        CodexOperation::ImageGeneration => ContractOperation::ImageGeneration,
-        CodexOperation::ImageEdit => ContractOperation::ImageEdit,
-    }
 }
 
 fn requires_model(operation: CodexOperation) -> bool {

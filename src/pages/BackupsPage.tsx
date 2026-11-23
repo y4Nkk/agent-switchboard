@@ -16,9 +16,11 @@ interface BackupsPageProps {
   busy: boolean;
   active: boolean;
   recoveryRequest: number;
+  configurationReady: boolean;
+  recoveryBackupId: string | null;
   lastSwitch: ConfigWriteRecord | null;
   cloudBackup: ReturnType<typeof useCloudBackup>;
-  onRestore: (backupId: string) => void | Promise<void>;
+  onRestore: (backupId: string, transactionOnly: boolean) => Promise<void>;
   onUndo: (lastSwitch: ConfigWriteRecord) => void;
   onOpenDir: () => void;
   /** Refreshes the record list after a bulk cleanup reclaimed backups. */
@@ -34,6 +36,8 @@ export function BackupsPage({
   busy,
   active,
   recoveryRequest,
+  configurationReady,
+  recoveryBackupId,
   lastSwitch,
   cloudBackup,
   onRestore,
@@ -92,14 +96,15 @@ export function BackupsPage({
               <div className="asb-backup-danger-row">
                 <Button
                   variant="danger"
-                  disabled={busy}
+                  disabled={busy || !configurationReady}
                   onClick={() => onUndo(lastSwitch)}
                 >
                   {lastSwitch.profileName ? t("backup.undoSwitch") : t("backup.undoWrite")}
                 </Button>
               </div>
             )}
-            <BackupHistory records={records} busy={busy} onRestore={onRestore} />
+            <BackupHistory records={records} busy={busy} onRestore={onRestore}
+              configurationReady={configurationReady} recoveryBackupId={recoveryBackupId} />
           </>
       </div>
       <div

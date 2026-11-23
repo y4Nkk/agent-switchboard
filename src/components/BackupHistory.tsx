@@ -1,5 +1,5 @@
 import { useMessageState } from "../i18n/use-message-state";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { backupDiff, type BackupRecord, type KeyChange } from "../api/client";
 import { DiffView } from "./DiffView";
 import { Button } from "./Button";
@@ -10,11 +10,14 @@ import { Time } from "./Time";
 import { RestoreIcon } from "./icons";
 import { useI18n, type MessageKey } from "../i18n";
 import { tr } from "../i18n/current";
+import type { TFunction } from "../i18n/context";
 
 interface Props {
   records: BackupRecord[];
   busy: boolean;
-  onRestore: (backupId: string) => void | Promise<void>;
+  configurationReady: boolean;
+  recoveryBackupId: string | null;
+  onRestore: (backupId: string, transactionOnly: boolean) => Promise<void>;
 }
 
 /** The backup table's page size, matching the codebase's page-size convention. */
@@ -75,134 +78,133 @@ function BackupDiff({ record }: { record: BackupRecord }) {
   return <DiffView changes={changes} label={t("backup.diff.label")} />;
 }
 
-/** Recent validation and restore history (DESIGN.md §7 bottom band); the
- * open diff rides the shared Table's expansion row under its own row. */
-export function BackupHistory({ records, busy, onRestore }: Props) {
+function RestoreConfirmation({ record, transactionOnly, busy, onRestore, onClose }: {
+  record: BackupRecord;
+  transactionOnly: boolean;
+  busy: boolean;
+  onRestore: Props["onRestore"];
+  onClose: () => void;
+}) {
   const { t } = useI18n();
-  const [pending, setPending] = useState<BackupRecord | null>(null);
-  const [openDiffs, setOpenDiffs] = useState<ReadonlySet<string>>(() => new Set());
-  const [page, setPage] = useState(1);
+  const [error, setError] = useMessageState();
+  const restoring = useRef(false);
 
-  const toggleDiff = (recordId: string) => {
-    setOpenDiffs((current) => {
-      const next = new Set(current);
-      if (next.has(recordId)) {
-        next.delete(recordId);
-      } else {
-        next.add(recordId);
-      }
-      return next;
-    });
-  };
-
-  /** A page turn is a new view context: diffs opened on another page collapse. */
-  const turnPage = (next: number) => {
-    setPage(next);
-    setOpenDiffs(new Set());
-  };
-
-  // A restore adds a pre-restore backup, shifting the list; the rendered page
-  // converges instead of showing an empty slice.
-  const pageCount = Math.max(1, Math.ceil(records.length / BACKUP_PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageRecords = records.slice(
-    (currentPage - 1) * BACKUP_PAGE_SIZE,
-    currentPage * BACKUP_PAGE_SIZE,
-  );
-
-  const columns: Array<TableColumn<BackupRecord>> = [
-    {
-      key: "createdAt",
-      header: t("backup.col.time"),
-      cellClassName: "asb-code",
-      render: (record) => <Time iso={record.createdAt} />,
-    },
-    { key: "app", header: t("backup.col.client"), render: (record) => clientLabel(record.app) },
-    { key: "reason", header: t("backup.col.reason"), render: (record) => reasonLabel(record.reason) },
-    {
-      key: "contentHash",
-      header: t("backup.col.hash"),
-      cellClassName: "asb-code",
-      render: (record) => record.contentHash.slice(0, 12),
-    },
-    {
-      key: "actions",
-      header: t("backup.col.actions"),
-      render: (record) => {
-        const isGatewayPortChange = isGatewayPortBackup(record.reason);
-        return (
-          <div className="asb-backup-actions">
-            {isGatewayPortChange ? (
-              <span className="asb-scope-note">{t("backup.history.gatewayPortNote")}</span>
-            ) : (
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() => setPending(record)}
-              >
-                {t("backup.history.restore")}
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              disabled={busy}
-              aria-expanded={openDiffs.has(record.id)}
-              onClick={() => toggleDiff(record.id)}
-            >
-              {t("backup.history.viewDiff")}
-            </Button>
-          </div>
-        );
-      },
-    },
-  ];
-
-  if (records.length === 0) {
-    return (
-      <div className="asb-empty-state">
-        <span className="asb-empty-state-icon" aria-hidden="true">
-          <RestoreIcon />
-        </span>
-        <h3 className="asb-section-title">{t("backup.history.empty")}</h3>
-      </div>
-    );
+  async function confirm() {
+    if (restoring.current) return;
+    restoring.current = true;
+    setError(null);
+    try {
+      await onRestore(record.id, transactionOnly);
+      onClose();
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      restoring.current = false;
+    }
   }
 
   return (
+    <ConfirmSheet
+      title={t(transactionOnly ? "backup.history.confirmTransactionTitle" : "backup.history.confirmTitle")}
+      confirmLabel={t("backup.confirmRestore")}
+      busy={busy}
+      onConfirm={() => void confirm()}
+      onCancel={onClose}
+    >
+      <ul className="asb-dialog-details">
+        <li>{t("backup.col.time")} <Time iso={record.createdAt} /></li>
+        <li>{t("backup.col.client")} {clientLabel(record.app)}</li>
+        <li>{t("backup.col.hash")} {record.contentHash.slice(0, 12)}</li>
+        <li>{t(transactionOnly ? "backup.history.confirmTransaction" : "backup.history.confirmBackupFirst")}</li>
+        <li>{t("backup.history.confirmRestoreSettings")}</li>
+        <li><BackupDiff record={record} /></li>
+      </ul>
+      {error && <p className="asb-field-error" role="alert">{t("backup.history.restoreFailed", { reason: error })}</p>}
+    </ConfirmSheet>
+  );
+}
+
+function backupColumns(t: TFunction, actions: (record: BackupRecord) => ReactNode): TableColumn<BackupRecord>[] {
+  return [
+    { key: "createdAt", header: t("backup.col.time"), cellClassName: "asb-code",
+      render: (record) => <Time iso={record.createdAt} /> },
+    { key: "app", header: t("backup.col.client"), render: (record) => clientLabel(record.app) },
+    { key: "reason", header: t("backup.col.reason"), render: (record) => reasonLabel(record.reason) },
+    { key: "contentHash", header: t("backup.col.hash"), cellClassName: "asb-code",
+      render: (record) => record.contentHash.slice(0, 12) },
+    { key: "actions", header: t("backup.col.actions"), render: actions },
+  ];
+}
+
+/** Backup list and the selection for an explicitly confirmed restore. */
+export function BackupHistory({ records, busy, configurationReady, recoveryBackupId, onRestore }: Props) {
+  const { t } = useI18n();
+  const [pending, setPending] = useState<{ record: BackupRecord; transactionOnly: boolean } | null>(null);
+  const [openDiffs, setOpenDiffs] = useState<ReadonlySet<string>>(() => new Set());
+  const [page, setPage] = useState(1);
+  const recoveryBackup = configurationReady ? undefined : records.find((record) => record.id === recoveryBackupId);
+  useEffect(() => { setPage(1); }, [recoveryBackupId]);
+
+  function toggleDiff(recordId: string) {
+    setOpenDiffs((current) => {
+      const next = new Set(current);
+      if (next.has(recordId)) next.delete(recordId);
+      else next.add(recordId);
+      return next;
+    });
+  }
+
+  function turnPage(next: number) {
+    setPage(next);
+    setOpenDiffs(new Set());
+  }
+
+  const orderedRecords = recoveryBackup
+    ? [recoveryBackup, ...records.filter((record) => record.id !== recoveryBackup.id)]
+    : records;
+  const pageCount = Math.max(1, Math.ceil(orderedRecords.length / BACKUP_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRecords = orderedRecords.slice((currentPage - 1) * BACKUP_PAGE_SIZE, currentPage * BACKUP_PAGE_SIZE);
+  const columns = backupColumns(t, (record) => {
+    const transactionOnly = record.id === recoveryBackup?.id;
+    return (
+      <div className="asb-backup-actions">
+        {isGatewayPortBackup(record.reason) ? (
+          <span className="asb-scope-note">{t("backup.history.gatewayPortNote")}</span>
+        ) : (
+          <Button variant="secondary" disabled={busy || (!configurationReady && !transactionOnly)}
+            onClick={() => setPending({ record, transactionOnly })}>
+            {t(transactionOnly ? "backup.history.restoreTransaction" : "backup.history.restore")}
+          </Button>
+        )}
+        <Button variant="secondary" disabled={busy} aria-expanded={openDiffs.has(record.id)}
+          onClick={() => toggleDiff(record.id)}>
+          {t("backup.history.viewDiff")}
+        </Button>
+      </div>
+    );
+  });
+
+  return (
     <div className="asb-backups">
-      <Table
-        columns={columns}
-        rows={pageRecords}
-        rowKey={(record) => record.id}
-        ariaLabel={t("backup.history.tableAria")}
-        renderExpansion={(record) => (openDiffs.has(record.id) ? <BackupDiff record={record} /> : null)}
-      />
-      <Pagination
-        total={records.length}
-        page={currentPage}
-        pageSize={BACKUP_PAGE_SIZE}
-        onPageChange={turnPage}
-        label={t("backup.history.paginationAria")}
-      />
+      {!configurationReady && <p className="asb-scope-note" role="status">
+        {t(recoveryBackup ? "backup.history.transactionOnly" : "backup.history.transactionUnavailable")}
+      </p>}
+      {records.length === 0 ? (
+        <div className="asb-empty-state">
+          <span className="asb-empty-state-icon" aria-hidden="true"><RestoreIcon /></span>
+          <h3 className="asb-section-title">{t("backup.history.empty")}</h3>
+        </div>
+      ) : <>
+        <Table columns={columns} rows={pageRecords} rowKey={(record) => record.id}
+          ariaLabel={t("backup.history.tableAria")}
+          renderExpansion={(record) => (openDiffs.has(record.id) ? <BackupDiff record={record} /> : null)} />
+        <Pagination total={records.length} page={currentPage} pageSize={BACKUP_PAGE_SIZE}
+          onPageChange={turnPage} label={t("backup.history.paginationAria")} />
+      </>}
       {pending && (
-        <ConfirmSheet
-          title={t("backup.history.confirmTitle")}
-          confirmLabel={t("backup.confirmRestore")}
-          busy={busy}
-          onConfirm={() => {
-            void Promise.resolve(onRestore(pending.id)).finally(() => setPending(null));
-          }}
-          onCancel={() => setPending(null)}
-        >
-          <ul className="asb-dialog-details">
-            <li>{t("backup.col.time")} <Time iso={pending.createdAt} /></li>
-            <li>{t("backup.col.client")} {clientLabel(pending.app)}</li>
-            <li>{t("backup.col.hash")} {pending.contentHash.slice(0, 12)}</li>
-            <li>{t("backup.history.confirmBackupFirst")}</li>
-            <li>{t("backup.history.confirmRestoreSettings")}</li>
-            <li><BackupDiff record={pending} /></li>
-          </ul>
-        </ConfirmSheet>
+        <RestoreConfirmation record={pending.record} transactionOnly={pending.transactionOnly || !configurationReady}
+          busy={busy} onRestore={onRestore} onClose={() => setPending(null)} />
       )}
     </div>
   );

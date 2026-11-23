@@ -12,6 +12,7 @@ struct ShortcutBindings {
 #[derive(Default)]
 pub(crate) struct DesktopSettingsState {
     pub gate: tokio::sync::Mutex<()>,
+    pub login_registration_refreshed: AtomicBool,
     bindings: Mutex<ShortcutBindings>,
     active_id: AtomicU32,
     error: Mutex<Option<CommandError>>,

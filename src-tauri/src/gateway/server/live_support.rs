@@ -303,6 +303,7 @@ fn live_draft(route: &LiveRoute, api_key: &str) -> CodexProviderDraft {
             alpha_search: false,
             image_generation: false,
             image_edit: false,
+            automatic_operations: Default::default(),
             function_tools: true,
             custom_tools: true,
             tool_search: true,

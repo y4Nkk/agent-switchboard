@@ -241,6 +241,5 @@ export function applyCodexPreset(draft: CodexEditorDraft, preset: ProviderPreset
   const next = reconcileCodexUpstream(draft, preset.protocol);
   return { ...next, endpoint: preset.endpoint, name: draft.name || preset.name,
     websiteUrl: draft.websiteUrl || preset.website || "",
-    capabilities: { ...next.capabilities, chatCompletions: preset.protocol === "chatCompletions" },
   };
 }

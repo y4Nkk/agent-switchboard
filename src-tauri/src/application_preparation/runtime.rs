@@ -83,7 +83,8 @@ fn check_once(app: &tauri::AppHandle, local: &LocalState, first: &mut Option<Res
     }
     report.issues.extend(service_issues.iter().cloned());
     if report.configuration_ready {
-        let errors = crate::startup::recover_configuration(app, local)?;
+        let (errors, recovery_backup_id) = crate::startup::recover_configuration(app, local)?;
+        report.recovery_backup_id = recovery_backup_id;
         if !errors.is_empty() { report.configuration_ready = false; report.issues.extend(errors); }
     }
     if let Some(settings) = &report.settings {

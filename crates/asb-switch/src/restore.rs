@@ -32,23 +32,37 @@ pub(crate) fn restore_backup_content<Io: SwitchIo>(
     target: &Path,
     backup: &BackupRecord,
 ) -> RecoveryOutcome {
-    let backup_path = Path::new(&backup.backup_path);
-    let Ok(content) = io.read_file(backup_path) else {
-        return RecoveryOutcome::RestoreFailed {
-            reason: "备份文件不可读".to_string(),
+    match read_verified_rollback_backup(io, backup) {
+        Ok(content) => restore_verified_backup(io, target, backup, &content),
+        Err(reason) => RecoveryOutcome::RestoreFailed {
+            reason: reason.into(),
             backup_path: backup.backup_path.clone(),
-        };
-    };
-    if sha256_hex(&content) != backup.content_hash {
-        return RecoveryOutcome::RestoreFailed {
-            reason: "备份内容与记录哈希不符".to_string(),
-            backup_path: backup.backup_path.clone(),
-        };
+        },
     }
+}
+
+pub(crate) fn read_verified_rollback_backup<Io: SwitchIo>(
+    io: &Io,
+    backup: &BackupRecord,
+) -> Result<String, &'static str> {
+    let backup_path = Path::new(&backup.backup_path);
+    let content = io.read_file(backup_path).map_err(|_| "备份文件不可读")?;
+    if sha256_hex(&content) != backup.content_hash {
+        return Err("备份内容与记录哈希不符");
+    }
+    Ok(content)
+}
+
+pub(crate) fn restore_verified_backup<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    backup: &BackupRecord,
+    content: &str,
+) -> RecoveryOutcome {
     if !backup.target_existed {
         return restore_absent_target(io, target, backup);
     }
-    let temp = match stage_restore_file(io, target, &content) {
+    let temp = match stage_restore_file(io, target, content) {
         Ok(temp) => temp,
         Err(reason) => {
             return RecoveryOutcome::RestoreFailed {

@@ -21,7 +21,8 @@ export function useConfigurationModel({ operationContext, appFilter, setAppFilte
   setProviderView: (view: ProviderView) => void;
   workspaceVersion: () => number;
 }) {
-  const { busy, onError: reportError, clearError } = operationContext;
+  const writeContext = { ...operationContext, busy: operationContext.busy || !preparation.configurationReady };
+  const { busy, onError: reportError, clearError } = writeContext;
   const snapshot = useConfigSnapshot({ onError: reportError, revision: dataRevision });
   const { targetProfileId, setTargetProfileId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
   const refresh = useCallback(async () => { await refreshSnapshot(); }, [refreshSnapshot]);
@@ -33,21 +34,22 @@ export function useConfigurationModel({ operationContext, appFilter, setAppFilte
   });
   const { invalidateCandidates, setTargetProfile } = providerSwitch;
   const discoveryState = useDiscovery({
-    ...operationContext, app: appFilter, invalidateCandidates, refresh: refreshSnapshot, setTargetProfile, setAppFilter, setPage,
+    ...writeContext, app: appFilter, invalidateCandidates, refresh: refreshSnapshot, setTargetProfile, setAppFilter, setPage,
   });
-  const ccImport = useCcImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
+  const ccImport = useCcImport({ ...writeContext, invalidateCandidates, refresh: refreshSnapshot,
     records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, setTargetProfile, setAppFilter });
-  const sqlImport = useSqlImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
+  const sqlImport = useSqlImport({ ...writeContext, invalidateCandidates, refresh: refreshSnapshot,
     records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, setTargetProfile, setAppFilter });
   const targetRecord = records.find((record) => record.profile.id === targetProfileId) ?? null;
   const targetProfile = targetRecord?.profile ?? null;
   const operations = useSwitchOperations({
-    ...operationContext, activationCandidate: providerSwitch.activationCandidate, clearCandidates: providerSwitch.clearCandidates,
+    ...writeContext, restoreBusy: operationContext.busy,
+    activationCandidate: providerSwitch.activationCandidate, clearCandidates: providerSwitch.clearCandidates,
     invalidateCandidates, setTargetProfile, targetProfileId, targetProfile, refresh,
     refreshDiscoveryOrAppend: discoveryState.refreshDiscoveryOrAppend,
   });
   const providers = useProviders({
-    ...operationContext, active: page === "providers", appFilter, setAppFilter, records,
+    ...writeContext, active: page === "providers", appFilter, setAppFilter, records,
     codexOfficialRecords: snapshot.codexOfficialRecords, codexRecords: snapshot.codexRecords, targetProfileId,
     activeIds: { codex: activeProfileId("codex"), claude: activeProfileId("claude") },
     workspaceVersion,

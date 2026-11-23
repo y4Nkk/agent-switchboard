@@ -56,7 +56,9 @@ export const messages = {
   "settings.window.close.exit": ["退出应用", "Quit the app"],
   "settings.window.alwaysOnTop": ["窗口始终置顶", "Always keep the window on top"],
   "settings.window.launchAtLogin": ["开机自动启动", "Launch at login"],
-  "settings.window.startMinimized": ["启动时最小化到托盘", "Start minimized to tray"],
+  "settings.window.loginStartupMode": ["启动方式", "Startup mode"],
+  "settings.window.loginStartupMode.showMain": ["显示主界面", "Show main window"],
+  "settings.window.loginStartupMode.hideToTray": ["最小化到托盘", "Minimize to tray"],
   "settings.window.startupPage": ["启动页面", "Startup page"],
   "settings.window.startupPage.detail": ["下次启动生效；「上次访问」仅恢复顶层页面，不含草稿或待确认操作。", "Takes effect next launch; \"Last visited\" restores the top-level page only, not drafts or pending confirmations."],
   "settings.window.startupPage.providers": ["供应商切换", "Providers"],
@@ -73,6 +75,7 @@ export const messages = {
   "settings.shortcut.clear": ["清除", "Clear"],
 
   "settings.font.pickerAria": ["选择界面字体", "Choose interface font"],
+  "settings.font.wenquanyiZenHei": ["文泉驿正黑", "WenQuanYi Zen Hei"],
   "settings.font.searchAria": ["搜索字体", "Search fonts"],
   "settings.font.searchPlaceholder": ["搜索字体", "Search fonts"],
   "settings.font.listAria": ["可选字体", "Available fonts"],

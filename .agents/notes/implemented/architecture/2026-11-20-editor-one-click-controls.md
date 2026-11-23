@@ -22,12 +22,12 @@ Status: implemented
 
 **能力声明区与 Chat 转换配置改为 Switch 行 / 常驻 Select。** 供应商级操作（模型列表、Chat Completions 等 5 项）是「标签 + Switch」设置行；Chat 思考转换的启停是 Switch，4 个子参数是常驻 Select/Switch。运行参数每个 spec 恰好一个常驻控件（toggle → 默认/启用/禁用 Select；slider/segment → 默认+选项 Select；integer → number Input 空=默认），显式值的「自定义」caption 保留。
 
-参考结论归属：cc-switch 的常驻内联与档位多选、ZCode 的 chip 编辑与基数退化（0 选项隐藏、不渲染假可用控件）、pi-desktop 的限额档位 chips（数字框 + 128k~1M 一键写入）。
+参考结论归属：cc-switch 的常驻内联与档位多选、ZCode 的 chip 编辑与基数退化（0 选项隐藏、不渲染假可用控件）。
 
 ## 契约归属
 
 - `ToggleChip`（`src/components/ToggleChip.tsx`）拥有 chip 的全部几何与 `aria-pressed` 语义；样式归 `provider-editor-sections.css` 的 `.asb-chip-*`。
-- `ModelPickerDialog`（`src/components/provider-editor/ModelPickerDialog.tsx`）拥有批量勾选的候选合并、搜索与差量应用；两处添加入口只传候选与当前集合。
+- `useProviderConnection.fetchModels` 以数组表示当前请求成功，以 `null` 表示失败、跳过或结果已过期。Codex 与 Claude 目录仅在收到数组时打开 `ModelPickerDialog`，并传入合并后的候选和当前集合；请求错误显示在目录的获取入口下方，勾选和搜索由弹窗管理。
 - 限额档位常量归 `CodexModelSection`（仅此一处消费）。
 - 数据契约（`CodexCatalogEntry`、`CodexCapabilities`、参数 shape、Rust 侧）零变更。
 
@@ -42,7 +42,7 @@ Status: implemented
 - 保留 `ProviderValue` 值编辑回合（2026-11-16 决定）。它最强的理由是扫读时只见结果值、同屏只挂一个输入控件，编辑器保持紧凑。不用：用户明确否决多级操作；枚举结构化后 chips 的选中态本身就是结果值，「扫读值」与「一击修改」不再互斥，回合只剩成本。
 - ZCode 式 chip 原位文本编辑（点击 chip 变输入框改档位名）。它最强的理由是支持任意自定义档位标识。不用：Codex 只认 8 档封闭枚举，自由命名必然产生被后端丢弃的值；自定义在这里没有合法出口。
 - 每模型编辑区收进 collapsible 折叠。它最强的理由是 5 模型 × (2 限额 + 6 能力 + 8 档位) 常驻的视觉密度。不用：折叠仍是二级操作；预设自动填正确后 chips 处于目标态，密度即信息本身。
-- 打包 pi-desktop 式 models.dev 全量快照（约 6.7MB、万余模型）。它最强的理由是零配置覆盖一切供应商。不用：仓库已有生成的 11 家 / 601 模型快照覆盖主流场景，全量打包引入体积与同步维护负担，本篇只需要档位 chips 的离散值。
+- 打包未裁剪的 models.dev 快照可以完整保留各类模型资料。档位 chips 只需要公开档位等有限字段，全量打包增加体积。生成快照的字段范围由[供应商配置减负](../feature/2026-11-16-provider-configuration-relief.md)持有。
 
 ## Consequences
 

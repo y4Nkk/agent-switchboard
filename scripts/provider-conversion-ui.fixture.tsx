@@ -15,7 +15,7 @@ import "../src/styles/base.css";
 
 const roles = { haiku: null, sonnet: null, opus: null, fable: null, subagent: null };
 const capabilities = { responses: true, compact: false, models: false, chatCompletions: false,
-  alphaSearch: false, imageGeneration: false, imageEdit: false, functionTools: false,
+  alphaSearch: false, imageGeneration: false, imageEdit: false, automaticOperations: [], functionTools: false,
   customTools: false, toolSearch: false, reasoning: false, chatReasoning: { kind: "unsupported" as const } };
 const catalogEntry = (id: string) => ({ id, contextWindow: 32768, maxOutputTokens: 2048,
   functionTools: false, customTools: false, toolSearch: false, reasoning: false,

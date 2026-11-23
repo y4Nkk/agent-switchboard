@@ -13,7 +13,7 @@ use super::{history, write_json_atomic, ConfigStore, PROFILE_PREIMAGE_FILE, SWIT
 use super::error::json_diagnostic;
 use asb_core::contracts::{
     AppKind, CodexProviderFile, ProviderConnectionOptions, ProviderFile, RouteMode,
-    SettingsValues, UpstreamProtocol,
+    SettingsValues, UpstreamProtocol, CODEX_PROVIDER_SCHEMA_VERSION,
 };
 use asb_core::endpoint::strip_anthropic_version_prefix;
 #[cfg(test)]
@@ -140,11 +140,8 @@ fn repair_file(root: &Path, path: &Path, kind: FileKind) -> Result<bool, String>
             changed |= asb_core::contracts::upgrade_claude_model_options(options)?;
         }
     }
-    if matches!(kind, FileKind::CodexProvider)
-        && value.pointer("/profile/routeMode").and_then(Value::as_str) == Some("direct")
-        && value.pointer("/profile/modelRoutes").and_then(Value::as_array).is_some_and(|routes| !routes.is_empty()) {
-        value["profile"]["routeMode"] = Value::String("gateway".into());
-        changed = true;
+    if matches!(kind, FileKind::CodexProvider) {
+        changed |= upgrade_codex_provider(&mut value).map_err(|error| format!("{label}：{error}"))?;
     }
     changed |= if provider {
         repair_provider_urls(kind, &mut value).map_err(|error| format!("{label}：{error}"))?
@@ -175,6 +172,22 @@ fn repair_file(root: &Path, path: &Path, kind: FileKind) -> Result<bool, String>
         write_json_atomic(path, &json)?;
     }
     Ok(changed)
+}
+
+fn upgrade_codex_provider(value: &mut Value) -> Result<bool, &'static str> {
+    if value.get("schemaVersion").and_then(Value::as_u64) != Some(1) {
+        return Ok(false);
+    }
+    let capabilities = value.pointer_mut("/profile/capabilities").and_then(Value::as_object_mut)
+        .ok_or("Codex 供应商档案缺少有效能力声明")?;
+    capabilities.entry("automaticOperations").or_insert_with(|| Value::Array(Vec::new()));
+    if value.pointer("/profile/routeMode").and_then(Value::as_str) == Some("direct")
+        && value.pointer("/profile/modelRoutes").and_then(Value::as_array).is_some_and(|routes| !routes.is_empty())
+    {
+        value["profile"]["routeMode"] = Value::String("gateway".into());
+    }
+    value["schemaVersion"] = Value::from(CODEX_PROVIDER_SCHEMA_VERSION);
+    Ok(true)
 }
 
 /// Repairs a terminal Anthropic version prefix using the endpoint owner's

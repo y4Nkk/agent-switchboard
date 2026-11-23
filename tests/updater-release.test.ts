@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { assertReleaseVersion, readReleaseNotes } from "../scripts/updater-release.mjs";
+import { fileURLToPath } from "node:url";
+import { assertReleaseVersion, readReleaseNotes, readUpdateAdvisories } from "../scripts/updater-release.mjs";
 
 async function withChangelog(content: string, check: (changelogFile: string) => Promise<void>) {
   const directory = await mkdtemp(path.join(tmpdir(), "asb-release-notes-"));
@@ -104,4 +105,85 @@ test("missing and duplicate local lock packages are rejected", async () => {
     await assert.rejects(assertReleaseVersion({ cargoManifest, tag: "v1.2.3", version: "1.2.3" }),
       /asb-core; found 2/);
   });
+});
+
+async function withCatalog(content: string, check: (catalogFile: string) => Promise<void>) {
+  const directory = await mkdtemp(path.join(tmpdir(), "asb-release-advisories-"));
+  try {
+    const catalogFile = path.join(directory, "update-advisories.json");
+    await writeFile(catalogFile, content, "utf8");
+    await check(catalogFile);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+const RECORD = JSON.stringify({
+  severity: "urgent",
+  affected_from: "0.3.10",
+  fixed_in: "0.3.13",
+  reason_zh: "切换可能损坏配置",
+  reason_en: "Switching may corrupt configuration",
+});
+
+test("valid advisory records pass through unchanged", async () => {
+  const record = JSON.parse(RECORD);
+  const records = [record, {
+    ...record,
+    affected_from: "18446744073709551614.0.0",
+    fixed_in: "18446744073709551615.0.0",
+  }];
+  await withCatalog(JSON.stringify(records), async (catalogFile) => {
+    assert.deepEqual(await readUpdateAdvisories(catalogFile), records);
+  });
+});
+
+test("the checked-in catalog is a valid advisory list", async () => {
+  const catalogFile = fileURLToPath(new URL("../release/update-advisories.json", import.meta.url));
+  assert.deepEqual(await readUpdateAdvisories(catalogFile), []);
+});
+
+test("advisory catalog rejects anything but strict cumulative records", async () => {
+  const cases: [string, RegExp][] = [
+    ["{", /valid JSON/],
+    ["{}", /must be an array/],
+    [`[${RECORD}, null]`, /must be an object/],
+    ['[["urgent","0.3.10","0.3.13","原因","reason"]]', /must be an object/],
+  ];
+  for (const [content, pattern] of cases) {
+    await withCatalog(content, async (catalogFile) => {
+      await assert.rejects(readUpdateAdvisories(catalogFile), pattern);
+    });
+  }
+});
+
+test("advisory records require the exact key set, known severity, ordered versions, and both reasons", async () => {
+  const mutate = (patch: Record<string, unknown>, remove: string[] = []) => {
+    const record = { ...JSON.parse(RECORD), ...patch };
+    for (const key of remove) delete record[key];
+    return JSON.stringify([record]);
+  };
+  const cases: [string, RegExp][] = [
+    [mutate({ extra: 1 }), /exactly the keys/],
+    [mutate({}, ["fixed_in"]), /exactly the keys/],
+    [mutate({ severity: "critical" }), /severity must be important or urgent/],
+    [mutate({ severity: { urgent: null } }), /severity must be important or urgent/],
+    [mutate({ affected_from: "0.3.13", fixed_in: "0.3.13" }), /lower than fixed_in/],
+    [mutate({ affected_from: "0.3.14", fixed_in: "0.3.13" }), /lower than fixed_in/],
+    [mutate({ affected_from: "0.3.10-beta.1" }), /plain X.Y.Z/],
+    [mutate({ fixed_in: "0.3.13+build" }), /plain X.Y.Z/],
+    [mutate({ affected_from: "0.03.10" }), /plain X.Y.Z/],
+    [mutate({ affected_from: ["0.3.10"] }), /plain X.Y.Z/],
+    [mutate({ fixed_in: "0.3.13\n" }), /plain X.Y.Z/],
+    [mutate({ fixed_in: "18446744073709551616.0.0" }), /plain X.Y.Z/],
+    [mutate({ fixed_in: "0.3" }), /plain X.Y.Z/],
+    [mutate({ reason_zh: " \u0085 " }), /non-empty zh-CN and en-US reasons/],
+    [mutate({ reason_en: "" }), /non-empty zh-CN and en-US reasons/],
+    [mutate({ reason_en: "\uD800" }), /valid Unicode/],
+  ];
+  for (const [content, pattern] of cases) {
+    await withCatalog(content, async (catalogFile) => {
+      await assert.rejects(readUpdateAdvisories(catalogFile), pattern);
+    });
+  }
 });

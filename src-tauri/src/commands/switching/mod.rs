@@ -25,6 +25,7 @@ pub(crate) use internal::switch_provider_internal;
 pub use profile_save::{ProfileSavePreparation, ProfileSaveSource};
 pub(crate) use profile_save::ProfileSavePreparations;
 pub(crate) use recovery::{ensure_profile_save_recovered, recover_pending_profile_save};
+pub(crate) use transaction::recovery_backup_id;
 
 use crate::commands::error::{
     blocking, observe, require_write_confirmation, state, store_error, CommandError,
@@ -380,6 +381,7 @@ pub async fn restore_backup(
     app: AppHandle,
     backup_id: String,
     confirm_write: bool,
+    transaction_only: bool,
 ) -> Result<RestoreOutcome, CommandError> {
     observe(RuntimeLogAction::BackupRestored, async move {
         require_write_confirmation(confirm_write, "恢复配置")?;
@@ -393,9 +395,23 @@ pub async fn restore_backup(
             let _write_gate = write_gate
                 .lock()
                 .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
-            if let Some(outcome) =
-                transaction::restore_pending_backup(&state, &gateway, &backup_id)?
+            let preparation = app.state::<crate::application_preparation::Preparation>();
+            preparation.require_ready()?;
+            let report = preparation.snapshot()?.report;
+            if !report.configuration_ready && report.recovery_backup_id.as_deref() != Some(backup_id.as_str()) {
+                return Err(transaction::transaction_backup_mismatch());
+            }
+            let transaction_only = transaction_only || !report.configuration_ready;
+            if let Some(mut outcome) =
+                transaction::restore_pending_backup(&state, &gateway, &backup_id, transaction_only)?
             {
+                if let Err(failure) = preparation.request_check() {
+                    outcome.warnings.push(asb_core::contracts::LocalizedMessage::new(
+                        "warnings.backup.preparationRecheckFailed",
+                        serde_json::json!({ "detail": failure.message }),
+                        format!("已恢复事务备份，但无法重新检查应用数据：{}", failure.message),
+                    ));
+                }
                 crate::tray::refresh(&app);
                 return Ok(outcome);
             }

@@ -70,7 +70,7 @@ impl CodexProviderRecord {
 impl CodexProviderFile {
     pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != CODEX_PROVIDER_SCHEMA_VERSION {
-            return Err("Codex 供应商档案版本不受支持，请重新创建档案".to_string());
+            return Err(format!("Codex 供应商档案只接受版本 {CODEX_PROVIDER_SCHEMA_VERSION}"));
         }
         if self.position == 0 {
             return Err("Codex 供应商排序位置必须大于零".to_string());

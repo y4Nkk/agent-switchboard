@@ -8,6 +8,14 @@
  * block below. See DESIGN.md for the shared visual contract.
  */
 
+@font-face {
+  font-family: "WenQuanYi Zen Hei";
+  src: url("../assets/fonts/wqy-zenhei.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   /* Core palette */
   --asb-ice: #f6f7fb;
@@ -69,10 +77,9 @@
   --asb-gradient-button-glow-hover: inset 0 0 16px 0 #ffffff,
     inset 0 0 14px 0 #80b4ff;
 
-  /* Typography. The user-selected interface font leads both text stacks; the
-     fallback here is the bundled default (see main.tsx @font-face imports).
-     useAppSettings overrides --asb-font-user at runtime. */
-  --asb-font-user: "Noto Sans SC";
+  /* applyAppAppearance overrides the bundled default when settings load. */
+  --asb-font-default: "WenQuanYi Zen Hei";
+  --asb-font-user: var(--asb-font-default);
   --asb-font-display: var(--asb-font-user), "Segoe UI Variable Display", "MiSans", system-ui,
     sans-serif;
   --asb-font-ui: var(--asb-font-user), "Segoe UI Variable", "MiSans", system-ui, sans-serif;

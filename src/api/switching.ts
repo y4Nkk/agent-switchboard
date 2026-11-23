@@ -142,8 +142,8 @@ export function listBackups(): Promise<BackupRecord[]> {
   return invoke<BackupRecord[]>("list_backups");
 }
 
-export function restoreBackup(backupId: string, confirmWrite: boolean): Promise<RestoreOutcome> {
-  return invoke<RestoreOutcome>("restore_backup", { backupId, confirmWrite });
+export function restoreBackup(backupId: string, confirmWrite: boolean, transactionOnly: boolean): Promise<RestoreOutcome> {
+  return invoke<RestoreOutcome>("restore_backup", { backupId, confirmWrite, transactionOnly });
 }
 
 export function undoLastSwitch(target: AppKind, confirmWrite: boolean): Promise<RestoreOutcome> {

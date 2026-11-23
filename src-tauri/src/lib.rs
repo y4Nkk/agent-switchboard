@@ -62,6 +62,8 @@ mod xai_auth;
 pub use commands::local_config_paths;
 use tauri::Manager;
 
+const LOGIN_LAUNCH_ARG: &str = "--asb-login-launch";
+
 /// Hardware acceleration is a WebView2 (Windows) creation-time concept; other
 /// platforms keep their webview engine defaults.
 #[cfg(windows)]
@@ -123,9 +125,7 @@ fn initialize_window_preferences(app: &tauri::AppHandle, local: &local_state::Lo
     app.manage(StartupHardwareAcceleration(enabled));
 }
 
-/// The main window is created hidden so startup owns its visibility in one
-/// place. It stays hidden only for an explicit start-minimized preference; a
-/// settings read failure also reveals it, keeping the recovery shell reachable.
+/// Shows the main window during startup or when preparation needs attention.
 pub(crate) fn reveal_main_window(app: &tauri::AppHandle) {
     use tauri::Manager;
     if let Some(window) = app.get_webview_window("main") {
@@ -142,12 +142,19 @@ pub fn run() {
     #[cfg(windows)]
     let startup_windows = app_paths::prepare_windows(&mut context);
 
+    let mut env = tauri::Env::default();
+    let launched_at_login = env.args_os.iter().skip(1).any(|arg| arg == LOGIN_LAUNCH_ARG);
+    // Tauri forwards its managed arguments on restart. The login marker belongs only to this launch.
+    env.args_os.retain(|arg| arg != LOGIN_LAUNCH_ARG);
     let command_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = crate::command_registry::handler!();
     tauri::Builder::default()
+        .manage(env)
         // Registered first so a duplicate launch exits during plugin init,
-        // before the gateway, tray, or any window state is created. The
-        // callback runs in the surviving instance and restores its window.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        // before the gateway, tray, or any window state is created.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().skip(1).any(|arg| arg == LOGIN_LAUNCH_ARG) {
+                return;
+            }
             if let Err(error) = tray::tray_open_main(app.clone()) {
                 log::warn!("重复启动已拦截，恢复主窗口失败: {error}");
             }
@@ -162,13 +169,13 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec![LOGIN_LAUNCH_ARG]),
         ))
         .setup(move |app| {
             #[cfg(windows)]
-            return start_application(app, &startup_windows);
+            return start_application(app, launched_at_login, &startup_windows);
             #[cfg(not(windows))]
-            start_application(app)
+            start_application(app, launched_at_login)
         })
         .on_window_event(handle_window_event)
         .invoke_handler(move |invoke| {
@@ -182,7 +189,7 @@ pub fn run() {
         .run(handle_run_event);
 }
 
-fn start_application(app: &mut tauri::App,
+fn start_application(app: &mut tauri::App, launched_at_login: bool,
     #[cfg(windows)] windows: &[tauri::utils::config::WindowConfig]) -> Result<(), Box<dyn std::error::Error>> {
     let local = local_state::LocalState::from_app(app.handle())
         .map_err(std::io::Error::other)?;
@@ -197,7 +204,10 @@ fn start_application(app: &mut tauri::App,
     initialize_window_preferences(app.handle(), &local);
     #[cfg(windows)]
     app_paths::build_windows(app.handle(), windows).map_err(std::io::Error::other)?;
-    if initial_settings.as_ref().is_none_or(|settings| !settings.start_minimized) {
+    let start_in_tray = launched_at_login && initial_settings.as_ref().is_some_and(|settings| {
+        settings.launch_at_login && settings.start_minimized
+    });
+    if !start_in_tray {
         reveal_main_window(app.handle());
     }
     #[cfg(debug_assertions)]
@@ -246,6 +256,13 @@ fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 }
 
 fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    #[cfg(target_os = "macos")]
+    if matches!(&event, tauri::RunEvent::Reopen { .. }) {
+        if let Err(error) = tray::tray_open_main(app.clone()) {
+            log::warn!("从 macOS 重新打开主窗口失败: {error}");
+        }
+        return;
+    }
     if matches!(&event, tauri::RunEvent::Exit) {
         if app.try_state::<application_preparation::Preparation>().is_some_and(|state| state.require_ready().is_ok()) {
             session_manager::history::flush_on_exit(app);

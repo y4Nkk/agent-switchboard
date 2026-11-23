@@ -1,6 +1,7 @@
 import type { CodexCapabilities, CodexChatReasoning, CodexReasoningLevel } from "../../api/client";
 import { catalogModel, providerPreset } from "../../lib/provider-catalog.ts";
 import type { CodexEditorDraft, EditableCodexCatalogEntry } from "./draft";
+import { AUTOMATIC_OPERATIONS } from "./operations.ts";
 
 export function catalogEntry(draft: CodexEditorDraft, id: string): EditableCodexCatalogEntry {
   const model = catalogModel(draft.endpoint, draft.upstream, id);
@@ -68,6 +69,7 @@ export function modelSource(draft: CodexEditorDraft, entry: EditableCodexCatalog
 export const emptyCapabilities = (): CodexCapabilities => ({
   responses: true, compact: false, models: false, chatCompletions: false,
   alphaSearch: false, imageGeneration: false, imageEdit: false,
+  automaticOperations: [...AUTOMATIC_OPERATIONS],
   functionTools: false, customTools: false, toolSearch: false, reasoning: false,
   chatReasoning: { kind: "unsupported" },
 });

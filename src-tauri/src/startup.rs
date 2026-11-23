@@ -67,16 +67,18 @@ fn start_background_services(app: &tauri::AppHandle, local: &LocalState) -> Resu
 }
 
 pub(crate) fn recover_configuration(app: &tauri::AppHandle, local: &LocalState)
-    -> Result<Vec<commands::error::CommandError>, String> {
+    -> Result<(Vec<commands::error::CommandError>, Option<String>), String> {
     let gate = app.state::<commands::ConfigWriteGate>();
     let _guard = gate.lock()?;
     let mut errors = Vec::new();
+    let mut recovery_backup_id = None;
     if let Err(error) = commands::switching::recover_pending_profile_save(app) {
         errors.push(commands::error::CommandError::new("profile-save-recovery-failed", error));
+        recovery_backup_id = commands::switching::recovery_backup_id(local);
     }
     if let Err(error) = commands::switching::codex_policy::recover_on_startup(local,
         app.state::<gateway::GatewayController>().inner()) {
         errors.push(commands::error::CommandError::new("codex-policy-recovery-failed", error));
     }
-    Ok(errors)
+    Ok((errors, recovery_backup_id))
 }

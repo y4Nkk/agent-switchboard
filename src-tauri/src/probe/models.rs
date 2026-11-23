@@ -1,9 +1,9 @@
 use crate::provider_diagnostics::{
     http_diagnostic, network_diagnostic, read_http_diagnostic, ProviderFailureKind,
 };
-use asb_core::contracts::UpstreamProtocol;
+use asb_core::contracts::{CodexProbedOperation, ProviderConnectionOptions, UpstreamProtocol};
 use serde::Serialize;
-use std::{io::Read, time::Duration};
+use std::{collections::BTreeSet, io::Read, time::Duration};
 
 /// One model from the provider's configured API root: the requestable
 /// id plus the optional `owned_by` vendor used to group the picker menu.
@@ -12,6 +12,13 @@ use std::{io::Read, time::Duration};
 pub struct ProviderModel {
     pub id: String,
     pub owned_by: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProviderModelDiscovery {
+    pub models: Vec<ProviderModel>,
+    pub confirmed_operations: Vec<CodexProbedOperation>,
 }
 
 pub(super) fn diagnostic_secrets(
@@ -30,12 +37,9 @@ pub(super) fn diagnostic_secrets(
     values
 }
 
-/// Fetches the model list beneath the same API root as model requests, with the exact
-/// selected authentication scheme. The profile API key travels only in
-/// the selected request header and is never logged or echoed in errors.
-/// Nothing is cached.
 const MAX_MODELS_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
 
+/// Lists models without checking auxiliary Codex routes.
 pub fn fetch_models(
     base_url: &str,
     api_key: &str,
@@ -43,8 +47,22 @@ pub fn fetch_models(
     authentication: Option<asb_core::AuthenticationScheme>,
     connection: &asb_core::contracts::ProviderConnectionOptions,
 ) -> Result<Vec<ProviderModel>, String> {
+    fetch_models_with_operations(base_url, api_key, protocol, authentication, connection, &BTreeSet::new())
+        .map(|result| result.models)
+}
+
+/// Fetches current model IDs and checks selected routes using the same connection.
+pub(crate) fn fetch_models_with_operations(
+    base_url: &str,
+    api_key: &str,
+    protocol: UpstreamProtocol,
+    authentication: Option<asb_core::AuthenticationScheme>,
+    connection: &ProviderConnectionOptions,
+    operations: &BTreeSet<CodexProbedOperation>,
+) -> Result<ProviderModelDiscovery, String> {
     if protocol == UpstreamProtocol::GeminiGenerateContent {
-        return super::claude_gemini::fetch(base_url, api_key, authentication, connection);
+        return super::claude_gemini::fetch(base_url, api_key, authentication, connection)
+            .map(|models| ProviderModelDiscovery { models, confirmed_operations: Vec::new() });
     }
     let url = asb_core::endpoint::models_endpoint_for_connection(base_url, protocol, connection)?;
     let client = crate::outbound_proxy::apply_blocking(reqwest::blocking::Client::builder()).map_err(|error| error.to_string())?
@@ -70,21 +88,35 @@ pub fn fetch_models(
         .build()
         .map_err(|_| "无法构造模型列表请求".to_string())?;
     crate::upstream_overrides::apply_header_overrides(request.headers_mut(), connection);
+    let discovery = (!operations.is_empty() && protocol != UpstreamProtocol::AnthropicMessages)
+        .then(|| (request.url().clone(), request.headers().clone()));
     let secrets = diagnostic_secrets(api_key, connection);
     let secret_refs = secrets.iter().map(String::as_str).collect::<Vec<_>>();
     let response = client
         .execute(request)
         .map_err(|error| network_diagnostic(&url, &error).summary())?;
+    let models = read_models_response(response, &url, &secret_refs)?;
+    let confirmed_operations = discovery.map_or_else(Vec::new, |(models_url, headers)| {
+        super::codex_operations::discover(&client, &headers, &models_url, base_url, connection.is_full_url, operations)
+    });
+    Ok(ProviderModelDiscovery { models, confirmed_operations })
+}
+
+fn read_models_response(
+    response: reqwest::blocking::Response,
+    url: &str,
+    secret_refs: &[&str],
+) -> Result<Vec<ProviderModel>, String> {
     if !response.status().is_success() {
-        return Err(read_http_diagnostic(response, &secret_refs).summary());
+        return Err(read_http_diagnostic(response, secret_refs).summary());
     }
     let mut diagnostic = http_diagnostic(
-        &url,
+        url,
         response.status().as_u16(),
         response.headers(),
         &[],
         false,
-        &secret_refs,
+        secret_refs,
     );
     diagnostic.kind = ProviderFailureKind::ResponseParse;
     diagnostic.message = "模型列表响应无法解析".to_string();
@@ -93,7 +125,7 @@ pub fn fetch_models(
         .take(MAX_MODELS_RESPONSE_BYTES + 1)
         .read_to_end(&mut body)
         .map_err(|error| {
-            let mut failure = network_diagnostic(&url, &error);
+            let mut failure = network_diagnostic(url, &error);
             failure.status = diagnostic.status;
             failure.request_id = diagnostic.request_id.clone();
             failure.summary()

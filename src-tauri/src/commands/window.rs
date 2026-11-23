@@ -7,7 +7,9 @@
 //! material theme stay native.
 
 use super::error::CommandError;
+use crate::desktop_shortcut::DesktopSettingsState;
 use crate::local_state::{AppSettings, ThemePreference};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
@@ -32,10 +34,13 @@ pub(crate) fn apply_desktop_settings(
     let registered = autostart
         .is_enabled()
         .map_err(|error| CommandError::new("launch-at-login-status-failed", error.to_string()))?;
-    if !registered && settings.launch_at_login {
+    // The plugin's status check does not verify the arguments of an existing entry.
+    let desktop = app.state::<DesktopSettingsState>();
+    if settings.launch_at_login && (!registered || !desktop.login_registration_refreshed.load(Ordering::Relaxed)) {
         autostart
             .enable()
             .map_err(|error| CommandError::new("launch-at-login-enable-failed", error.to_string()))?;
+        desktop.login_registration_refreshed.store(true, Ordering::Relaxed);
     } else if registered && !settings.launch_at_login {
         autostart
             .disable()

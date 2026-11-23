@@ -131,6 +131,9 @@ export type CodexChatReasoning =
     effortMode: "passthrough" | "lowHigh" | "deepSeek" | "openRouter" | "catalog";
   };
 
+export type CodexProbedOperation = "alphaSearch" | "imageGeneration" | "imageEdit";
+export type CodexAutomaticOperation = "models" | "chatCompletions" | CodexProbedOperation;
+
 export interface CodexCapabilities {
   responses: boolean;
   compact: boolean;
@@ -139,6 +142,7 @@ export interface CodexCapabilities {
   alphaSearch: boolean;
   imageGeneration: boolean;
   imageEdit: boolean;
+  automaticOperations: CodexAutomaticOperation[];
   functionTools: boolean;
   customTools: boolean;
   toolSearch: boolean;
@@ -397,21 +401,29 @@ export interface ProviderModel {
   id: string;
   ownedBy: string | null;
 }
+
+export interface ProviderModelDiscovery {
+  models: ProviderModel[];
+  confirmedOperations: CodexProbedOperation[];
+}
+
 /** Models from the provider's configured API root. */
 export function fetchProviderModels(
   app: AppKind,
   baseUrl: string,
   apiKey: string,
   upstreamProtocol: UpstreamProtocol,
+  probeOperations: readonly CodexProbedOperation[],
   authentication?: AuthenticationScheme | null,
   connection?: ProviderConnectionOptions | null,
-): Promise<ProviderModel[]> {
-  return invoke<ProviderModel[]>("fetch_provider_models", {
+): Promise<ProviderModelDiscovery> {
+  return invoke("fetch_provider_models", {
     request: {
       app,
       url: baseUrl,
       apiKey,
       upstreamProtocol,
+      probeOperations,
       ...(authentication ? { authentication } : {}),
       ...(connection ? { connection } : {}),
     },

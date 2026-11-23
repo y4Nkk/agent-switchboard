@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 mod routing;
 pub use routing::{CodexRouteMode, CodexUpstream};
-pub const CODEX_PROVIDER_SCHEMA_VERSION: u8 = 1;
+pub const CODEX_PROVIDER_SCHEMA_VERSION: u8 = 2;
 
 /// A validated Codex upstream API root. The value is never an operation URL;
 /// operation paths are appended only by the gateway endpoint resolver.
@@ -23,88 +23,11 @@ pub const XAI_OAUTH_PLACEHOLDER: &str = "xai_oauth_placeholder";
 /// never be sent elsewhere.
 pub const XAI_API_BASE_URL: &str = "https://api.x.ai/v1";
 
-/// The operations which may be exposed on the fixed local Codex endpoint.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CodexOperation {
-    Responses,
-    Compact,
-    Models,
-    ChatCompletions,
-    AlphaSearch,
-    ImageGeneration,
-    ImageEdit,
-}
+mod capabilities;
+pub use capabilities::*;
 
 mod reasoning;
 pub use reasoning::*;
-
-/// Capabilities declared by a provider. None is inferred from its name or a
-/// response from `/models`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CodexCapabilities {
-    pub responses: bool,
-    pub compact: bool,
-    pub models: bool,
-    pub chat_completions: bool,
-    pub alpha_search: bool,
-    pub image_generation: bool,
-    pub image_edit: bool,
-    pub function_tools: bool,
-    pub custom_tools: bool,
-    pub tool_search: bool,
-    pub reasoning: bool,
-    pub chat_reasoning: CodexChatReasoning,
-}
-
-/// The full reasoning ladder a generated catalog row declares when neither
-/// the source nor the user narrows it. The editor mirrors this order in
-/// `REASONING_LEVELS` (src/components/codex-provider-editor/draft.ts).
-pub const CODEX_REASONING_LADDER: [CodexReasoningLevel; 8] = [
-    CodexReasoningLevel::None,
-    CodexReasoningLevel::Minimal,
-    CodexReasoningLevel::Low,
-    CodexReasoningLevel::Medium,
-    CodexReasoningLevel::High,
-    CodexReasoningLevel::Xhigh,
-    CodexReasoningLevel::Max,
-    CodexReasoningLevel::Ultra,
-];
-
-impl CodexCapabilities {
-    pub const fn supports_operation(&self, operation: CodexOperation) -> bool {
-        match operation {
-            CodexOperation::Responses => self.responses,
-            CodexOperation::Compact => self.compact,
-            CodexOperation::Models => self.models,
-            CodexOperation::ChatCompletions => self.chat_completions,
-            CodexOperation::AlphaSearch => self.alpha_search,
-            CodexOperation::ImageGeneration => self.image_generation,
-            CodexOperation::ImageEdit => self.image_edit,
-        }
-    }
-}
-
-/// The capability declaration a generated provider starts from: the full
-/// Codex-compatible surface except the chat-completions-only extras. The
-/// editor mirrors this constant as its interactive default
-/// (`DEFAULT_CODEX_CAPABILITIES` in src/components/codex-provider-editor/draft.ts);
-/// this one owns what a one-click import persists.
-pub const DEFAULT_CODEX_CAPABILITIES: CodexCapabilities = CodexCapabilities {
-    responses: true,
-    compact: true,
-    models: true,
-    chat_completions: false,
-    alpha_search: false,
-    image_generation: false,
-    image_edit: false,
-    function_tools: true,
-    custom_tools: true,
-    tool_search: true,
-    reasoning: true,
-    chat_reasoning: CodexChatReasoning::Unsupported,
-};
 
 /// Official published model limits, cited per official model id (OpenAI model
 /// pages, 2026-09). A source-stated fact always wins; the editor mirrors this
@@ -543,6 +466,7 @@ impl CodexRouteSnapshot {
                 alpha_search: true,
                 image_generation: true,
                 image_edit: true,
+                automatic_operations: Default::default(),
                 function_tools: true,
                 custom_tools: true,
                 tool_search: true,
@@ -558,66 +482,4 @@ impl CodexRouteSnapshot {
 }
 
 #[cfg(test)]
-mod subagent_route_tests {
-    use super::CodexSubagentRoute;
-
-    fn route(profile_id: &str, model: &str) -> CodexSubagentRoute {
-        CodexSubagentRoute {
-            profile_id: profile_id.to_string(),
-            model: model.to_string(),
-        }
-    }
-
-    const UUID: &str = "01234567-89ab-cdef-0123-456789abcdef";
-
-    #[test]
-    fn wire_id_round_trips() {
-        let original = route(UUID, "gpt-5-codex");
-        let parsed = CodexSubagentRoute::parse_wire_id(&original.wire_id()).unwrap();
-        assert_eq!(parsed, original);
-        assert_eq!(
-            original.wire_id(),
-            "asb:01234567-89ab-cdef-0123-456789abcdef/gpt-5-codex"
-        );
-    }
-
-    #[test]
-    fn a_model_id_containing_slashes_survives_the_wire_spelling() {
-        let original = route(UUID, "meta-llama/Llama-4");
-        let parsed = CodexSubagentRoute::parse_wire_id(&original.wire_id()).unwrap();
-        assert_eq!(parsed, original);
-    }
-
-    #[test]
-    fn malformed_wire_spellings_are_rejected() {
-        for value in [
-            "gpt-5-codex",
-            "asb:",
-            "asb:gpt-5-codex",
-            "asb:/gpt-5-codex",
-            "asb:01234567-89ab-cdef-0123-456789abcdef/",
-        ] {
-            assert!(
-                CodexSubagentRoute::parse_wire_id(value).is_none(),
-                "{value} must not parse"
-            );
-        }
-    }
-
-    #[test]
-    fn canonical_profile_id_shape_is_checked() {
-        assert!(route(UUID, "m").has_canonical_profile_id());
-        for malformed in [
-            "01234567-89ab-cdef-0123-456789abcdeg",
-            "0123456789ab-cdef-0123-456789abcdef",
-            "01234567-89ab-cdef-0123-456789abcd",
-            "",
-        ] {
-            assert!(
-                !route(malformed, "m").has_canonical_profile_id(),
-                "{malformed} must not be canonical"
-            );
-        }
-    }
-}
-
+mod subagent_route_tests;

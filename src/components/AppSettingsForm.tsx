@@ -75,14 +75,21 @@ function WindowSettings({ settings, busy, onPatch }: Props) {
         <Switch label={t("settings.window.alwaysOnTop")} checked={settings.alwaysOnTop} disabled={busy}
           onChange={(alwaysOnTop) => void onPatch({ alwaysOnTop })} />
       </AppSettingRow>
-      <AppSettingRow label={t("settings.window.launchAtLogin")}>
-        <Switch label={t("settings.window.launchAtLogin")} checked={settings.launchAtLogin} disabled={busy}
-          onChange={(launchAtLogin) => void onPatch({ launchAtLogin })} />
-      </AppSettingRow>
-      <AppSettingRow label={t("settings.window.startMinimized")}>
-        <Switch label={t("settings.window.startMinimized")} checked={settings.startMinimized} disabled={busy}
-          onChange={(startMinimized) => void onPatch({ startMinimized })} />
-      </AppSettingRow>
+      <div>
+        <AppSettingRow label={t("settings.window.launchAtLogin")}>
+          <Switch label={t("settings.window.launchAtLogin")} checked={settings.launchAtLogin} disabled={busy}
+            onChange={(launchAtLogin) => void onPatch({ launchAtLogin })} />
+        </AppSettingRow>
+        {settings.launchAtLogin && <div className="asb-login-startup-mode">
+          <AppSegmentSetting<"main" | "tray"> label={t("settings.window.loginStartupMode")}
+            value={settings.startMinimized ? "tray" : "main"} busy={busy}
+            options={[
+              { value: "main", label: t("settings.window.loginStartupMode.showMain") },
+              { value: "tray", label: t("settings.window.loginStartupMode.hideToTray") },
+            ]}
+            onChange={(mode) => void onPatch({ startMinimized: mode === "tray" })} />
+        </div>}
+      </div>
       <AppPreviewSetting<AppSettings["startupPage"]> label={t("settings.window.startupPage")} detail={t("settings.window.startupPage.detail")}
         value={settings.startupPage} busy={busy}
         options={[
