@@ -88,7 +88,7 @@ pub(crate) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Ups
         );
         return;
     }
-    if codex_operation.is_none_or(CodexOperation::requires_json) && !json_content_type(&request) {
+    if !codex_operation.is_some_and(CodexOperation::is_model_list) && !json_content_type(&request) {
         span.finish(Some(415), 0);
         respond_error(
             request,
