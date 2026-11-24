@@ -24,28 +24,10 @@
   margin: var(--asb-space-3) 0 var(--asb-space-2);
 }
 
-.asb-provider-import {
-  display: grid;
-  gap: var(--asb-space-4);
-  /* The editor scroll surface gives this stack its full height; without an
-     explicit start, align-content's default stretch would share that leftover
-     across every auto row — inflating the source rail and shifting the page
-     whenever switching sources changes the row count. */
-  align-content: start;
-}
-
-/* The rail is a direct child of the gap-owning grid; the shared tab pill's
-   own below-margin would double the gap. */
-.asb-provider-import > .asb-tabs {
-  margin-bottom: 0;
-}
-
-/* Each source tabpanel re-owns the gap the import grid used to own directly:
-   the same stack of header + content rows, so nesting changes no spacing. */
 .asb-provider-import > [role="tabpanel"] {
   display: grid;
   gap: var(--asb-space-4);
-  align-content: start;
+  min-width: 0;
 }
 
 .asb-provider-import [role="tabpanel"] > .asb-module-header {

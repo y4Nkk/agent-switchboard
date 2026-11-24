@@ -17,6 +17,6 @@ pub use content::{
 };
 pub use definition::{validate_definition, validate_definition_draft};
 pub use error::ExtensionValidationError;
-pub use metadata::validate_mcp_metadata;
+pub use metadata::{mcp_registry_endpoint, validate_mcp_metadata, validate_mcp_registry_source};
 pub(crate) use naming::validate_mcp_definition;
 pub use naming::{validate_env_name, validate_server_key, validate_skill_name};

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { AppKind, KeyChange, SettingSpec, SettingValue } from "../api/client";
 import { useI18n } from "../i18n";
 import { catalogText } from "../i18n/errors";
@@ -12,7 +12,6 @@ import { SettingInput } from "./SettingInput";
 import { ScrollArea } from "./ScrollArea";
 import { settingDetail } from "./setting-detail";
 import { sameSettingValue } from "../lib/setting-values";
-import { ProviderParameterControl } from "./provider-editor/ProviderParameterControl";
 
 interface Props {
   specs: SettingSpec[];
@@ -49,6 +48,9 @@ export function choiceLabel(spec: SettingSpec, value: SettingValue, t: TFunction
     if (typeof fields === "object" && !Array.isArray(fields)) return t("clientConfig.settings.granularSummary", {
       enabled: Object.values(fields).filter((enabled) => enabled === true).length, total: spec.options.length,
     });
+  }
+  if (spec.control === "toggle" && value.mode === "explicit") {
+    return t(value.value === true ? "clientConfig.settings.on" : "clientConfig.settings.off");
   }
   return value.mode === "automatic"
     ? t("clientConfig.settings.automatic")
@@ -97,6 +99,7 @@ type ProviderParameterRowProps = Pick<ControlProps, "spec" | "value" | "baseline
 
 function SettingControl({ spec, value, busy, onChange }: SettingControlProps) {
   const { t } = useI18n();
+  const name = useId();
   if (spec.control !== "toggle" && spec.control !== "slider" && spec.control !== "segment") {
     return <SettingInput spec={spec} value={value} busy={busy} onChange={onChange} />;
   }
@@ -115,10 +118,10 @@ function SettingControl({ spec, value, busy, onChange }: SettingControlProps) {
     : spec.options;
   return (
     <div className="asb-segments" role="radiogroup" aria-label={catalogText(spec.label, t)}>
-      <RadioOption name={`${spec.key}-setting`} checked={value.mode === "automatic"} disabled={busy}
+      <RadioOption name={name} checked={value.mode === "automatic"} disabled={busy}
         label={t("clientConfig.settings.automatic")} onChange={() => onChange(automatic)} />
       {options.map((option) => (
-        <RadioOption key={String(option.value)} name={`${spec.key}-setting`}
+        <RadioOption key={String(option.value)} name={name}
           checked={value.mode === "explicit" && value.value === option.value}
           disabled={busy} label={catalogText(option.label, t)} onChange={() => onChange(explicit(option.value))} />
       ))}
@@ -272,7 +275,7 @@ function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: Pr
         <span className="asb-setting-actual" aria-live="polite">{t("clientConfig.settings.currentSetting", { value: choiceLabel(spec, baseline, t) })}</span>
       </div>
       <div className="asb-choice-controls">
-        <ProviderParameterControl spec={spec} value={value} busy={busy} onChange={onChange} />
+        <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
       </div>
       {changed && <p className="asb-setting-pending" role="status">{pendingSettingMessage(spec, value, false, t)}</p>}
     </div>
@@ -343,7 +346,7 @@ export function SettingsFields({
             </div>
             {group === "ownership.group.sandbox" && <p className="asb-field-help">{t("clientConfig.settings.sandboxPlatform")}</p>}
             {groupSpecs.map((spec) => (
-              <SettingsRow key={spec.key} spec={spec} value={values[spec.key]}
+              <SettingsRow key={spec.key} spec={spec} value={values[spec.key] ?? automatic}
                 baselineValue={baselineValues?.[spec.key]} actualValue={actualValues?.[spec.key]}
                 showActual={actualValues !== undefined} busy={busy} presentation={presentation}
                 clientApp={clientApp} onChange={(next) => onChange(spec.key, next)} />

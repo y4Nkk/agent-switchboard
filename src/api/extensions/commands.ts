@@ -68,11 +68,11 @@ export function resolveSkillSource(
 }
 
 export function importSkillCandidate(
-  digest: string,
+  candidateId: string,
   name: string,
   hostScoped: AppKind | null,
 ): Promise<ExtensionMutation> {
-  return invoke<ExtensionMutation>("import_skill_candidate", { digest, name, hostScoped });
+  return invoke<ExtensionMutation>("import_skill_candidate", { candidateId, name, hostScoped });
 }
 
 export function importDiscoveredSkill(observationId: string): Promise<ExtensionMutation> {
@@ -121,11 +121,12 @@ export function setBindingLock(bindingId: string, locked: boolean): Promise<void
   return invoke<void>("set_binding_lock", { bindingId, locked });
 }
 
-export function updateSkillDefinition(
+export function setSkillVersion(
   definitionId: string,
-  newDigest: string,
+  expectedRevision: number,
+  change: { kind: "upstream"; candidateId: string } | { kind: "restore"; digest: string },
 ): Promise<ExtensionMutation> {
-  return invoke<ExtensionMutation>("update_skill_definition", { definitionId, newDigest });
+  return invoke<ExtensionMutation>("set_skill_version", { definitionId, expectedRevision, change });
 }
 
 /** One file of a local skill's content version as loaded for the editor.

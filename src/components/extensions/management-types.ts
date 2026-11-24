@@ -6,6 +6,7 @@ import type {
   SkillUpdateReport,
 } from "../../api/client";
 import type { McpConnectionCheck } from "../../pages/extensions/useMcpConnectionCheck";
+import type { McpRegistryUpdateReport } from "../../api/extensions/registry";
 
 export interface ExtensionManagementProps {
   item: ExtensionListItem;
@@ -15,6 +16,7 @@ export interface ExtensionManagementProps {
   check: McpConnectionCheck;
   installTargets: string[];
   updateReport: SkillUpdateReport | null;
+  registryUpdate?: McpRegistryUpdateReport;
   projectNames: ReadonlyMap<string, string>;
   onInstallTargetsChange: (values: string[]) => void;
   onInstall: () => void;
@@ -24,6 +26,7 @@ export interface ExtensionManagementProps {
   onDelete: () => void;
   onCheckUpdates: () => void;
   onApplyUpdate: () => void;
+  onEditUpdateConfig: () => void;
   onDeployCurrent: () => void;
   onExportPortable?: () => void;
 }

@@ -18,10 +18,8 @@ export interface SkillUpdatePreparation {
   deployment: "required" | "notRequired" | "unverified";
 }
 
-/** Result of advancing a batch of skill definitions to new content
- * versions: the ids that advanced and the per-item failures. */
+/** Fresh library snapshot and per-item failures after applying Skill updates. */
 export interface SkillBatchAdvance {
-  advanced: string[];
   failed: Array<{ definitionId: string; error: unknown }>;
   workspace: ExtensionsWorkspace | null;
 }

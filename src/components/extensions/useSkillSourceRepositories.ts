@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   listSkillRepositories, removeSkillRepository, saveSkillRepository,
   type SkillRepository, type SkillRepositoryInput,
@@ -7,6 +7,7 @@ import { useSkillSourceRequests } from "./useSkillSourceRequests";
 
 export function useSkillSourceRepositories(busy: boolean, onChanged: (repos: SkillRepository[] | null) => void) {
   const requests = useSkillSourceRequests<SkillRepository[]>(false);
+  const [saving, setSaving] = useState(false);
   const reload = async () => {
     const repositories = await requests.run(() => listSkillRepositories());
     if (repositories) onChanged(repositories);
@@ -16,12 +17,19 @@ export function useSkillSourceRepositories(busy: boolean, onChanged: (repos: Ski
   const mutate = async (write: (previous: SkillRepository[]) => Promise<SkillRepository[]>) => {
     if (busy || !requests.result) return false;
     const previous = requests.result;
-    const repositories = await requests.run(() => write(previous));
+    const repositories = await requests.run(async () => {
+      setSaving(true);
+      try {
+        return await write(previous);
+      } finally {
+        setSaving(false);
+      }
+    });
     if (repositories) onChanged(repositories);
     return repositories !== null;
   };
   return {
-    items: requests.result ?? [], loading: requests.loading, error: requests.error,
+    items: requests.result ?? [], loading: requests.loading, saving, error: requests.error,
     ready: requests.result !== null, reload,
     save: (input: SkillRepositoryInput) => mutate(async (previous) => {
       const saved = await saveSkillRepository(input);

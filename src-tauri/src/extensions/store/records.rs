@@ -5,8 +5,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use asb_core::extensions::contracts::{
-    ExtensionBinding, ExtensionDefinition, ExtensionManifest, ManagedBaselineFile, McpCheckResult,
-    OperationSnapshot, ProjectRegistration, EXTENSIONS_SCHEMA_VERSION,
+    ExtensionBinding, ExtensionDefinition, ExtensionManifest, ExtensionPayload, ManagedBaselineFile,
+    McpCheckResult, OperationSnapshot, ProjectRegistration, EXTENSIONS_SCHEMA_VERSION,
 };
 use asb_core::extensions::validate::validate_definition;
 
@@ -171,13 +171,18 @@ impl ExtensionStore {
                 "扩展已被其他窗口修改；请刷新后重试".to_string(),
             ));
         }
-        if definition.revision != expected_revision.saturating_add(1) {
+        if expected_revision.checked_add(1) != Some(definition.revision) {
             return Err(ExtensionStoreError::Conflict(
                 "扩展修订号不连续；请重新生成编辑草稿".to_string(),
             ));
         }
+        let mut next = definition.clone();
+        let same_mcp_config = matches!(&next.payload, ExtensionPayload::Mcp(_))
+            && next.name == current.name
+            && next.payload == current.payload;
+        next.mcp_config_revision = same_mcp_config.then(|| current.mcp_config_revision());
         let manifest_before = self.manifest_state_locked()?;
-        self.write_json(&path, definition)?;
+        self.write_json(&path, &next)?;
         if let Err(error) = self.bump_generation_locked() {
             return self.metadata_failure(
                 "更新扩展定义",

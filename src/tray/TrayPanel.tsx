@@ -19,12 +19,13 @@ interface TrayGroupProps {
   loaded: boolean;
   busy: boolean;
   switchingId: string | null;
+  armedId: string | null;
   refreshingId: string | null;
   onSwitch: (providerId: string) => void;
   onRefreshUsage: (provider: TraySnapshot["providers"][number]) => void;
 }
 
-function TrayGroup({ app, providers, loaded, busy, switchingId, refreshingId, onSwitch, onRefreshUsage }: TrayGroupProps) {
+function TrayGroup({ app, providers, loaded, busy, switchingId, armedId, refreshingId, onSwitch, onRefreshUsage }: TrayGroupProps) {
   const label = app === "codex" ? "Codex" : "Claude Code";
   const { t } = useI18n();
   return (
@@ -37,6 +38,7 @@ function TrayGroup({ app, providers, loaded, busy, switchingId, refreshingId, on
           provider={provider}
           busy={busy}
           switchingId={switchingId}
+          armedId={armedId}
           refreshingId={refreshingId}
           onSwitch={() => onSwitch(provider.id)}
           onRefreshUsage={() => onRefreshUsage(provider)}
@@ -53,12 +55,13 @@ function TrayPanelContent({ snapshot, readError, initialized, refresh }: {
   refresh: () => Promise<void>;
 }) {
   const { t } = useI18n();
-  const { error: actionError, setError, pending, run, switchProvider, refreshUsage } = useTrayActions(refresh);
+  const { error: actionError, setError, pending, armedId, run, requestSwitch, refreshUsage } = useTrayActions(refresh);
   const panel = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const busy = pending !== null || snapshot?.switching === true;
   const error = actionError ?? readError ?? snapshot?.error ?? null;
   const providers = snapshot?.providers ?? [];
+  const armedProvider = providers.find((provider) => provider.id === armedId && !provider.active);
   const switchingId = pending?.kind === "switch" ? pending.providerId : null;
   const refreshingId = pending?.kind === "refresh" ? pending.providerId : null;
   useTrayPanelLayout(panel, list, initialized, error, setError);
@@ -69,6 +72,9 @@ function TrayPanelContent({ snapshot, readError, initialized, refresh }: {
         <AppLogo className="tray-app-logo" />
         <span className="tray-app-name">Agent Switchboard</span>
       </header>
+      <div role="status" className="tray-switch-announcement">
+        {armedProvider ? t("tray.provider.confirmSwitch", { name: armedProvider.name }) : null}
+      </div>
       {error && <div role="alert" className="tray-error">{error}
         <Button variant="secondary" disabled={busy} onClick={() => void run({ kind: "panel" }, refresh)}>{t("tray.retry")}</Button></div>}
       <div ref={list} className="tray-list">
@@ -82,8 +88,9 @@ function TrayPanelContent({ snapshot, readError, initialized, refresh }: {
               loaded={snapshot !== null}
               busy={busy}
               switchingId={switchingId}
+              armedId={armedProvider?.id ?? null}
               refreshingId={refreshingId}
-              onSwitch={switchProvider}
+              onSwitch={requestSwitch}
               onRefreshUsage={refreshUsage}
             />
           ))}

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { EditorFrame } from "../../components/EditorFrame";
+import { WorkspaceSubpage } from "../../components/WorkspaceSubpage";
 import {
   DiscoverPanel,
   DiscoveryImportBar,
@@ -16,9 +16,6 @@ interface Props {
   notice?: ReactNode;
 }
 
-/** Scanning existing extensions uses the shared full-page editor frame: search and
- * scan results scroll, while batch selection and the import commit stay in
- * the fixed bottom bar. */
 export function ExtensionDiscoveryView({ workspace: w, notice }: Props) {
   const { t } = useI18n();
   const kind = w.nav.kind === "mcp" ? "mcp" : "skill";
@@ -27,7 +24,8 @@ export function ExtensionDiscoveryView({ workspace: w, notice }: Props) {
   const view = useDiscoveryRows({ discovery: w.discovery, kindTab: kind, search, bindingInfo: w.bindingInfo });
   const selection = useDiscoverySelection(view.allRows, w.discovery.scanId, kind);
   return (
-    <EditorFrame
+    <WorkspaceSubpage
+      layout="fixed-actions"
       title={t("extensions.discovery.title")}
       backLabel={t("extensions.backToLibrary")}
       busy={w.busy}
@@ -60,6 +58,6 @@ export function ExtensionDiscoveryView({ workspace: w, notice }: Props) {
           onRepair={(ids) => void w.applies.repair(ids)}
         />
       </div>
-    </EditorFrame>
+    </WorkspaceSubpage>
   );
 }

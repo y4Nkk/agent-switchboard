@@ -6,11 +6,13 @@ import { parseClaudeExtraConfiguration } from "../api/client";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { EditableCodePreview } from "./EditableCodePreview";
+import type { ConfigurationEditState } from "./CurrentConfigurationEditor";
 
 interface Props {
   extra: Record<string, unknown> | undefined;
   busy: boolean;
   onChange: (extra: Record<string, unknown>) => void;
+  onEditStateChange: (state: ConfigurationEditState) => void;
 }
 
 function serialized(extra: Record<string, unknown> | undefined): string {
@@ -23,7 +25,7 @@ function leafCount(value: unknown): number {
   return entries.length === 0 ? 0 : entries.reduce<number>((total, child) => total + leafCount(child), 0);
 }
 
-export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props) {
+export function ClaudeExtraConfigurationEditor({ extra, busy, onChange, onEditStateChange }: Props) {
   const { t } = useI18n();
   const source = serialized(extra);
   const [editing, setEditing] = useState(false);
@@ -33,10 +35,12 @@ export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props)
   const [notice, setNotice] = useMessageState();
   const revision = useRef(0);
   const count = Object.values(extra ?? {}).reduce<number>((total, value) => total + leafCount(value), 0);
+  const dirty = editing && draft !== source;
 
   useEffect(() => {
     if (!editing) setDraft(source);
   }, [editing, source]);
+  useEffect(() => { onEditStateChange({ dirty, working: parsing }); }, [dirty, onEditStateChange, parsing]);
 
   const begin = () => {
     setDraft(source); setError(null); setNotice(null); setEditing(true);

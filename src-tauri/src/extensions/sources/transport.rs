@@ -15,7 +15,10 @@ pub fn http_fetch(url: &str) -> Result<(u16, Vec<u8>), String> {
         ("https", Some("skills.sh")) if parsed.path() == "/api/search" => {
             (MAX_DIRECTORY_DOWNLOAD, "skills.sh")
         }
-        _ => return Err("仅接受 GitHub 或 skills.sh 的 HTTPS 来源地址".into()),
+        ("https", Some("registry.modelcontextprotocol.io")) if parsed.path().starts_with("/v0.1/servers") => {
+            (MAX_DIRECTORY_DOWNLOAD, "MCP Registry")
+        }
+        _ => return Err("来源地址不在支持的 HTTPS 目录中".into()),
     };
     if !parsed.username().is_empty() || parsed.password().is_some() || parsed.port().is_some() {
         return Err("来源地址不能包含凭据或自定义端口".into());
@@ -29,7 +32,7 @@ pub fn http_fetch(url: &str) -> Result<(u16, Vec<u8>), String> {
             .build()
             .expect("static source HTTP configuration")
     }).map_err(|error| error.to_string())?;
-    let timeout = Duration::from_secs(if service == "skills.sh" { 10 } else { 45 });
+    let timeout = Duration::from_secs(if service == "GitHub" { 45 } else { 10 });
     let response = client
         .get(parsed)
         .timeout(timeout)
@@ -77,12 +80,15 @@ pub(crate) fn fetch_bytes(url: &str, limit: u64, fetch: HttpFetch) -> Result<Vec
             .collect::<String>();
         let service = if url.starts_with("https://skills.sh/") {
             "skills.sh"
+        } else if url.starts_with("https://registry.modelcontextprotocol.io/") {
+            "MCP Registry"
         } else {
             "GitHub"
         };
         let hint = match (service, status) {
             ("skills.sh", 403 | 429) => "；请稍后重试目录搜索",
             ("skills.sh", _) => "；请稍后重试或使用 GitHub 仓库来源",
+            ("MCP Registry", _) => "；请检查目录条目状态或稍后重试",
             (_, 403 | 429) => "；请检查 GitHub 访问限制或稍后重试",
             (_, 404) => "；请确认公开仓库、分支或提交存在",
             (_, 301 | 302 | 307 | 308) => "；仓库地址已迁移，请使用新的仓库地址",

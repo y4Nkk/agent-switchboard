@@ -1,8 +1,9 @@
-import { useId, type ReactNode } from "react";
+import { useId, type ReactNode, type RefCallback } from "react";
 import type { AppSettings } from "../api/client";
 import { AppLogo } from "../components/AppLogo";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
 import type { ApplicationUpdateControl } from "../app/update-state";
+import type { usePanelSlideTransition } from "../app/usePanelSlideTransition";
 import { useI18n } from "../i18n";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
@@ -15,7 +16,7 @@ import { PageErrorBoundary } from "../components/PageErrorBoundary";
 interface SettingsPageProps {
   active: boolean;
   section: SettingsSection;
-  onSectionChange: (section: SettingsSection) => void;
+  transition: ReturnType<typeof usePanelSlideTransition<SettingsSection>>;
   onReturnToProviders?: () => void;
   backups: ReactNode;
   clientManagement: ReactNode;
@@ -84,18 +85,21 @@ function AboutSettings(props: SettingsPageProps) {
   );
 }
 
-function SettingsPanel({ section, selected, active, id, labelledBy, title, children }: {
-  section: SettingsSection;
-  selected: SettingsSection;
+function SettingsPanel({ selected, leaving, active, panelRef, id, labelledBy, title, children }: {
+  selected: boolean;
+  leaving: boolean;
   active: boolean;
+  panelRef: RefCallback<HTMLElement>;
   id: string;
   labelledBy: string;
   title?: string;
   children: ReactNode;
 }) {
   return (
-    <section className={title ? "asb-panel" : undefined} id={id} role="tabpanel" aria-labelledby={labelledBy} hidden={selected !== section}>
-      <PageErrorBoundary active={active && selected === section}>
+    <section ref={panelRef} className={title ? "asb-panel" : undefined} id={id} role="tabpanel" aria-labelledby={labelledBy}
+      hidden={!selected && !leaving} inert={leaving || undefined} aria-hidden={leaving || undefined}
+      data-settings-panel-leaving={leaving || undefined}>
+      <PageErrorBoundary active={active && selected}>
         {title && <ModuleHeader title={title} />}
         {children}
       </PageErrorBoundary>
@@ -104,43 +108,36 @@ function SettingsPanel({ section, selected, active, id, labelledBy, title, child
 }
 
 export function SettingsPage(props: SettingsPageProps) {
-  const { section, onSectionChange } = props;
+  const { section, transition } = props;
   const { t } = useI18n();
   const id = useId();
+  const contents: Record<SettingsSection, ReactNode> = {
+    application: <ApplicationSettings {...props} />,
+    "client-management": props.clientManagement,
+    backups: props.backups,
+    storage: props.storage,
+    diagnostics: props.diagnostics,
+    about: <AboutSettings {...props} />,
+  };
   return (
     <section className="asb-page-stack asb-settings-content" aria-label={t("nav.page.settings")}>
       <WorkspaceHeader title={t("nav.page.settings")} primary={
-        <Tabs value={section} onChange={onSectionChange} scope={id} label={t("settings.page.categories.aria")}
+        <Tabs value={section} onChange={transition.select} scope={id} label={t("settings.page.categories.aria")}
           tabs={SETTINGS_SECTIONS.map((tab) => ({
             value: tab.value, label: t(tab.labelKey), controls: `${id}-${tab.value}-panel`,
           }))} />
       } primaryActions={props.onReturnToProviders ? (
         <Button variant="secondary" onClick={props.onReturnToProviders}>{t("settings.page.backToProviders")}</Button>
       ) : undefined} />
-      <SettingsPanel section="application" selected={section} active={props.active} title={t("nav.section.application")}
-        id={`${id}-application-panel`} labelledBy={`${id}-application-tab`}>
-        <ApplicationSettings {...props} />
-      </SettingsPanel>
-      <SettingsPanel section="client-management" selected={section} active={props.active}
-        id={`${id}-client-management-panel`} labelledBy={`${id}-client-management-tab`}>
-        {props.clientManagement}
-      </SettingsPanel>
-      <SettingsPanel section="backups" selected={section} active={props.active}
-        id={`${id}-backups-panel`} labelledBy={`${id}-backups-tab`}>
-        {props.backups}
-      </SettingsPanel>
-      <SettingsPanel section="storage" selected={section} active={props.active}
-        id={`${id}-storage-panel`} labelledBy={`${id}-storage-tab`}>
-        {props.storage}
-      </SettingsPanel>
-      <SettingsPanel section="diagnostics" selected={section} active={props.active}
-        id={`${id}-diagnostics-panel`} labelledBy={`${id}-diagnostics-tab`}>
-        {props.diagnostics}
-      </SettingsPanel>
-      <SettingsPanel section="about" selected={section} active={props.active} title={t("nav.section.about")}
-        id={`${id}-about-panel`} labelledBy={`${id}-about-tab`}>
-        <AboutSettings {...props} />
-      </SettingsPanel>
+      <div ref={transition.stageRef} className="asb-settings-panels">
+        {SETTINGS_SECTIONS.map(({ value, labelKey }) => (
+          <SettingsPanel key={value} selected={section === value} leaving={transition.leaving === value} active={props.active}
+            panelRef={transition.panelRefs[value]} id={`${id}-${value}-panel`} labelledBy={`${id}-${value}-tab`}
+            title={value === "application" || value === "about" ? t(labelKey) : undefined}>
+            {contents[value]}
+          </SettingsPanel>
+        ))}
+      </div>
     </section>
   );
 }

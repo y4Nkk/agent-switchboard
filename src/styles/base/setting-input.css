@@ -15,10 +15,13 @@
   margin-block: var(--asb-space-3);
 }
 
-.asb-setting-input-row > .asb-input,
-.asb-model-effort-name {
+.asb-setting-input-row > .asb-input {
   flex: 1 1 12rem;
   min-width: 0;
 }
 
-.asb-model-effort-name { overflow-wrap: anywhere; }
+/* The model name heads a column of preference rows: it only needs to wrap. */
+.asb-model-effort-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

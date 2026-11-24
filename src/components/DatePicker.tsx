@@ -2,12 +2,14 @@ import { createCalendar, isSameMonth, isToday, parseDate, type CalendarDate } fr
 import { useButton, useCalendar, useCalendarCell, useCalendarGrid, useFocusRing, I18nProvider,
   mergeProps, useLocale } from "react-aria";
 import { useCalendarState } from "react-stately";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { Dialog, Popover } from "react-aria-components";
 import { useI18n } from "../i18n";
 import { dateLabel } from "../lib/time";
+import { useDialogFieldPopup } from "./AppDialog";
 import { Button } from "./Button";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { OverlayMotionContext } from "./overlay-motion";
 
 interface Props {
   /** Selected calendar date as `YYYY-MM-DD`; empty = nothing chosen yet. */
@@ -29,26 +31,29 @@ interface Props {
  */
 export function DatePicker({ value, onChange, ariaLabel, disabled = false }: Props) {
   const { language, t } = useI18n();
+  const animate = useContext(OverlayMotionContext);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
+  const popup = useDialogFieldPopup(disabled);
+  const close = () => popup.onOpenChange(false);
   const selected = value ? parseDate(value) : null;
   return <I18nProvider locale={language}>
     <Button variant="unstyled" ref={triggerRef} className="asb-select-trigger asb-date-trigger"
-      aria-haspopup="dialog" aria-expanded={open} aria-label={ariaLabel} disabled={disabled}
-      onClick={() => setOpen(!open)}>
+      aria-haspopup="dialog" aria-expanded={popup.open} aria-label={ariaLabel} disabled={popup.disabled}
+      onClick={() => popup.onOpenChange(!popup.open)}>
       <span className="asb-date-value" data-placeholder={!selected || undefined}>
         {selected ? dateLabel(selected.toString()) : t("format.date.unset")}
       </span>
       <span className="asb-select-chevron" aria-hidden="true"><ChevronDownIcon /></span>
     </Button>
-    {open && <Popover triggerRef={triggerRef} isOpen onOpenChange={setOpen}
-      placement="bottom start" offset={4} className="asb-date-popover">
+    {popup.open && <Popover triggerRef={triggerRef} isOpen UNSTABLE_portalContainer={popup.container}
+      onOpenChange={popup.onOpenChange}
+      placement="bottom start" offset={4} className="asb-date-popover" data-overlay-motion={animate || undefined}>
       <Dialog aria-label={ariaLabel} className="asb-date-dialog">
         <CalendarSheet selected={selected} disabled={disabled} ariaLabel={ariaLabel}
-          onSelect={(date) => { onChange(date.toString()); setOpen(false); }} />
+          onSelect={(date) => { onChange(date.toString()); close(); }} />
         <div className="asb-date-actions">
           <Button variant="secondary" disabled={disabled || !selected}
-            onClick={() => { onChange(""); setOpen(false); }}>{t("format.date.clear")}</Button>
+            onClick={() => { onChange(""); close(); }}>{t("format.date.clear")}</Button>
         </div>
       </Dialog>
     </Popover>}

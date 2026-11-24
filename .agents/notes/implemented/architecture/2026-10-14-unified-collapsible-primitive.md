@@ -17,7 +17,9 @@ Status: implemented
 
 触发器契约：按钮声明 `aria-expanded`，仅在请求展开时声明 `aria-controls`，不引用已卸载的目标。`Collapsible` 从请求收起起立即设置 `inert`，保留挂载的退出动画不再使内容留在键盘导航和辅助技术中；显隐、卸载与可交互状态统一由原语拥有，页面不补第二套禁用逻辑。工具栏驱动的四区块经 `ariaLabel` prop 升级为带标签的 `role="region"`。
 
-已接入：供应商行测试/用量面板（Claude 与 Codex）、两行官方面板（重登录、订阅额度，此前为瞬切条件渲染）、供应商编辑器模型映射（Claude/Codex）与连接测试、客户端配置四区块与逐项代码证据、扩展能力表/安装目标/资源事实、MCP 元数据、发现警告列表、更新日志、候选文件预览、Codex 每日数据表、上游请求体、会话批量标签面板、[会话详情信息](../bug-fix/2026-09-24-session-operations-layout.md)、会话长消息"展开完整内容"（截断预览与分页阅读器经 `onClosed` 互斥换位：展开时预览立即让位、阅读器展开动画；收起时预览在动画结束、阅读器卸载后才回归，两形态绝不并存；展开集合仍由 `useSessionDetail` 持有，收藏页恒展开与目录跳转展开走同一条路）。已删除：`RowPanelDisclosure.tsx` 与 7 个 CSS 文件中的全部专属折叠块（行面板、编辑器 details、连接测试、客户端配置、扩展、MCP、更新日志、代码证据）；provider-editor 折叠引用与 `provider-editor-disclosures.css` 只保留非折叠布局。`DESIGN.md` 组件所有权节新增 Collapsible 条目。
+已接入：供应商行测试/用量面板（Claude 与 Codex）、两行官方面板（重登录、订阅额度，此前为瞬切条件渲染）、供应商编辑器模型映射（Claude/Codex）与连接测试、客户端配置四区块与逐项代码证据、扩展能力表/安装目标/资源事实、MCP 元数据、发现警告列表、更新日志、候选文件预览、Codex 每日数据表、上游请求体、[会话详情信息](../bug-fix/2026-09-24-session-operations-layout.md)、会话长消息"展开完整内容"（截断预览与分页阅读器经 `onClosed` 互斥换位：展开时预览立即让位、阅读器展开动画；收起时预览在动画结束、阅读器卸载后才回归，两形态绝不并存；展开集合仍由 `useSessionDetail` 持有，收藏页恒展开与目录跳转展开走同一条路）。已删除：`RowPanelDisclosure.tsx` 与 7 个 CSS 文件中的全部专属折叠块（行面板、编辑器 details、连接测试、客户端配置、扩展、MCP、更新日志、代码证据）；provider-editor 折叠引用与 `provider-editor-disclosures.css` 只保留非折叠布局。`DESIGN.md` 组件所有权节新增 Collapsible 条目。
+
+会话批量标签由[会话批量操作弹窗](../feature/2026-11-24-session-batch-dialog.md)接管，使用 AppDialog。
 
 资源占用表格的三款软件入口直接消费 `CollapsibleTrigger`，删除 `asb-resource-name` 及页面自行声明的按钮外观、尺寸选择和 aria 接线；主表、进程明细、分页继续复用已有 Table / Pagination / Collapsible。资源选择和两秒读取仍由资源阅读 hook 拥有，不改采样事实或展开状态保存范围。该模块原生边界继续由[资源监控笔记](2026-10-23-native-process-resource-monitor.md)拥有。
 

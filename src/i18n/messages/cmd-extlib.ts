@@ -16,7 +16,7 @@ export const messages = {
   "errors.extlib.updateCheckOnlySkill": ["更新检查只适用于 Skill", "Update checks apply only to Skills"],
   "errors.extlib.updateCheckNoSelection": ["更新检查没有选择任何 Skill", "No Skill was selected for the update check"],
   "errors.extlib.updateOnlySkill": ["更新只适用于 Skill", "Updates apply only to Skills"],
-  "errors.extlib.candidateExpiredPickHistory": ["候选内容已过期；请重新检查更新或从版本历史选择", "The candidate content expired; check for updates again or choose from the version history"],
+  "errors.extlib.updateCandidateExpired": ["更新候选已过期，请重新检查更新", "The update candidate expired. Check for updates again."],
   "errors.extlib.candidateExpiredRescan": ["候选内容已过期；请重新扫描来源", "The candidate content expired; scan the source again"],
   "errors.extlib.candidateSourceConflict": ["候选内容来自不同来源；未更新当前 Skill 的来源绑定", "The candidate content comes from a different source; the current Skill's source binding was not updated"],
   "errors.extlib.notSkillCannotFork": ["该扩展不是 Skill，无法创建本地副本", "This extension is not a Skill and cannot be forked locally"],

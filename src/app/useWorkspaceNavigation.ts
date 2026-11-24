@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getStartupPage, onExitRecovery, rememberWorkspacePage, type CommandError } from "../api/client";
 import type { DiagnosticSection, ExtensionSection, Page, ProviderView, SettingsSection, UsageSection } from "./navigation";
+import type { PageRootRequest } from "./page-root";
 
 export function useWorkspaceNavigation(settingsReady: boolean, settingsError: string | null, onError: (error: CommandError) => void) {
   const [page, setPageState] = useState<Page>("providers");
@@ -44,11 +45,18 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
   const [usageSection, setUsageSection] = useState<UsageSection>("consumption");
   const [settingsReturnToProviders, setSettingsReturnToProviders] = useState(false);
   const [backupRecoveryRequest, setBackupRecoveryRequest] = useState(0);
+  const [pageRoot, setPageRoot] = useState<PageRootRequest | null>(null);
   const setPage = useCallback((next: Page) => {
     userNavigated.current = true;
     setSettingsReturnToProviders(false);
     changePage(next);
   }, []);
+  /** Sidebar selection only: choosing the page already shown returns it to
+   * its first-level view. Programmatic setPage callers keep their meaning. */
+  const selectPage = useCallback((next: Page) => {
+    if (currentPage.current === next) setPageRoot({ page: next });
+    else setPage(next);
+  }, [setPage]);
   const openSettings = useCallback((section: SettingsSection, diagnostic?: DiagnosticSection) => {
     userNavigated.current = true;
     setSettingsReturnToProviders(page === "providers");
@@ -62,7 +70,7 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
     setPage("usage");
   }, [setPage]);
   useRecoveryNavigation({ setUsageSection, setSettingsSection, setPage, setBackupRecoveryRequest, onError });
-  return { page, pageVersion, setPage, navigationReady, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
+  return { page, pageVersion, setPage, selectPage, pageRoot, navigationReady, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
     extensionSection, setExtensionSection, usageSection, setUsageSection, settingsReturnToProviders,
     openSettings, returnToProviders, openQuota, backupRecoveryRequest };
 }

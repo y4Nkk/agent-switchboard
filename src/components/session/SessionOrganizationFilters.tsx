@@ -1,57 +1,63 @@
+import { useState } from "react";
 import { useI18n } from "../../i18n";
+import { AppDialog } from "../AppDialog";
+import { Checkbox } from "../Checkbox";
+import { Collapsible } from "../Collapsible";
 import { Select } from "../Select";
-import { DatePicker } from "../DatePicker";
+import { SessionDateFields } from "./SessionDateFields";
+import { sessionDatesInOrder, type SessionDates } from "./session-dates";
 import type { SessionSearch } from "./use-session-search";
-
-import { dateBoundary } from "./session-dates";
 
 function SessionTimeFilter({ search, disabled }: { search: SessionSearch; disabled: boolean }) {
   const { t } = useI18n();
-  const { range, from, to } = search.timeDraft;
-  const apply = (start: string, end: string) => {
-    if (!start || !end || start <= end) {
-      search.changeDates({ activeAfter: dateBoundary(start, false), activeBefore: dateBoundary(end, true) });
-    }
+  const { range, dates } = search.timeFilter;
+  const custom = range === "custom";
+  const [invalidDraft, setInvalidDraft] = useState<SessionDates | null>(null);
+  const options = [
+    { value: "all", label: t("sessions.time.all") },
+    { value: "7", label: t("sessions.time.week") },
+    { value: "30", label: t("sessions.time.month") },
+    { value: "custom", label: t("sessions.time.custom") },
+  ] as const;
+  const changeRange = (value: string) => {
+    const option = options.find((item) => item.value === value);
+    if (!option) return;
+    setInvalidDraft(null);
+    search.changeTime(option.value, dates);
   };
-  const change = (value: string) => {
-    search.setTimeDraft({ range: value, from: value === "all" ? "" : from, to: value === "all" ? "" : to });
-    if (value === "custom") {
-      apply(from, to);
-    } else search.changeDates({ activeAfter: value === "all" ? null
-      : new Date(Date.now() - Number(value) * 86400000).toISOString(), activeBefore: null });
+  const changeDates = (next: SessionDates) => {
+    if (!sessionDatesInOrder(next)) { setInvalidDraft(next); return; }
+    setInvalidDraft(null);
+    search.changeTime("custom", next);
   };
-  const update = (start: string, end: string) => {
-    search.setTimeDraft({ range, from: start, to: end });
-    apply(start, end);
-  };
-  return <>
-    <Select value={range} ariaLabel={t("sessions.time.range")} disabled={disabled} onChange={change} options={[
-      { value: "all", label: t("sessions.time.all") }, { value: "7", label: t("sessions.time.week") },
-      { value: "30", label: t("sessions.time.month") }, { value: "custom", label: t("sessions.time.custom") },
-    ]} />
-    {range === "custom" && <div className="asb-session-date-range">
-      <label>{t("sessions.time.from")}<DatePicker value={from} disabled={disabled}
-        ariaLabel={t("sessions.time.from")} onChange={(value) => update(value, to)} /></label>
-      <label>{t("sessions.time.to")}<DatePicker value={to} disabled={disabled}
-        ariaLabel={t("sessions.time.to")} onChange={(value) => update(from, value)} /></label>
-    </div>}
-  </>;
+  return <div>
+    <div className="asb-field">
+      <span>{t("sessions.time.range")}</span>
+      <Select value={range} ariaLabel={t("sessions.time.range")} disabled={disabled} onChange={changeRange} options={options} />
+    </div>
+    <Collapsible open={custom}>
+      <div className="asb-session-date-range">
+        <SessionDateFields dates={invalidDraft ?? dates} disabled={disabled || !custom} onChange={changeDates} />
+      </div>
+      {invalidDraft && <p className="asb-field-error" role="alert">{t("sessions.time.invalid")}</p>}
+    </Collapsible>
+  </div>;
 }
 
-export function SessionOrganizationFilters({ search, disabled }: { search: SessionSearch; disabled: boolean }) {
+export function SessionOrganizationFilters({ search, busy, onClose }: {
+  search: SessionSearch; busy: boolean; onClose: () => void;
+}) {
   const { t } = useI18n();
-  const { range, from, to } = search.timeDraft;
-  const invalid = range === "custom" && Boolean(from && to && from > to);
-  return <>
-    <SessionTimeFilter search={search} disabled={disabled} />
-    <Select value={search.tag === null ? "all" : `tag:${search.tag}`} ariaLabel={t("sessions.organize.tagFilter")}
-      disabled={disabled} onChange={(value) => search.changeTag(value === "all" ? null : value.slice(4))}
-      options={[{ value: "all", label: t("sessions.organize.allTags") },
-        ...[...new Set([...search.tags, ...(search.tag ? [search.tag] : [])])].map((tag) => ({ value: `tag:${tag}`, label: tag }))]} />
-    <label className="asb-session-pin-filter"><input type="checkbox" checked={search.pinnedOnly} disabled={disabled}
-      onChange={(event) => search.changePinned(event.target.checked)} />{t("sessions.organize.pinnedOnly")}</label>
-    {invalid && <p className="asb-field-error asb-session-filter-error" role="alert">
-      {t("sessions.time.invalid")}
-    </p>}
-  </>;
+  return <AppDialog title={t("sessions.search.filters")} busy={busy} onClose={onClose} narrow>
+    <SessionTimeFilter search={search} disabled={busy} />
+    <div className="asb-field">
+      <span>{t("sessions.organize.tags")}</span>
+      <Select value={search.tag === null ? "all" : `tag:${search.tag}`} ariaLabel={t("sessions.organize.tagFilter")}
+        disabled={busy} onChange={(value) => search.changeTag(value === "all" ? null : value.slice(4))}
+        options={[{ value: "all", label: t("sessions.organize.allTags") },
+          ...[...new Set([...search.tags, ...(search.tag ? [search.tag] : [])])].map((tag) => ({ value: `tag:${tag}`, label: tag }))]} />
+    </div>
+    <Checkbox label={t("sessions.organize.pinnedOnly")} checked={search.pinnedOnly} disabled={busy}
+      onChange={search.changePinned} />
+  </AppDialog>;
 }

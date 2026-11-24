@@ -72,7 +72,18 @@ pub(super) async fn dispatch(
         }
         "search_skill_directory" => command!(commands::extensions::search_skill_directory(
             argument(&request.args, "query")?,
-            argument::<Option<usize>>(&request.args, "offset")?,
+        )),
+        "search_mcp_registry" => command!(commands::extensions::search_mcp_registry(
+            argument(&request.args, "query")?,
+            argument(&request.args, "cursor")?,
+        )),
+        "check_mcp_registry_updates" => command!(commands::extensions::check_mcp_registry_updates(
+            app.clone(), argument(&request.args, "definitionIds")?,
+        )),
+        "apply_mcp_registry_update" => command!(commands::extensions::apply_mcp_registry_update(
+            app.clone(), argument(&request.args, "definitionId")?,
+            argument(&request.args, "expectedRevision")?, argument(&request.args, "source")?,
+            argument(&request.args, "action")?,
         )),
         "resolve_directory_skill" => {
             command!(commands::extensions::resolve_directory_skill(argument::<
@@ -88,7 +99,7 @@ pub(super) async fn dispatch(
         )?,)),
         "import_skill_candidate" => command!(commands::extensions::import_skill_candidate(
             app.clone(),
-            argument(&request.args, "digest")?,
+            argument(&request.args, "candidateId")?,
             argument(&request.args, "name")?,
             argument::<Option<AppKind>>(&request.args, "hostScoped")?,
         )),
@@ -125,10 +136,11 @@ pub(super) async fn dispatch(
             app.clone(),
             argument(&request.args, "definitionIds")?,
         )),
-        "update_skill_definition" => command!(commands::extensions::update_skill_definition(
+        "set_skill_version" => command!(commands::extensions::set_skill_version(
             app.clone(),
             argument(&request.args, "definitionId")?,
-            argument(&request.args, "newDigest")?,
+            argument(&request.args, "expectedRevision")?,
+            argument(&request.args, "change")?,
         )),
         "create_local_skill" => command!(commands::extensions::create_local_skill(
             app.clone(),

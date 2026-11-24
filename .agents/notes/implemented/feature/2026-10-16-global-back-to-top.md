@@ -10,7 +10,7 @@ Status: implemented
 
 ScrollArea 统一拥有固定定位边界、原生滚动视口及 BackToTop。按钮只呈现向上箭头，使用共享 Button、Tooltip、图标与双语名称；仅当前视口离开顶部时显示，点击保留横向位置并返回该视口顶部，焦点回到视口，减少动效时立即完成。BackToTop 读取真实 scrollTop，通过本地 scroll、ResizeObserver 及组件提交后的实际 overflow 更新显隐，不维护页面位置副本或全局目标注册表。滚动事件只更新一个显隐布尔值，卸载移除监听与观察器；手动滚到顶部时，若按钮仍有焦点，先交给视口再移除按钮。
 
-主工作区、EditorFrame、AppDialog、Table、扩展列表状态面、会话/收藏列表、详情、正文与大纲全部消费同一组件；配置文件预览、配置字段代码证据、请求回复、上游诊断正文和全局信息列表也通过原语接入。原有表格 horizontal / viewport 契约保持成立，横向模式不出现回顶按钮；窄窗口正文继续跟随详情滚动。菜单、输入框、纯横向代码块与侧栏不属于页面返回顶部入口。
+主工作区、[二级工作区](../architecture/2026-11-23-workspace-subpage-scrolling.md)、AppDialog、Table、扩展列表状态面、会话/收藏列表、详情、正文与大纲全部消费同一组件；配置文件预览、配置字段代码证据、请求回复、上游诊断正文和全局信息列表也通过原语接入。原有表格 horizontal / viewport 契约保持成立，横向模式不出现回顶按钮；窄窗口正文继续跟随详情滚动。菜单、输入框、纯横向代码块与侧栏不属于页面返回顶部入口。
 
 原有布局类留在固定外层，实际内容布局、overflow、gutter、scroll-padding、键盘停靠、阅读引用和 onScroll 指向内层 `.asb-scroll-viewport`；页头、底栏仍是滚动面的兄弟。原直接子级选择器同批更新，旧 overflow/gutter 不留在外层。useReadingScroll 从实际视口恢复和记录位置，取消恢复的手势监听覆盖整个 ScrollArea，包含作为视口兄弟的回顶按钮，避免回顶被延迟恢复覆盖。动效选择只读取现有 `--asb-motion-fast`，不建立第二套偏好。
 

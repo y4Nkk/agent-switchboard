@@ -10,6 +10,7 @@ mod mcp_view;
 mod source_view;
 pub use mcp_view::McpConnectionView;
 pub use source_view::SkillSourceViewDto;
+pub(super) use source_view::skill_source_view;
 
 use asb_core::contracts::AppKind;
 use asb_core::extensions::contracts::{
@@ -44,8 +45,7 @@ pub(super) fn pending_plans() -> &'static Mutex<BTreeMap<String, PendingPlan>> {
     PENDING_PLANS.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
-/// Skill candidates from the most recent scan, keyed by content digest.
-/// File bytes never travel to the frontend.
+/// Reviewed Skill candidates keyed by source and content identity.
 static CANDIDATES: OnceLock<Mutex<BTreeMap<String, SkillCandidate>>> = OnceLock::new();
 
 pub(super) fn candidates() -> &'static Mutex<BTreeMap<String, SkillCandidate>> {
@@ -273,6 +273,7 @@ pub(super) fn extension_list_item(
         created_at,
         updated_at,
         payload,
+        ..
     } = definition;
     match payload {
         ExtensionPayload::Skill(skill) => ExtensionListItemDto::Skill {

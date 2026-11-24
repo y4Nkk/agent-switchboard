@@ -2,7 +2,7 @@ import { useId } from "react";
 import type { ProviderConnectionOptions, UpstreamProtocol, UsageQuery } from "../api/client";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
-import { EditorFrame } from "./EditorFrame";
+import { WorkspaceSubpage } from "./WorkspaceSubpage";
 import { Tabs } from "./Tabs";
 import { Time } from "./Time";
 import { UsageIcon } from "./icons";
@@ -12,6 +12,7 @@ import { DeclarativeFields, RefreshInterval, ScriptFields } from "./usage-query/
 import { canRun, useUsageQueryDraft, useUsageQueryExecution } from "./usage-query/useUsageQueryEditor";
 
 export interface UsageQueryWorkspaceProps {
+  active: boolean;
   providerName: string;
   value: UsageQuery | null;
   apiKey: string;
@@ -30,9 +31,9 @@ export function UsageQueryWorkspace(props: UsageQueryWorkspaceProps) {
   const editor = useUsageQueryDraft(props.value, execution.clearResult);
   const { draft, kind } = editor;
   const disabled = props.busy || execution.querying || execution.saving;
-  const leave = useUnsavedChanges(editor.dirty, disabled);
+  const leave = useUnsavedChanges(editor.dirty, disabled, { guardPageRoot: props.active });
   const scope = useId();
-  return <EditorFrame className="asb-usage-editor" title={t("usage.query.title")} backLabel={t("usage.query.back")}
+  return <WorkspaceSubpage layout="fixed-actions" className="asb-usage-editor" title={t("usage.query.title")} backLabel={t("usage.query.back")}
     busy={disabled} onBack={() => leave.request(props.onClose)} primary={<>
       <p className="asb-usage-provider">{props.providerName.trim() || t("usage.query.unnamedProvider")}</p>
       <Tabs value={kind} onChange={editor.selectKind} scope={scope} label={t("usage.query.modeAria")}
@@ -63,5 +64,5 @@ export function UsageQueryWorkspace(props: UsageQueryWorkspaceProps) {
           <UsageReadingsTable readings={execution.summary.readings} ariaLabel={t("usage.query.readingsAria")} />
         </div></section>}
     </section>{leave.confirmation}
-  </EditorFrame>;
+  </WorkspaceSubpage>;
 }

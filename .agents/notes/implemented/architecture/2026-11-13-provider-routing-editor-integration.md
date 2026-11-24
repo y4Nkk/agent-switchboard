@@ -34,9 +34,7 @@ Status: implemented
 
 ### 视觉与资源
 
-网关页头、状态与已保存用途列表分层，活动档案与查看方案分开。用途行显示目标、模型、1M 和固定/跟随规则，操作复用已有 Button、Tabs、Select、FactList；窄内容区按命名容器查询重排，隐藏装饰，不挤正文。实际拓扑、请求遥测、端口与恢复仍由原运行模块拥有。
-
-内置生图工具生成透明的金属与冰玻璃交换节点装饰，落地 `src/assets/routing-hub.png`，提示词与用途记录在 `src/assets/routing-hub.prompt.md`。它无文字、状态灯或请求关系，仅作 alt 为空的装饰；不在图片内承载产品事实，不添加远程运行时依赖。
+网关页头、状态与已保存用途列表分层，活动档案与查看方案分开。用途行显示目标、模型、1M 和固定/跟随规则，操作复用已有 Button、Tabs、Select、FactList。窄内容区按命名容器查询重排并缩小装饰。实际拓扑、请求遥测、端口与恢复仍由原运行模块拥有，装饰的绘制与动效由[网关拓扑与总览](../feature/2026-10-12-gateway-spatial-topology.md)记录。
 
 ## Related decisions
 

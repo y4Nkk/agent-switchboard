@@ -17,6 +17,7 @@ import { useRuntimeLogs } from "./use-runtime-logs";
 
 interface DiagnosticsPageProps extends ConfigStatusPanelProps {
   active: boolean;
+  leaving: boolean;
   section: DiagnosticSection;
   onSectionChange: (section: DiagnosticSection) => void;
   onRefresh: () => void;
@@ -49,18 +50,18 @@ function LogControls({ logs, logLevel, onLogLevelChange, busy }: Pick<Diagnostic
 }
 
 export function DiagnosticsPage(props: DiagnosticsPageProps) {
-  const { active, section, onSectionChange, profiles, busy } = props;
+  const { active, leaving, section, onSectionChange, profiles, busy } = props;
   const { t } = useI18n();
   const visible = useWorkspaceVisible(active);
   const [visited, setVisited] = useState<DiagnosticSection[]>([]);
   useEffect(() => {
     if (active) setVisited((current) => current.includes(section) ? current : [...current, section]);
   }, [active, section]);
-  const opened = (target: DiagnosticSection) => visited.includes(target) || (active && section === target);
+  const opened = (target: DiagnosticSection) => visited.includes(target) || ((active || leaving) && section === target);
   const logsOpened = opened("logs");
-  const logs = useRuntimeLogs(visible && section === "logs");
+  const logs = useRuntimeLogs(visible && section === "logs", leaving);
   return (
-    <section className="asb-diagnostics" aria-label={t("backup.diagnostics.aria")} hidden={!active}>
+    <section className="asb-diagnostics" aria-label={t("backup.diagnostics.aria")}>
       {/* 设置内容区的子页：模块级 h3 标题独占第一行；第二行是分类页签与
       页签级动作，视图控制行只挂当前页签自己的控制项。 */}
       <ModuleHeader

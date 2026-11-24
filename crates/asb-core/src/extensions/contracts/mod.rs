@@ -13,7 +13,7 @@ mod operation;
 mod server;
 mod skill;
 
-pub use definition::{ExtensionBinding, ExtensionDefinition, ExtensionPayload, McpMetadata};
+pub use definition::{ExtensionBinding, ExtensionDefinition, ExtensionPayload, McpMetadata, McpRegistrySource};
 pub use managed::{BaselineKind, ManagedBaseline, ManagedBaselineFile, ManagedFileEntry};
 pub use manifest::{
     DesiredState, DocumentSyntax, ExtensionKind, ExtensionManifest, ExtensionTarget, SecretValue,

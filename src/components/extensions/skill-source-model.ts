@@ -3,7 +3,7 @@ import { tr } from "../../i18n/current";
 
 export interface SkillSourceActions {
   onScanLocal: (root: string) => Promise<SkillCandidateDto[] | null>;
-  onImport: (digest: string, name: string, host: AppKind | null) => Promise<ExtensionMutation | null>;
+  onImport: (candidateId: string, name: string, host: AppKind | null) => Promise<ExtensionMutation | null>;
   onPickDirectory: () => Promise<string | null>;
   onPickZip: () => Promise<string | null>;
 }
@@ -37,6 +37,15 @@ export function skillCandidateInstalled(candidate: SkillCandidateDto, items: Ext
       (!binding.lockedDigest || binding.lockedDigest === candidate.digest),
     ),
   ));
+}
+
+export function skillSourceHasOtherVersion(candidate: SkillCandidateDto, items: ExtensionListItem[]) {
+  const source = candidate.source;
+  if (!source?.repo) return false;
+  const repo = source.repo.toLowerCase();
+  return items.some((item) => item.kind === "skill" && item.contentDigest !== candidate.digest &&
+    item.source?.repo?.toLowerCase() === repo && item.source?.subpath === source.subpath &&
+    (item.source?.refName ?? null) === (source.refName ?? null));
 }
 
 export function sourceErrorMessage(error: unknown, fallback: string) {

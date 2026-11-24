@@ -17,7 +17,7 @@ export function levelLabel(level: RuntimeLogSeverity): string {
 export const RUNTIME_LOG_PAGE_SIZE = 20;
 
 
-function useLogSnapshot(enabled: boolean, filter: RuntimeLogFilter) {
+function useLogSnapshot(enabled: boolean, filter: RuntimeLogFilter, leaving: boolean) {
   const [snapshot, setSnapshot] = useState<{ filter: RuntimeLogFilter; read: RuntimeLogRead } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ filter: RuntimeLogFilter; problem: CommandError } | null>(null);
@@ -37,21 +37,24 @@ function useLogSnapshot(enabled: boolean, filter: RuntimeLogFilter) {
     finally { if (current === generation.current) setLoading(false); }
   }, [filter]);
   useEffect(() => {
-    setSnapshot(null);
-    if (enabled) void refresh(); else setLoading(false);
+    if (enabled || !leaving) {
+      setSnapshot(null);
+      if (enabled) void refresh();
+      else setLoading(false);
+    }
     return () => { generation.current += 1; };
-  }, [enabled, refresh]);
+  }, [enabled, leaving, refresh]);
   const read = snapshot?.filter === filter ? snapshot.read : null;
   return { entries: read?.entries ?? [], total: read?.total ?? 0, skipped: read?.skipped ?? 0,
     loading, error: error?.filter === filter ? error.problem : null, refresh };
 }
 
-export function useRuntimeLogs(enabled: boolean) {
+export function useRuntimeLogs(enabled: boolean, leaving: boolean) {
   const [filter, setFilter] = useState<RuntimeLogFilter>("all");
   const [page, setPage] = useState(1);
   const [openingFolder, setOpeningFolder] = useState(false);
   const [folderError, setFolderError] = useState<CommandError | null>(null);
-  const snapshot = useLogSnapshot(enabled, filter);
+  const snapshot = useLogSnapshot(enabled, filter, leaving);
   const openLogDirectory = useCallback(async () => {
     setOpeningFolder(true); setFolderError(null);
     try { await openRuntimeLogDir(); }

@@ -1,11 +1,18 @@
 import type { SecretValue } from "./types";
 
+export interface McpRegistrySource {
+  name: string;
+  version: string;
+  endpoint: string;
+}
+
 export interface McpMetadata {
   displayName?: string | null;
   description?: string | null;
   tags?: string[];
   homepage?: string | null;
   docs?: string | null;
+  registry?: McpRegistrySource | null;
 }
 
 export interface CodexServerOptions {

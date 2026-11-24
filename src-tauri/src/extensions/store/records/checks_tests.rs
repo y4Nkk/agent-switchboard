@@ -3,6 +3,7 @@ use asb_core::{contracts::AppKind, extensions::contracts::{ExtensionPayload, Ext
 
 fn definition() -> ExtensionDefinition {
     ExtensionDefinition {
+        mcp_config_revision: None,
         schema_version: EXTENSIONS_SCHEMA_VERSION, id: "fixture".into(), name: "fixture".into(), revision: 1,
         mcp_metadata: None, created_at: "2026-10-13T00:00:00Z".into(), updated_at: "2026-10-13T00:00:00Z".into(),
         payload: ExtensionPayload::Mcp(McpDefinition::Http {

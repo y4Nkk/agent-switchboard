@@ -17,8 +17,11 @@ use crate::commands::error::{blocking, state, CommandError};
 use crate::extensions::sources::{self};
 use crate::extensions::store::ExtensionStore;
 
-use super::sources::cache_candidates;
+use super::sources::{cache_candidates, candidate_id};
 use super::support::*;
+
+mod version;
+pub use version::SkillVersionChange;
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -42,12 +45,9 @@ pub struct SkillFileChange {
 #[serde(rename_all = "camelCase")]
 pub struct SkillUpdateReport {
     definition_id: String,
-    up_to_date: bool,
-    current_commit: Option<String>,
-    new_commit: Option<String>,
-    new_digest: Option<String>,
-    changed_files: Vec<SkillFileChange>,
-    error: Option<String>,
+    revision: u64,
+    #[serde(flatten)]
+    outcome: SkillUpdateOutcome,
 }
 
 /// File-level difference between the deployed content version and a fresh
@@ -72,7 +72,7 @@ fn skill_file_changes(
                 relative_path: (*path).to_string(),
                 action: SkillFileChangeAction::Added,
             }),
-            Some(existing) if existing.bytes != entry.bytes => {
+            Some(existing) if existing.bytes != entry.bytes || existing.mode != entry.mode => {
                 changes.push(SkillFileChange {
                     relative_path: (*path).to_string(),
                     action: SkillFileChangeAction::Modified,
@@ -92,12 +92,17 @@ fn skill_file_changes(
     changes
 }
 
-struct SkillUpdateOutcome {
-    up_to_date: bool,
-    current_commit: Option<String>,
-    new_commit: Option<String>,
-    new_digest: Option<String>,
-    changed_files: Vec<SkillFileChange>,
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "camelCase", rename_all_fields = "camelCase")]
+enum SkillUpdateOutcome {
+    Current,
+    Available {
+        candidate_id: String,
+        commit: String,
+        digest: String,
+        changed_files: Vec<SkillFileChange>,
+    },
+    Failed { message: String },
 }
 
 fn check_one_skill_update(
@@ -112,23 +117,11 @@ fn check_one_skill_update(
         ));
     };
     let Some(source) = &skill.source else {
-        return Ok(SkillUpdateOutcome {
-            up_to_date: true,
-            current_commit: None,
-            new_commit: None,
-            new_digest: None,
-            changed_files: Vec::new(),
-        });
+        return Ok(SkillUpdateOutcome::Current);
     };
     let identity = &source.source_id;
     if !identity.contains('/') || source.resolved_commit.is_none() {
-        return Ok(SkillUpdateOutcome {
-            up_to_date: true,
-            current_commit: source.resolved_commit.clone(),
-            new_commit: None,
-            new_digest: None,
-            changed_files: Vec::new(),
-        });
+        return Ok(SkillUpdateOutcome::Current);
     }
     let fetch: sources::HttpFetch = &sources::http_fetch;
     let commit = sources::resolve_github_commit(
@@ -137,35 +130,22 @@ fn check_one_skill_update(
         &fetch,
     )
     .map_err(source_error)?;
-    if commit == source.resolved_commit.clone().unwrap_or_default() {
-        return Ok(SkillUpdateOutcome {
-            up_to_date: true,
-            current_commit: source.resolved_commit.clone(),
-            new_commit: Some(commit),
-            new_digest: None,
-            changed_files: Vec::new(),
-        });
-    }
+    // A historical restore can retain the source commit while changing the bytes.
     let mut candidate = sources::fetch_github_subtree(identity, &commit, &source.subpath, &fetch)
         .map_err(source_error)?;
     candidate.ref_name = source.ref_name.clone();
-    let up_to_date = candidate.content_digest == skill.content_digest;
-    let changed_files = if up_to_date {
-        Vec::new()
-    } else {
-        let current = store
-            .load_skill_version(&definition.id, &skill.content_digest)
-            .map_err(store_error)?;
-        skill_file_changes(&current, &candidate.entries)
+    if candidate.content_digest == skill.content_digest {
+        return Ok(SkillUpdateOutcome::Current);
+    }
+    let current = store.load_skill_version(&definition.id, &skill.content_digest).map_err(store_error)?;
+    let outcome = SkillUpdateOutcome::Available {
+        candidate_id: candidate_id(&candidate),
+        commit,
+        digest: candidate.content_digest.clone(),
+        changed_files: skill_file_changes(&current, &candidate.entries),
     };
-    cache_candidates(vec![candidate.clone()])?;
-    Ok(SkillUpdateOutcome {
-        up_to_date,
-        current_commit: source.resolved_commit.clone(),
-        new_commit: Some(commit),
-        new_digest: Some(candidate.content_digest),
-        changed_files,
-    })
+    cache_candidates(vec![candidate]);
+    Ok(outcome)
 }
 
 /// Checks source freshness for one or more skills in order. Every entry
@@ -191,32 +171,15 @@ pub async fn check_skill_updates(
             let report = match store.get_definition(definition_id).map_err(store_error)? {
                 None => SkillUpdateReport {
                     definition_id: definition_id.clone(),
-                    up_to_date: true,
-                    current_commit: None,
-                    new_commit: None,
-                    new_digest: None,
-                    changed_files: Vec::new(),
-                    error: Some("扩展不存在或已被删除".to_string()),
+                    revision: 0,
+                    outcome: SkillUpdateOutcome::Failed { message: "扩展不存在或已被删除".into() },
                 },
-                Some(definition) => match check_one_skill_update(&store, &definition) {
-                    Ok(outcome) => SkillUpdateReport {
-                        definition_id: definition_id.clone(),
-                        up_to_date: outcome.up_to_date,
-                        current_commit: outcome.current_commit,
-                        new_commit: outcome.new_commit,
-                        new_digest: outcome.new_digest,
-                        changed_files: outcome.changed_files,
-                        error: None,
-                    },
-                    Err(error) => SkillUpdateReport {
-                        definition_id: definition_id.clone(),
-                        up_to_date: true,
-                        current_commit: None,
-                        new_commit: None,
-                        new_digest: None,
-                        changed_files: Vec::new(),
-                        error: Some(error.message),
-                    },
+                Some(definition) => SkillUpdateReport {
+                    definition_id: definition_id.clone(),
+                    revision: definition.revision,
+                    outcome: check_one_skill_update(&store, &definition).unwrap_or_else(|error| {
+                        SkillUpdateOutcome::Failed { message: error.message }
+                    }),
                 },
             };
             reports.push(report);
@@ -226,94 +189,18 @@ pub async fn check_skill_updates(
     .await
 }
 
-/// Updates a skill definition to a freshly cached content version. A digest
-/// that already exists in this definition's library history is accepted for
-/// version rollback without touching the recorded source commit.
+/// Applies a reviewed upstream candidate or restores a version from history.
 #[tauri::command]
-pub async fn update_skill_definition(
+pub async fn set_skill_version(
     app: AppHandle,
     definition_id: String,
-    new_digest: String,
+    expected_revision: u64,
+    change: SkillVersionChange,
 ) -> Result<ExtensionMutationDto, CommandError> {
     blocking(move || {
         let state = state(&app)?;
         let store = extension_store(&state);
-        let mut definition = store
-            .get_definition(&definition_id)
-            .map_err(store_error)?
-            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
-        // A stored version wins: rolling back to library history must not
-        // require a live source scan, and only fresh source candidates may
-        // advance the recorded commit. A present-but-corrupt version is a
-        // hard load error, never silently treated as an absent one.
-        let stored = if store
-            .skill_version_exists(&definition.id, &new_digest)
-            .map_err(store_error)?
-        {
-            Some(
-                store
-                    .load_skill_version(&definition.id, &new_digest)
-                    .map_err(store_error)?,
-            )
-        } else {
-            None
-        };
-        let candidate = if stored.is_some() {
-            None
-        } else {
-            Some(
-                candidates()
-                    .lock()
-                    .expect("candidates")
-                    .get(&new_digest)
-                    .cloned()
-                    .ok_or_else(|| {
-                        CommandError::keyed(
-                            "candidate-expired",
-                            "errors.extlib.candidateExpiredPickHistory",
-                            "候选内容已过期；请重新检查更新或从版本历史选择",
-                        )
-                    })?,
-            )
-        };
-        let entries = stored
-            .or_else(|| {
-                candidate
-                    .as_ref()
-                    .map(|candidate| candidate.entries.clone())
-            })
-            .expect("entries from one of the two sources");
-        let previous_revision = definition.revision;
-        let ExtensionPayload::Skill(skill) = &mut definition.payload else {
-            return Err(CommandError::keyed("extension-invalid", "errors.extlib.updateOnlySkill", "更新只适用于 Skill"));
-        };
-        if let (Some(source), Some(candidate)) = (&skill.source, &candidate) {
-            if source.source_id != candidate.source_identity
-                || source.subpath != candidate.subpath
-                || source.ref_name != candidate.ref_name
-            {
-                return Err(CommandError::keyed(
-                    "candidate-source-conflict",
-                    "errors.extlib.candidateSourceConflict",
-                    "候选内容来自不同来源；未更新当前 Skill 的来源绑定",
-                ));
-            }
-        }
-        store
-            .save_skill_version(&definition.id, &new_digest, &entries)
-            .map_err(store_error)?;
-        skill.content_digest = new_digest.clone();
-        if let (Some(source), Some(candidate)) = (&mut skill.source, &candidate) {
-            source.resolved_commit = candidate.resolved_commit.clone();
-        }
-        definition.revision += 1;
-        definition.updated_at = now();
-        validate_definition(&definition)
-            .map_err(|error| CommandError::new("extension-invalid", error.message))?;
-        store
-            .update_definition(&definition, previous_revision)
-            .map_err(store_error)?;
-        Ok(extension_mutation(&definition))
+        version::apply(&store, &definition_id, expected_revision, change)
     })
     .await
 }
@@ -384,6 +271,7 @@ pub async fn create_local_skill(
         let definition = ExtensionDefinition {
             schema_version: EXTENSIONS_SCHEMA_VERSION,
             mcp_metadata: None,
+            mcp_config_revision: None,
             id: new_id("ext"),
             name,
             revision: 1,
@@ -446,6 +334,7 @@ pub async fn fork_local_skill(
         let definition = ExtensionDefinition {
             schema_version: EXTENSIONS_SCHEMA_VERSION,
             mcp_metadata: None,
+            mcp_config_revision: None,
             id: new_id("ext"),
             name: source.name.clone(),
             revision: 1,

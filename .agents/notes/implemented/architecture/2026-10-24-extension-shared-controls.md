@@ -15,6 +15,7 @@ Status: implemented
 - `src/components/SearchInput.tsx` 与 `styles/base/search-input.css` 是搜索图标、输入内留白、清除按钮、Escape 清空和焦点归还的唯一组合，内部复用 Input 和 Button；扩展库、来源筛选与目录查询直接使用它。
 - `src/components/ActionMenu.tsx` 与 `styles/base/action-menu.css` 是更多菜单的唯一结构和样式，使用已有 react-aria-components 的 MenuTrigger / Pressable / Menu / Popover 行为并组合真实 Button。一次替换扩展、会话和收藏的三个消费者，删除两套旧 CSS；不新增依赖、不手写菜单键盘状态机。
 - 菜单项的鼠标悬停与键盘焦点分别消费 react-aria 的 data-hovered / data-focused 状态和全局行背景变量；禁用项不响应悬停高亮。不能用焦点状态推断指针悬停，因为库分别发布这两种输入状态。
+- ActionMenu 在省略可见标签时使用全局图标 Button 和 Tooltip，可访问名称由调用方提供。[会话客户端操作](../feature/2026-11-10-session-context-actions-and-native-delete.md)使用该入口，文字及图标入口共享相同的菜单行为。
 - 扫描警告复用 CollapsibleTrigger 的展开语义与按钮，移除局部摘要按钮、失效目标引用和无消费者文案。业务选择与异步写入仍由原有 hooks 和类型化入口拥有。
 - 删除没有源码消费者的旧来源浏览器、环境行和 MCP 固定操作栏样式。Table 行点击的指针规则移回 tables-backups.css，扩展样式不再持有全局表格规则；清除搜索的文案收敛到 common.clearSearch，不保留旧扩展键。
 

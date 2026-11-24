@@ -1,50 +1,89 @@
-import { useId, useRef } from "react";
+import { useState } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { Table } from "../Table";
-import { RouteInspector } from "../model-routing/RouteInspector";
-import { resetRouting, roleTarget, routeDescription, routeRoles, routeIssue, routeRecords, type RouteDocument, type RouteInventory, type RouteRole } from "../model-routing/model";
+import { Select } from "../Select";
+import { Switch } from "../Switch";
+import { ToggleChip } from "../ToggleChip";
+import { RouteCard } from "../model-routing/RouteCard";
+import { clearRoleRoute, resetRouting, roleRoute, roleSource, roleSources, routeCardState, routeRoles, setRoleModel,
+  setRoleOneM, setRoleSource, sourceKey, sourceModels, sourceName, type RouteDocument, type RouteInventory,
+  type RouteRole, type RouteSource } from "../model-routing/model";
 
-export function ProviderRoutingPanel({ document, inventory, role, onRole, onChange, busy }: {
-  document: RouteDocument; inventory: RouteInventory; role: RouteRole;
-  onRole: (role: RouteRole) => void; onChange: (document: RouteDocument) => void; busy: boolean;
-}) {
+interface Props {
+  document: RouteDocument;
+  inventory: RouteInventory;
+  onChange: (document: RouteDocument) => void;
+  busy: boolean;
+}
+
+function EditorPurpose({ document, inventory, role, busy, onChange }: Props & { role: RouteRole }) {
   const { t } = useI18n();
-  const id = useId();
-  const root = useRef<HTMLElement>(null);
-  const app = document.kind === "codex" ? "codex" : "claude";
-  const issue = routeIssue(document, inventory);
-  const select = (next: RouteRole) => {
-    onRole(next);
-    if (next === "main") root.current?.parentElement?.querySelector<HTMLInputElement>("[data-provider-model-entry]")?.focus();
+  const state = routeCardState(document, role, inventory);
+  const roleLabel = t(`modelRoutes.role.${role}`);
+  const route = roleRoute(document, role);
+  const [staged, setStaged] = useState<RouteSource | null>(null);
+  const offered = roleSources(document, inventory);
+  const current = roleSource(document, role);
+  // A target that stopped being eligible stays listed so the purpose can be moved off it.
+  const options = [...(current && !offered.some((item) => sourceKey(item) === sourceKey(current)) ? [current] : []), ...offered];
+  const stagedKey = staged ? sourceKey(staged) : null;
+  const source = current ?? options.find((item) => sourceKey(item) === stagedKey) ?? options[0] ?? null;
+  const models = source && offered.some((item) => sourceKey(item) === sourceKey(source)) ? sourceModels(document, source, inventory) : [];
+  const oneM = role === "main" ? state.oneM : document.kind === "profile" && route && "oneM" in route ? route.oneM : false;
+  const context = document.kind === "profile" && <span className="asb-purpose-card-option">
+    <span aria-hidden="true">1M</span>
+    <Switch label={`${roleLabel} · ${t("modelRoutes.oneM")}`} checked={oneM} disabled={busy || !(role === "main" ? state.model : route?.model)}
+      onChange={(next) => onChange(setRoleOneM(document, role, next))} />
+  </span>;
+  if (role === "main") return <RouteCard role={role} state={state}
+    fallback={t(document.kind === "codex" ? "providerSetup.chooseModel" : "modelRoutes.clientDefault")}>
+    <p className="asb-field-help">{t("modelRoutes.mainOwner", { name: document.draft.name })}</p>
+    {context}
+  </RouteCard>;
+  const pick = (key: string) => {
+    const next = options.find((item) => sourceKey(item) === key);
+    if (!next) return;
+    // An automatic purpose has nothing to move yet: the choice only stages which models the lane offers.
+    if (current) onChange(setRoleSource(document, role, next, inventory)); else setStaged(next);
   };
-  return <section ref={root} className="asb-editor-section asb-provider-routing" aria-label={t("providerEditor.section.models")}>
+  const label = (item: RouteSource) => item === "primary" ? t("modelRoutes.primaryModelMode")
+    : item.profileId === document.profileId ? t("providerEditor.selfTarget", { name: document.draft.name })
+    : sourceName(document, item, inventory) ?? t("modelRoutes.unresolved");
+  return <RouteCard role={role} state={state} fallback={t("modelRoutes.chooseTarget")}>
+    <div className="asb-purpose-card-controls">
+      {options.length > 1 && <label className="asb-purpose-card-source"><span>{t("providerSetup.source")}</span>
+        <Select value={source ? sourceKey(source) : null} ariaLabel={`${roleLabel} · ${t("providerSetup.source")}`} disabled={busy}
+          options={options.map((item) => ({ value: sourceKey(item), label: label(item) }))} onChange={pick} /></label>}
+      <div className="asb-chip-row" role="group" aria-label={t("modelRoutes.editNode", { role: roleLabel })}>
+        <ToggleChip pressed={!route} label={t(state.inherited ? "modelRoutes.inheritOpus" : "modelRoutes.automatic")} disabled={busy}
+          onClick={() => { if (route) onChange(clearRoleRoute(document, role)); }} />
+        {models.map((model) => <ToggleChip key={model} pressed={route?.model === model} label={model} disabled={busy}
+          onClick={() => { if (source && route?.model !== model) onChange(setRoleModel(document, role, source, model)); }} />)}
+      </div>
+      {!state.issue && !models.length && <p className="asb-field-help">{t("modelRoutes.chooseProviderFirst")}</p>}
+      {context}
+    </div>
+  </RouteCard>;
+}
+
+export function ProviderRoutingPanel({ document, inventory, onChange, busy }: Props) {
+  const { t } = useI18n();
+  const roles = routeRoles(document);
+  const relayed = roles.some((role) => {
+    const route = roleRoute(document, role);
+    return route !== null && (!("mode" in route) || route.mode === "provider");
+  });
+  return <section className="asb-editor-section asb-provider-routing" aria-label={t("providerEditor.section.models")}>
     <h3 className="asb-section-title">{t("providerEditor.routingTitle")}</h3>
     <p className="asb-field-help">{t("providerEditor.routingHelp")}</p>
-    <Table rows={routeRoles(document)} rowKey={(item) => item} ariaLabel={t("providerEditor.routingTitle")} columns={[
-      { key: "purpose", header: t("providerSetup.purpose"), render: (item) => t(`modelRoutes.role.${item}`) },
-      { key: "target", header: t("providerSetup.destination"), render: (item) => {
-        const target = roleTarget(document, item, inventory);
-        return target ? <span>{target.provider || t("modelRoutes.unresolved")} · {target.model
-          || t(document.kind === "codex" ? "providerSetup.chooseModel" : "modelRoutes.clientDefault")}</span> : t("modelRoutes.automatic");
-      } },
-      { key: "mode", header: t("providerSetup.source"), render: (item) => {
-        const description = routeDescription(document, item, inventory);
-        const inherited = document.kind === "profile" && item === "fable" && document.draft.modelOptions?.kind === "claude"
-          && !document.draft.modelOptions.routes.fable && document.draft.modelOptions.routes.opus;
-        return <span>{t(inherited ? "modelRoutes.inheritOpus" : !description.target ? "modelRoutes.automatic"
-          : description.mode === "provider" ? "modelRoutes.specify" : "modelRoutes.primaryModelMode")}{description.oneM ? " · 1M" : ""}</span>;
-      } },
-      { key: "edit", header: t("providerSetup.actions"), render: (item) => <Button variant="ghost" size="compact" disabled={busy}
-        aria-label={t("modelRoutes.editNode", { role: t(`modelRoutes.role.${item}`) })} aria-pressed={role === item} aria-controls={item === "main" ? undefined : id} onClick={() => select(item)}>{t("providerSetup.edit")}</Button> },
-    ]} />
-    <section className="asb-model-route-inspector" id={id} aria-labelledby={`${id}-title`}>
-      <h3 className="asb-section-title" id={`${id}-title`}>{t("modelRoutes.configureRole", { role: t(`modelRoutes.role.${role}`) })}</h3>
-      <div className="asb-model-route-fields"><RouteInspector document={document} role={role}
-        sources={routeRecords(inventory, app)} codex={inventory.codex} disabled={busy} onChange={onChange} /></div>
-    </section>
-    {issue && <p className="asb-warn-text" role="status">{t(issue)}</p>}
-    <div className="asb-model-route-actions"><Button variant="secondary" disabled={busy}
-      onClick={() => onChange(resetRouting(document))}>{t("providerEditor.resetPurposes")}</Button></div>
+    <ul className="asb-purpose-cards" data-app={document.kind === "codex" ? "codex" : "claude"}
+      aria-label={t("providerEditor.routingTitle")}>
+      {roles.map((role) => <EditorPurpose key={role} document={document} inventory={inventory} role={role}
+        busy={busy} onChange={onChange} />)}
+    </ul>
+    <div className="asb-model-route-actions">
+      {relayed && <p className="asb-field-help">{t("modelRoutes.subagentHelp")}</p>}
+      <Button variant="secondary" disabled={busy}
+        onClick={() => onChange(resetRouting(document))}>{t("providerEditor.resetPurposes")}</Button></div>
   </section>;
 }

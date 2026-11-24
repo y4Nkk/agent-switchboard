@@ -4,11 +4,13 @@ import type { SessionRangeAction, SessionRangePreview, SessionRangeProgress } fr
 import { useI18n } from "../../i18n";
 import { AppDialog } from "../AppDialog";
 import { Button } from "../Button";
-import { DatePicker } from "../DatePicker";
+import { Checkbox } from "../Checkbox";
 import { Pagination } from "../Pagination";
 import { Select } from "../Select";
 import { Time } from "../Time";
+import { SessionDateFields } from "./SessionDateFields";
 import { sessionTitle } from "./session-content";
+import type { SessionDates } from "./session-dates";
 import { useSessionRange, type SessionRangeState } from "./use-session-range";
 
 function RangeForm({ state, app, archived, scopeRef }: {
@@ -16,19 +18,23 @@ function RangeForm({ state, app, archived, scopeRef }: {
 }) {
   const { t } = useI18n();
   const locked = state.busy || state.preview !== null;
+  const options = [
+    { value: archived ? "unarchive" : "archive", label: t(archived ? "sessions.range.unarchive" : "sessions.range.archive") },
+    { value: "delete", label: t("sessions.delete.title") },
+  ] as const;
   return <>
     <p ref={scopeRef} tabIndex={-1} className="asb-scope-note">{t("sessions.range.scope", { client: app === "codex" ? "Codex" : app === "claude" ? "Claude" : t("clientConfig.filter.all"),
       state: t(archived ? "sessions.archive.title" : "sessions.list.heading") })}</p>
     <div className="asb-session-range-fields">
-      <label>{t("sessions.time.from")}<DatePicker value={state.dates.from} disabled={locked}
-        ariaLabel={t("sessions.time.from")} onChange={(from) => state.setDates({ ...state.dates, from })} /></label>
-      <label>{t("sessions.time.to")}<DatePicker value={state.dates.to} disabled={locked}
-        ariaLabel={t("sessions.time.to")} onChange={(to) => state.setDates({ ...state.dates, to })} /></label>
-      <label>{t("sessions.range.action")}<Select value={state.action} disabled={locked} ariaLabel={t("sessions.range.action")}
-        onChange={(value) => state.setAction(value as SessionRangeAction)} options={[
-          { value: archived ? "unarchive" : "archive", label: t(archived ? "sessions.range.unarchive" : "sessions.range.archive") },
-          { value: "delete", label: t("sessions.delete.title") },
-        ]} /></label>
+      <SessionDateFields dates={state.dates} disabled={locked} onChange={state.setDates} />
+      <div className="asb-field">
+        <span>{t("sessions.range.action")}</span>
+        <Select value={state.action} disabled={locked} ariaLabel={t("sessions.range.action")} options={options}
+          onChange={(value) => {
+            const option = options.find((item) => item.value === value);
+            if (option) state.setAction(option.value);
+          }} />
+      </div>
     </div>
     {!state.valid && <p className="asb-field-error" role="alert">{t("sessions.range.invalidDates")}</p>}
     <p className="asb-field-help">{t("sessions.range.datePolicy")}</p>
@@ -60,7 +66,7 @@ function RangeResults({ progress, action }: { progress: SessionRangeProgress; ac
   const [page, setPage] = useState(1);
   const failed = progress.outcomes.filter((item) => !item.completed || item.error);
   const completed = progress.outcomes.filter((item) => item.completed).length;
-  return <section aria-label={t("sessions.range.results")}>
+  return <section className="asb-session-range-results" aria-label={t("sessions.range.results")}>
     <p role="status">{t(progress.running ? "sessions.range.progress" : "sessions.range.done", {
       completed: progress.running ? progress.completed : completed, total: progress.total, failed: failed.length,
     })}</p>
@@ -77,7 +83,7 @@ function RangeResults({ progress, action }: { progress: SessionRangeProgress; ac
 }
 
 export function SessionRangeDialog({ app, archived, dates, onClose, onChanged }: {
-  app: AppKind | null; archived: boolean; dates: { from: string; to: string }; onClose: () => void; onChanged: () => void;
+  app: AppKind | null; archived: boolean; dates: SessionDates; onClose: () => void; onChanged: () => void;
 }) {
   const { t } = useI18n();
   const state = useSessionRange(app, archived, dates, onChanged, onClose);
@@ -98,9 +104,9 @@ export function SessionRangeDialog({ app, archived, dates, onClose, onChanged }:
     <RangeForm state={state} app={app} archived={archived} scopeRef={scope} />
     {state.error && <p className="asb-warn-text" role="alert">{state.error}</p>}
     {state.preview && !state.progress && <RangePreview key={state.preview.id} preview={state.preview} />}
-    {state.preview && state.stage !== "execute" && <label className="asb-session-range-confirm"><input type="checkbox"
-      checked={state.confirmed} disabled={state.busy} onChange={(event) => state.setConfirmed(event.target.checked)} />
-      {t(state.action === "delete" ? "sessions.range.confirmDelete" : "sessions.range.confirmArchive")}</label>}
+    {state.preview && state.stage !== "execute" && <Checkbox
+      checked={state.confirmed} disabled={state.busy} onChange={state.setConfirmed}
+      label={t(state.action === "delete" ? "sessions.range.confirmDelete" : "sessions.range.confirmArchive")} />}
     {state.progress && <RangeResults progress={{ ...state.progress, running: state.stage === "execute" }} action={state.resultAction} />}
   </AppDialog>;
 }

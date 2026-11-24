@@ -1,9 +1,9 @@
-import { LoaderCircle, Plus, RefreshCw } from "lucide-react";
-import type { ReactNode } from "react";
+import { Plus, RefreshCw } from "lucide-react";
+import { useEffect, useRef } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { EditorFrame } from "../EditorFrame";
+import { ScrollArea } from "../ScrollArea";
 import { SearchInput } from "../SearchInput";
 import { Select } from "../Select";
 import { SearchIcon } from "../icons";
@@ -18,12 +18,7 @@ import { useSkillSource, type SkillSourceActions, type SkillSourceState } from "
 
 interface Props extends SkillSourceActions {
   busy: boolean;
-  active: boolean;
-  retain: boolean;
   items: ExtensionListItem[];
-  onBack: () => void;
-  /** Persistent failure notice rendered at the top of the scroll body. */
-  notice?: ReactNode;
 }
 
 function SourceFilters({ state }: { state: SkillSourceState }) {
@@ -99,7 +94,7 @@ function SourceErrors({ state, busy }: { state: SkillSourceState; busy: boolean 
     {state.imports.error && <p className="asb-warn-text" role="alert">{state.imports.error}</p>}
     {state.source === "directory" && state.directory.resolveError &&
       <p className="asb-warn-text" role="alert">{state.directory.resolveError}</p>}
-    {!state.managerOpen && state.repositories.error && <div className="asb-skill-source-error" role="alert">
+    {state.source === "catalog" && state.repositories.error && <div className="asb-skill-source-error" role="alert">
       <span>{state.repositories.error}</span>
       <Button variant="secondary" disabled={disabled || state.repositories.loading}
         onClick={() => void state.repositories.reload()}><RefreshCw size={16} />{t("extensions.repo.retryLoad")}</Button>
@@ -122,40 +117,34 @@ function SourceErrors({ state, busy }: { state: SkillSourceState; busy: boolean 
   </>;
 }
 
-/** Finding new skills uses the shared full-page editor frame; the scan
- * action lives in the fixed bottom bar and submits the source form via its id. */
 export function SkillSourceBrowser(props: Props) {
   const { t } = useI18n();
   const state = useSkillSource(props);
-  const scanning = state.source === "directory" ? state.directory.searching : state.loading;
-  const scanDisabled = props.busy || state.loading || state.imports.busy || (state.source === "catalog" &&
-    (!state.repositories.ready || state.repositories.loading || !state.repositories.items.some((repo) => repo.enabled)));
-  const scanLabel = scanning ? (state.source === "directory" ? t("extensions.sources.searching") : t("extensions.sources.scanning"))
-    : state.source === "catalog" ? t("extensions.sources.refreshRepos")
-      : state.source === "directory" ? t("extensions.sources.search") : state.source === "zip" ? t("extensions.sources.scanZip") : t("extensions.sources.scanSource");
+  const results = useRef<HTMLDivElement>(null);
+  const manager = useRef<HTMLDivElement>(null);
+  const wasManaging = useRef(false);
+  useEffect(() => {
+    if (wasManaging.current !== state.managerOpen) {
+      (state.managerOpen ? manager : results).current?.focus({ preventScroll: true });
+      wasManaging.current = state.managerOpen;
+    }
+  }, [state.managerOpen]);
   return (
-    <EditorFrame
-      title={t("extensions.sources.title")}
-      backLabel={t("extensions.backToLibrary")}
-      busy={props.busy}
-      onBack={props.onBack}
-      footer={
-        <Button type="submit" form="skill-source-scan" variant="primary" disabled={scanDisabled}>
-          {scanning ? <LoaderCircle size={16} className="asb-skill-source-spinner" />
-            : state.source === "catalog" ? <RefreshCw size={16} /> : <SearchIcon />}
-          {scanLabel}
-        </Button>
-      }
-    >
-      {props.notice}
-      <div className="asb-skill-source-browser">
-        <SkillSourceForm state={state} busy={props.busy} />
-        {state.managerOpen ? <SkillRepositoryManager state={state} busy={props.busy} /> : <>
+    <div className="asb-ext-market">
+      {!state.managerOpen && <SkillSourceForm state={state} busy={props.busy} />}
+      <ScrollArea className="asb-ext-market-results" role="region" aria-label={t("extensions.registry.marketSkill")}
+        viewportRef={results} tabIndex={0} hidden={state.managerOpen}>
+        <div className="asb-skill-source-browser">
           <SourceErrors state={state} busy={props.busy} />
           {state.source === "directory" ? <SkillDirectoryResults state={state} busy={props.busy} items={props.items} /> :
             <SourceResults state={state} busy={props.busy} />}
-        </>}
-      </div>
-    </EditorFrame>
+        </div>
+      </ScrollArea>
+      {state.managerOpen &&
+        <ScrollArea className="asb-ext-market-results" role="region" aria-label={t("extensions.repo.title")}
+          viewportRef={manager} tabIndex={0}>
+          <SkillRepositoryManager state={state} busy={props.busy} />
+        </ScrollArea>}
+    </div>
   );
 }

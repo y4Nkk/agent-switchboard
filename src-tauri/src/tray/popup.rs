@@ -7,7 +7,8 @@ use super::position::{place, Bounds};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{
-    AppHandle, Manager, PhysicalPosition, PhysicalSize, Rect, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Rect, WebviewWindow,
+    WebviewWindowBuilder,
 };
 
 pub const LABEL: &str = "tray";
@@ -358,6 +359,9 @@ pub fn resize(app: &AppHandle, height: f64) -> Result<(), String> {
 pub fn hide(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LABEL) {
         window.hide().map_err(|error| error.to_string())?;
+        if let Err(error) = app.emit_to(LABEL, "tray-hidden", ()) {
+            log::warn!("通知托盘窗口清除切换确认失败: {error}");
+        }
     }
     let generation = with_state(app, |state| {
         state.lifecycle.visible = false;

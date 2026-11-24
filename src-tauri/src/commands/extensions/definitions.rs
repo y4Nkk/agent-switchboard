@@ -31,7 +31,7 @@ pub struct ExtensionDraft {
 }
 
 /// Creates one library definition. Editing an existing definition has its
-/// own typed paths (`update_mcp_definition`, `update_skill_definition`);
+/// own typed paths (`update_mcp_definition`, `set_skill_version`);
 /// there is deliberately no whole-payload update.
 #[tauri::command]
 pub async fn save_extension(
@@ -52,12 +52,18 @@ fn save_definition(
 ) -> Result<ExtensionMutationDto, CommandError> {
     validate_definition_draft(&draft.name, &draft.payload)
         .map_err(|error| CommandError::new("extension-invalid", error.message))?;
+    if let Some(source) = draft.mcp_metadata.as_ref().and_then(|metadata| metadata.registry.as_ref()) {
+        if !matches!(&draft.payload, ExtensionPayload::Mcp(asb_core::extensions::contracts::McpDefinition::Http { url, .. }) if url == &source.endpoint) {
+            return Err(CommandError::new("extension-invalid", "MCP 配置与目录端点不一致"));
+        }
+    }
     let definition = ExtensionDefinition {
         schema_version: EXTENSIONS_SCHEMA_VERSION,
         id: new_id("ext"),
         name: draft.name,
         mcp_metadata: draft.mcp_metadata,
         revision: 1,
+        mcp_config_revision: None,
         created_at: now(),
         updated_at: now(),
         payload: draft.payload,

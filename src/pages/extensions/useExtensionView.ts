@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ExtensionKind, ExtensionListItem, McpEditViewEnvelope } from "../../api/client";
+import type { McpRegistrySource } from "../../api/extensions/mcp";
+import type { McpRegistryEntry, McpRegistryUpdate } from "../../api/extensions/registry";
 import type { ExtensionSection } from "../../app/navigation";
 
 export type ExtensionDialogView =
   | { type: "management" | "skillEditor"; definitionId: string }
   | { type: "mcpEditor"; envelope: McpEditViewEnvelope }
+  | { type: "newMcp"; registryEntry?: McpRegistryEntry & { source: McpRegistrySource } }
+  | { type: "mcpRegistryUpdate"; report: McpRegistryUpdate }
   | { type: "remove" | "export"; item: ExtensionListItem }
-  | { type: "newMcp" | "newSkill" | "portableImport" | "project" | "history" };
+  | { type: "newSkill" | "portableImport" | "project" | "history" };
 
 export interface ExtensionNavigation {
   section: ExtensionSection;
@@ -14,29 +18,33 @@ export interface ExtensionNavigation {
 }
 
 export function useExtensionView({ section, onSectionChange }: ExtensionNavigation) {
-  const [search, setSearch] = useState("");
-  const [sourceBrowser, setSourceBrowser] = useState(false);
+  const [searches, setSearches] = useState<Record<ExtensionSection, string>>({ skill: "", mcp: "" });
+  const [view, changeView] = useState<"library" | "market">("library");
+  const marketButton = useRef<HTMLButtonElement>(null);
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
   const [dialog, setDialog] = useState<ExtensionDialogView | null>(null);
+  const setSearch = (search: string) => setSearches((current) => ({ ...current, [section]: search }));
   const openManagement = (id: string, nextKind: ExtensionKind) => {
-    if (!sourceBrowser && !discoveryOpen) onSectionChange(nextKind);
+    if (view === "library" && !discoveryOpen) onSectionChange(nextKind);
     setDialog({ type: "management", definitionId: id });
   };
   const openSkillEditor = (id: string) => {
-    if (!sourceBrowser && !discoveryOpen) onSectionChange("skill");
+    if (view === "library" && !discoveryOpen) onSectionChange("skill");
     setDialog({ type: "skillEditor", definitionId: id });
-  };
-  const changeSection = (nextSection: ExtensionSection) => {
-    onSectionChange(nextSection);
   };
   return {
     section,
     kind: section,
-    changeSection,
-    search,
+    changeSection: onSectionChange,
+    search: searches[section],
     setSearch,
-    sourceBrowser,
-    setSourceBrowser,
+    view,
+    changeView,
+    marketButton,
+    openMarket: () => {
+      changeView("market");
+      marketButton.current?.focus();
+    },
     discoveryOpen,
     setDiscoveryOpen,
     dialog,

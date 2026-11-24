@@ -8,10 +8,10 @@ Status: implemented
 
 ## Decision
 
-- `buttons.css` 拥有危险文字变体的全部几何：`asb-btn-danger-text` 在 ghost 几何上叠加危险色文字、`--asb-diff-remove-bg` 悬停底、以及 `:not(:first-child)::before` 的发丝分隔线（行首不显示）。`Button` 的 VARIANT_CLASS 沿用 dangerIcon 的「基础变体 + 修饰类」模式：`dangerText = "asb-btn-ghost asb-btn-danger-text"`。三张表（Codex 目录、Claude 目录、Codex 映射）的删除一律 dangerText。
+- `buttons.css` 拥有危险文字变体的全部几何：`asb-btn-danger-text` 在 ghost 几何上叠加危险色文字、`--asb-diff-remove-bg` 悬停底、以及 `:not(:first-child)::before` 的发丝分隔线（行首不显示）。`Button` 的 VARIANT_CLASS 沿用 dangerIcon 的「基础变体 + 修饰类」模式：`dangerText = "asb-btn-ghost asb-btn-danger-text"`。Codex 与 Claude 模型卡片和 Codex 名称映射的删除使用 `dangerText`。
 - ghost 增加 `calc(space-unit + space-hairline)`（6px）横向内边距作为悬停呼吸；文字原位靠内边距实现，不用负外边距。折叠触发行是唯一的 flex-start 拉伸 ghost，由 `collapsible.css` 在触发器上 `padding-inline: 0` 保持贴边原几何，折叠行视觉零变化。
-- `providerSetup.actions`（「操作」）是动作列表头的唯一键；`modelRoutes.edit` 删除，四个消费方（Codex 目录、Codex 映射、Claude 目录、路由面板）全部换用。
-- `asb-provider-primary-pill`（provider-editor-sections.css 拥有）是「主模型」状态的唯一表达：Codex 动作列与 Claude 主模型列共用同一胶囊（行选中蓝底、行动蓝混色文字、全圆角），该行不再渲染禁用的「用作主模型」按钮，Codex 模型列下的小字「主模型」删除。主模型仍只有一个编辑位置。
+- `providerSetup.actions`（「操作」）由 Codex 名称映射作为列头。
+- `asb-provider-primary-pill`（provider-editor-sections.css 拥有）标记主模型。两端模型卡片头部共用胶囊，使用各客户端的强调色。其他卡片提供「用作主模型」按钮。模型目录拥有主模型编辑。
 - 运行参数行的模式 caption 只在显式模式下显示「自定义」；自动模式的来源事实由值本身（「客户端默认」）承载，DESIGN.md 运行参数行条款（名称、保存含义、当前值、来源、修改入口）不受影响。
 - DESIGN.md `Button` 条款同步：dangerText 语义、ghost 呼吸、折叠行例外。
 
@@ -26,6 +26,6 @@ Status: implemented
 
 ## Consequences
 
-- 收益：删除的危险性从「猜」变成「看得见」（危险色 + 分隔 + 红染悬停）；列头语义正确且四表一致；主模型表达在两个编辑器收敛为一种；自动模式行少一行冗余文案；ghost 悬停不再贴字。
+- 收益：删除的危险性从「猜」变成「看得见」（危险色 + 分隔 + 红染悬停）；名称映射的列头标明操作；主模型表达在两个编辑器收敛为一种；自动模式行少一行冗余文案；ghost 悬停不再贴字。
 - 代价：ghost 文字全局右移 6px；删除仍然无确认——危险只是可见了，不是被拦截了；dangerText 的分隔线依赖 DOM 顺序（`:first-child`），调用方若把危险动作放在动作组首位，分隔会静默消失，这是有意的行为而非缺陷。
 - 验证缺口：无既有测试断言这些文案或类名（rg 全量检索确认），本次不新增测试；样式效果待应用内目验。

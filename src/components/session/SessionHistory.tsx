@@ -3,7 +3,6 @@ import { useI18n } from "../../i18n";
 import { SessionDetail } from "./SessionDetail";
 import { ScrollArea } from "../ScrollArea";
 import { SessionSearchList } from "./SessionSearchList";
-import { SessionSelectionToolbar } from "./SessionSelectionToolbar";
 import { sessionKey } from "./session-content";
 import type { SessionSearch } from "./use-session-search";
 import type { SessionDetailState } from "./use-session-detail";
@@ -18,18 +17,13 @@ export function SessionHistory({ search, detail, bookmarks, organization, deleti
 }) {
   const { t } = useI18n();
   const busy = deletion.busy || organization.busy;
-  return <>
-    {deletion.selecting && <SessionSelectionToolbar search={search} selection={deletion} organization={organization} disabled={busy} />}
-    <div className="asb-session-layout">
-      <SessionSearchList search={search} selected={detail.selected} selecting={deletion.selecting}
-        chosen={deletion.chosen} disabled={busy} onToggle={deletion.toggle}
-        onToggleMode={deletion.toggleMode}
-        onSelect={(hit) => onOpen(hit.session, hit.messageId, hit.contentOffset)} />
-      {detail.selected ? <SessionDetail key={sessionKey(detail.selected)} detail={detail} session={detail.selected}
-        bookmarks={bookmarks} organization={organization} deleting={busy} onDelete={(session) => deletion.setPending([session])} />
-        : <ScrollArea as="section" className="asb-session-detail asb-session-empty-detail" aria-label={t("sessions.detail.aria")}>
-          <p>{t("sessions.detail.empty")}</p>
-        </ScrollArea>}
-    </div>
-  </>;
+  return <div className="asb-session-layout">
+    <SessionSearchList search={search} selected={detail.selected} disabled={busy}
+      onSelect={(hit) => onOpen(hit.session, hit.messageId, hit.contentOffset)} />
+    {detail.selected ? <SessionDetail key={sessionKey(detail.selected)} detail={detail} session={detail.selected}
+      bookmarks={bookmarks} organization={organization} deleting={busy} onDelete={(session) => deletion.setPending([session])} />
+      : <ScrollArea as="section" className="asb-session-detail asb-session-empty-detail" aria-label={t("sessions.detail.aria")}>
+        <p>{t("sessions.detail.empty")}</p>
+      </ScrollArea>}
+  </div>;
 }

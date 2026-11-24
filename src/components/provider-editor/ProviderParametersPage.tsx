@@ -45,7 +45,7 @@ export function ProviderParametersPage({ value, onChange, parameters, busy, base
   const change = (key: string, next: SettingValue) =>
     onChange({ settings: { ...value.settings, [key]: next } });
   return (
-    <div className="asb-form asb-provider-parameters" aria-label={t("providers.parameters.aria")}>
+    <div className="asb-provider-parameters" aria-label={t("providers.parameters.aria")}>
       <p className="asb-field-help">{t("providers.parameters.help")}</p>
       <SettingsFields specs={catalog.specs} groups={catalog.groups} values={value.settings}
         baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />

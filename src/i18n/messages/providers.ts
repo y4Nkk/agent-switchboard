@@ -243,7 +243,6 @@ export const messages = {
   "providers.editor.primaryOneMAria": ["主模型启用 1M 上下文", "Enable 1M context for the main model"],
   "providers.editor.fetchingModels": ["正在获取模型", "Fetching models"],
   "providers.editor.userConfigModel": ["当前用户级配置模型：{model}", "Current user-level configuration model: {model}"],
-  "providers.editor.availableModels": ["可选模型列表（每行一个）", "Available models (one per line)"],
 
   // Editor: Responses capabilities.
   "providers.editor.responses.title": ["Responses 能力", "Responses capabilities"],

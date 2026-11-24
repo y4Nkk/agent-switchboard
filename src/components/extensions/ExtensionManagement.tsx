@@ -10,8 +10,9 @@ import { CapabilityPanel } from "./CapabilityPanel";
 import { ExtensionBindings, ExtensionInstallTargets } from "./ExtensionBindings";
 import { ExtensionCheckPanel } from "./ExtensionCheckPanel";
 import { ExtensionResourceFacts } from "./ExtensionResourceFacts";
+import { SkillSourceLink } from "./SkillSourceCandidate";
 import type { ExtensionManagementProps } from "./management-types";
-import { SKILL_CHANGE_LABELS } from "./labels";
+import { SKILL_CHANGE_LABELS, TRANSPORT_LABELS } from "./labels";
 
 function ManagementAction({ label, disabled, danger = false, onClick, children }: {
   label: string;
@@ -41,7 +42,7 @@ function ManagementActions(props: ExtensionManagementProps) {
   const { item, busy } = props;
   return (
     <div className="asb-ext-management-actions" role="group" aria-label={t("extensions.management.actionsAria", { name: item.name })}>
-      {item.kind === "skill" && (
+      {(item.kind === "skill" ? item.source?.resolvedCommit : item.mcpMetadata?.registry) && (
         <ManagementAction label={t("extensions.management.checkUpdates")} disabled={busy} onClick={props.onCheckUpdates}>
           <UpdateIcon />
         </ManagementAction>
@@ -65,35 +66,62 @@ function ManagementActions(props: ExtensionManagementProps) {
   );
 }
 
+function McpUpdateManagement({ item, registryUpdate: report, busy, onApplyUpdate, onEditUpdateConfig }: ExtensionManagementProps) {
+  const { t } = useI18n();
+  if (item.kind !== "mcp" || !item.mcpMetadata?.registry || !report) return null;
+  if (report.status === "failed") return <p className="asb-warn-text" role="alert">
+    {t("extensions.management.checkFailed", { error: report.message })}</p>;
+  return <div className="asb-ext-section">
+    <div className="asb-ext-section-heading">
+      <h4 className="asb-section-title">{t("extensions.management.sourceUpdates")}</h4>
+      <span className="asb-scope-note">{report.status === "current" ? t("extensions.management.upToDate")
+        : report.status === "manual" ? t("extensions.registry.manualUpdate", { version: report.version })
+        : t("extensions.registry.versionChange", { from: item.mcpMetadata.registry.version, to: report.source.version })}</span>
+      {report.status === "available" && <Button variant="secondary" disabled={busy} onClick={onApplyUpdate}>
+        {t(report.action === "associateCurrent" ? "extensions.registry.associateVersion" : "extensions.management.applyUpdate")}</Button>}
+      {report.status === "manual" && <>
+        <SkillSourceLink url={report.docs} label={t("extensions.registry.docs", { name: item.name })} />
+        <Button variant="secondary" disabled={busy} onClick={onEditUpdateConfig}>{t("extensions.registry.editConnection")}</Button>
+      </>}
+    </div>
+    {report.status === "manual" && report.connections.length > 0 && <>
+      <Table rows={report.connections} rowKey={(connection) => JSON.stringify(connection)}
+        ariaLabel={t("extensions.management.sourceUpdates")} columns={[
+          { key: "transport", header: t("extensions.facts.transport"), render: (row) => t(TRANSPORT_LABELS[row.transport]) },
+          { key: "endpoint", header: t("extensions.registry.nextEndpoint"), render: (row) => <code>{row.endpoint}</code> },
+          { key: "headers", header: t("extensions.registry.requiredHeaders"), render: (row) => row.requiredHeaders.join(", ") || "—" },
+        ]} />
+      <p className="asb-scope-note">{t("extensions.registry.manualAssociable")}</p>
+    </>}
+  </div>;
+}
+
 function SkillUpdateManagement({ item, updateReport: report, busy, onApplyUpdate }: ExtensionManagementProps) {
   const { t } = useI18n();
   if (item.kind !== "skill" || !report) return null;
-  if (report.error)
+  if (report.status === "failed")
     return (
       <p className="asb-warn-text" role="alert">
-        {t("extensions.management.checkFailed", { error: report.error })}
+        {t("extensions.management.checkFailed", { error: report.message })}
       </p>
     );
-  const current = report.upToDate || report.newDigest === item.contentDigest;
+  const update = report.status === "available" ? report : null;
   return (
     <div className="asb-ext-section">
       <div className="asb-ext-section-heading">
         <h4 className="asb-section-title">{t("extensions.management.sourceUpdates")}</h4>
         <span className="asb-scope-note">
-          {current
-            ? t("extensions.management.upToDate")
-            : report.newCommit
-              ? t("extensions.management.newVersionCommit", { commit: report.newCommit.slice(0, 12) })
-              : t("extensions.management.newVersion")}
+          {update ? t("extensions.management.newVersionCommit", { commit: update.commit.slice(0, 12) })
+            : t("extensions.management.upToDate")}
         </span>
-        {!current && (
-          <Button variant="secondary" disabled={busy || !report.newDigest} onClick={onApplyUpdate}>
+        {update && (
+          <Button variant="secondary" disabled={busy} onClick={onApplyUpdate}>
             {t("extensions.management.applyUpdate")}
           </Button>
         )}
       </div>
-      {!current && report.changedFiles.length > 0 && (
-        <Table rows={report.changedFiles} rowKey={(file) => `${file.action}:${file.relativePath}`}
+      {update && update.changedFiles.length > 0 && (
+        <Table rows={update.changedFiles} rowKey={(file) => `${file.action}:${file.relativePath}`}
           ariaLabel={t("extensions.management.sourceUpdates")} columns={[
             { key: "file", header: t("extensions.table.file"), render: (file) => <span className="asb-code">{file.relativePath}</span> },
             { key: "change", header: t("extensions.table.change"), render: (file) => t(SKILL_CHANGE_LABELS[file.action]) },
@@ -122,6 +150,7 @@ export function ExtensionManagement(props: ExtensionManagementProps) {
           <ExtensionCheckPanel {...props} />
         )}
         <SkillUpdateManagement {...props} />
+        <McpUpdateManagement {...props} />
         <CollapsibleSection quiet open={factsOpen} onOpenChange={setFactsOpen}
           label={t("extensions.management.details")}>
           <ExtensionResourceFacts item={item} />

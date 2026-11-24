@@ -1,0 +1,67 @@
+/* Only a visible subpage takes over from the main workspace viewport. */
+.asb-main > .asb-scroll-viewport:has(.asb-subpage-route:not([hidden], [hidden] *)) {
+  overflow: clip;
+}
+
+.asb-page-stack:has(.asb-subpage-route:not([hidden], [hidden] *)) {
+  flex: 1;
+  gap: 0;
+  min-height: 0;
+}
+
+.asb-subpage-route {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.asb-workspace-subpage {
+  display: grid;
+  grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.asb-workspace-subpage > .asb-workspace-header {
+  grid-row: 1;
+  gap: var(--asb-space-1);
+  margin: 0 var(--asb-space-unit);
+}
+
+.asb-subpage-scroll {
+  grid-row: 2;
+}
+
+.asb-subpage-scroll > .asb-scroll-viewport {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-1) var(--asb-space-unit);
+}
+
+.asb-subpage-scroll > .asb-scroll-viewport > .asb-workspace-header {
+  gap: var(--asb-space-2);
+  margin: 0;
+}
+
+.asb-workspace-subpage .asb-workspace-header .asb-panel-title {
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.asb-subpage-footer {
+  grid-row: 3;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-1) var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-1) var(--asb-space-unit) 0;
+}
+
+@media (max-width: 580px) {
+  .asb-subpage-footer > .asb-btn { flex: 1; }
+}

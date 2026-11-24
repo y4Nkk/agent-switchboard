@@ -2,18 +2,17 @@ use std::collections::BTreeSet;
 
 use serde::Deserialize;
 
-use super::{
-    SkillDirectoryEntry, SkillDirectoryResult, DIRECTORY_PAGE_SIZE, MAX_DIRECTORY_RESULTS,
-};
+use super::SkillDirectoryEntry;
 use crate::extensions::sources::{
     fetch_source_bytes, normalize_github_repository, resolve_github_source,
     validate_source_subpath, HttpFetch, SkillCandidate, SourceError, MAX_DIRECTORY_DOWNLOAD,
 };
 
+const DIRECTORY_RESULT_LIMIT: usize = 200;
+
 #[derive(Deserialize)]
 struct DirectoryResponse {
     skills: Vec<DirectoryItem>,
-    count: usize,
 }
 
 #[derive(Deserialize)]
@@ -28,49 +27,35 @@ struct DirectoryItem {
 
 pub fn search_directory(
     query: &str,
-    offset: usize,
     fetch: HttpFetch,
-) -> Result<SkillDirectoryResult, SourceError> {
+) -> Result<Vec<SkillDirectoryEntry>, SourceError> {
     let query = query.trim();
     if !(2..=200).contains(&query.chars().count()) || query.chars().any(char::is_control) {
         return Err(SourceError::Rejected(
             "Search requires 2 to 200 characters without control characters".into(),
         ));
     }
-    if offset >= MAX_DIRECTORY_RESULTS || offset % DIRECTORY_PAGE_SIZE != 0 {
-        return Err(SourceError::Rejected(format!(
-            "Search offset must be a multiple of {DIRECTORY_PAGE_SIZE} below {MAX_DIRECTORY_RESULTS}"
-        )));
-    }
     let mut url =
         reqwest::Url::parse("https://skills.sh/api/search").expect("static directory URL");
     url.query_pairs_mut()
         .append_pair("q", query)
-        .append_pair("limit", &DIRECTORY_PAGE_SIZE.to_string())
-        .append_pair("offset", &offset.to_string());
+        .append_pair("limit", &DIRECTORY_RESULT_LIMIT.to_string());
     let bytes = fetch_source_bytes(url.as_str(), MAX_DIRECTORY_DOWNLOAD, fetch)?;
     let response: DirectoryResponse = serde_json::from_slice(&bytes).map_err(|error| {
         SourceError::Unreachable(format!("skills.sh response could not be parsed: {error}"))
     })?;
-    if response.skills.len() > DIRECTORY_PAGE_SIZE {
+    if response.skills.len() > DIRECTORY_RESULT_LIMIT {
         return Err(SourceError::Rejected(
-            "skills.sh returned more entries than the requested page".into(),
+            "skills.sh returned more entries than the requested limit".into(),
         ));
     }
-    let raw_count = response.skills.len();
-    let total = response.count.min(MAX_DIRECTORY_RESULTS);
     let mut ids = BTreeSet::new();
-    let items = response
+    Ok(response
         .skills
         .into_iter()
         .filter_map(directory_entry)
         .filter(|entry| ids.insert(entry.id.clone()))
-        .collect();
-    Ok(SkillDirectoryResult {
-        items,
-        total,
-        has_more: raw_count > 0 && offset + DIRECTORY_PAGE_SIZE < total,
-    })
+        .collect())
 }
 
 fn directory_entry(item: DirectoryItem) -> Option<SkillDirectoryEntry> {
@@ -141,5 +126,32 @@ pub fn resolve_directory_skill(
         [] if candidates.len() == 1 && candidates[0].subpath.is_empty() => Ok(candidates),
         [] => Err(SourceError::Rejected("Skill manifest was not found in the repository; refresh the search or use an explicit repository subpath".into())),
         _ => Err(SourceError::Rejected("Several manifest paths match this Skill; use an explicit repository subpath".into())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_returns_one_snapshot_and_filters_duplicate_rows() {
+        let mut skills: Vec<_> = (0..25).map(|index| serde_json::json!({
+            "id": format!("demo/repo/skill-{index}"), "skillId": format!("skill-{index}"),
+            "name": format!("Skill {index}"), "installs": 1, "source": "demo/repo",
+        })).collect();
+        skills.push(skills[0].clone());
+        let body = serde_json::to_vec(&serde_json::json!({ "skills": skills, "count": 26 })).unwrap();
+        let fetch = |url: &str| {
+            let url = reqwest::Url::parse(url).unwrap();
+            let pairs: Vec<_> = url.query_pairs().into_owned().collect();
+            assert_eq!(pairs, vec![
+                ("q".to_owned(), "react".to_owned()),
+                ("limit".to_owned(), "200".to_owned()),
+            ]);
+            Ok((200, body.clone()))
+        };
+        let found = search_directory("react", &fetch).unwrap();
+        assert_eq!(found.len(), 25);
+        assert_eq!(found[20].subpath, "skill-20");
     }
 }

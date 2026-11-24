@@ -21,7 +21,7 @@ export default function App() {
 
 function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplicationPreparation> }) {
   const model = useSwitchboardModel(preparation.snapshot!, preparation.completedRevision);
-  const { page, setPage, error, busy, providers, operations, appSettingsState, update } = model;
+  const { page, selectPage, error, busy, providers, operations, appSettingsState, update } = model;
   const settingsReady = appSettingsState.appSettings !== null || appSettingsState.loadError !== null;
   if (!settingsReady || !model.sidebar.ready) {
     return (
@@ -37,7 +37,7 @@ function PreparedApp({ preparation }: { preparation: ReturnType<typeof useApplic
     <>
       <div className="asb-prepared-app" inert={suspended}>
         <AppDialogSuspension suspended={suspended || update.restartConfirmationOpen}>
-          <AppShell page={page} onPageChange={setPage} error={error} busy={busy}
+          <AppShell page={page} onPageChange={selectPage} error={error} busy={busy}
             sidebar={model.sidebar}
             preparation={preparation.snapshot!} settingsError={appSettingsState.loadFailure}
             pin={appSettingsState.pin} update={update} onOpenUpdate={() => model.openSettings("about")}>

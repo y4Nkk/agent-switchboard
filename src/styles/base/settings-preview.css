@@ -1,13 +1,3 @@
-.asb-client-configuration-review {
-  display: grid;
-  gap: var(--asb-space-2);
-  margin: 0 0 var(--asb-space-4);
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
-}
-
 /* One page-owned footer gives whole-form reset, save status, and save action
    a shared alignment line. Individual groups keep their own local reset. */
 .asb-settings-actions,

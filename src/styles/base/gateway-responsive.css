@@ -1,30 +1,15 @@
 /* Breakpoints use the gateway content width, including app zoom and rail. */
-@container gateway (max-width: 920px) {
-  .asb-gateway-map-canvas {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    column-gap: var(--asb-space-3);
-    padding-inline: 0;
-  }
-
-  .asb-gateway-connection.is-provider { grid-column: 3; }
-  .asb-gateway-node.is-hub { grid-column: 2; }
-  .asb-gateway-node.is-empty { grid-column: 3; }
-}
-
 @container gateway (max-width: 680px) {
-  .asb-gateway-map-canvas { display: flex; flex-direction: column; align-items: stretch; gap: var(--asb-space-4); padding-top: var(--asb-space-2); }
-  .asb-gateway-floor,
+  .asb-gateway-map-canvas { display: flex; flex-direction: column; align-items: stretch; gap: var(--asb-space-4); background: none; }
   .asb-gateway-wires { display: none; }
   .asb-gateway-node { grid-template-columns: minmax(0, 1fr) 112px; justify-items: start; text-align: left; }
   .asb-gateway-node > .asb-gateway-device { grid-column: 2; grid-row: 1 / span 4; align-self: center; }
   .asb-gateway-node > :not(.asb-gateway-device) { grid-column: 1; }
   .asb-gateway-node-footer { justify-content: flex-start; }
-  .asb-gateway-map-heading { align-items: flex-start; flex-direction: column; gap: var(--asb-space-1); }
+  .asb-gateway-map-heading { align-items: flex-start; flex-direction: column; }
   .asb-gateway-recent-heading { flex-wrap: wrap; }
 }
 
 @container gateway (max-width: 420px) {
-  .asb-gateway-unavailable { align-items: flex-start; flex-wrap: wrap; }
-  .asb-gateway-unavailable > .asb-btn { margin-left: 0; }
-  .asb-gateway-node.is-hub .asb-gateway-device { width: 72px; height: 60px; }
+  .asb-gateway-node { grid-template-columns: minmax(0, 1fr) 88px; }
 }

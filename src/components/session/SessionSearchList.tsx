@@ -7,7 +7,6 @@ import { ClientLogo } from "../ClientLogo";
 import { Pagination } from "../Pagination";
 import { Time } from "../Time";
 import { ScrollArea } from "../ScrollArea";
-import { SessionProjects } from "./SessionProjects";
 import { SessionSearchProgress } from "./SessionSearchProgress";
 import { sessionKey, sessionTitle } from "./session-content";
 import { SESSION_PAGE_SIZE, type SessionSearch } from "./use-session-search";
@@ -15,23 +14,19 @@ import { SESSION_PAGE_SIZE, type SessionSearch } from "./use-session-search";
 interface Props {
   search: SessionSearch;
   selected: SessionMeta | null;
-  selecting: boolean;
-  chosen: ReadonlyMap<string, SessionMeta>;
   disabled: boolean;
   onSelect: (hit: SessionSearchHit) => void;
-  onToggle: (session: SessionMeta) => void;
-  onToggleMode: () => void;
 }
 
-function SearchRow({ hit, active, picked, selecting, disabled, onClick }: {
-  hit: SessionSearchHit; active: boolean; picked: boolean; selecting: boolean;
+function SearchRow({ hit, active, disabled, onClick }: {
+  hit: SessionSearchHit; active: boolean;
   disabled: boolean; onClick: () => void;
 }) {
   const { t } = useI18n();
   const { session } = hit;
   return <div className="asb-session-result-row"><Button variant="unstyled" disabled={disabled} onClick={onClick}
-    aria-pressed={selecting ? picked : active}
-    className={`asb-session-item${active ? " is-active" : ""}${picked ? " is-selected" : ""}`}>
+    aria-pressed={active}
+    className={`asb-session-item${active ? " is-active" : ""}`}>
     <span className="asb-session-item-title">
       <ClientLogo app={session.app} className="asb-session-logo" />
       <span title={sessionTitle(session)}>{sessionTitle(session)}</span>
@@ -48,19 +43,14 @@ function SearchRow({ hit, active, picked, selecting, disabled, onClick }: {
   </Button></div>;
 }
 
-export function SessionSearchList({ search, selected, selecting, chosen, disabled, onSelect, onToggle, onToggleMode }: Props) {
+export function SessionSearchList({ search, selected, disabled, onSelect }: Props) {
   const { t } = useI18n();
-  const { result, busy, error } = search;
+  const { result, total, busy, error } = search;
   return <section className="asb-session-list" aria-label={t("sessions.list.aria")} aria-busy={busy}>
     <div className="asb-session-list-heading">
       <span>{t(search.query ? "sessions.search.results" : "sessions.list.heading")}</span>
-      <div className="asb-session-list-heading-actions">
-        {result && <span className="asb-session-count">{result.total}</span>}
-        {!selecting && <Button variant="unstyled" className="asb-session-quiet-action" disabled={disabled}
-          onClick={onToggleMode}>{t("sessions.batch.enter")}</Button>}
-      </div>
+      {total !== null && <span className="asb-session-count">{total}</span>}
     </div>
-    <SessionProjects search={search} disabled={disabled} />
     {busy && <SessionSearchProgress progress={search.progress} />}
     {error && <p className="asb-warn-text" role="alert">{error}</p>}
     {result?.total === 0 && <p className="asb-empty-state">{t("sessions.list.empty")}</p>}
@@ -77,12 +67,11 @@ export function SessionSearchList({ search, selected, selecting, chosen, disable
             {clientFullName(hit.session.app)} · {dir}
           </Button>}
           <SearchRow hit={hit} active={selected !== null && sessionKey(selected) === sessionKey(hit.session)}
-            picked={chosen.has(sessionKey(hit.session))} selecting={selecting} disabled={disabled}
-            onClick={() => selecting ? onToggle(hit.session) : onSelect(hit)} />
+            disabled={disabled} onClick={() => onSelect(hit)} />
         </Fragment>;
       })}
     </ScrollArea>
-    {result && <Pagination total={result.total} page={search.page} pageSize={SESSION_PAGE_SIZE}
+    {total !== null && <Pagination total={total} page={search.page} pageSize={SESSION_PAGE_SIZE}
       onPageChange={search.setPage} label={t("sessions.search.pagination")} />}
   </section>;
 }

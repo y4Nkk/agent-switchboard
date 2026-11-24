@@ -1,6 +1,7 @@
 # Agent Note: 两级供应商编辑器翻级滚动由编辑器 hook 复位
 
 Status: implemented
+Archived: 2026-11-23
 
 ## Problem
 

@@ -2,19 +2,20 @@ import { useId, useState, type ReactNode } from "react";
 import type { AppKind } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
-import routingHub from "../../assets/routing-hub.png";
 import { Button } from "../Button";
 import { ClientLogo } from "../ClientLogo";
 import { FactList } from "../FactList";
-import { ChevronRightIcon } from "../icons";
 import { Select } from "../Select";
 import { Tabs } from "../Tabs";
 import { ModuleHeader, WorkspaceHeader } from "../WorkspaceHeader";
-import { routeDescription, routeDocument, routeIssue, routeRecords, routeRoles,
-  type RouteDocument, type RouteInventory, type RouteRole } from "./model";
+import { GatewayArtwork } from "./GatewayArtwork";
+import { RouteCard } from "./RouteCard";
+import { routeCardState, routeDocument, routeRecords, routeRoles, type RouteDocument, type RouteInventory, type RouteRole } from "./model";
 
 interface Props {
   runtimeSummary: ReactNode;
+  runtimeObservation: ReactNode;
+  visible: boolean;
   inventory: RouteInventory;
   initialApp: AppKind;
   busy: boolean;
@@ -22,50 +23,24 @@ interface Props {
   onProviders: (app: AppKind) => void;
 }
 
-function SavedPurpose({ document, inventory, role, disabled, onEdit }: {
-  document: RouteDocument; inventory: RouteInventory; role: RouteRole; disabled: boolean; onEdit: () => void;
-}) {
-  const { t } = useI18n();
-  const { target, mode, oneM } = routeDescription(document, role, inventory);
-  const source = role === "main" ? "gatewayOverview.mainConnection"
-    : !target ? "modelRoutes.automatic" : mode === "provider" ? "gatewayOverview.fixedProvider" : "gatewayOverview.primaryConnection";
-  const provider = target ? target.provider ?? t("modelRoutes.unresolved") : t("modelRoutes.automatic");
-  const model = target?.model || t("modelRoutes.clientDefault");
-  return <li className="asb-route-overview-purpose">
-    <Button variant="ghost" className="asb-route-overview-edit" disabled={disabled} onClick={onEdit}
-      aria-label={t("gatewayOverview.editPurpose", { role: t(`modelRoutes.role.${role}`), provider, model })}>
-      <span className="asb-route-overview-role">{t(`modelRoutes.role.${role}`)}</span>
-      <span className="asb-route-overview-target">
-        <span className="asb-route-overview-provider">{provider}</span>
-        <span className="asb-route-overview-model asb-code">{model}{oneM && <span className="asb-route-overview-context">1M</span>}</span>
-      </span>
-      <span className="asb-route-overview-mode">{t(source)}</span>
-      <span className="asb-route-overview-arrow" aria-hidden="true"><ChevronRightIcon /></span>
-    </Button>
-  </li>;
-}
-
 function SavedPlan({ document, app, inventory, busy, onEdit }: {
   document: RouteDocument; app: AppKind; inventory: RouteInventory; busy: boolean; onEdit: Props["onEdit"];
 }) {
   const { t } = useI18n();
-  const issue = routeIssue(document, inventory);
   const official = document.kind === "profile" && document.draft.routeMode === "official";
   return <>
-    <div className="asb-route-overview-columns" aria-hidden="true">
-      <span>{t("modelRoutes.purpose")}</span><span>{t("gatewayOverview.destination")}</span><span>{t("gatewayOverview.rule")}</span>
-    </div>
-    <ul className="asb-route-overview-list" aria-label={t("gatewayOverview.destinations")}>
-      {routeRoles(document).map((role) => <SavedPurpose key={role} document={document} inventory={inventory}
-        role={role} disabled={busy} onEdit={() => onEdit(app, document.profileId, role)} />)}
+    <ul className="asb-purpose-cards" data-app={app} aria-label={t("gatewayOverview.destinations")}>
+      {routeRoles(document).map((role) => <RouteCard key={role} role={role} state={routeCardState(document, role, inventory)}
+        fallback={t("modelRoutes.clientDefault")} disabled={busy} onOpen={() => onEdit(app, document.profileId, role)} />)}
     </ul>
     {official && <p className="asb-field-help">{t("modelRoutes.official")}</p>}
-    {issue && <p className="asb-warn-text" role="status">{t(issue)}</p>}
   </>;
 }
 
 /** Saved plans stay read-only here; every edit enters the provider-owned session. */
-export function ModelRoutingWorkspace({ runtimeSummary, inventory, initialApp, busy, onEdit, onProviders }: Props) {
+export function ModelRoutingWorkspace({
+  runtimeSummary, runtimeObservation, visible, inventory, initialApp, busy, onEdit, onProviders,
+}: Props) {
   const { t } = useI18n();
   const id = useId();
   const [app, setApp] = useState(initialApp);
@@ -78,15 +53,16 @@ export function ModelRoutingWorkspace({ runtimeSummary, inventory, initialApp, b
   const document = selected ? routeDocument(selected) : null;
   const selectedId = selected?.record.profile.id ?? null;
   return <section className="asb-panel asb-model-routing" aria-label={t("nav.page.gateway")}>
-    <div className="asb-route-overview-hero">
-      <div className="asb-route-overview-intro">
-        <WorkspaceHeader title={t("nav.page.gateway")} />
-        <p className="asb-route-overview-description">{t("gatewayOverview.description")}</p>
-        <p className="asb-route-overview-caption">{t("gatewayOverview.editHelp")}</p>
+    <WorkspaceHeader title={t("nav.page.gateway")} />
+    <section className="asb-route-overview-runtime" aria-label={t("gatewayOverview.runtime")}>
+      <div className="asb-route-overview-listener">
+        <div className="asb-route-overview-artwork">
+          <GatewayArtwork active={visible} />
+        </div>
+        {runtimeSummary}
       </div>
-      <img className="asb-route-overview-art" src={routingHub} alt="" aria-hidden="true" draggable={false} />
-    </div>
-    <section className="asb-route-overview-runtime" aria-label={t("gatewayOverview.listener")}>{runtimeSummary}</section>
+      {runtimeObservation}
+    </section>
     <section className="asb-route-overview-plan" aria-labelledby={`${id}-title`}>
       <ModuleHeader id={`${id}-title`} title={t("gatewayOverview.savedPlan")} primary={
         <Tabs value={app} onChange={setApp} scope={id} label={t("modelRoutes.client")}

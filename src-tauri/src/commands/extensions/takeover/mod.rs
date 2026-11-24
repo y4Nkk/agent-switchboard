@@ -15,7 +15,7 @@ use asb_core::extensions::validate::{validate_binding, validate_definition};
 use tauri::AppHandle;
 
 use super::planner::Planner;
-use super::sources::import_cached_skill_candidate;
+use super::sources::import_candidate_content;
 use super::support::*;
 use crate::commands::error::{blocking, require_write_confirmation, state, CommandError};
 use crate::extensions::discovery::DiscoveredPaths;
@@ -81,6 +81,7 @@ pub(super) fn takeover_observed_mcp(
             let definition = ExtensionDefinition {
                 schema_version: EXTENSIONS_SCHEMA_VERSION,
                 mcp_metadata: None,
+                mcp_config_revision: None,
                 id: new_id("ext"),
                 name: observed.name.clone(),
                 revision: 1,
@@ -173,9 +174,9 @@ pub(super) fn takeover_observed_skill(
     let definition = match existing {
         Some(definition) => definition,
         None => {
-            let mutation = import_cached_skill_candidate(
+            let mutation = import_candidate_content(
                 store,
-                &candidate.content_digest,
+                &candidate,
                 observed.name.clone(),
                 Some(observed.client),
             )?;

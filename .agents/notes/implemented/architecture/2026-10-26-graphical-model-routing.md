@@ -8,7 +8,7 @@ Codex 默认子代理模型藏在供应商运行参数中，新建档案因尚�
 
 ## Decision
 
-保存时隐式激活与 Claude 单连接边界由[按档案用途路由方案](2026-11-12-profile-owned-purpose-routing.md)取代；网关独占编辑入口与独立草稿由[供应商统一编辑](2026-11-13-provider-routing-editor-integration.md)取代；图形编辑与模型原始文本由[供应商配置减负](../feature/2026-11-16-provider-configuration-relief.md)取代。本篇继续拥有单一档案所有权与准备释放纪律，下述图形细节仅保留首次实现的取舍，当前界面事实由配置减负笔记和 DESIGN 拥有。
+保存时隐式激活与 Claude 单连接边界由[按档案用途路由方案](2026-11-12-profile-owned-purpose-routing.md)取代；网关独占编辑入口与独立草稿由[供应商统一编辑](2026-11-13-provider-routing-editor-integration.md)取代。本篇拥有单一档案所有权与准备释放纪律，下述图形细节记录首次实现的取舍，当前界面由[用途路由卡片](../feature/2026-11-23-visual-purpose-routing-cards.md)、[供应商配置减负](../feature/2026-11-16-provider-configuration-relief.md)和 DESIGN 定义。
 
 - 「模型路由与网关」保留主导航一级工作区和已保存方案入口，图形编辑控件位于统一供应商会话。图以客户端、用途和供应商模型节点表达草稿；键盘和辅助技术消费同一份语义 DOM。SVG 只连接实际节点边界，ResizeObserver 与动画帧随场景卸载清理，不新增图形运行时或依赖。
 - 供应商档案唯一拥有模型与用途方案；不创建全局路由文件，不复制凭据，不把草稿画成已生效连接。当前应用状态由客户端配置与网关快照拥有。编辑对象选择与用途契约由关联的新笔记定义。

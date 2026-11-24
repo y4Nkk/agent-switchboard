@@ -7,6 +7,20 @@
   container: settings-content / inline-size;
 }
 
+.asb-settings-panels {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.asb-settings-panels > [data-settings-panel-leaving] {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .asb-client-provider-help,
 .asb-client-preference-save {
   display: flex;
@@ -21,16 +35,6 @@
   border-color: transparent;
 }
 
-/* Client configuration keeps expanded modules on the muted-gray surface;
-   the toolbar and save footer remain unwrapped operation areas. */
-.asb-client-settings-panel .asb-client-configuration-review,
-.asb-client-settings-panel .asb-client-settings-reset-preview,
-.asb-client-settings-panel .asb-official-directory,
-.asb-client-settings-panel .asb-collapsible.is-instructions .asb-client-settings-instructions {
-  border-color: var(--asb-settings-module-border);
-  background: var(--asb-settings-module-bg);
-}
-
 /* Loading placeholders reserve the client form's row footprint so the panel
    does not reflow when the real settings arrive. */
 .asb-settings-skeleton {
@@ -40,21 +44,6 @@
 
 .asb-settings-skeleton > .asb-skeleton {
   height: var(--asb-touch-target);
-}
-
-/* The global-instructions editor rides the module surface as a boxed group;
-   the fold itself is the shared .asb-collapsible primitive. */
-.asb-client-settings-panel .asb-collapsible.is-instructions .asb-client-settings-instructions {
-  display: grid;
-  gap: var(--asb-space-3);
-  margin-bottom: var(--asb-space-4);
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-settings-module-border);
-  border-radius: var(--asb-radius);
-}
-
-.asb-client-settings-panel .asb-collapsible.is-instructions .asb-prompt-actions {
-  margin-bottom: var(--asb-space-4);
 }
 
 .asb-client-provider-help {
@@ -82,15 +71,11 @@
   gap: var(--asb-space-1);
 }
 
-/* The toolbar-owned reset preview lists removals on a shared surface instead
-   of nesting preview cards inside the expanded section. */
+/* The reset dialog's preview lists removals directly on the dialog surface,
+   ahead of the separate extra-settings action below it. */
 .asb-client-settings-reset-preview {
   display: grid;
   gap: var(--asb-space-3);
-  margin: 0 0 var(--asb-space-4);
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-settings-module-border);
-  border-radius: var(--asb-radius);
 }
 
 .asb-client-settings-reset-preview > p,
@@ -114,12 +99,6 @@
   color: var(--asb-text);
   font: var(--asb-text-code);
   overflow-wrap: anywhere;
-}
-
-
-.asb-client-settings-reset-preview > .asb-section-title,
-.asb-client-settings-reset-scope > p {
-  margin: 0;
 }
 
 .asb-client-settings-reset-scope {
@@ -159,7 +138,6 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--asb-space-3);
-  margin: 0 0 var(--asb-space-4);
   padding: var(--asb-space-3) 0 0;
 }
 
@@ -182,7 +160,6 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--asb-space-2);
-  margin: 0 0 var(--asb-space-4);
 }
 
 .asb-client-settings-reset-error .asb-field-error {
@@ -319,7 +296,7 @@
   min-width: 0;
 }
 
-.asb-diagnostics:not([hidden]),
+.asb-diagnostics,
 .asb-diagnostics-configuration {
   display: flex;
   flex-direction: column;

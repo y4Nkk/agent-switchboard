@@ -1,14 +1,9 @@
-/* Source controls, results and repository maintenance share one work surface;
-   the source controls are separated by a single hairline. */
 .asb-skill-source-browser {
   display: grid;
   align-content: start;
   gap: var(--asb-space-4);
   min-width: 0;
-  padding: var(--asb-space-4);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content);
+  padding-block: var(--asb-space-1) var(--asb-space-3);
 }
 
 .asb-skill-source-browser > .asb-skill-source-error {
@@ -18,16 +13,6 @@
   background: var(--asb-content-muted);
 }
 
-.asb-skill-source-form {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--asb-space-3);
-  padding-bottom: var(--asb-space-4);
-  border-bottom: 1px solid var(--asb-hairline);
-}
-
-.asb-skill-source-input-row,
 .asb-skill-source-toolbar {
   display: flex;
   align-items: center;
@@ -36,25 +21,9 @@
   width: 100%;
 }
 
-.asb-skill-source-input-row > .asb-input,
-.asb-skill-source-query,
 .asb-skill-source-search {
   flex: 1 1 18rem;
   min-width: 0;
-}
-
-.asb-skill-source-input-row > .asb-btn {
-  flex: none;
-  white-space: nowrap;
-}
-
-.asb-skill-source-form .asb-segments {
-  flex-wrap: wrap;
-  max-width: 100%;
-}
-
-.asb-skill-source-input-row > .asb-btn-icon {
-  margin-inline-start: auto;
 }
 
 .asb-skill-source-catalog-count {
@@ -301,6 +270,4 @@
 
 @media (max-width: 640px) {
   .asb-skill-source-options { grid-template-columns: 1fr; }
-  .asb-skill-source-input-row > .asb-input,
-  .asb-skill-source-query { flex-basis: 100%; }
 }

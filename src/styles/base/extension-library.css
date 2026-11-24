@@ -1,4 +1,3 @@
-/* The library bounds the primary Table viewport; module tables stay in flow. */
 .asb-ext {
   display: flex;
   flex: 1;
@@ -7,23 +6,53 @@
   min-height: 0;
 }
 
-.asb-main:has(> .asb-scroll-viewport > .asb-page-stack:not([hidden]) > .asb-ext) > .asb-scroll-viewport { overflow: hidden; }
-.asb-page-stack:has(> .asb-ext) { flex: 1; min-height: 0; }
+.asb-main > .asb-scroll-viewport:has(> .asb-page-stack:not([hidden]) > .asb-ext:not([hidden])) { overflow: hidden; }
+.asb-page-stack:has(> .asb-ext:not([hidden])) { flex: 1; min-height: 0; }
 .asb-ext > .asb-workspace-header { flex: none; }
-.asb-ext > [role="tabpanel"]:not([hidden]) {
+.asb-ext > [role="tabpanel"],
+.asb-ext-pane,
+.asb-ext-market,
+.asb-ext-library-panel {
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
 }
 
-/* Search stays in the page header; Table owns the list's only scroll region. */
-.asb-ext-library-panel {
-  display: flex;
-  flex-direction: column;
+.asb-ext-market-results {
   flex: 1;
+}
+
+.asb-ext-market-form {
+  display: flex;
+  flex: none;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-ext-market-form > .asb-input,
+.asb-ext-market-query {
+  flex: 1 1 16rem;
   min-width: 0;
-  min-height: 0;
+}
+
+.asb-ext-market-form > .asb-btn { flex: none; }
+
+.asb-ext-views,
+.asb-ext-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-ext-views > .asb-btn[aria-pressed="true"] {
+  border-color: var(--asb-action);
+  background: var(--asb-row-selected);
+  color: var(--asb-text);
 }
 
 .asb-ext-actions {
@@ -33,8 +62,6 @@
   gap: var(--asb-space-2);
 }
 
-/* Kind totals are part of navigation; bulk client actions stay beside search
-   with their full-category scope visible. */
 .asb-ext .asb-tab {
   display: inline-flex;
   align-items: center;
@@ -74,37 +101,6 @@
   min-width: 0;
 }
 
-.asb-ext-toolbar-summary {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  min-width: 0;
-}
-
-.asb-ext-client-summary {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--asb-space-1);
-  padding-left: var(--asb-space-2);
-}
-.asb-ext-client-summary-scope {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-  white-space: nowrap;
-}
-
-.asb-ext-client-summary .asb-btn {
-  white-space: nowrap;
-}
-
-.asb-ext-client-summary-logo {
-  flex: none;
-  width: var(--asb-icon-size-sm);
-  height: var(--asb-icon-size-sm);
-  object-fit: contain;
-}
-.asb-ext-client-summary-value { color: var(--asb-text-muted); font: var(--asb-text-caption); }
 .asb-ext-search { flex: 1 1 18rem; min-width: min(18rem, 100%); }
 
 /* Empty, loading and failed lists have no Table viewport of their own. */
@@ -181,6 +177,7 @@
 .asb-ext-table-action-cell { text-align: left; }
 .asb-ext-table-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-start;
   gap: var(--asb-space-1);
 }
@@ -196,18 +193,8 @@
 .asb-ext-loading > .asb-skeleton { height: 44px; }
 .asb-ext-result-count { flex: none; margin: var(--asb-space-2) 0 0; color: var(--asb-text-muted); font: var(--asb-text-caption); }
 
-@media (max-width: 900px) {
-  .asb-ext .asb-header-primary > .asb-panel-actions { flex-wrap: wrap; }
-}
 @media (max-width: 640px) {
-  .asb-ext .asb-header-primary > .asb-panel-actions { width: 100%; margin-left: 0; gap: var(--asb-space-1); }
-  .asb-ext-toolbar-summary { width: 100%; }
-  .asb-ext-client-summary {
-    justify-content: flex-start;
-    width: 100%;
-    padding-top: var(--asb-space-2);
-    padding-left: 0;
-    border-top: 1px solid var(--asb-hairline);
-    border-left: 0;
-  }
+  .asb-ext .asb-header-primary > .asb-panel-actions { margin-left: 0; }
+  .asb-ext-market-form > .asb-input,
+  .asb-ext-market-query { flex-basis: 100%; }
 }

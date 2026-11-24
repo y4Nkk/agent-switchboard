@@ -8,6 +8,7 @@ mod transport;
 mod zip;
 mod zip_header;
 
+use asb_core::extensions::contracts::SourceRef;
 use asb_core::extensions::skill::{
     content_digest, extract_manifest, ContentEntry, ManifestExtraction,
 };
@@ -38,6 +39,23 @@ pub struct SkillCandidate {
     pub content_digest: String,
     pub entries: Vec<ContentEntry>,
     pub diagnostics: Vec<String>,
+}
+
+impl SkillCandidate {
+    pub fn source_ref(&self) -> SourceRef {
+        SourceRef {
+            source_id: self.source_identity.clone(),
+            subpath: self.subpath.clone(),
+            ref_name: self.ref_name.clone(),
+            resolved_commit: self.resolved_commit.clone(),
+        }
+    }
+
+    pub fn matches_source(&self, source: &SourceRef) -> bool {
+        source.source_id == self.source_identity
+            && source.subpath == self.subpath
+            && source.ref_name == self.ref_name
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

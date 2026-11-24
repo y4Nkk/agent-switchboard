@@ -88,9 +88,10 @@ export const messages = {
   "sessions.delete.codexDetail": ["Codex 会话由本机 Codex CLI 删除，包含原生登记、消息记录及关联子代理。需要已安装支持删除的 Codex CLI；被占用或仍有历史引用时会显示具体错误。", "Codex sessions are deleted by the local Codex CLI, including their registration, messages, and associated subagents. A Codex CLI supporting deletion is required; active use or history references are reported as errors."],
   "sessions.actions.more": ["更多", "More"],
   "sessions.actions.moreAria": ["更多会话操作", "More session actions"],
+  "sessions.actions.pageMore": ["更多操作", "More actions"],
 
-  "sessions.batch.enter": ["批量选择", "Select multiple"],
-  "sessions.batch.exit": ["退出批量选择", "Exit selection"],
+  "sessions.batch.title": ["批量操作", "Batch actions"],
+  "sessions.batch.tagsTitle": ["批量编辑标签", "Edit tags in bulk"],
   "sessions.batch.selectedCount": ["已选择 {count} 个会话", "{count} sessions selected"],
   "sessions.batch.deleteSelected": ["删除所选（{count}）", "Delete selected ({count})"],
 
@@ -109,7 +110,8 @@ export const messages = {
 
   "sessions.search.aria": ["搜索会话", "Search sessions"],
   "sessions.search.placeholder": ["搜索会话与消息", "Search messages"],
-  "sessions.search.submit": ["搜索", "Search"],
+  "sessions.search.filters": ["会话筛选", "Session filters"],
+  "sessions.search.filtersActive": ["会话筛选（已启用）", "Session filters (active)"],
   "sessions.search.results": ["搜索结果", "Search results"],
   "sessions.search.messageHit": ["消息命中 · 点击定位", "Message match · open in conversation"],
   "sessions.search.pagination": ["搜索结果分页", "Search results pagination"],

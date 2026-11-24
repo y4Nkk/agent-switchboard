@@ -1,17 +1,16 @@
-import { FileArchive, FolderGit2, Settings2 } from "lucide-react";
+import { FileArchive, FolderGit2, LoaderCircle, RefreshCw, Settings2 } from "lucide-react";
 import { useI18n } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { Button } from "../Button";
 import { Input } from "../Input";
-import { RadioOption } from "../RadioOption";
 import { SearchInput } from "../SearchInput";
-import { Tooltip } from "../Tooltip";
-import { FolderOpenIcon } from "../icons";
+import { Select } from "../Select";
+import { FolderOpenIcon, SearchIcon } from "../icons";
 import type { SkillSourceKind } from "./skill-source-model";
 import type { SkillSourceState } from "./useSkillSource";
 
 const SOURCES: { value: SkillSourceKind; labelKey: MessageKey }[] = [
-  { value: "catalog", labelKey: "extensions.sources.kindCatalog" }, { value: "directory", labelKey: "extensions.sources.kindDirectory" },
+  { value: "directory", labelKey: "extensions.sources.kindDirectory" }, { value: "catalog", labelKey: "extensions.sources.kindCatalog" },
   { value: "zip", labelKey: "extensions.sources.kindZip" }, { value: "local", labelKey: "extensions.sources.kindLocal" },
 ];
 
@@ -28,7 +27,7 @@ function SourceInput({ state, disabled, busy }: { state: SkillSourceState; disab
     </span>
   );
   if (state.source === "directory") return (
-    <div className="asb-skill-source-query">
+    <div className="asb-ext-market-query">
       <SearchInput ariaLabel={t("extensions.sources.searchSkillsSh")} placeholder={t("extensions.sources.searchSkillsSh")}
         value={state.directory.input} disabled={disabled} onChange={state.directory.changeInput} />
     </div>
@@ -50,25 +49,31 @@ function SourceInput({ state, disabled, busy }: { state: SkillSourceState; disab
 export function SkillSourceForm({ state, busy }: { state: SkillSourceState; busy: boolean }) {
   const { t } = useI18n();
   const disabled = state.imports.busy || (busy && !state.loading);
+  const { source, repositories } = state;
+  const scanning = source === "directory" ? state.directory.searching : state.loading;
+  const scanDisabled = busy || state.loading || state.imports.busy || (source === "catalog" &&
+    (!repositories.ready || repositories.loading || !repositories.items.some((repo) => repo.enabled)));
+  const scanLabel = scanning ? t(source === "directory" ? "extensions.sources.searching" : "extensions.sources.scanning")
+    : t(source === "catalog" ? "extensions.sources.refreshRepos" : source === "directory" ? "extensions.sources.search"
+      : source === "zip" ? "extensions.sources.scanZip" : "extensions.sources.scanSource");
   return (
-    <form id="skill-source-scan" className="asb-skill-source-form" aria-label={t("extensions.sources.formAria")} onSubmit={(event) => {
-      event.preventDefault(); void state.search();
+    <form className="asb-ext-market-form" aria-label={t("extensions.sources.formAria")} onSubmit={(event) => {
+      event.preventDefault();
+      if (!scanDisabled) void state.search();
     }}>
-      <div className="asb-skill-source-input-row">
-        <div className="asb-segments" role="radiogroup" aria-label={t("extensions.sources.kindAria")}>
-          {SOURCES.map(({ value, labelKey }) => (
-            <RadioOption key={value} name="skill-source-type" checked={state.source === value}
-              disabled={disabled} label={t(labelKey)} onChange={() => state.changeSource(value)} />
-          ))}
-        </div>
-        <Tooltip label={t("extensions.sources.manageRepos")}>
-          <Button variant="icon" aria-label={t("extensions.sources.manageRepos")} disabled={disabled}
-            onClick={() => state.setManagerOpen(true)}><Settings2 size={16} /></Button>
-        </Tooltip>
-      </div>
-      <div className="asb-skill-source-input-row">
-        <SourceInput state={state} disabled={disabled} busy={busy} />
-      </div>
+      <Select value={source} ariaLabel={t("extensions.sources.kindAria")} disabled={disabled || state.directory.resolving !== null}
+        options={SOURCES.map(({ value, labelKey }) => ({ value, label: t(labelKey) }))}
+        onChange={(value) => state.changeSource(value as SkillSourceKind)} />
+      <SourceInput state={state} disabled={disabled} busy={busy} />
+      <Button type="submit" variant="primary" disabled={scanDisabled}>
+        {scanning ? <LoaderCircle size={16} className="asb-skill-source-spinner" />
+          : source === "catalog" ? <RefreshCw size={16} /> : <SearchIcon />}
+        {scanLabel}
+      </Button>
+      {source === "catalog" && <Button variant="secondary" disabled={disabled}
+        onClick={() => state.setManagerOpen(true)}>
+        <Settings2 size={16} />{t("extensions.sources.manageRepos")}
+      </Button>}
     </form>
   );
 }

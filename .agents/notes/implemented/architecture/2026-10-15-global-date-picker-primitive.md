@@ -17,7 +17,9 @@ Status: implemented
 - 值契约：`value`/`onChange` 用 `YYYY-MM-DD` 字符串，空串 = 未选（触发器显示 `format.date.unset` 占位）。弹层提供清空按钮，发出空串并关闭、归还触发器焦点；无 min/max、不选时刻，不增加手输旁路。
 - 直接依赖：`react-aria`（行为 hooks）、`react-stately`（日历状态机）、`@internationalized/date`（日期数学与 `parseDate`）。后两者此前只是 react-aria-components 的传递依赖，声明版本与其范围一致；`react-aria-components` 仍被 RAC `Popover`/`Dialog`（弹层惯例）与其他既有消费点使用。
 
-已完整接入（无兼容无过渡）：存储归档截止日期（`StorageSettings`）与会话库起止筛选（`SessionOrganizationFilters`）是仅有的两个消费点；全库 `type="date"` 零残留。随选择器只产出合法日期，会话筛选的手输防御同步删除：`dateBoundary` 收敛为纯换算器（仅保留 9999-12-31 的 +1 天溢出守卫，防 `toISOString` 抛错，此时按无上界处理），`sessions.time.invalidDate` 文案与 aria-invalid 接线删除；`from > to` 的范围错误（`sessions.time.invalid`）仍然可达，保留。`DESIGN.md` 组件清单新增 `DatePicker` 条目。
+消费点包含存储归档截止日期、备份清理截止日期、会话库起止筛选与「按日期处理」。随选择器只产出合法日期，会话筛选的手输防御同步删除：`dateBoundary` 收敛为纯换算器（仅保留 9999-12-31 的 +1 天溢出守卫，防 `toISOString` 抛错，此时按无上界处理），`sessions.time.invalidDate` 文案与 aria-invalid 接线删除；`from > to` 的范围错误（`sessions.time.invalid`）仍然可达，保留。`DESIGN.md` 组件清单新增 `DatePicker` 条目。
+
+[会话批量操作弹窗](../feature/2026-11-24-session-batch-dialog.md)复用带日期范围的会话筛选。日历使用[AppDialog 提供的字段弹层容器](2026-11-24-session-dialog-control-boundaries.md)，沿用对话框的遮罩与焦点边界。
 
 同主题笔记审计：[Time date 模式](2026-10-15-time-date-mode-storage-cutoff.md)「范围边界」段随本决策原地更新（会话筛选不再是 Input 原语消费点）；无其他笔记持有时间选择契约。
 

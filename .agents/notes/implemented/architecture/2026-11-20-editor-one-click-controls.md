@@ -16,11 +16,11 @@ Status: implemented
 
 **推理等级是 8 档 chips 多选，不是文本。** `REASONING_LEVELS`（= Rust `CODEX_REASONING_LADDER`）按深度渲染为固定顺序 chips，点击切换选中；默认档是 `Select`，选项 = 已选档位。清空归一到 `["none"]` / 默认 `none`；`reasoning` 能力关闭时整组档位 UI 消失（联动置 none 的既有契约不变）。非法档位在 UI 层不可能产生，`invalidLevels` 校验退化为对历史数据的兜底。
 
-**Codex 模型目录是常驻模型卡片，不是表格加行编辑。** 每模型一张卡片：模型 ID + 来源徽标 + 主模型胶囊/按钮 + 删除（dangerText）；限额行 = 窗口与输出上限的常驻 number Input，各带一排**限额档位 chips**（上下文 128k/200k/256k/400k/1M，输出 8k/16k/32k/64k/128k，点击写入、当前值命中档位时高亮；取值与内置快照真实值精确对齐）；能力行 = 6 个 toggle chips；推理开启时追加档位 chips 行。`selected` 行编辑状态与 `CodexCatalogDetails` 删除。`withCatalog` 能力汇总、`catalogEntry` 预设补全、`modelSource` 来源徽标、保存校验与数据 shape 全部不变。
+**两端模型目录使用常驻图形卡片。** `ModelCatalogCard` 共用设备插画、模型 ID、主模型状态和操作区。Claude 卡片按可用宽度排成网格，Codex 卡片内继续直接编辑来源相关信息、限额、能力和推理档位。Codex 限额使用常驻数值输入和档位 chips，命中档位时高亮。`withCatalog` 汇总能力，`catalogEntry` 补全预设，`modelSource` 提供来源。名称映射使用自己的设置区。
 
 **添加模型以批量勾选为主路径。** 「获取模型」成功后自动打开 `ModelPickerDialog`：候选 = 拉取结果 ∪ 端点匹配预设的模型（协议一致才并入），带搜索、全选/全不选；勾选即加入（走 `catalogEntry` 自动补全），取消勾选即移除，应用一次生效。手输 ID 保留为兜底（中转站 `/models` 常不可用），降级为次要入口。Claude 目录接入同一弹窗。
 
-**能力声明区与 Chat 转换配置改为 Switch 行 / 常驻 Select。** 供应商级操作（模型列表、Chat Completions 等 5 项）是「标签 + Switch」设置行；Chat 思考转换的启停是 Switch，4 个子参数是常驻 Select/Switch。运行参数每个 spec 恰好一个常驻控件（toggle → 默认/启用/禁用 Select；slider/segment → 默认+选项 Select；integer → number Input 空=默认），显式值的「自定义」caption 保留。
+**能力声明区与 Chat 转换配置改为 Switch 行 / 常驻 Select。** 供应商级操作（模型列表、Chat Completions 等 5 项）是「标签 + Switch」设置行；Chat 思考转换的启停是 Switch，4 个子参数是常驻 Select/Switch。运行参数常驻控件的当前映射由[供应商运行参数沿用客户端设置行](../feature/2026-11-23-provider-parameter-setting-rows.md)拥有。
 
 参考结论归属：cc-switch 的常驻内联与档位多选、ZCode 的 chip 编辑与基数退化（0 选项隐藏、不渲染假可用控件）。
 
@@ -35,10 +35,11 @@ Status: implemented
 
 - [供应商配置减负](../feature/2026-11-16-provider-configuration-relief.md)：其「只在主动修改时呈现值控件」的值编辑回合被本篇取代；预设补全、能力单处编辑、汇总与校验所有者不变。
 - [供应商高级设置完整显示](../simplification/2026-10-13-provider-advanced-settings-always-visible.md)：常显原则被本篇推到控件层，继续成立。
-- [供应商目录动作按钮契约](../feature/2026-11-20-provider-catalog-action-buttons.md)：dangerText 变体与主模型胶囊继续使用；Codex 目录改为卡片后 `providerSetup.actions` 列头只剩 Claude 目录表格消费。
+- [供应商目录动作按钮契约](../feature/2026-11-20-provider-catalog-action-buttons.md)拥有危险文字和主模型胶囊。`providerSetup.actions` 由 Codex 名称映射使用。
 
 ## Alternatives considered
 
+- Claude 表格可以压缩大量模型的高度，模型 ID 也能对齐。共享图形卡片将主模型与操作放回同一个模型单元，窄窗仍可自然换行。Codex 的多组编辑控件使用单列卡片保留操作空间。
 - 保留 `ProviderValue` 值编辑回合（2026-11-16 决定）。它最强的理由是扫读时只见结果值、同屏只挂一个输入控件，编辑器保持紧凑。不用：用户明确否决多级操作；枚举结构化后 chips 的选中态本身就是结果值，「扫读值」与「一击修改」不再互斥，回合只剩成本。
 - ZCode 式 chip 原位文本编辑（点击 chip 变输入框改档位名）。它最强的理由是支持任意自定义档位标识。不用：Codex 只认 8 档封闭枚举，自由命名必然产生被后端丢弃的值；自定义在这里没有合法出口。
 - 每模型编辑区收进 collapsible 折叠。它最强的理由是 5 模型 × (2 限额 + 6 能力 + 8 档位) 常驻的视觉密度。不用：折叠仍是二级操作；预设自动填正确后 chips 处于目标态，密度即信息本身。
@@ -49,3 +50,7 @@ Status: implemented
 - 收益：编辑器内任何值一次点击可达；推理等级与能力全部点选，手敲只发生在真正的开放值（端点、密钥、上游模型名）；添加模型对主流供应商全程零键入；`ProviderValue`、`CodexCatalogDetails`、编辑/完成按钮与逗号解析路径全部删除，交互面收窄为三类原语（Input、Select/Switch、chips）。
 - 代价：模型卡片常驻编辑区增加目录区高度（由编辑器中部滚动承载）；档位 chips 对快照未收录的限额值不高亮，只作快捷键不作验证；批量弹窗多一个临时勾选态，应用前草稿不变。
 - 数据契约零变更：旧档案打开即正常渲染；保存路径与校验时机不变。
+
+## Verification
+
+在应用入口使用示例档案打开两端模型目录，确认目录内使用卡片。Claude 的卡片支持改设主模型、输入模型 ID 添加和删除。Codex 的卡片支持改设主模型，并保留上下文窗口和输出上限控件。在应用默认窗口尺寸截取两端目录和用途路由。

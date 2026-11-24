@@ -189,8 +189,19 @@
 }
 
 :where(.asb-client-settings-panel, .asb-provider-parameters) {
-  --asb-settings-module-bg: var(--asb-content-muted);
   --asb-settings-module-border: var(--asb-hairline-strong);
+}
+
+/* Provider runtime parameters stack at the client configuration's section
+ * rhythm and span the workspace width like its body: no form measure. */
+.asb-provider-parameters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+}
+
+.asb-provider-parameters > .asb-settings-actions {
+  margin-top: 0;
 }
 
 .asb-toggle-group {

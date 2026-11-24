@@ -5,7 +5,7 @@ import { SkillWorkbench } from "../../components/extensions/SkillWorkbench";
 import { toast, toastMessage } from "../../components/use-toast";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
-async function deployUpdatedDefinition(w: ExtensionWorkspace, saved: SkillUpdatePreparation | null) {
+export async function deployUpdatedDefinition(w: ExtensionWorkspace, saved: SkillUpdatePreparation | null) {
   if (!saved) return false;
   if (saved.deployment === "unverified") {
     toast({
@@ -73,7 +73,7 @@ export function SkillEditorDialog({
           return deployUpdatedDefinition(w, result);
         }}
         onRestoreVersion={async (id, digest) => {
-          const result = await w.ext.restoreSkillVersion(id, digest);
+          const result = await w.ext.restoreSkillVersion(id, digest, item.revision);
           return deployUpdatedDefinition(w, result);
         }}
         onSaveDependencies={w.ext.saveSkillDependencies}

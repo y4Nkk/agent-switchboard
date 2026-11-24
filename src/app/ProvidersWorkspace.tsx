@@ -6,6 +6,7 @@ import { ProviderConversionPicker } from "../components/provider-editor/Provider
 import { ProviderConversionBatchView } from "../components/provider-editor/ProviderConversionBatchView";
 import { ProvidersPage } from "../pages/ProvidersPage";
 import { useClientRouteTransition } from "./useClientRouteTransition";
+import { useOnReturnToRoot } from "./PageRoot";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
@@ -14,6 +15,12 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
   const { snapshot, appFilter, activeProfileId, providers, providerSwitch, appSettingsState, busy, operations } = model;
   const { discoveryState, ccImport, sqlImport } = model;
   const { route, userConfigRoute, codexEditorSession, claudeEditorSession } = useProvidersWorkspaceRoute(model, active);
+  const subpageOpen = importing || (appFilter === "claude" && model.providerView.kind === "usage")
+    || codexEditorSession !== null || claudeEditorSession !== null;
+  useOnReturnToRoot(active && subpageOpen, () => {
+    model.setProviderView({ kind: "list" });
+    providers.closeEditorAtList();
+  }, importing && busy);
   const editorNavigation = { request: providers.editorRequest, onRequestHandled: providers.handleEditorRequest,
     onReplaceSession: providers.replaceEditorSession, onReload: providers.reloadEditor, inventory: { codex: snapshot.codexRecords,
       profiles: [...snapshot.records, ...snapshot.codexOfficialRecords], activeIds: { codex: activeProfileId("codex"), claude: activeProfileId("claude") } } };
@@ -21,7 +28,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
     <div ref={route.workspaceRef} className="asb-client-route-workspace">
       <ProviderConversionFlow model={model} active={active && !importing} />
       {providers.pendingReleaseError != null && <p className="asb-field-help" role="status">{t("operations.save.retryRelease")}</p>}
-      {importing && <div className="asb-editor-route" hidden={!active}>
+      {importing && <div className="asb-subpage-route" hidden={!active}>
         <ProviderImportPage appFilter={appFilter} discovery={discoveryState.discovery} busy={busy}
           ccScan={ccImport.ccScan} ccSelected={ccImport.ccSelected} ccResult={ccImport.ccResult} ccDirectory={ccImport.ccDirectory}
           sqlScan={sqlImport.sqlScan} sqlSelected={sqlImport.sqlSelected} sqlResult={sqlImport.sqlResult}

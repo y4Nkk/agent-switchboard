@@ -25,9 +25,8 @@
   min-height: 0;
 }
 
-/* The navigation row owns client selection and page actions; search and
-   organization filters share the view-controls row. The surrounding flex
-   column owns spacing; the shared header rule removes its bottom margin. */
+/* The navigation row owns client selection and page actions. Project,
+   search and filters share the view-controls row. */
 .asb-sessions > .asb-workspace-header {
   flex: none;
 }
@@ -81,6 +80,8 @@
 
 .asb-session-list-heading {
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-unit) var(--asb-space-2);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
@@ -118,13 +119,12 @@
   text-align: left;
 }
 
-.asb-session-item:hover,
-.asb-session-item.is-active {
-  background: var(--asb-row-selected);
+.asb-session-item:hover:not(:disabled) {
+  background: var(--asb-row-hover);
 }
 
-.asb-session-item.is-selected {
-  border-color: var(--asb-action);
+.asb-session-item.is-active {
+  background: var(--asb-row-selected);
 }
 
 .asb-session-item-title {

@@ -10,6 +10,7 @@ mod checks;
 mod definitions;
 mod planner;
 mod portable;
+mod registry;
 mod repair;
 mod skill_backups;
 mod skills;
@@ -65,6 +66,12 @@ pub use portable::{
     __tauri_command_name_export_extension_portable, __tauri_command_name_import_extension_portable,
     export_extension_portable, import_extension_portable,
 };
+pub use registry::{
+    __cmd__apply_mcp_registry_update, __cmd__check_mcp_registry_updates, __cmd__search_mcp_registry,
+    __tauri_command_name_apply_mcp_registry_update, __tauri_command_name_check_mcp_registry_updates,
+    __tauri_command_name_search_mcp_registry, apply_mcp_registry_update, check_mcp_registry_updates,
+    search_mcp_registry,
+};
 #[cfg(debug_assertions)]
 pub use repair::RepairRequest;
 pub use repair::{
@@ -79,14 +86,14 @@ pub use skill_backups::{
 };
 pub use skills::{
     __cmd__check_skill_updates, __cmd__create_local_skill, __cmd__fork_local_skill,
-    __cmd__get_skill_editor, __cmd__list_skill_versions, __cmd__update_skill_definition,
+    __cmd__get_skill_editor, __cmd__list_skill_versions, __cmd__set_skill_version,
     __cmd__update_skill_dependencies, __cmd__update_skill_files,
     __tauri_command_name_check_skill_updates, __tauri_command_name_create_local_skill,
     __tauri_command_name_fork_local_skill, __tauri_command_name_get_skill_editor,
-    __tauri_command_name_list_skill_versions, __tauri_command_name_update_skill_definition,
+    __tauri_command_name_list_skill_versions, __tauri_command_name_set_skill_version,
     __tauri_command_name_update_skill_dependencies, __tauri_command_name_update_skill_files,
     check_skill_updates, create_local_skill, fork_local_skill, get_skill_editor,
-    list_skill_versions, update_skill_definition, update_skill_dependencies, update_skill_files,
+    list_skill_versions, set_skill_version, update_skill_dependencies, update_skill_files,
 };
 pub use sources::{
     __cmd__import_discovered_mcp, __cmd__import_discovered_skill, __cmd__import_skill_candidate,

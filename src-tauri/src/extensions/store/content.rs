@@ -271,21 +271,6 @@ impl ExtensionStore {
         Ok(())
     }
 
-    pub fn skill_version_exists(
-        &self,
-        definition_id: &str,
-        digest: &str,
-    ) -> Result<bool, ExtensionStoreError> {
-        let manifest_path = self
-            .path(&["library", definition_id, digest])
-            .join(CONTENT_MANIFEST_NAME);
-        if !manifest_path.is_file() {
-            return Ok(false);
-        }
-        self.load_skill_version(definition_id, digest)?;
-        Ok(true)
-    }
-
     pub fn load_skill_version(
         &self,
         definition_id: &str,

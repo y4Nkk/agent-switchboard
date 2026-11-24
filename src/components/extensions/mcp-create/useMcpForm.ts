@@ -1,6 +1,8 @@
 import { uiMessage } from "../../../i18n/errors";
 import { useRef, useState } from "react";
 import type { AppKind, ExtensionDraft } from "../../../api/client";
+import type { McpRegistrySource } from "../../../api/extensions/mcp";
+import type { McpRegistryEntry } from "../../../api/extensions/registry";
 import { materializeMcpDraft, validateMcpSource, type PutSecret } from "./mcp-draft";
 import { emptyServer, formatMcpJson, jsonServiceName, parseMcpJson, renameJsonService, type CreateSource } from "./mcp-json";
 import { validateUniqueName, uniquePresetName } from "./mcp-name";
@@ -12,6 +14,7 @@ export interface NewMcpFormProps {
   busy: boolean;
   onCancel: () => void;
   existingNames?: string[];
+  registryEntry?: McpRegistryEntry & { source: McpRegistrySource };
   onBusyChange?: (busy: boolean) => void;
   onPutSecret: PutSecret;
   onSave: (draft: ExtensionDraft, clients: AppKind[]) => Promise<boolean>;
@@ -25,7 +28,10 @@ async function saveNewMcp(props: NewMcpFormProps, document: EditorDocument, clie
   const source = parseMcpJson(document.json, document.name);
   validateUniqueName(source.name, props.existingNames ?? []);
   validateMcpSource(source, clients);
-  const mcpMetadata = buildMetadata(metadata);
+  const registry = props.registryEntry?.source;
+  const display = buildMetadata(metadata);
+  const mcpMetadata = registry && source.server.type === "http" && source.server.url === registry.endpoint
+    ? { ...display, registry } : display;
   const draft = await materializeMcpDraft(source, props.onPutSecret);
   if (!await props.onSave({ ...draft, ...(mcpMetadata ? { mcpMetadata } : {}) }, [...clients])) {
     throw uiMessage("mcp.error.saveIncomplete");
@@ -33,9 +39,15 @@ async function saveNewMcp(props: NewMcpFormProps, document: EditorDocument, clie
 }
 
 export function useMcpForm(props: NewMcpFormProps) {
-  const [document, setDocument] = useState(EMPTY_DOCUMENT);
-  const [clients, setClients] = useState([...DEFAULT_CLIENTS]);
-  const [metadata, setMetadata] = useState(metadataDraft);
+  const entry = props.registryEntry;
+  const [document, setDocument] = useState(() => entry ? {
+    name: uniquePresetName((entry.name.split("/").at(-1) ?? "mcp").replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 56), props.existingNames ?? []),
+    json: formatMcpJson({ type: "http", url: entry.source.endpoint, headers: {} }),
+  } : EMPTY_DOCUMENT);
+  const [clients, setClients] = useState(entry ? [] : [...DEFAULT_CLIENTS]);
+  const [metadata, setMetadata] = useState(() => metadataDraft(entry ? {
+    displayName: entry.title, description: entry.description, docs: entry.docs,
+  } : undefined));
   const baseline = useRef(JSON.stringify({ document, clients, metadata }));
   const dirty = baseline.current !== JSON.stringify({ document, clients, metadata });
   const [preset, setPreset] = useState("custom");

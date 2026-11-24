@@ -12,6 +12,7 @@ interface Props {
   provider: TrayProvider;
   busy: boolean;
   switchingId: string | null;
+  armedId: string | null;
   refreshingId: string | null;
   onSwitch: () => void;
   onRefreshUsage: () => void;
@@ -21,16 +22,22 @@ interface Props {
  * every column as one native button and the usage warning carries a second
  * native refresh button. Both stay real buttons because a button cannot be
  * nested; tray.css owns every visual property. */
-export function TrayProviderItem({ provider, busy, switchingId, refreshingId, onSwitch, onRefreshUsage }: Props) {
+export function TrayProviderItem({ provider, busy, switchingId, armedId, refreshingId, onSwitch, onRefreshUsage }: Props) {
   const { t, language } = useI18n();
   // Plain formatters consume the committed language, so locale is an input too.
   const content = useMemo(() => trayUsageContent(provider.usage), [provider.usage, language]);
+  const armed = armedId === provider.id;
+  const confirmLabel = t("tray.provider.confirmSwitch", { name: provider.name });
   const action = provider.active
     ? t("tray.provider.active", { name: provider.name })
-    : t("tray.provider.switchTo", { name: provider.name });
+    : armed ? confirmLabel : t("tray.provider.switchTo", { name: provider.name });
+  const status = provider.active
+    ? t("tray.provider.current")
+    : switchingId === provider.id ? t("tray.provider.switching")
+    : armed ? confirmLabel : t("tray.provider.switch");
 
   return (
-    <div className={cx("tray-provider", provider.active && "is-active", switchingId === provider.id && "is-switching")}>
+    <div className={cx("tray-provider", provider.active && "is-active", switchingId === provider.id && "is-switching", armed && "is-armed")}>
       <button
         type="button"
         className="tray-provider-main"
@@ -43,7 +50,7 @@ export function TrayProviderItem({ provider, busy, switchingId, refreshingId, on
         <span className="tray-provider-name" title={provider.name}>{provider.name}</span>
         <TrayUsage content={content} />
         <span className={cx("tray-provider-switch", provider.active && "is-current")}>
-          {provider.active ? t("tray.provider.current") : switchingId === provider.id ? t("tray.provider.switching") : t("tray.provider.switch")}
+          {status}
         </span>
       </button>
       {content.alert && (

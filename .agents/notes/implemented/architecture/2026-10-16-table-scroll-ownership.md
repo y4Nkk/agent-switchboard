@@ -8,9 +8,9 @@ Status: implemented
 
 ## Decision
 
-Table 唯一拥有表格标记、行内展开和横向平移，默认 `scrollMode="horizontal"`：`flex: none` 保留内容高度，`overflow-x: auto / overflow-y: hidden` 只提供横向平移，随页面、EditorFrame 或 AppDialog 主体自然展开。只有以表格为主体的有界工作区显式选择 `scrollMode="viewport"`，由 Table 包裹层占满剩余空间并统一拥有两轴滚动、固定表头、键盘焦点和稳定槽位；模块不再私自给包裹层限定高度或固定表头。viewport 的 scroll-padding 为键盘焦点留出表头空间，滚动边界不向外层传递，内收焦点轮廓避免被工作区裁切。
+Table 唯一拥有表格标记、行内展开和横向平移，默认 `scrollMode="horizontal"`：`flex: none` 保留内容高度，`overflow-x: auto / overflow-y: hidden` 只提供横向平移，随页面、WorkspaceSubpage 或 AppDialog 主体自然展开。只有以表格为主体的有界工作区显式选择 `scrollMode="viewport"`，由 Table 包裹层占满剩余空间并统一拥有两轴滚动、固定表头、键盘焦点和稳定槽位；模块不再私自给包裹层限定高度或固定表头。viewport 的 scroll-padding 为键盘焦点留出表头空间，滚动边界不向外层传递，内收焦点轮廓避免被工作区裁切。
 
-扩展主列表直接选择 viewport，移除外层滚动壳；加载、失败和空态在同一个位置使用状态滚动面，结果数量留在列表下方。多模块管理面继续使用 AppDialog / EditorFrame 唯一主体。用量表与日额度明细按默认模式展开，移除旧私有高度与 sticky 规则。
+扩展主列表直接选择 viewport，移除外层滚动壳；加载、失败和空态在同一个位置使用状态滚动面，结果数量留在列表下方。多模块管理面使用 AppDialog 或 [WorkspaceSubpage](2026-11-23-workspace-subpage-scrolling.md) 提供的视口。用量表与日额度明细按默认模式展开，移除旧私有高度与 sticky 规则。
 
 Table 和列表状态面均组合 ScrollArea：外层负责布局，内层 `.asb-scroll-viewport` 承担原生滚动与键盘停靠，返回顶部按钮固定在外层右下角；表格模式对应的 overflow、overscroll、gutter 与 scroll-padding 应用于内层，sticky 选择器包含这层实际视口。
 
@@ -29,7 +29,7 @@ Table 和列表状态面均组合 ScrollArea：外层负责布局，内层 `.asb
 
 ## Consequences
 
-默认表格在 flex 主体内不再收缩为独立纵向滚动区；直接消费者无需逐个声明自然展开。扩展列表没有外层滚动壳，状态面与表格互斥，过滤结果数量位于固定注脚。扫描与来源浏览已属于 EditorFrame，旧 data-view 滚动分支及失去消费者的属性删除；日额度高度上限与用量私有 sticky / flex 规则删除。DESIGN.md 与仍有效的历史决定同步，不增加兼容选择器、祖先推断或第二套表格组件。
+默认表格在 flex 主体内不再收缩为独立纵向滚动区；直接消费者无需逐个声明自然展开。扩展列表没有外层滚动壳，状态面与表格互斥，过滤结果数量位于固定注脚。扫描使用二级工作区，来源浏览使用市场结果区。旧 data-view 滚动分支、日额度高度上限与用量私有 sticky / flex 规则删除。
 
 代价是长日额度明细增加页面高度。viewport 只适用于已有有界 flex 高度链的主列表；如果今后出现多个并排独立工作区，应明确各自工作面而非给模块表格添加任意高度上限。非溢出表格仍保留共享键盘停靠点。
 

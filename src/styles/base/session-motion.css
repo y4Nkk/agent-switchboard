@@ -1,0 +1,97 @@
+/* History and archive share a live panel. The changed animation name
+   restarts its entry without replacing its scroll or focus owners. */
+.asb-session-panel:not([hidden]) {
+  animation: asb-session-panel-in var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-session-panel[data-view="history"]:not([hidden]) {
+  animation-name: asb-session-history-in;
+}
+
+@keyframes asb-session-panel-in {
+  from { opacity: 0.76; translate: var(--asb-space-1) 0; }
+}
+
+@keyframes asb-session-history-in {
+  from { opacity: 0.76; translate: calc(-1 * var(--asb-space-1)) 0; }
+}
+
+/* A populated viewport animates as a unit. Progress updates, row selection,
+   and metadata changes leave the animation name and pagination intact. */
+.asb-session-items > .asb-scroll-viewport:has(> .asb-session-item, > .asb-session-result-row),
+.asb-session-detail:not(.asb-session-empty-detail),
+.asb-session-body,
+.asb-session-batch-list,
+.asb-session-range-preview,
+.asb-session-range-results {
+  animation: asb-session-content-in var(--asb-motion-fast) var(--asb-easing);
+}
+
+@keyframes asb-session-content-in {
+  from { opacity: 0.62; }
+}
+
+.asb-sessions .asb-tab {
+  transition:
+    background-color var(--asb-motion-press) var(--asb-easing),
+    color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-session-item,
+.asb-session-batch-list > li,
+.asb-action-menu[data-overlay-motion] .asb-action-menu-item,
+.asb-select-content[data-overlay-motion] .asb-select-item {
+  transition: background-color var(--asb-motion-press) var(--asb-easing);
+}
+
+:is(.asb-sessions, .asb-dialog-backdrop[data-overlay-motion]) .asb-select-chevron {
+  transition: rotate var(--asb-motion-press) var(--asb-easing);
+}
+
+:is(.asb-sessions, .asb-dialog-backdrop[data-overlay-motion])
+  :is(.asb-select-trigger[data-state="open"], .asb-date-trigger[aria-expanded="true"]) .asb-select-chevron {
+  rotate: 180deg;
+}
+
+.asb-dialog-backdrop[data-overlay-motion] .asb-checkbox-box > svg {
+  animation: asb-session-check-in var(--asb-motion-press) var(--asb-easing);
+}
+
+@keyframes asb-session-check-in {
+  from { opacity: 0.55; scale: 0.75; }
+}
+
+.asb-dialog-backdrop[data-overlay-motion][data-entering] {
+  animation: asb-session-backdrop-in var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-dialog-backdrop[data-overlay-motion] > .asb-dialog[data-entering] {
+  /* Field popups mount inside the surface and keep viewport coordinates. */
+  animation: asb-session-dialog-in var(--asb-motion-sheet) var(--asb-easing);
+}
+
+@keyframes asb-session-backdrop-in {
+  from { background-color: transparent; }
+}
+
+@keyframes asb-session-dialog-in {
+  from { opacity: 0; }
+}
+
+:is(.asb-action-menu, .asb-date-popover, .asb-select-content)[data-overlay-motion] {
+  transform-origin: var(--radix-select-content-transform-origin, var(--trigger-anchor-point, top center));
+}
+
+:is(.asb-action-menu, .asb-date-popover)[data-overlay-motion][data-entering],
+.asb-select-content[data-overlay-motion][data-state="open"] {
+  animation: asb-session-popover-in var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-action-menu[data-overlay-motion][data-exiting] {
+  pointer-events: none;
+  animation: asb-session-popover-in var(--asb-motion-press) var(--asb-easing) reverse;
+}
+
+@keyframes asb-session-popover-in {
+  from { opacity: 0; scale: 0.98; }
+}

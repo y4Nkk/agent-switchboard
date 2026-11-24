@@ -1,7 +1,7 @@
 import type { ReactNode, Ref } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { EditorFrame } from "../EditorFrame";
+import { WorkspaceSubpage } from "../WorkspaceSubpage";
 
 interface Props {
   title: string;
@@ -37,7 +37,8 @@ export function ProviderEditorFrame({
   const { t } = useI18n();
   const canSubmit = Boolean(formId) && canSave && !busy;
   return (
-    <EditorFrame
+    <WorkspaceSubpage
+      layout="fixed-actions"
       title={title}
       titleRef={titleRef}
       viewportRef={viewportRef}
@@ -56,6 +57,6 @@ export function ProviderEditorFrame({
       }
     >
       {children}
-    </EditorFrame>
+    </WorkspaceSubpage>
   );
 }

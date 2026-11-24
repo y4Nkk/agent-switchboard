@@ -6,7 +6,7 @@ use tauri::AppHandle;
 
 use crate::commands::error::{blocking, state, CommandError};
 use crate::extensions::skill_catalog::{
-    self, CatalogError, SkillDirectoryResult, SkillRepository, SkillRepositoryCatalog,
+    self, CatalogError, SkillRepository, SkillRepositoryCatalog,
     SkillRepositoryFailure,
 };
 use crate::extensions::sources::{self, SkillCandidate};
@@ -100,14 +100,8 @@ fn cache_catalog_scan(scan: skill_catalog::CatalogScan) -> SkillCatalogResult {
                 readme_url: readme_url(&repository.repo, candidate),
             })
             .collect();
-        match cache_candidates(group.candidates) {
-            Ok(()) => result.candidates.extend(dtos),
-            Err(error) => result.failures.push(SkillRepositoryFailure {
-                repository_id: repository.id,
-                repo: repository.repo,
-                message: error.message,
-            }),
-        }
+        cache_candidates(group.candidates);
+        result.candidates.extend(dtos);
     }
     for failure in &mut result.failures {
         failure.message = CommandError::new("skill-source-failed", &failure.message).message;
@@ -140,11 +134,9 @@ fn readme_url(repo: &str, candidate: &SkillCandidate) -> Option<String> {
 #[tauri::command]
 pub async fn search_skill_directory(
     query: String,
-    offset: Option<usize>,
-) -> Result<SkillDirectoryResult, CommandError> {
+) -> Result<Vec<SkillDirectoryEntry>, CommandError> {
     blocking(move || {
-        skill_catalog::search_directory(&query, offset.unwrap_or(0), &sources::http_fetch)
-            .map_err(detailed_source_error)
+        skill_catalog::search_directory(&query, &sources::http_fetch).map_err(detailed_source_error)
     })
     .await
 }
@@ -157,7 +149,7 @@ pub async fn resolve_directory_skill(
         let candidates = skill_catalog::resolve_directory_skill(&entry, &sources::http_fetch)
             .map_err(detailed_source_error)?;
         let dtos = candidates.iter().map(candidate_dto).collect();
-        cache_candidates(candidates)?;
+        cache_candidates(candidates);
         Ok(dtos)
     })
     .await

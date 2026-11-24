@@ -2,7 +2,7 @@ import { useId, useRef, useState } from "react";
 import { Save, X } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { EditorFrame } from "../EditorFrame";
+import { WorkspaceSubpage } from "../WorkspaceSubpage";
 import { Input } from "../Input";
 import { useUnsavedChanges } from "../useUnsavedChanges";
 import { McpClientFields, McpJsonField } from "./mcp-create/McpFormFields";
@@ -34,11 +34,11 @@ function McpEditor(props: McpEditFormProps & { reload: () => Promise<void> }) {
   const form = useMcpEditForm({ ...props, envelope: initial.current });
   const stale = props.currentRevision !== initial.current.revision;
   const id = useId();
-  const leave = useUnsavedChanges(form.dirty, form.busy);
+  const leave = useUnsavedChanges(form.dirty, form.busy, { guardPageRoot: true });
   const close = () => leave.request(props.onCancel);
   if (form.wizard) return <McpWizard initial={form.wizard} original={form.original} busy={form.busy}
     onApply={form.applyWizard} onCancel={form.closeWizard} />;
-  return <EditorFrame title={t("extensions.editor.editMcp", { name: props.envelope.name })}
+  return <WorkspaceSubpage layout="fixed-actions" title={t("extensions.editor.editMcp", { name: props.envelope.name })}
     backLabel={t("extensions.backToLibrary")} onBack={close} busy={form.busy}
     footer={<><Button variant="secondary" disabled={form.busy} onClick={close}><X size={16} aria-hidden="true" />{t("confirm.cancel")}</Button>
       <Button type="submit" form={id} variant="primary" disabled={form.busy || stale}><Save size={16} aria-hidden="true" />
@@ -58,5 +58,5 @@ function McpEditor(props: McpEditFormProps & { reload: () => Promise<void> }) {
         onChange={form.changeJson} onWizard={form.openWizard} /></section>
       {form.error && <p id={`${id}-error`} className="asb-warn-text asb-mcp-error" role="alert">{form.error}</p>}
     </form>{leave.confirmation}
-  </EditorFrame>;
+  </WorkspaceSubpage>;
 }

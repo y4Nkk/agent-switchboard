@@ -18,6 +18,7 @@ export const messages = {
   "tray.actionFailed": ["托盘操作失败，请打开主界面检查。", "The tray action failed; open the main window to check."],
   "tray.provider.active": ["{name}，当前供应商", "{name}, current provider"],
   "tray.provider.switchTo": ["切换到 {name}", "Switch to {name}"],
+  "tray.provider.confirmSwitch": ["再次点击切换到 {name}", "Click again to switch to {name}"],
   "tray.provider.switch": ["切换", "Switch"],
   "tray.provider.current": ["当前使用", "Current"],
   "tray.provider.switching": ["切换中", "Switching"],

@@ -3,9 +3,9 @@ import { discardSessionRange, executeSessionRange, previewSessionRange, readSess
   type SessionRangeAction, type SessionRangePreview, type SessionRangeProgress } from "../../api/session-range";
 import type { AppKind } from "../../api/client";
 import { useMessageState } from "../../i18n/use-message-state";
-import { dateBoundary, localDate } from "./session-dates";
+import { dateBoundary, localDate, sessionDatesInOrder, type SessionDates } from "./session-dates";
 
-export function useSessionRange(app: AppKind | null, archived: boolean, initial: { from: string; to: string },
+export function useSessionRange(app: AppKind | null, archived: boolean, initial: SessionDates,
   onChanged: () => void, onClose: () => void) {
   const [dates, setDates] = useState(() => {
     const today = new Date(); const from = new Date(); from.setDate(today.getDate() - 30);
@@ -20,7 +20,7 @@ export function useSessionRange(app: AppKind | null, archived: boolean, initial:
   const [error, setError] = useMessageState();
   const busy = stage !== null;
   const after = dateBoundary(dates.from, false), before = dateBoundary(dates.to, true);
-  const valid = Boolean(after && before && dates.from <= dates.to);
+  const valid = Boolean(after && before && sessionDatesInOrder(dates));
   useEffect(() => {
     if (stage !== "execute" || !preview) return;
     let stopped = false; let timer: ReturnType<typeof setTimeout>;

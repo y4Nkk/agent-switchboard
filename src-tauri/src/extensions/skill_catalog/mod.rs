@@ -11,8 +11,6 @@ pub use directory::{resolve_directory_skill, search_directory};
 pub use repositories::SkillRepositoryCatalog;
 pub use scan::{scan_repositories, CatalogScan};
 
-pub const DIRECTORY_PAGE_SIZE: usize = 20;
-pub const MAX_DIRECTORY_RESULTS: usize = 1000;
 pub const MAX_REPOSITORIES: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,14 +50,6 @@ pub struct SkillDirectoryEntry {
     pub subpath: String,
     pub installs: u64,
     pub readme_url: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillDirectoryResult {
-    pub items: Vec<SkillDirectoryEntry>,
-    pub total: usize,
-    pub has_more: bool,
 }
 
 #[derive(Debug, thiserror::Error)]

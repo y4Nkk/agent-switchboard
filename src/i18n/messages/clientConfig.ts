@@ -23,24 +23,16 @@ export const messages = {
   "clientConfig.common.reload": ["重新读取", "Reload"],
   "clientConfig.common.back": ["返回", "Back"],
   "clientConfig.common.cancel": ["取消", "Cancel"],
-  "clientConfig.toolbar.backFromDirectory": ["返回客户端配置", "Back to client configuration"],
   "clientConfig.toolbar.directory": ["官方设置目录", "Official settings directory"],
   "clientConfig.toolbar.instructions": ["全局指令", "Global instructions"],
-  "clientConfig.toolbar.collapseInstructions": ["收起全局指令", "Collapse global instructions"],
-  "clientConfig.toolbar.instructionsEditor": ["全局指令编辑器", "Global instructions editor"],
-  "clientConfig.toolbar.collapseReset": ["收起恢复设置", "Collapse reset settings"],
-  "clientConfig.toolbar.generatingClear": ["正在生成清空预览", "Generating the clear preview"],
-  "clientConfig.toolbar.generatingNative": ["正在生成恢复预览", "Generating the restore preview"],
 
-  // Configuration review (common configuration file).
+  // Common configuration file dialog.
   "clientConfig.review.title": ["通用配置文件", "Common configuration file"],
-  "clientConfig.review.collapse": ["收起通用配置文件", "Collapse common configuration file"],
-  "clientConfig.review.reading": ["正在读取配置", "Reading configuration"],
   "clientConfig.review.preparing": ["正在准备通用配置文件。", "Preparing the common configuration file."],
   "clientConfig.review.readingReal": ["正在读取当前机器的真实配置。", "Reading this machine's real configuration."],
   "clientConfig.review.readError": ["无法读取当前机器的真实配置：{message}", "Failed to read this machine's real configuration: {message}"],
   "clientConfig.review.scopeTitle": ["ASB 管理范围", "Managed by ASB"],
-  "clientConfig.review.scopeHelp": ["通用设置由本页表单管理，收起通用配置文件后请用对应设置项修改。", "Common settings are managed by the forms on this page; after collapsing the common configuration file, edit them through their settings."],
+  "clientConfig.review.scopeHelp": ["通用设置由客户端配置页的表单管理，关闭通用配置文件后请用对应设置项修改。", "Common settings are managed by the forms on the client configuration page; after closing the common configuration file, edit them through their settings."],
   "clientConfig.review.scopeCodexHelp": ["Codex 子 agent 的三项全局运行设置由「子 agent 运行」模块管理。", "Codex's three global subagent run settings are managed by the \"Subagent run\" module."],
 
   // Editor load errors.
@@ -67,7 +59,6 @@ export const messages = {
   // Reset flow.
   "clientConfig.reset.nativeTitle": ["恢复为客户端原生默认值", "Restore client native defaults"],
   "clientConfig.reset.extraTitle": ["清空 ASB 管理的额外通用配置", "Clear extra common settings managed by ASB"],
-  "clientConfig.reset.previewAria": ["{title}预览", "{title} preview"],
   "clientConfig.reset.extraLead": ["移除通过配置草稿由 ASB 明确管理的额外字段。", "Remove the extra fields explicitly managed by ASB through the configuration draft."],
   "clientConfig.reset.deepLead": ["清除 ASB 管理的标准通用配置覆盖，并移除真实配置中界面未拥有的字段。", "Clear the standard common setting overrides managed by ASB and remove fields in the real configuration that the UI does not own."],
   "clientConfig.reset.nativeLead": ["清除 ASB 管理的标准通用配置覆盖，让客户端按其原生默认行为运行。", "Clear the standard common setting overrides managed by ASB so the client runs on its native defaults."],
@@ -102,7 +93,7 @@ export const messages = {
   // Extra common configuration.
   "clientConfig.extra.title": ["额外通用配置", "Extra common settings"],
   "clientConfig.extra.actionHelp": ["来自配置草稿，不含在原生默认值恢复内；当前管理 {count} 项。", "From the configuration draft, outside the native-defaults restore; {count} entries managed."],
-  "clientConfig.extra.savedNotice": ["已加入当前通用设置草稿；收起通用配置文件后可保存并预览应用。", "Added to the current common settings draft; collapse the common configuration file to save and preview the apply."],
+  "clientConfig.extra.savedNotice": ["已加入当前通用设置草稿；关闭通用配置文件后，可在客户端配置页保存并预览应用。", "Added to the current common settings draft; close the common configuration file to save and preview the apply on the client configuration page."],
   "clientConfig.extra.invalid": ["Claude 额外通用配置无效", "Invalid Claude extra common configuration"],
   "clientConfig.extra.editorTitle": ["ASB 管理的额外通用配置", "Extra common settings managed by ASB"],
   "clientConfig.extra.editorHelp": ["仅用于 Claude 未被可视化表单覆盖的通用字段；供应商、凭据与扩展字段会被拒绝。", "Only for Claude common fields not covered by the visual forms; provider, credential, and extension fields are rejected."],
@@ -175,7 +166,6 @@ export const messages = {
   "clientConfig.details.recoverLock": ["清理遗留锁", "Clean up leftover lock"],
 
   // Official settings directory (disposition labels; entry.title/detail stay backend-owned).
-  "clientConfig.directory.title": ["官方设置目录", "Official settings directory"],
   "clientConfig.directory.dispositionDirect": ["基础参数", "Base parameters"],
   "clientConfig.directory.dispositionSeparate": ["独立模块", "Separate module"],
   "clientConfig.directory.dispositionPreserve": ["保留不写入", "Preserved, never written"],

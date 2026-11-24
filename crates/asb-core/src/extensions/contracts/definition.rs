@@ -26,6 +26,16 @@ pub struct McpMetadata {
     pub homepage: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub docs: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<McpRegistrySource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct McpRegistrySource {
+    pub name: String,
+    pub version: String,
+    pub endpoint: String,
 }
 
 /// One library definition, persisted as `extensions/definitions/<id>.json`.
@@ -43,6 +53,10 @@ pub struct ExtensionDefinition {
     pub mcp_metadata: Option<McpMetadata>,
     /// Monotonic per-definition revision for optimistic concurrency.
     pub revision: u64,
+    /// Revision of the current MCP name and connection, present only when
+    /// later edits affected library metadata alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_config_revision: Option<u64>,
     /// RFC 3339 UTC timestamps.
     pub created_at: String,
     pub updated_at: String,
@@ -51,6 +65,10 @@ pub struct ExtensionDefinition {
 }
 
 impl ExtensionDefinition {
+    pub fn mcp_config_revision(&self) -> u64 {
+        self.mcp_config_revision.unwrap_or(self.revision)
+    }
+
     pub fn kind(&self) -> ExtensionKind {
         match self.payload {
             ExtensionPayload::Skill(_) => ExtensionKind::Skill,

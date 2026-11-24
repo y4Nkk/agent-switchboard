@@ -1,14 +1,11 @@
 import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "../components/Button";
-import { ClientFilter, type ClientFilterValue } from "../components/ClientFilter";
+import type { ClientFilterValue } from "../components/ClientFilter";
 import { GatewayGuidance, GatewayTopology } from "../components/GatewayTopology";
 import { GatewayHub } from "../components/GatewayHub";
 import { GatewayPortChangeSheet, type PortSheetState } from "../components/GatewayPortChangeSheet";
 import { GatewayTelemetry } from "../components/GatewayTelemetry";
-import { GatewayPanel } from "../components/GatewayPagePrimitives";
-import { GatewayIcon } from "../components/icons";
-import { CollapsibleSection } from "../components/Collapsible";
 import { useI18n } from "../i18n";
 import { useWorkspaceVisible } from "../hooks/use-workspace-visible";
 import {
@@ -37,12 +34,10 @@ interface Props {
 
 /** Runtime snapshots and transient focus share one page owner. */
 export function GatewayPage({ active, busy, profiles, routing }: Props & {
-  routing: (summary: ReactNode, mutating: boolean) => ReactNode;
+  routing: (runtime: { summary: ReactNode; observation: ReactNode; mutating: boolean; visible: boolean }) => ReactNode;
 }) {
-  const { t } = useI18n();
   const [focus, setFocus] = useState<ClientFilterValue>("all");
   const [portSheet, setPortSheet] = useState<PortSheetState | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const visible = useWorkspaceVisible(active);
   // The sheet is portaled over the whole window; leaving the gateway workspace
   // must close it so it never floats over an unrelated page. The flow hook
@@ -64,21 +59,16 @@ export function GatewayPage({ active, busy, profiles, routing }: Props & {
       onRetry={retryBind} onChangePort={() => setPortSheet({ stage: "input" })} />
     <GatewayGuidance status={status} busy={retrying || busy} onDiscardRecovery={discardRecovery} />
   </> : error ? <GatewayUnavailable error={error} onRetry={refresh} /> : <GatewayLoading />;
-  return (
-    <div className="asb-gateway-workspace">
-      {routing(summary, retrying)}
-      {status && <CollapsibleSection className="asb-panel asb-gateway-panel" open={detailsOpen}
-        onOpenChange={setDetailsOpen} label={t("modelRoutes.runtime")}>
-      <ClientFilter value={focus} onChange={setFocus} label={t("gateway.focusAriaLabel")} showLogos />
-      <GatewayTopology
-        status={status}
-        failed={failed}
-        profileNames={profileNames}
-        focus={focus}
-        onFocus={(app) => setFocus((current) => current === app ? "all" : app)}
-      />
+  const observation = visible && status ? (
+    <div className="asb-gateway-observation">
+      <GatewayTopology status={status} failed={failed} profileNames={profileNames}
+        focus={focus} onFocusChange={setFocus} />
       <GatewayTelemetry metrics={status.metrics} profileNames={profileNames} focus={focus} />
-      </CollapsibleSection>}
+    </div>
+  ) : null;
+  return (
+    <>
+      {routing({ summary, observation, mutating: retrying, visible })}
       {portSheet && status && (
         <GatewayPortChangeSheet
           state={portSheet}
@@ -87,7 +77,7 @@ export function GatewayPage({ active, busy, profiles, routing }: Props & {
           onRefreshed={() => void refresh()}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -156,29 +146,26 @@ function useGatewayRuntime(active: boolean) {
 function GatewayUnavailable({ error, onRetry }: { error: string; onRetry: () => void }) {
   const { t } = useI18n();
   return (
-    <GatewayPanel>
-      <div className="asb-gateway-unavailable" role="alert">
-        <GatewayIcon />
-        <div>
-          <p className="asb-gateway-unavailable-title">{t("gateway.unavailableTitle")}</p>
-          <p className="asb-gateway-error">{error}</p>
-        </div>
-        <Button variant="secondary" onClick={() => void onRetry()}>{t("gateway.retry")}</Button>
+    <div className="asb-gateway-summary-state">
+      <div role="alert">
+        <p className="asb-gateway-hub-state">{t("gateway.unavailableTitle")}</p>
+        <p className="asb-gateway-hub-detail">{error}</p>
       </div>
-    </GatewayPanel>
+      <Button variant="secondary" onClick={() => void onRetry()}>{t("gateway.retry")}</Button>
+    </div>
   );
 }
 
-/* Loading reserves the new page's footprint (map, strip, recent requests). */
 function GatewayLoading() {
   const { t } = useI18n();
   return (
-    <GatewayPanel>
-      <div className="asb-gateway-loading" role="status" aria-label={t("gateway.loadingAriaLabel")}>
-        <span className="asb-skeleton" aria-hidden="true" />
-        <span className="asb-skeleton" aria-hidden="true" />
-        <span className="asb-skeleton" aria-hidden="true" />
+    <div className="asb-gateway-summary-state" role="status">
+      <p className="asb-gateway-hub-state">{t("gateway.loadingAriaLabel")}</p>
+      <div className="asb-gateway-loading" aria-hidden="true">
+        <span className="asb-skeleton" />
+        <span className="asb-skeleton" />
+        <span className="asb-skeleton" />
       </div>
-    </GatewayPanel>
+    </div>
   );
 }

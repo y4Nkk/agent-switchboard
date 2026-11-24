@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CodexProviderRecord, ProviderRecord } from "../src/api/client.ts";
 import { codexProviderDraft } from "../src/lib/provider-drafts.ts";
-import { resetRouting, roleTarget, routeDocument, routeIssue, routeRecords, routeRoles, routeDescription, routeIssueRole, type RouteDocument } from "../src/components/model-routing/model.ts";
+import { clearRoleRoute, resetRouting, roleRoute, roleSource, roleSources, roleTarget, routeDocument, routeIssue, routeRecords, routeRoles, routeDescription, routeIssueRole,
+  setRoleModel, setRoleOneM, setRoleSource, sourceKey, sourceModels, sourceName, type RouteDocument } from "../src/components/model-routing/model.ts";
 
 function codex(id: string): CodexProviderRecord {
   return { profile: { id, name: id, routeMode: "gateway", endpoint: "https://fixture.invalid", apiKey: "fixture-key",
@@ -147,4 +148,69 @@ test("a new Claude fixed self target keeps its provider mode and unsaved display
   assert.deepEqual(routeDescription(document, "subagent", inventory()), {
     target: { provider: "Unsaved Claude owner", model: "tier-model" }, mode: "provider", oneM: true,
   });
+});
+
+test("lane sources list the main connection first and skip targets that cannot relay", () => {
+  const source = claude();
+  const other = claude();
+  other.profile.id = "other";
+  other.profile.name = "Other provider";
+  other.profile.model = "other-main";
+  const bound = claude();
+  bound.profile.id = "bound";
+  bound.profile.connection = { authBinding: { source: "fixture" } };
+  const document = routeDocument({ kind: "profile", record: source });
+  const list = inventory([], [source, other, bound]);
+  assert.deepEqual(roleSources(document, list).map(sourceKey), ["primary", `provider:${source.profile.id}`, "provider:other"]);
+  assert.deepEqual(sourceModels(document, "primary", list), ["main-model", "tier-model"]);
+  assert.deepEqual(sourceModels(document, { kind: "provider", profileId: "other" }, list), ["other-main", "tier-model"]);
+  assert.deepEqual(sourceModels(document, { kind: "provider", profileId: "missing" }, list), []);
+  assert.equal(sourceName(document, { kind: "provider", profileId: "other" }, list), "Other provider");
+  assert.equal(sourceName(document, { kind: "provider", profileId: "missing" }, list), null);
+});
+
+test("choosing a model routes a purpose in one step and the 1M flag follows the model", () => {
+  const document = routeDocument({ kind: "profile", record: claude() });
+  const routed = setRoleModel(document, "haiku", "primary", "main-model");
+  assert.deepEqual(roleRoute(routed, "haiku"), { mode: "primary", model: "main-model", oneM: false });
+  assert.deepEqual(roleSource(routed, "haiku"), "primary");
+  const flagged = setRoleOneM(routed, "haiku", true);
+  const moved = setRoleModel(flagged, "haiku", { kind: "provider", profileId: document.profileId }, "tier-model");
+  assert.deepEqual(roleRoute(moved, "haiku"), { mode: "provider", profileId: document.profileId, model: "tier-model", oneM: true });
+  assert.equal(routeIssue(moved, inventory([], [claude()])), null);
+  assert.deepEqual(roleRoute(clearRoleRoute(moved, "haiku"), "haiku"), null);
+  assert.equal(setRoleModel(document, "main", "primary", "other"), document);
+  const main = setRoleOneM(document, "main", false);
+  if (main.kind !== "profile" || main.draft.modelOptions?.kind !== "claude") throw new Error("wrong boundary");
+  assert.equal(main.draft.modelOptions.primaryOneM, false);
+});
+
+test("moving a routed purpose to a source without its model clears the model, and an unrouted purpose stays unwritten", () => {
+  const document = routeDocument({ kind: "profile", record: claude() });
+  const list = inventory([], [claude()]);
+  const routed = setRoleModel(document, "sonnet", { kind: "provider", profileId: "other" }, "other-tier");
+  assert.deepEqual(roleRoute(routed, "sonnet"), { mode: "provider", profileId: "other", model: "other-tier", oneM: true });
+  const switched = setRoleSource(routed, "sonnet", "primary", list);
+  assert.deepEqual(roleRoute(switched, "sonnet"), { mode: "primary", model: "", oneM: false });
+  assert.equal(routeIssue(switched, list), "modelRoutes.chooseTarget");
+  assert.equal(setRoleSource(document, "haiku", "primary", list), document);
+});
+
+test("Codex subagent lanes offer the draft catalog and other saved catalogs, skipping account-bound profiles", () => {
+  const source = codex("source");
+  const bound = codex("bound");
+  bound.profile.connection = { authBinding: { kind: "fixture" } } as typeof bound.profile.connection;
+  const document = routeDocument({ kind: "codex", record: source });
+  const list = inventory([source, codex("target"), bound]);
+  assert.deepEqual(roleSources(document, list).map(sourceKey), ["provider:source", "provider:target"]);
+  assert.deepEqual(sourceModels(document, { kind: "provider", profileId: "source" }, list), ["shared-model"]);
+  assert.deepEqual(sourceModels(document, { kind: "provider", profileId: "missing" }, list), []);
+  const routed = setRoleModel(document, "subagent", { kind: "provider", profileId: "target" }, "shared-model");
+  assert.deepEqual(roleRoute(routed, "subagent"), { profileId: "target", model: "shared-model" });
+  assert.deepEqual(roleSource(routed, "subagent"), { kind: "provider", profileId: "target" });
+  assert.equal(routeIssue(routed, list), null);
+  assert.equal(setRoleOneM(routed, "subagent", true), routed);
+  source.profile.connection = { authBinding: { kind: "fixture" } } as typeof source.profile.connection;
+  assert.deepEqual(roleSources(routeDocument({ kind: "codex", record: source }), list).map(sourceKey), ["provider:target"]);
+  assert.deepEqual(roleRoute(clearRoleRoute(routed, "subagent"), "subagent"), null);
 });

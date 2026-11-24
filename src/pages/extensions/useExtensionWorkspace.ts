@@ -15,6 +15,7 @@ import { useExtensionApplies } from "./useExtensionApplies";
 import { useExtensionView, type ExtensionNavigation } from "./useExtensionView";
 import { useSkillUpdates } from "./useSkillUpdates";
 import { useMcpConnectionCheck } from "./useMcpConnectionCheck";
+import { useMcpRegistryUpdates } from "./useMcpRegistryUpdates";
 
 function definitionActions(
   ext: ReturnType<typeof useExtensions>,
@@ -43,8 +44,8 @@ function definitionActions(
     if (removed) nav.closeDialog();
     return removed === true;
   };
-  const importCandidate = async (digest: string, name: string, hostScoped: AppKind | null) => {
-    const definition = await ext.importCandidate(digest, name, hostScoped);
+  const importCandidate = async (candidateId: string, name: string, hostScoped: AppKind | null) => {
+    const definition = await ext.importCandidate(candidateId, name, hostScoped);
     if (!definition) return null;
     const result = await install(definition.id, hostScoped ? [hostScoped] : EXTENSION_CLIENTS);
     if (result.status !== "applied") toast({
@@ -83,6 +84,7 @@ export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation
   );
   const applies = useExtensionApplies(ext, discovery);
   const updates = useSkillUpdates(ext, applies);
+  const registryUpdates = useMcpRegistryUpdates(ext);
   const items = ext.workspace?.items ?? [];
   const kindItems = items.filter((item) => item.kind === nav.kind);
   const visible = kindItems.filter(
@@ -119,6 +121,7 @@ export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation
     nav,
     applies,
     updates,
+    registryUpdates,
     check,
     items,
     kindItems,

@@ -2,7 +2,7 @@ import { useMessageState } from "../../../i18n/use-message-state";
 import { useId, useRef, useState } from "react";
 import { useI18n } from "../../../i18n";
 import { Button } from "../../Button";
-import { EditorFrame } from "../../EditorFrame";
+import { WorkspaceSubpage } from "../../WorkspaceSubpage";
 import { useUnsavedChanges } from "../../useUnsavedChanges";
 import { Input } from "../../Input";
 import { Select } from "../../Select";
@@ -67,7 +67,7 @@ export function McpWizard({ initial, original, busy, onApply, onCancel }: Props)
   const [name, setName] = useState(initial.name);
   const [server, setServer] = useState(() => initializeWizard(initial.server));
   const baseline = useRef(JSON.stringify({ name, server }));
-  const leave = useUnsavedChanges(baseline.current !== JSON.stringify({ name, server }), busy);
+  const leave = useUnsavedChanges(baseline.current !== JSON.stringify({ name, server }), busy, { guardPageRoot: true });
   const id = useId();
   const close = () => leave.request(onCancel);
   const [pendingType, setPendingType] = useState<McpType | null>(null);
@@ -87,7 +87,7 @@ export function McpWizard({ initial, original, busy, onApply, onCancel }: Props)
     } catch (caught) { setError(caught); }
   };
   return (
-    <EditorFrame title={t("mcp.wizard.aria")} backLabel={t("mcp.action.cancel")} busy={busy} onBack={close}
+    <WorkspaceSubpage layout="fixed-actions" title={t("mcp.wizard.aria")} backLabel={t("mcp.action.cancel")} busy={busy} onBack={close}
       footer={<><Button variant="secondary" disabled={busy} onClick={close}><CloseIcon />{t("mcp.action.cancel")}</Button>
         <Button type="submit" form={id} variant="primary" disabled={busy || pendingType !== null}><CheckIcon />{t("mcp.wizard.apply")}</Button></>}>
     <form id={id} className="asb-form asb-mcp-create" aria-label={t("mcp.wizard.aria")} noValidate
@@ -115,6 +115,6 @@ export function McpWizard({ initial, original, busy, onApply, onCancel }: Props)
       </div>}
       <ServerFields server={server} busy={busy || pendingType !== null} original={original} onChange={update} />
       {error && <p id={`${id}-error`} className="asb-warn-text asb-mcp-error" role="alert">{error}</p>}
-    </form>{leave.confirmation}</EditorFrame>
+    </form>{leave.confirmation}</WorkspaceSubpage>
   );
 }

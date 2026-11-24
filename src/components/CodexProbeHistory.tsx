@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { CodexProbeGradingVersion, CodexProbeHistoryItem, CodexProbeQuestionSnapshot } from "../api/client";
 import type { MessageKey, TFunction } from "../i18n";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { Checkbox } from "./Checkbox";
 import { ConfirmSheet } from "./ConfirmSheet";
-import { EditorFrame } from "./EditorFrame";
 import { Pagination } from "./Pagination";
 import { ProbeTaskProgress } from "./ProbeTaskProgress";
 import { Select } from "./Select";
@@ -17,11 +16,13 @@ import {
 import { Table, type TableColumn } from "./Table";
 import { Time } from "./Time";
 import { ModuleHeader } from "./WorkspaceHeader";
+import { WorkspaceSubpage } from "./WorkspaceSubpage";
 import { formatCompactTokenCount, TOKEN_UNIT } from "../lib/token-format";
 import type { useCodexProbe } from "../app/useCodexProbe";
 import { useCodexProbeHistory } from "./use-codex-probe-history";
 
 interface Props {
+  open: boolean;
   active: boolean;
   probe: ReturnType<typeof useCodexProbe>;
   onClose: () => void;
@@ -236,13 +237,19 @@ function HistoryDetail({ history, onReuseQuestion }: {
   );
 }
 
-/** The full-page probe history on the shared editor frame: filtered and
- * paged list, detail view, explicit deletions, and a live entry back to a
- * running batch. */
-export function CodexProbeHistory({ active, probe, onClose, onReuseQuestion, onChanged }: Props) {
+export function CodexProbeHistory({ open, active, probe, onClose, onReuseQuestion, onChanged }: Props) {
   const { t } = useI18n();
   const [pendingDelete, setPendingDelete] = useState<CodexProbeHistoryItem[] | null>(null);
   const history = useCodexProbeHistory(active, probe.detailRevision, pendingDelete !== null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const heading = headingRef.current;
+    if (!heading || heading.closest("[hidden]")) return;
+    viewportRef.current?.scrollTo({ top: 0 });
+    heading.focus({ preventScroll: true });
+  }, [history.detailId]);
+  if (!open) return null;
   const pendingItems = pendingDelete ?? [];
   const requestDelete = (ids: string[]) => {
     const items = history.items.filter((item) => ids.includes(item.batchId));
@@ -261,8 +268,11 @@ export function CodexProbeHistory({ active, probe, onClose, onReuseQuestion, onC
     }
   };
   return (
-    <EditorFrame
+    <WorkspaceSubpage
+      layout="page"
       title={t("codex.history.title")}
+      titleRef={headingRef}
+      viewportRef={viewportRef}
       backLabel={t(history.detailId === null ? "codex.history.backToRadar" : "codex.history.backToList")}
       onBack={history.detailId === null ? onClose : history.closeDetail}
       busy={history.deleting}
@@ -303,6 +313,6 @@ export function CodexProbeHistory({ active, probe, onClose, onReuseQuestion, onC
           </ul>
         </ConfirmSheet>
       )}
-    </EditorFrame>
+    </WorkspaceSubpage>
   );
 }

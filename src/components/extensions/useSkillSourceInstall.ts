@@ -17,11 +17,11 @@ export function useSkillSourceInstall(actions: SkillSourceActions, items: Extens
     const current = latest.current;
     if (!mounted.current || current.busy || lock.current || candidate.diagnostics.length > 0 ||
       skillCandidateInstalled(candidate, current.items)) return;
-    lock.current = candidate.digest;
-    setActive(candidate.digest);
+    lock.current = candidate.candidateId;
+    setActive(candidate.candidateId);
     setError(null);
     try {
-      const saved = await current.actions.onImport(candidate.digest, candidate.name, skillCandidateHost(candidate));
+      const saved = await current.actions.onImport(candidate.candidateId, candidate.name, skillCandidateHost(candidate));
       if (!mounted.current) return;
       if (!saved) setError(uiMessage("extensions.sources.installIncomplete", { name: candidate.name }));
     } catch (reason) {

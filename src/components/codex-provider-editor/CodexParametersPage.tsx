@@ -30,7 +30,7 @@ function SubagentSettingsGroup({ specs, baselineValues, editor, busy, onChange }
       </div>
       <p className="asb-field-help">{t("codex.params.subagentNote")}</p>
       {specs.map((spec) => (
-        <SettingsRow key={spec.key} spec={spec} value={settings[spec.key]}
+        <SettingsRow key={spec.key} spec={spec} value={settings[spec.key] ?? automatic}
           baselineValue={baselineValues[spec.key] ?? automatic} showActual={false} busy={busy}
           presentation="provider" onChange={(value) => onChange(spec.key, value)} />
       ))}
@@ -55,7 +55,7 @@ export function CodexParametersPage({ editor, busy, baselineValues }: Props) {
     ? { ...current, parameters: { settings: { ...current.parameters.settings, [key]: value } } }
     : current);
   return (
-    <div className="asb-form asb-provider-parameters" aria-label={t("codex.params.pageAria")}>
+    <div className="asb-provider-parameters" aria-label={t("codex.params.pageAria")}>
       <p className="asb-field-help">{t("codex.params.pageNote")}</p>
       <SettingsFields specs={parameterSpecs} groups={parameterGroups} values={draft.parameters.settings}
         baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />

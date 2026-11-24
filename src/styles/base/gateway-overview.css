@@ -1,7 +1,8 @@
 .asb-model-routing,
 .asb-route-overview-plan,
 .asb-route-overview-panel,
-.asb-route-overview-runtime {
+.asb-route-overview-runtime,
+.asb-route-overview-listener {
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-4);
@@ -9,42 +10,175 @@
 }
 
 .asb-model-routing { container: routing-overview / inline-size; }
+.asb-model-routing > .asb-workspace-header { margin-block-end: 0; }
 
-.asb-route-overview-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(10rem, 13rem);
-  align-items: center;
-  column-gap: var(--asb-space-5);
+.asb-route-overview-listener {
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: radial-gradient(ellipse at top, color-mix(in srgb, var(--asb-action) 8%, var(--asb-content-muted)), var(--asb-content-muted) 72%);
 }
 
-.asb-route-overview-intro {
+.asb-route-overview-artwork {
   display: grid;
-  gap: var(--asb-space-2);
+  place-items: center;
   min-width: 0;
 }
 
-.asb-route-overview-description {
-  max-width: var(--asb-measure-prose);
-  margin: 0;
-  font: var(--asb-text-body);
-  color: var(--asb-text);
+.asb-route-overview-art {
+  display: block;
+  inline-size: min(100%, 36rem);
+  block-size: auto;
+  max-block-size: 15rem;
+  user-select: none;
+  pointer-events: none;
 }
 
-.asb-route-overview-caption,
+.asb-gateway-socket-glow { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .asb-route-overview-art[data-active] {
+    .asb-gateway-socket-glow {
+      animation: asb-gateway-socket-light calc(var(--asb-motion-ambient) * 4) ease-in-out infinite;
+    }
+
+    .asb-gateway-socket:nth-child(2) .asb-gateway-socket-glow { animation-delay: calc(var(--asb-motion-ambient) * -.65); }
+    .asb-gateway-socket:nth-child(3) .asb-gateway-socket-glow { animation-delay: calc(var(--asb-motion-ambient) * -1.3); }
+    .asb-gateway-socket:nth-child(4) .asb-gateway-socket-glow { animation-delay: calc(var(--asb-motion-ambient) * -1.95); }
+  }
+}
+
+@keyframes asb-gateway-socket-light {
+  0%, 12% { opacity: 0; transform: translateY(0); }
+  24% { opacity: .68; }
+  50%, 100% { opacity: 0; transform: translateY(5px); }
+}
+
+.asb-gateway-hub {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-gateway-hub-identity,
+.asb-gateway-summary-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  text-align: center;
+}
+
+.asb-gateway-hub-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--asb-space-1);
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+}
+
+.asb-gateway-hub.is-failure .asb-gateway-hub-state { color: var(--asb-danger); }
+
+.asb-gateway-hub-updated,
+.asb-gateway-hub-detail {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  overflow-wrap: anywhere;
+}
+
+.asb-gateway-hub-updated { font-variant-numeric: tabular-nums; }
+
+.asb-gateway-lamp {
+  flex: none;
+  width: var(--asb-space-1);
+  height: var(--asb-space-1);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-text-muted);
+}
+
+.asb-gateway-lamp.is-running { background: var(--asb-safe); }
+.asb-gateway-lamp.is-failure { background: var(--asb-danger); }
+
+.asb-gateway-hub-failure {
+  display: grid;
+  justify-items: center;
+  gap: var(--asb-space-1);
+  text-align: center;
+}
+
+.asb-gateway-hub-message {
+  margin: 0;
+  color: var(--asb-danger);
+  font: var(--asb-text-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.asb-gateway-hub > .asb-fact-row.is-inline,
+.asb-gateway-loading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-gateway-hub > .asb-fact-row.is-inline { align-items: stretch; }
+
+.asb-gateway-hub > .asb-fact-row.is-inline > div {
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-gateway-hub dd {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--asb-control-height-compact);
+}
+
+.asb-gateway-fact-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-1);
+  width: 100%;
+  min-width: 0;
+}
+
+.asb-gateway-fact-value > code { font: var(--asb-text-code); }
+
+.asb-gateway-fact-value.is-address > .asb-btn {
+  flex: none;
+  width: var(--asb-control-height-compact);
+  height: var(--asb-control-height-compact);
+}
+
+.asb-gateway-fact-value.is-port { flex-wrap: wrap; }
+.asb-gateway-fact-value.is-port > .asb-btn {
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: var(--asb-space-2);
+  overflow-wrap: anywhere;
+}
+
+.asb-gateway-port-value { font: var(--asb-text-title); }
+
+.asb-gateway-summary-state { gap: var(--asb-space-3); }
+
+.asb-gateway-loading { width: 100%; }
+.asb-gateway-loading > .asb-skeleton { height: 4rem; }
+
 .asb-route-overview-footnote {
   max-width: var(--asb-measure-prose);
   margin: 0;
   font: var(--asb-text-caption);
   color: var(--asb-text-muted);
-}
-
-.asb-route-overview-art {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: contain;
-  user-select: none;
-  pointer-events: none;
 }
 
 .asb-route-overview-selection {
@@ -77,79 +211,6 @@
   color: var(--asb-text-muted);
 }
 
-.asb-route-overview-columns,
-.asb-route-overview-edit.asb-btn {
-  display: grid;
-  grid-template-columns: minmax(8rem, .7fr) minmax(0, 1.5fr) minmax(8rem, 1fr) var(--asb-icon-size-sm);
-  align-items: center;
-  gap: var(--asb-space-3);
-  padding-inline: var(--asb-space-3);
-}
-
-.asb-route-overview-columns {
-  font: var(--asb-text-caption);
-  color: var(--asb-text-muted);
-}
-
-.asb-route-overview-list {
-  display: grid;
-  gap: var(--asb-space-unit);
-  margin: calc(-1 * var(--asb-space-2)) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.asb-route-overview-purpose { min-width: 0; }
-
-.asb-route-overview-edit.asb-btn {
-  width: 100%;
-  min-height: var(--asb-row-min-height);
-  padding-block: var(--asb-space-3);
-  text-align: start;
-  white-space: normal;
-}
-
-.asb-route-overview-role {
-  font: var(--asb-text-label);
-  color: var(--asb-text);
-}
-
-.asb-route-overview-target {
-  display: grid;
-  gap: var(--asb-space-unit);
-  min-width: 0;
-}
-
-.asb-route-overview-provider {
-  font: var(--asb-text-label);
-  color: var(--asb-text);
-  overflow-wrap: anywhere;
-}
-
-.asb-route-overview-model {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--asb-space-1);
-  color: var(--asb-text-muted);
-  overflow-wrap: anywhere;
-}
-
-.asb-route-overview-context {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-}
-
-.asb-route-overview-mode {
-  font: var(--asb-text-caption);
-  color: var(--asb-text-muted);
-}
-
-.asb-route-overview-arrow {
-  display: flex;
-  color: var(--asb-text-muted);
-}
-
 .asb-route-overview-empty {
   display: grid;
   justify-items: start;
@@ -161,21 +222,15 @@
 
 .asb-route-overview-empty > p { margin: 0; }
 
-@container routing-overview (max-width: 54rem) {
-  .asb-route-overview-hero { grid-template-columns: minmax(0, 1fr) 10rem; }
-  .asb-route-overview-columns { display: none; }
-  .asb-route-overview-list { margin-top: 0; }
-  .asb-route-overview-edit.asb-btn { grid-template-columns: minmax(7rem, .7fr) minmax(0, 1.5fr) var(--asb-icon-size-sm); }
-  .asb-route-overview-mode { grid-column: 2; }
-  .asb-route-overview-arrow { grid-column: 3; grid-row: 1 / span 2; }
+@media (max-height: 680px) {
+  .asb-route-overview-art { max-block-size: 10rem; }
 }
 
 @container routing-overview (max-width: 36rem) {
-  .asb-route-overview-hero { grid-template-columns: minmax(0, 1fr); }
-  .asb-route-overview-art { display: none; }
-  .asb-route-overview-edit.asb-btn { grid-template-columns: minmax(0, 1fr) var(--asb-icon-size-sm); gap: var(--asb-space-1); }
-  .asb-route-overview-role { grid-column: 1; }
-  .asb-route-overview-target,
-  .asb-route-overview-mode { grid-column: 1; }
-  .asb-route-overview-arrow { grid-column: 2; grid-row: 1 / span 3; }
+  .asb-route-overview-listener { padding: var(--asb-space-3); }
+  .asb-route-overview-art { max-block-size: 9.5rem; }
+  .asb-gateway-hub > .asb-fact-row.is-inline,
+  .asb-gateway-loading { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .asb-gateway-hub > .asb-fact-row.is-inline > :first-child,
+  .asb-gateway-loading > :first-child { grid-column: 1 / -1; }
 }

@@ -20,6 +20,8 @@ import { CodePreview } from "./CodePreview";
 import { EditableCodePreview } from "./EditableCodePreview";
 import { EditIcon } from "./icons";
 
+export interface ConfigurationEditState { dirty: boolean; working: boolean }
+
 interface Props {
   app: AppKind;
   busy: boolean;
@@ -27,6 +29,9 @@ interface Props {
   source: CurrentClientConfiguration;
   subagentDraft?: CodexSubagentSettings;
   onApplied: () => void;
+  /** Reports whether an unapplied edit would be lost or a write is running,
+   * so the owning dialog can guard its close and lock while writing. */
+  onEditStateChange: (state: ConfigurationEditState) => void;
 }
 
 function currentSettings({ app, editorState }: Pick<Props, "app" | "editorState">) {
@@ -34,12 +39,14 @@ function currentSettings({ app, editorState }: Pick<Props, "app" | "editorState"
   return clientSettingsPayload(app, editorState.draft, editorState.claudeExtra);
 }
 
-function CurrentConfigurationRepair({ app, busy, source, onApplied }: Pick<Props, "app" | "busy" | "source" | "onApplied">) {
+function CurrentConfigurationRepair({ app, busy, source, onApplied, onEditStateChange }: Pick<Props,
+  "app" | "busy" | "source" | "onApplied" | "onEditStateChange">) {
   const { t } = useI18n();
   const [preview, setPreview] = useState<ClientConfigurationRepairPreview | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useMessageState();
   useEffect(() => { setPreview(null); setError(null); }, [source.contentHash]);
+  useEffect(() => { onEditStateChange({ dirty: false, working }); }, [working, onEditStateChange]);
   const prepare = () => {
     if (busy || working) return;
     setWorking(true); setError(null); setPreview(null);
@@ -108,14 +115,19 @@ function useCurrentConfigurationEdit({ app, busy, editorState, source, subagentD
   return { canWrite, changeDraft, commit, draft, editing, error, prepare, preview, startEditing, stale, setEditing, setPreview, setDraft, setError, working };
 }
 
-/** The configuration-review file module: one surface reviews the redacted
- * real client configuration and turns editable in place through the edit
- * icon in its heading, instead of a read-only preview above a separate
- * manual editor below. */
+/** The common-configuration-file dialog's file module: one surface reviews
+ * the redacted real client configuration and turns editable in place through
+ * the edit icon in its heading, instead of a read-only preview above a
+ * separate manual editor below. */
 export function CurrentConfigurationEditor(props: Props) {
-  const { app, busy, source } = props;
+  const { app, busy, source, onEditStateChange } = props;
   const { t } = useI18n();
   const edit = useCurrentConfigurationEdit(props);
+  const repairing = !source.syntaxOk && !edit.editing;
+  const dirty = edit.editing && edit.draft !== source.content;
+  useEffect(() => {
+    if (!repairing) onEditStateChange({ dirty, working: edit.working });
+  }, [dirty, edit.working, onEditStateChange, repairing]);
   const heading = (help: string, icon?: ReactNode) => (
     <div className="asb-client-configuration-file-heading">
       <div>
@@ -125,11 +137,12 @@ export function CurrentConfigurationEditor(props: Props) {
       {icon}
     </div>
   );
-  if (!source.syntaxOk && !edit.editing) {
+  if (repairing) {
     return (
       <section className="asb-client-configuration-file" aria-label={t("clientConfig.repair.sectionAria")}>
         {heading(t("clientConfig.repair.help"))}
-        <CurrentConfigurationRepair app={app} busy={busy} source={source} onApplied={props.onApplied} />
+        <CurrentConfigurationRepair app={app} busy={busy} source={source} onApplied={props.onApplied}
+          onEditStateChange={onEditStateChange} />
       </section>
     );
   }

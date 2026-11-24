@@ -11,8 +11,8 @@ export function CodexModelMapping({ editor, busy }: { editor: CodexEditorState; 
   const update = (index: number, patch: Partial<(typeof draft.modelRoutes)[number]>) => setDraft((current) => ({ ...current,
     modelRoutes: current.modelRoutes.map((route, row) => row === index ? { ...route, ...patch } : route),
   }));
-  return <section className="asb-provider-advanced-group">
-    <div className="asb-provider-advanced-heading"><h4>{t("providerSetup.mapping")}</h4>
+  return <section className="asb-editor-section" aria-label={t("providerSetup.mapping")}>
+    <div className="asb-provider-advanced-heading"><h3 className="asb-section-title">{t("providerSetup.mapping")}</h3>
       <Button variant="ghost" size="compact" disabled={busy || !draft.catalog.length} onClick={() => setDraft((current) => ({ ...current,
         modelRoutes: [...current.modelRoutes, { clientModel: current.catalog[0].id, upstreamModel: "" }],
       }))}>{t("codex.model.mappingAdd")}</Button></div>

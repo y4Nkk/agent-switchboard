@@ -2,6 +2,7 @@
   z-index: 60;
   min-width: var(--asb-menu-min-width);
   max-width: calc(100vw - var(--asb-space-4));
+  overflow-y: auto;
   padding: var(--asb-space-1);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius);

@@ -8,6 +8,7 @@ import {
 import { useI18n } from "../../i18n";
 import { ExtensionManagementDialog } from "./ExtensionManagementDialog";
 import { McpEditorDialog, SkillEditorDialog } from "./ExtensionEditorDialogs";
+import { McpRegistryUpdateSheet } from "./McpRegistryUpdateSheet";
 import {
   HistoryDialog,
   NewMcpDialog,
@@ -26,6 +27,8 @@ function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWork
     switch (dialog.type) {
     case "newMcp":
       return <NewMcpDialog workspace={w} />;
+    case "mcpRegistryUpdate":
+      return <McpRegistryUpdateSheet workspace={w} report={dialog.report} />;
     case "newSkill":
       return <NewSkillDialog workspace={w} />;
     case "portableImport":

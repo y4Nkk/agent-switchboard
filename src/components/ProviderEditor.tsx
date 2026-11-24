@@ -97,7 +97,7 @@ function ProviderEditorSession(props: Props) {
     if (navigation.stale) return;
     if (!validateEditorForm(form, selectSection)) return;
     const issueRole = official ? null : routeIssueRole(route, props.inventory);
-    if (issueRole) { selectSection("models"); setRole(issueRole); setInvalid(true); return; }
+    if (issueRole) { selectSection("models"); setRole(issueRole); navigation.focusRole(issueRole); setInvalid(true); return; }
     setInvalid(false);
     editor.save(props.onSave);
   };
@@ -117,7 +117,7 @@ function ProviderEditorSession(props: Props) {
       {!official && <div className="asb-provider-form asb-provider-editor-section" id={`${formId}-models-panel`} role="tabpanel"
         aria-labelledby={`${formId}-models-tab`} data-editor-section="models" hidden={section !== "models"}>
         <ClaudeModelCatalog editor={editor} busy={props.busy} />
-        <ProviderRoutingPanel document={route} inventory={props.inventory} role={role} onRole={setRole} onChange={changeRoute} busy={props.busy} />
+        <ProviderRoutingPanel document={route} inventory={props.inventory} onChange={changeRoute} busy={props.busy} />
         {props.userConfigModel && <p className="asb-scope-note">{t("providers.editor.userConfigModel", { model: props.userConfigModel })}</p>}
         {props.userConfigWarnings.map((warning) => <p key={warning.key} className="asb-scope-note asb-warn-text">{localizedMessageText(warning, t)}</p>)}
       </div>}

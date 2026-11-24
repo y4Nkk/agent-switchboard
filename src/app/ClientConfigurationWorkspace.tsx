@@ -16,15 +16,17 @@ export function ClientConfigurationWorkspace({ model, active }: { model: Switchb
         data-client-route-leaving={leaving || undefined}
         hidden={model.appFilter !== app && !leaving}
         inert={leaving || undefined} aria-hidden={leaving || undefined}>
-        <ClientConfigurationPanel model={model} app={app} onSelectApp={route.selectApp} routeContentRef={route.contentRefs[app]} />
+        <ClientConfigurationPanel model={model} app={app} active={active && model.appFilter === app}
+          onSelectApp={route.selectApp} routeContentRef={route.contentRefs[app]} />
       </div>;
     })}
   </div>;
 }
 
-function ClientConfigurationPanel({ model, app, onSelectApp, routeContentRef }: {
+function ClientConfigurationPanel({ model, app, active, onSelectApp, routeContentRef }: {
   model: SwitchboardModel;
   app: AppKind;
+  active: boolean;
   onSelectApp: (app: AppKind) => void;
   routeContentRef: RefCallback<HTMLElement>;
 }) {
@@ -40,6 +42,7 @@ function ClientConfigurationPanel({ model, app, onSelectApp, routeContentRef }: 
   return (
     <section className="asb-panel" aria-label={t("clientConfig.title")}>
       <ClientSettingsPanel
+        active={active}
         app={app}
         routeContentRef={routeContentRef}
         onSelectApp={onSelectApp}
@@ -66,6 +69,8 @@ function ClientConfigurationPanel({ model, app, onSelectApp, routeContentRef }: 
             onDiscard={() => prompts.discardPromptDraft(app)}
             onReload={() => prompts.reloadPromptDocument(app)} />
         }
+        globalInstructionsDirty={prompts.isPromptDirty(app)}
+        onDiscardGlobalInstructions={() => prompts.discardPromptDraft(app)}
         subagentDraft={app === "codex" ? codexSubagentSettings.editorState.draft : undefined}
         subagentSettings={app === "codex" ? (
           <CodexSubagentSettingsPanel

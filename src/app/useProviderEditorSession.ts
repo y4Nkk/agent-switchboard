@@ -56,6 +56,9 @@ export function useProviderEditorSession(deps: ProvidersDeps) {
       restoreProviderEditorFocus(editorSession.profileId, editorSession.section);
     }
   };
+  /** Leaves the editor onto the provider list; only the back control follows
+   * a gateway return and restores the row's focus. */
+  const closeEditorAtList = () => conversion.closeEditor();
   const openCodexOfficialEditor = (record: ProviderRecord | null) => {
     if (record) { stored.openRoutes("codex", record.profile.id, "main"); return; }
     clearCandidates();
@@ -73,5 +76,5 @@ export function useProviderEditorSession(deps: ProvidersDeps) {
     [clearCandidates, setAppFilter, setTargetProfileId, conversion.cancelConversion],
   );
   return { ...conversion, editorSession, ...stored, openCodexOfficialEditor,
-    switchCodexAccessMode, newEditor, newEditorFor, closeEditor, selectApp };
+    switchCodexAccessMode, newEditor, newEditorFor, closeEditor, closeEditorAtList, selectApp };
 }

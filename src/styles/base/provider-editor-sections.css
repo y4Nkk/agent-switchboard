@@ -3,7 +3,6 @@
 .asb-provider-editor-section > .asb-provider-form,
 .asb-provider-editor-section.asb-provider-form { gap: var(--asb-space-4); }
 .asb-provider-routing { gap: var(--asb-space-3); }
-.asb-provider-parameter-value { display: grid; gap: var(--asb-space-1); }
 .asb-provider-switch-rows { display: grid; gap: var(--asb-space-2); min-width: 0; }
 .asb-provider-switch-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-3); min-width: 0; }
 .asb-provider-switch-row > span:first-child { flex: 1 1 auto; min-width: 0; }
@@ -32,19 +31,46 @@
   font-weight: 600;
 }
 .asb-chip:disabled { opacity: 0.45; cursor: default; }
-/* Model cards: every control lives on the card — no row editor, no edit state. */
-.asb-provider-model-card {
+.asb-model-catalog-grid {
   display: grid;
-  gap: var(--asb-space-2);
-  padding: var(--asb-space-2);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--asb-space-3);
+}
+
+.asb-provider-model-card {
+  --asb-model-accent: var(--asb-action);
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
+  border-radius: var(--asb-radius-group);
   background: var(--asb-canvas);
 }
-.asb-provider-model-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-2); min-width: 0; }
-.asb-provider-model-card-head > code { overflow-wrap: anywhere; font: var(--asb-text-label); }
-.asb-provider-model-card-head .asb-provider-model-actions { margin-inline-start: auto; }
-.asb-provider-model-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--asb-space-2); }
+.asb-provider-model-card[data-app="claude"] { --asb-model-accent: var(--asb-claude); }
+.asb-provider-model-card[data-primary] { border-color: color-mix(in srgb, var(--asb-model-accent) 55%, var(--asb-hairline)); }
+.asb-provider-model-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--asb-space-2); }
+.asb-model-catalog-identity { display: flex; flex: 1 1 auto; align-items: center; gap: var(--asb-space-2); min-width: 0; }
+.asb-model-catalog-name { display: grid; gap: var(--asb-space-1); min-width: 0; overflow-wrap: anywhere; }
+.asb-model-catalog-name > code { font: var(--asb-text-code); font-weight: 600; }
+.asb-model-catalog-art { display: block; flex: none; width: 64px; height: 48px; }
+.asb-model-catalog-base { fill: var(--asb-content-muted); stroke: var(--asb-hairline-strong); }
+.asb-model-catalog-shell { fill: color-mix(in srgb, var(--asb-model-accent) 15%, var(--asb-content)); stroke: var(--asb-hairline-strong); }
+.asb-model-catalog-surface { fill: color-mix(in srgb, var(--asb-model-accent) 19%, var(--asb-content)); stroke: var(--asb-hairline-strong); }
+.asb-model-catalog-traces { fill: none; stroke: var(--asb-model-accent); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+.asb-model-catalog-terminal { fill: var(--asb-model-accent); }
+.asb-provider-primary-pill {
+  flex: none;
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border-radius: var(--asb-radius-pill);
+  background: color-mix(in srgb, var(--asb-model-accent) 13%, var(--asb-content));
+  color: color-mix(in srgb, var(--asb-model-accent) 55%, var(--asb-text));
+  font: var(--asb-text-caption);
+  font-weight: 600;
+}
+.asb-model-catalog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--asb-space-1); margin-block-start: auto; }
+.asb-provider-model-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--asb-space-2); }
 .asb-provider-model-meta { display: grid; gap: var(--asb-space-1); }
 .asb-provider-model-meta .asb-chip-row { gap: var(--asb-space-1); }
 .asb-provider-model-meta .asb-select-trigger { width: auto; min-width: 8ch; }
@@ -55,9 +81,6 @@
 .asb-model-picker-dialog-list .asb-checkbox { flex: 1 1 auto; min-width: 0; }
 .asb-model-picker-dialog-list .asb-checkbox-label { overflow-wrap: anywhere; }
 .asb-model-picker-dialog-list .asb-field-help { flex: none; white-space: nowrap; }
-@media (max-width: 600px) {
-  .asb-provider-model-card-head .asb-provider-model-actions { margin-inline-start: 0; }
-}
 @media (max-width: 600px) {
   .asb-provider-editor .asb-tabs { max-width: 100%; }
 }

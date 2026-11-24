@@ -56,7 +56,7 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
   const [dirty, setDirty] = useState(false);
   const { repositories, catalog } = state;
   const disabled = busy || !repositories.ready || repositories.loading || state.loading || state.imports.busy;
-  const leave = useUnsavedChanges(formOpen && dirty, disabled);
+  const leave = useUnsavedChanges(formOpen && dirty, repositories.saving);
   return (
     <section className="asb-skill-repository-manager" aria-label={t("extensions.repo.title")}>
       <ModuleHeader
@@ -71,7 +71,7 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
             <Button variant="secondary" disabled={disabled || formOpen} onClick={() => { setEditing(null); setFormOpen(true); }}>
               <Plus size={16} />{t("extensions.repo.add")}
             </Button>
-            <Button variant="secondary" disabled={disabled} onClick={() => leave.request(() => state.setManagerOpen(false))}>
+            <Button variant="secondary" disabled={repositories.saving} onClick={() => leave.request(() => state.setManagerOpen(false))}>
               {t("extensions.repo.backToSearch")}
             </Button>
           </>

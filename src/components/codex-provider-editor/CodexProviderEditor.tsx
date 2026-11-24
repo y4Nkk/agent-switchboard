@@ -22,6 +22,7 @@ import { CodexCapabilitiesSection } from "./CodexCapabilitiesSection";
 import { CodexConnectionFields } from "./CodexConnectionFields";
 import { CodexAccessMode, CodexIdentityFields } from "./CodexIdentityFields";
 import { CodexModelSection } from "./CodexModelSection";
+import { CodexModelMapping } from "./CodexModelMapping";
 import { CodexOfficialProviderForm } from "./CodexOfficialProviderForm";
 import { CodexParametersPage } from "./CodexParametersPage";
 import { useCodexProviderEditor, type CodexEditorState } from "./useCodexProviderEditor";
@@ -97,8 +98,8 @@ function CodexForm({ editor, props, formId, navigation, route, onChange, showPro
       aria-labelledby={`${formId}-models-tab`} data-editor-section="models" hidden={section !== "models"}>
       <CodexModelSection editor={editor} busy={props.busy} userConfigModel={props.userConfigModel}
         userConfigWarnings={props.userConfigWarnings} />
-      <ProviderRoutingPanel document={route} inventory={props.inventory} role={navigation.role} onRole={navigation.setRole}
-        onChange={onChange} busy={props.busy} />
+      <CodexModelMapping editor={editor} busy={props.busy} />
+      <ProviderRoutingPanel document={route} inventory={props.inventory} onChange={onChange} busy={props.busy} />
       <CodexCapabilitiesSection editor={editor} busy={props.busy} />
       <ConversionReview editor={editor} busy={props.busy} />
       {showProblems && editor.problems.length > 0 && <div className="asb-field-error" role="status">
@@ -130,7 +131,9 @@ function CodexProviderEditorSession(props: Props) {
     if (!validateEditorForm(form, (section) => { navigation.selectSection(section); if (section === "models") setInvalid((revision) => revision + 1); })) return;
     const issueRole = routeIssueRole(route, props.inventory);
     if (issueRole || !editor.canSave) {
-      navigation.selectSection("models"); navigation.setRole(issueRole ?? "main"); setInvalid((revision) => revision + 1); return;
+      navigation.selectSection("models"); navigation.setRole(issueRole ?? "main");
+      if (issueRole) navigation.focusRole(issueRole);
+      setInvalid((revision) => revision + 1); return;
     }
     setInvalid(0); editor.save(props.onSave);
   };

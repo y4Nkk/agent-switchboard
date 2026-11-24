@@ -1,7 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
-import { ModuleHeader } from "./WorkspaceHeader";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { CopyButton } from "./CopyButton";
 
@@ -34,16 +33,5 @@ export function CopyGatewayAddressButton({ value }: { value: string }) {
     <CopyButton content={value} iconOnly
       label={t("gateway.copyAddressAria")}
       copiedLabel={t("gateway.copiedAddressAria")} />
-  );
-}
-
-/** Status and recovery precede topology, charts and recent requests. */
-export function GatewayPanel({ children, controls }: { children: ReactNode; controls?: ReactNode }) {
-  const { t } = useI18n();
-  return (
-    <section className="asb-panel asb-gateway-panel" aria-label={t("gateway.panelAriaLabel")}>
-      <ModuleHeader title={t("gateway.title")} primaryActions={controls} />
-      <div className="asb-gateway-stack">{children}</div>
-    </section>
   );
 }

@@ -9,7 +9,7 @@ import type {
   ProviderSqlScan,
 } from "../api/client";
 import { Tabs } from "../components/Tabs";
-import { EditorFrame } from "../components/EditorFrame";
+import { WorkspaceSubpage } from "../components/WorkspaceSubpage";
 import { CcSwitchImport } from "./provider-import/CcSwitchImport";
 import { LocalConfigImport } from "./provider-import/LocalConfigImport";
 import { SqlExport } from "./provider-import/SqlExport";
@@ -41,9 +41,7 @@ interface ProviderImportPageProps {
   onError: (error: CommandError) => void;
 }
 
-/** Local discovery uses the selected client; batch import stays cross-client.
- * Scan and import actions belong to each source panel, so the frame runs
- * without a persistent bottom action bar. */
+/** Local discovery uses the selected client; batch import stays cross-client. */
 export function ProviderImportPage(props: ProviderImportPageProps) {
   const { t } = useI18n();
   const [source, setSource] = useState<"local" | "ccswitch" | "sql" | "export">("local");
@@ -57,8 +55,13 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
     if (await props.onImportSql()) props.onBack();
   };
   return (
-    <EditorFrame title={t("importDiscovery.page.title")} backLabel={t("importDiscovery.page.back")} busy={props.busy} onBack={props.onBack}>
-      <div className="asb-provider-import">
+    <WorkspaceSubpage
+      layout="page"
+      title={t("importDiscovery.page.title")}
+      backLabel={t("importDiscovery.page.back")}
+      busy={props.busy}
+      onBack={props.onBack}
+      primary={
         <Tabs value={source} onChange={setSource} scope="provider-import" label={t("importDiscovery.page.tabsAria")}
           tabs={[
             { value: "local", label: t("importDiscovery.tab.local"), controls: "provider-import-local-panel", disabled: props.busy },
@@ -66,8 +69,9 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
             { value: "sql", label: t("importDiscovery.tab.sqlImport"), controls: "provider-import-sql-panel", disabled: props.busy },
             { value: "export", label: t("importDiscovery.tab.sqlExport"), controls: "provider-import-export-panel", disabled: props.busy },
           ]} />
-        {/* Every tabpanel stays mounted so each tab's aria-controls always
-            resolves; inactive content unmounts inside its hidden panel. */}
+      }
+    >
+      <div className="asb-provider-import">
         <div id="provider-import-local-panel" role="tabpanel" aria-labelledby="provider-import-local-tab"
           hidden={source !== "local"}>
           <LocalConfigImport app={props.appFilter} discovery={props.discovery} busy={props.busy}
@@ -90,6 +94,6 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
           <SqlExport busy={props.busy} onError={props.onError} />
         </div>
       </div>
-    </EditorFrame>
+    </WorkspaceSubpage>
   );
 }

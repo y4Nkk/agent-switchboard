@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { ExtensionListItem, SkillDependency, SkillEditorView, SkillVersion } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { EditorFrame } from "../EditorFrame";
+import { WorkspaceSubpage } from "../WorkspaceSubpage";
 import { Tabs } from "../Tabs";
 import { useUnsavedChanges } from "../useUnsavedChanges";
 import { ExtensionLoading } from "./ExtensionLoading";
@@ -37,7 +37,7 @@ export function SkillWorkbench(props: SkillWorkbenchProps) {
   const files = useSkillFiles(props);
   const deps = useSkillDependencies(props.item.dependencies);
   const busy = props.busy || working;
-  const leave = useUnsavedChanges(files.dirty || deps.dirty, busy);
+  const leave = useUnsavedChanges(files.dirty || deps.dirty, busy, { guardPageRoot: true });
   const perform = async (action: () => Promise<unknown>) => {
     if (busy || running.current) return;
     running.current = true;
@@ -55,7 +55,7 @@ export function SkillWorkbench(props: SkillWorkbenchProps) {
   const restore = (digest: string) => leave.request(() => void perform(async () => {
     if (await props.onRestoreVersion(props.item.id, digest)) { await files.reload(); deps.reset(); }
   }));
-  return <EditorFrame title={t("extensions.workbench.title", { name: props.item.name })}
+  return <WorkspaceSubpage layout="fixed-actions" title={t("extensions.workbench.title", { name: props.item.name })}
     backLabel={t("extensions.backToLibrary")} busy={busy} onBack={() => leave.request(props.onClose)}
     primary={<Tabs value={section} onChange={setSection} scope="skill-workbench"
       label={t("extensions.workbench.aria", { name: props.item.name })}
@@ -81,5 +81,5 @@ export function SkillWorkbench(props: SkillWorkbenchProps) {
     <div role="tabpanel" id="skill-workbench-dependencies-panel" aria-labelledby="skill-workbench-dependencies-tab" hidden={section !== "dependencies"}>
       <SkillDependencies deps={deps} options={props.mcpOptions} busy={busy} onReload={() => leave.request(() => deps.reset())} /></div>
     {leave.confirmation}
-  </EditorFrame>;
+  </WorkspaceSubpage>;
 }

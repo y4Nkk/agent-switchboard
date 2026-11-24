@@ -1,6 +1,6 @@
-import type { ExtensionListItem, McpCheckOutcome, SkillUpdateReport } from "../../api/client";
+import type { ExtensionListItem, McpCheckOutcome, SkillUpdate } from "../../api/client";
 import { Button } from "../../components/Button";
-import { TrashIcon, UpdateIcon } from "../../components/icons";
+import { UpdateIcon } from "../../components/icons";
 import { Table, type TableColumn } from "../../components/Table";
 import { Tooltip } from "../../components/Tooltip";
 import { ClientToggleGroup } from "../../components/extensions/ClientToggleGroup";
@@ -38,25 +38,15 @@ function RowActions({
   workspace,
 }: {
   item: ExtensionListItem;
-  report?: SkillUpdateReport;
+  report?: SkillUpdate;
   workspace: ExtensionWorkspace;
 }) {
   const { t } = useI18n();
+  const registry = workspace.registryUpdates.reportMap.get(item.id);
+  const associate = registry?.status === "available" && registry.action === "associateCurrent";
+  const updateLabel = t(associate ? "extensions.registry.associateVersion" : "extensions.management.applyUpdate");
   return (
     <div className="asb-ext-table-actions">
-      {report && (
-        <Tooltip label={t("extensions.list.updateAria", { name: item.name })}>
-          <Button
-            variant="icon"
-            size="compact"
-            disabled={workspace.writeBlocked}
-            aria-label={t("extensions.list.updateAria", { name: item.name })}
-            onClick={() => void workspace.updates.update([report])}
-          >
-            <UpdateIcon />
-          </Button>
-        </Tooltip>
-      )}
       <Tooltip label={t("extensions.management.aria", { name: item.name })}>
         <Button
           variant="secondary"
@@ -68,17 +58,16 @@ function RowActions({
           {t("extensions.list.manage")}
         </Button>
       </Tooltip>
-      <Tooltip label={t("extensions.list.deleteAria", { name: item.name })}>
-        <Button
-          variant="dangerIcon"
-          size="compact"
-          disabled={workspace.writeBlocked}
-          aria-label={t("extensions.list.deleteAria", { name: item.name })}
-          onClick={() => workspace.nav.setDialog({ type: "remove", item })}
-        >
-          <TrashIcon />
+      {(report || registry?.status === "available") && (
+        <Button variant="secondary" size="compact" disabled={workspace.writeBlocked}
+          aria-label={t("extensions.list.updateAria", { action: updateLabel, name: item.name })}
+          onClick={() => {
+            if (registry?.status === "available") workspace.nav.setDialog({ type: "mcpRegistryUpdate", report: registry });
+            else if (report) void workspace.updates.update([report]);
+          }}>
+          <UpdateIcon />{updateLabel}
         </Button>
-      </Tooltip>
+      )}
     </div>
   );
 }
@@ -86,6 +75,9 @@ function RowActions({
 function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; workspace: ExtensionWorkspace }) {
   const { t } = useI18n();
   const report = workspace.updates.reportMap.get(item.id);
+  const registry = workspace.registryUpdates.reportMap.get(item.id);
+  const registryVersion = item.mcpMetadata?.registry?.version;
+  const failure = report?.status === "failed" ? report.message : registry?.status === "failed" ? registry.message : null;
   const updatable = workspace.updates.updatable.find((entry) => entry.definitionId === item.id);
   const description = rowDescription(item);
   const meta = item.kind === "mcp"
@@ -103,8 +95,10 @@ function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; works
       <span className="asb-ext-table-title">
         <span className="asb-ext-table-name" title={item.name}>{item.name}</span>
         <span className="asb-ext-table-meta">{meta}</span>
-        {updatable && <span className="asb-ext-update-badge">{t("extensions.list.updatable")}</span>}
-        {report?.error && <span className="asb-ext-table-error" title={report.error}>{t("extensions.list.checkError")}</span>}
+        {registryVersion && <span className="asb-ext-table-meta">{registryVersion}</span>}
+        {(updatable || registry?.status === "available") && <span className="asb-ext-update-badge">{t("extensions.list.updatable")}</span>}
+        {registry?.status === "manual" && <span className="asb-ext-update-badge">{t("extensions.registry.manualUpdate", { version: registry.version })}</span>}
+        {failure && <span className="asb-ext-table-error" title={failure}>{t("extensions.list.checkError")}</span>}
       </span>
       {description.text && (
         <span className="asb-ext-table-description" title={description.text}>

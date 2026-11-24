@@ -9,6 +9,7 @@ use crate::extensions::{discovery::DiscoveredPaths, store::ExtensionStore};
 
 fn definition(id: &str) -> ExtensionDefinition {
     ExtensionDefinition {
+        mcp_config_revision: None,
         schema_version: EXTENSIONS_SCHEMA_VERSION, id: id.into(), name: id.into(), revision: 1,
         mcp_metadata: None, created_at: "2026-10-13T00:00:00Z".into(), updated_at: "2026-10-13T00:00:00Z".into(),
         payload: ExtensionPayload::Mcp(McpDefinition::Stdio {

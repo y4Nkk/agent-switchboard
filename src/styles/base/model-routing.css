@@ -1,6 +1,5 @@
 @import "./gateway-overview.css";
 
-.asb-gateway-workspace,
 .asb-model-route-panel {
   display: flex;
   flex-direction: column;
@@ -10,14 +9,121 @@
 
 .asb-model-routing .asb-tab { display: inline-flex; align-items: center; gap: var(--asb-space-2); }
 .asb-model-route-logo { width: var(--asb-icon-size-md); height: var(--asb-icon-size-md); flex: none; }
-.asb-model-route-inspector { display: grid; gap: var(--asb-space-3); min-width: 0; }
-.asb-model-route-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: var(--asb-space-3);
-  align-items: start;
-}
-.asb-model-route-fields > .asb-segments,
-.asb-model-route-fields > .asb-field-help { grid-column: 1 / -1; }
-.asb-model-route-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--asb-space-2); }
 .asb-model-route-empty { display: grid; gap: var(--asb-space-3); max-width: 28rem; }
+
+.asb-model-route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--asb-space-2) var(--asb-space-4);
+}
+.asb-model-route-actions > p { flex: 1 1 20rem; margin: 0; }
+
+.asb-purpose-cards {
+  --asb-route-client: var(--asb-action);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr));
+  gap: var(--asb-space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.asb-purpose-cards[data-app="claude"] { --asb-route-client: var(--asb-claude); }
+
+.asb-purpose-card {
+  --asb-route-tone: var(--asb-route-client);
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-group);
+  background: var(--asb-content);
+  box-shadow: var(--asb-inset-highlight);
+}
+.asb-purpose-card[data-status="automatic"] { --asb-route-tone: var(--asb-text-muted); }
+.asb-purpose-card[data-status="needsAttention"] { --asb-route-tone: var(--asb-warning); }
+.asb-purpose-card:not(:has(> .asb-purpose-card-open)),
+.asb-purpose-card > .asb-purpose-card-open { padding: var(--asb-space-3); }
+
+.asb-purpose-card > .asb-purpose-card-open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--asb-space-3);
+  width: 100%;
+  height: auto;
+  border-radius: inherit;
+  text-align: start;
+  white-space: normal;
+}
+.asb-purpose-card:hover:has(.asb-purpose-card-open:enabled) { border-color: var(--asb-link); }
+
+.asb-purpose-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--asb-space-1) var(--asb-space-2);
+}
+.asb-purpose-card-title { color: var(--asb-text); font: var(--asb-text-body); font-weight: 650; }
+.asb-purpose-card-status {
+  color: color-mix(in srgb, var(--asb-route-tone) 58%, var(--asb-text));
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-purpose-card-destination {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  min-height: 4.5rem;
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border-radius: var(--asb-radius);
+  background: radial-gradient(ellipse at 14% 20%,
+    color-mix(in srgb, var(--asb-route-tone) 10%, var(--asb-content)), var(--asb-content-muted) 83%);
+}
+.asb-purpose-card-target { display: grid; flex: 1; gap: var(--asb-space-1); min-width: 0; overflow-wrap: anywhere; }
+.asb-purpose-card-model { color: var(--asb-text); font: var(--asb-text-body); font-weight: 600; }
+.asb-purpose-card-model[data-kind="model"] { font: var(--asb-text-code); font-weight: 600; }
+.asb-purpose-card-note { color: var(--asb-text-muted); font: var(--asb-text-caption); }
+.asb-purpose-card-arrow { display: flex; flex: none; color: var(--asb-text-muted); }
+.asb-purpose-card-issue { margin: 0; font: var(--asb-text-label); overflow-wrap: anywhere; }
+
+.asb-purpose-card-controls { display: grid; gap: var(--asb-space-2); min-width: 0; }
+.asb-purpose-card-source,
+.asb-purpose-card-option {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+.asb-purpose-card-source > span { flex: none; }
+.asb-purpose-card-source .asb-select-trigger { flex: 1; min-width: 0; }
+.asb-purpose-card-option { justify-self: end; align-self: end; }
+.asb-purpose-card > .asb-purpose-card-option { margin-inline-start: auto; }
+.asb-purpose-card .asb-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; padding-block: var(--asb-space-1); }
+.asb-purpose-card .asb-field-help { margin: 0; overflow-wrap: anywhere; }
+
+.asb-purpose-card-art { display: block; flex: none; inline-size: min(34%, 8.5rem); block-size: auto; }
+.asb-route-art-floor { fill: color-mix(in srgb, var(--asb-route-tone) 8%, transparent); }
+.asb-route-art-guide { fill: none; stroke: var(--asb-hairline); stroke-width: .6; }
+.asb-route-art-base { fill: var(--asb-content-muted); stroke: var(--asb-hairline-strong); stroke-width: .85; }
+.asb-route-art-shell { stroke: var(--asb-hairline-strong); stroke-width: .85; }
+.asb-route-art-ceramic-light { stop-color: var(--asb-content); }
+.asb-route-art-ceramic-shadow { stop-color: color-mix(in srgb, var(--asb-route-tone) 16%, var(--asb-content-muted)); }
+.asb-route-art-glass { stroke: color-mix(in srgb, var(--asb-route-tone) 35%, transparent); stroke-width: .8; }
+.asb-route-art-glass-light { stop-color: color-mix(in srgb, var(--asb-route-tone) 9%, var(--asb-content)); }
+.asb-route-art-glass-shade { stop-color: color-mix(in srgb, var(--asb-route-tone) 25%, var(--asb-content-muted)); }
+.asb-route-art-port { fill: color-mix(in srgb, var(--asb-route-tone) 68%, var(--asb-text)); }
+.asb-route-art-highlight { fill: none; stroke: var(--asb-route-tone); stroke-width: 1.3; stroke-linecap: round; }
+.asb-route-art-trace { fill: none; stroke: var(--asb-route-tone); stroke-width: 2.2; stroke-linecap: round; }
+.asb-route-art-terminal { fill: var(--asb-content); stroke: var(--asb-route-tone); stroke-width: 1.5; }
+.asb-purpose-card[data-status="automatic"] .asb-route-art-trace { stroke-dasharray: 2 3; }

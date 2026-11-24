@@ -38,7 +38,7 @@
  *
  * Short forms, confirmations, plan previews and history share a title,
  * one scrolling body and an optional fixed footer, grouped with space.
- * Complex editors use EditorFrame. Modal width is one of three tiers;
+ * Complex editors use WorkspaceSubpage. Modal width is one of three tiers;
  * there is no second modal
  * anatomy, so a dialog can never drift into its own padding rhythm or invent
  * a fourth width.
@@ -92,6 +92,10 @@
 
 .asb-dialog.is-wide {
   width: min(100%, var(--asb-dialog-width-wide));
+}
+
+.asb-dialog.is-tall {
+  height: var(--asb-dialog-viewport-max);
 }
 
 .asb-dialog-heading {

@@ -11,6 +11,7 @@ import {
 import type { ProviderEditorSession, ProviderEditorNavigation } from "../app/provider-editor-session";
 import { useProviderSwitchFlow } from "../app/useProviderSwitchFlow";
 import { notifyWriteOutcome } from "../app/notifications";
+import { useOnReturnToRoot } from "../app/PageRoot";
 import type { ActiveProfileRef } from "../lib/current-provider-name";
 import { useI18n } from "../i18n";
 import { CodexOfficialRow, CodexProviderRow, ConfiguredCodexProviderRow } from "../components/CodexProviderRows";
@@ -188,8 +189,9 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
 export function CodexProvidersPage(props: Props) {
   const { t } = useI18n();
   const state = useCodexProvidersState(props);
+  useOnReturnToRoot(props.active && state.usageRecord !== null, () => state.setUsageRecord(null));
   if (props.editorSession) return (
-    <div className="asb-editor-route" hidden={!props.active}>
+    <div className="asb-subpage-route" hidden={!props.active}>
       <CodexProviderEditor key={props.editorSession.instanceId} active={props.active} source={props.editorSession.source} busy={props.busy}
         {...props.editorNavigation} profileId={props.editorSession.profileId} section={props.editorSession.section} routeRole={props.editorSession.role} returnTo={props.editorSession.returnTo}
         userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings}
@@ -200,9 +202,10 @@ export function CodexProvidersPage(props: Props) {
   );
   const usageRecord = state.usageRecord;
   if (usageRecord) return (
-    <div className="asb-editor-route" hidden={!props.active}>
+    <div className="asb-subpage-route" hidden={!props.active}>
       <UsageQueryWorkspace
         key={usageRecord.profile.id}
+        active={props.active}
         providerName={usageRecord.profile.name}
         value={usageRecord.usageQuery ?? null}
         apiKey={usageRecord.profile.apiKey}

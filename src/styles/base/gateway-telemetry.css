@@ -1,138 +1,186 @@
-/* 网关遥测分层：图表带与「最近请求」明细共用同一组中性内容面，不引入
- * 第二套背景、圆角或阴影语言。结构契约见 gateway.css 顶部注释与
- * DESIGN.md 本机网关。柱高与条宽的过渡时长取自 motion token，两种减少
- * 动态偏好下自动归零。 */
-
-/* —— 图表带：无卡片、无内部分隔线，仅靠间距与字阶分列。统计块按内容取宽
- * 排成一条仪表行，协议分布吸收剩余宽度；窄容器按块自然换行。 —— */
-
-.asb-gateway-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--asb-space-4) var(--asb-space-5);
-  padding-block: var(--asb-space-4);
-}
-
-.asb-gateway-gauge {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-1);
+.asb-gateway-charts,
+.asb-gateway-chart-grid {
+  display: grid;
+  gap: var(--asb-space-3);
   min-width: 0;
 }
 
-.asb-gateway-gauge.is-warning .asb-gateway-gauge-value {
-  color: var(--asb-warning);
-}
-
-.asb-gateway-gauge-label {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-  font-weight: 600;
-}
-
-.asb-gateway-gauge-value {
-  margin: 0;
-  color: var(--asb-text);
-  font: var(--asb-text-instrument);
-  font-variant-numeric: tabular-nums;
-}
-
-.asb-gateway-gauge-detail {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 趋势柱：60 根分钟柱，柱高以窗口内最大计数满高，随轮询平滑过渡。
- * 宽度固定，块在仪表行内按内容取宽时柱组仍有稳定读数宽度。 */
-.asb-gateway-trend {
+.asb-gateway-charts-heading,
+.asb-gateway-totals,
+.asb-gateway-chart-title {
   display: flex;
-  align-items: flex-end;
-  gap: 1px;
-  width: 280px;
-  max-width: 100%;
-  height: 64px;
-  margin-top: var(--asb-space-2);
-}
-
-.asb-gateway-trend-bar {
-  flex: 1 1 0;
-  min-width: 1px;
-  border-radius: 1px 1px 0 0;
-  background: color-mix(in srgb, var(--asb-action) 42%, transparent);
-  transition: height var(--asb-motion-node) var(--asb-easing);
-}
-
-/* 延迟条：p50/p95 的条宽线性对应 p95 满宽，数值始终以文字呈现。
- * 两行共用一组三列轨道，标签、条与数值跨行对齐。 */
-.asb-gateway-latency {
-  display: grid;
-  grid-template-columns: max-content 120px auto;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: var(--asb-space-1) var(--asb-space-2);
-  margin-top: var(--asb-space-2);
 }
 
-.asb-gateway-latency-row { display: contents; }
+.asb-gateway-charts-heading,
+.asb-gateway-chart-title { justify-content: space-between; }
 
-.asb-gateway-latency-label {
+.asb-gateway-totals {
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
-  font-weight: 600;
+  column-gap: var(--asb-space-3);
 }
 
-.asb-gateway-latency-track {
-  display: block;
-  height: 6px;
-  overflow: hidden;
-  border-radius: var(--asb-radius-pill);
-  background: color-mix(in srgb, var(--asb-hairline-strong) 45%, transparent);
-}
+.asb-gateway-totals .asb-fact-row { column-gap: var(--asb-space-3); }
+.asb-gateway-totals dt,
+.asb-gateway-totals dd { font: var(--asb-text-label); }
+.asb-gateway-totals dd { color: var(--asb-text); }
+.asb-gateway-failed-total { color: var(--asb-danger); }
 
-.asb-gateway-latency-fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--asb-radius-pill);
-  background: color-mix(in srgb, var(--asb-action) 42%, transparent);
-  transition: width var(--asb-motion-node) var(--asb-easing);
-}
-
-.asb-gateway-latency-value {
-  color: var(--asb-text);
-  font: var(--asb-text-label);
-  font-variant-numeric: tabular-nums;
-}
-
-.asb-gateway-gauge.is-protocol {
-  flex: 1 1 auto;
+.asb-gateway-chart-grid {
+  grid-template-columns: minmax(0, 1.55fr) repeat(2, minmax(0, 1fr));
   gap: var(--asb-space-2);
 }
 
-.asb-gateway-protocol-bar {
+.asb-gateway-chart {
   display: flex;
-  gap: var(--asb-space-hairline);
-  overflow: hidden;
-  height: var(--asb-space-unit);
-  border-radius: var(--asb-radius-pill);
-}
-
-.asb-gateway-protocol-bar > span {
-  flex-basis: 0;
-  min-width: 2px;
-}
-
-.asb-gateway-protocol-legend {
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  min-block-size: 12rem;
   margin: 0;
-  overflow-wrap: anywhere;
+  padding: var(--asb-space-3);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-gateway-chart-title { color: var(--asb-text-muted); font: var(--asb-text-caption); }
+.asb-gateway-chart-title strong { color: var(--asb-text); font: var(--asb-text-label); font-weight: 600; }
+
+.asb-gateway-chart-empty {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
-  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
-/* —— 最近请求明细：常驻展示，不做折叠。 —— */
+.asb-gateway-trend-plot {
+  flex: 1 0 auto;
+  height: 9rem;
+  min-width: 0;
+}
+
+.asb-gateway-latency-chart {
+  display: grid;
+  grid-template-columns: minmax(3.5rem, 0.45fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--asb-space-2);
+  margin-block: auto;
+}
+
+.asb-gateway-latency-values {
+  display: grid;
+  grid-template-rows: repeat(2, 2.75rem);
+  margin: 0;
+  font: var(--asb-text-caption);
+}
+
+.asb-gateway-latency-values > div {
+  display: grid;
+  align-content: center;
+  gap: var(--asb-space-hairline);
+}
+
+.asb-gateway-latency-values dt { color: var(--asb-text-muted); }
+.asb-gateway-latency-values abbr { text-decoration: none; }
+.asb-gateway-latency-values dd { margin: 0; font: var(--asb-text-label); font-weight: 600; overflow-wrap: anywhere; }
+.asb-gateway-latency-plot { min-width: 0; padding-inline: 5px; }
+
+.asb-gateway-latency-grid {
+  position: relative;
+  height: 5.5rem;
+  border-inline: 1px solid var(--asb-hairline-strong);
+  border-block-end: 1px solid var(--asb-hairline-strong);
+}
+
+.asb-gateway-latency-grid::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 50%;
+  border-inline-start: 1px dashed var(--asb-hairline-strong);
+  content: "";
+}
+
+.asb-gateway-latency-point {
+  position: absolute;
+  inset-block-start: 25%;
+  translate: -50% -50%;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--asb-content-muted);
+  border-radius: 50%;
+  background: var(--asb-link);
+}
+
+.asb-gateway-latency-point + .asb-gateway-latency-point {
+  inset-block-start: 75%;
+  rotate: 45deg;
+  border-radius: 2px;
+  background: var(--asb-claude);
+}
+
+.asb-gateway-latency-ticks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  white-space: nowrap;
+}
+
+.asb-gateway-latency-ticks > :nth-child(2) { justify-self: center; }
+.asb-gateway-latency-ticks > :last-child { justify-self: end; }
+
+.asb-gateway-donut {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 6rem;
+  aspect-ratio: 1;
+}
+
+.asb-gateway-donut > * { grid-area: 1 / 1; }
+.asb-gateway-donut > svg { width: 100%; fill: none; stroke-width: 10; }
+.asb-gateway-donut-track { stroke: var(--asb-hairline); }
+.asb-gateway-donut-center { display: grid; justify-items: center; }
+.asb-gateway-donut-center strong { font: var(--asb-text-title); font-weight: 600; }
+.asb-gateway-donut-center span { color: var(--asb-text-muted); font: var(--asb-text-caption); }
+
+.asb-gateway-protocol-key {
+  display: grid;
+  gap: var(--asb-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: var(--asb-text-caption);
+}
+
+.asb-gateway-protocol-key > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--asb-space-1);
+  overflow-wrap: anywhere;
+}
+
+.asb-gateway-protocol-key i { width: 7px; height: 7px; border-radius: 50%; }
+.asb-gateway-protocol-share { color: var(--asb-text-muted); white-space: nowrap; }
+
+@container gateway (max-width: 45rem) {
+  .asb-gateway-chart-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .asb-gateway-chart.is-trend { grid-column: 1 / -1; }
+}
+
+@container gateway (max-width: 32rem) {
+  .asb-gateway-chart-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Recent request details stay on the shared page surface. */
 
 .asb-gateway-recent {
   display: grid;
@@ -178,12 +226,6 @@
 }
 
 /* —— 请求表内单元格 —— */
-
-.asb-gateway-empty {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-body);
-}
 
 .asb-gateway-row-value { font-variant-numeric: tabular-nums; }
 

@@ -1,10 +1,13 @@
 use std::collections::BTreeSet;
 
-use crate::extensions::contracts::McpMetadata;
+use crate::extensions::contracts::{McpMetadata, McpRegistrySource};
 
 use super::error::{invalid, reject, ExtensionValidationError};
 
 pub fn validate_mcp_metadata(metadata: &McpMetadata) -> Result<(), ExtensionValidationError> {
+    if let Some(source) = &metadata.registry {
+        validate_mcp_registry_source(source)?;
+    }
     for (value, label, limit) in [
         (&metadata.display_name, "显示名称", 128),
         (&metadata.description, "描述", 2000),
@@ -46,4 +49,23 @@ pub fn validate_mcp_metadata(metadata: &McpMetadata) -> Result<(), ExtensionVali
         }
     }
     Ok(())
+}
+
+pub fn validate_mcp_registry_source(source: &McpRegistrySource) -> Result<(), ExtensionValidationError> {
+    if source.name.len() > 255 || !source.name.contains('/') || !source.name.split('/').all(|part| {
+        !matches!(part, "" | "." | "..") && part.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+    }) || source.version.is_empty() || source.version.len() > 255 || source.version.chars().any(|ch| ch.is_control() || ch.is_whitespace()) {
+        return reject("mcpMetadata", "MCP Registry 名称或版本无效");
+    }
+    mcp_registry_endpoint(&source.endpoint).ok_or_else(|| invalid("mcpMetadata", "MCP Registry 远程地址无效"))?;
+    Ok(())
+}
+
+pub fn mcp_registry_endpoint(value: &str) -> Option<url::Url> {
+    if value.len() > 2048 || value.chars().any(|ch| ch.is_control() || ch.is_whitespace() || matches!(ch, '{' | '}' | '\\')) {
+        return None;
+    }
+    let url = url::Url::parse(value).ok()?;
+    (url.scheme() == "https" && url.host_str().is_some() && url.username().is_empty()
+        && url.password().is_none() && url.query().is_none() && url.fragment().is_none()).then_some(url)
 }

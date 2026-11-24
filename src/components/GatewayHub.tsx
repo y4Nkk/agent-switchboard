@@ -24,26 +24,17 @@ interface Props {
   active: boolean;
 }
 
-/** The settings fact rail: state, loopback address, ports and actions share
- * one baseline; failure copy takes a full row. The map's central hub node is
- * owned by GatewayTopology and shares nothing with this section. */
+/** Runtime state and listener controls below the overview artwork. */
 export function GatewayHub({ status, failed, refreshedAt, retrying, onRetry, onChangePort, active }: Props) {
   const { t } = useI18n();
   return (
-    <section className={`asb-gateway-hub${failed ? " is-failure" : ""}`}>
+    <div className={`asb-gateway-hub${failed ? " is-failure" : ""}`}>
       <div className="asb-gateway-hub-identity">
-        <p className="asb-gateway-hub-state">
+        <p className="asb-gateway-hub-state" role="status">
           <span className={`asb-gateway-lamp${failed ? " is-failure" : status.status === "running" ? " is-running" : ""}`} aria-hidden="true" />
           {t(STATUS_KEYS[status.status])}
         </p>
         <GatewayUpdatedAgo at={refreshedAt} active={active} />
-      </div>
-      <div className="asb-gateway-hub-address">
-        <p className="asb-gateway-address-label">{t("gateway.loopbackKicker")}</p>
-        <div className={`asb-gateway-plate${status.baseUrl ? "" : " is-unavailable"}`}>
-          <span className="asb-gateway-plate-address asb-code">{status.baseUrl ?? t("gateway.addressNotListening")}</span>
-          {status.baseUrl && <CopyGatewayAddressButton value={status.baseUrl} />}
-        </div>
       </div>
       {status.failure && (
         <div className="asb-gateway-hub-failure" role="alert">
@@ -53,16 +44,27 @@ export function GatewayHub({ status, failed, refreshedAt, retrying, onRetry, onC
         </div>
       )}
       <FactList inline rows={[
-        { label: t("gateway.configuredPort"), value: <span className="asb-num">{status.configuredPort}</span> },
-        { label: t("gateway.actualPort"), value: <span className="asb-num">{status.listeningPort ?? t("gateway.portNotListening")}</span> },
+        { label: t("gateway.loopbackKicker"), value: <div className="asb-gateway-fact-value is-address">
+          {status.baseUrl ? <>
+            <code>{status.baseUrl}</code>
+            <CopyGatewayAddressButton value={status.baseUrl} />
+          </> : <span className="asb-field-help">{t("gateway.addressNotListening")}</span>}
+        </div> },
+        { label: t("gateway.configuredPort"), value: <div className="asb-gateway-fact-value is-port">
+          <span className="asb-gateway-port-value asb-num">{status.configuredPort}</span>
+          <Button variant="secondary" size="compact" disabled={retrying || status.status === "recoveryBlocked"}
+            onClick={onChangePort}>{t("gateway.changePort")}</Button>
+        </div> },
+        { label: t("gateway.actualPort"), value: <div className="asb-gateway-fact-value is-port">
+          {status.listeningPort === null
+            ? <span className="asb-field-help">{t("gateway.portNotListening")}</span>
+            : <span className="asb-gateway-port-value asb-num">{status.listeningPort}</span>}
+          {status.failure && (
+            <Button variant="secondary" size="compact" disabled={retrying} onClick={onRetry}>{t("gateway.retryListen")}</Button>
+          )}
+        </div> },
       ]} />
-      <div className="asb-gateway-hub-actions">
-        {status.failure && (
-          <Button variant="secondary" disabled={retrying} onClick={onRetry}>{t("gateway.retryListen")}</Button>
-        )}
-        <Button variant="secondary" disabled={retrying || status.status === "recoveryBlocked"} onClick={onChangePort}>{t("gateway.changePort")}</Button>
-      </div>
-    </section>
+    </div>
   );
 }
 

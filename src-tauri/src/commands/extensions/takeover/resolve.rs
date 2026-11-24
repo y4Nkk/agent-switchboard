@@ -21,7 +21,6 @@ use asb_core::extensions::mcp::{
 };
 
 use crate::commands::error::CommandError;
-use crate::commands::extensions::sources::cache_candidates;
 use crate::commands::extensions::support::*;
 use crate::extensions::discovery::DiscoveredPaths;
 use crate::extensions::sources::{self};
@@ -228,7 +227,7 @@ pub(super) fn resolve_skill_takeover(
         .ok_or_else(|| CommandError::keyed("source-rejected", "errors.extlib.discoveredSkillPathInvalid", "发现到的 Skill 路径无效"))?;
     let scanned = sources::scan_local_source(parent, None).map_err(source_error)?;
     let candidate = scanned
-        .iter()
+        .into_iter()
         .find(|candidate| candidate.content_digest == digest)
         .ok_or_else(|| {
             CommandError::keyed(
@@ -236,9 +235,7 @@ pub(super) fn resolve_skill_takeover(
                 "errors.extlib.skillChangedSinceScan",
                 "该 Skill 内容已在扫描后变化；请重新扫描并确认",
             )
-        })?
-        .clone();
-    cache_candidates(scanned)?;
+        })?;
     let target = takeover_target(store, &observed, false)?;
     Ok((
         candidate,

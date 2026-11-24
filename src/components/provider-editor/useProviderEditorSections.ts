@@ -24,24 +24,26 @@ export function useProviderEditorSections(props: ProviderEditorNavigation & {
     ?? props.inventory.profiles.find(({ profile }) => profile.app === props.app && profile.id === props.profileId);
   const originalHash = useRef(current?.fileHash ?? null);
   const stale = originalHash.current !== null && current?.fileHash !== originalHash.current;
-  const leave = useUnsavedChanges(props.dirty, props.busy);
+  const leave = useUnsavedChanges(props.dirty, props.busy, { guardPageRoot: props.active });
   const selectSection = (next: ProviderEditorSection) => {
     positions.current[section] = props.viewportRef.current?.scrollTop ?? 0;
     updateSection(props.official && next === "models" ? "connection" : next);
   };
-  const focusInspector = (requestedRole: RouteRole = role) => requestAnimationFrame(() => {
-    const inspector = props.viewportRef.current?.querySelector<HTMLElement>(requestedRole === "main"
-      ? "[data-provider-model-entry]" : ".asb-model-route-inspector");
-    inspector?.scrollIntoView({ block: "nearest" });
-    if (inspector?.matches("input,button")) inspector.focus({ preventScroll: true });
-    else inspector?.querySelector<HTMLElement>("input,button")?.focus({ preventScroll: true });
+  // The main model is edited from the catalog; the other purposes have their own controls.
+  const focusRole = (requestedRole: RouteRole = role) => requestAnimationFrame(() => {
+    const target = props.viewportRef.current?.querySelector<HTMLElement>(requestedRole === "main"
+      ? "[data-provider-model-entry]" : `[data-route-role="${requestedRole}"]`);
+    target?.scrollIntoView({ block: "nearest" });
+    const enabled = "input:not(:disabled),button:not(:disabled)";
+    const control = target?.matches(enabled) ? target : target?.querySelector<HTMLElement>(enabled);
+    (control ?? target)?.focus({ preventScroll: true });
   });
   useEffect(() => {
     props.viewportRef.current?.scrollTo({ top: positions.current[section] ?? 0 });
   }, [section, props.viewportRef]);
   useEffect(() => {
     if (props.section !== "models" || props.official || !props.active) return;
-    const frame = focusInspector();
+    const frame = focusRole();
     return () => cancelAnimationFrame(frame);
   }, [props.profileId]);
   useEffect(() => {
@@ -52,10 +54,10 @@ export function useProviderEditorSections(props: ProviderEditorNavigation & {
     if (!request.reload && request.app === props.app && request.profileId === props.profileId) {
       selectSection(request.section);
       setRole(request.role ?? "main");
-      if (request.section === "models" && !props.official) focusInspector(request.role ?? "main");
+      if (request.section === "models" && !props.official) focusRole(request.role ?? "main");
     } else leave.request(() => props.onReplaceSession(request));
   }, [props.request, props.busy, props.active]);
-  return { section, selectSection, role, setRole, leave, stale };
+  return { section, selectSection, role, setRole, focusRole, leave, stale };
 }
 
 /** Native constraints are checked after revealing their owning tab. */

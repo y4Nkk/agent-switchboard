@@ -4,12 +4,19 @@ import { DiagnosticsPage } from "../pages/DiagnosticsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { OutboundProxySettings } from "../components/OutboundProxySettings";
 import { StorageSettings } from "../components/StorageSettings";
+import { SETTINGS_SECTIONS } from "./navigation";
+import { usePanelSlideTransition } from "./usePanelSlideTransition";
 import type { SwitchboardModel } from "./useSwitchboardModel";
+
+const SETTINGS_ORDER = SETTINGS_SECTIONS.map(({ value }) => value);
 
 export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
   const { appSettingsState: settings, update, snapshot, operations, busy } = model;
+  const transition = usePanelSlideTransition({
+    value: model.settingsSection, order: SETTINGS_ORDER, active, onChange: model.setSettingsSection,
+  });
   return (
-    <SettingsPage active={active} section={model.settingsSection} onSectionChange={model.setSettingsSection}
+    <SettingsPage active={active} section={model.settingsSection} transition={transition}
       onReturnToProviders={model.settingsReturnToProviders ? model.returnToProviders : undefined}
       egress={<OutboundProxySettings active={active && model.settingsSection === "application"} busy={busy}
         revision={model.dataRevision} onBusy={model.setBusy} onError={model.reportError}
@@ -24,6 +31,7 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         onOpenDir={model.openBackupFolder} onCleaned={() => { void snapshot.refresh(); }} />}
       clientManagement={<ClientManagementPage active={active && model.settingsSection === "client-management"} onChanged={() => void snapshot.refresh()} />}
       diagnostics={<DiagnosticsPage active={active && model.settingsSection === "diagnostics"}
+        leaving={transition.leaving === "diagnostics"}
         section={model.diagnosticSection} onSectionChange={model.setDiagnosticSection}
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks} busy={busy}
         onRefresh={() => void snapshot.refresh()} onRecoverLock={operations.setRecoverLockPending}

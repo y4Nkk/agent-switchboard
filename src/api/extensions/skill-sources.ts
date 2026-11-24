@@ -34,12 +34,6 @@ export interface SkillDirectoryEntry {
   readmeUrl: string | null;
 }
 
-export interface SkillDirectoryResult {
-  items: SkillDirectoryEntry[];
-  total: number;
-  hasMore: boolean;
-}
-
 export function listSkillRepositories(): Promise<SkillRepository[]> {
   return invoke<SkillRepository[]>("list_skill_repositories");
 }
@@ -57,9 +51,8 @@ export function scanSkillRepositories(): Promise<SkillCatalogResult> {
   return invoke<SkillCatalogResult>("scan_skill_repositories");
 }
 
-/** Pages contain up to 20 entries; offsets are bounded by the backend. */
-export function searchSkillDirectory(query: string, offset = 0): Promise<SkillDirectoryResult> {
-  return invoke<SkillDirectoryResult>("search_skill_directory", { query, offset });
+export function searchSkillDirectory(query: string): Promise<SkillDirectoryEntry[]> {
+  return invoke("search_skill_directory", { query });
 }
 
 export function resolveDirectorySkill(entry: SkillDirectoryEntry): Promise<SkillCandidateDto[]> {

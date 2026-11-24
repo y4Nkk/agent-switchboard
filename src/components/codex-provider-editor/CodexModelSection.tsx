@@ -8,9 +8,9 @@ import { Button } from "../Button";
 import { Input } from "../Input";
 import { Select } from "../Select";
 import { ToggleChip } from "../ToggleChip";
+import { ModelCatalogCard } from "../provider-editor/ModelCatalogCard";
 import { ModelPickerDialog, type PickerCandidate } from "../provider-editor/ModelPickerDialog";
 import { addCatalogModel, applyCatalogModels, modelSource, removeCatalogModel, withCatalog } from "./catalog";
-import { CodexModelMapping } from "./CodexModelMapping";
 import { REASONING_LEVELS, REASONING_LEVEL_LABELS, type EditableCodexCatalogEntry } from "./draft";
 import type { CodexEditorState } from "./useCodexProviderEditor";
 
@@ -62,18 +62,8 @@ function ModelCard({ entry, primary, busy, onChange, onPrimary, onRemove, source
       </div>
     </label>;
   };
-  return <section className="asb-provider-model-card" aria-label={t("providerSetup.modelCapabilities", { model: entry.id })}>
-    <div className="asb-provider-model-card-head">
-      <code>{entry.id}</code>
-      <span className="asb-field-help">{sourceLabel}</span>
-      <div className="asb-provider-model-actions">
-        {primary
-          ? <span className="asb-provider-primary-pill">{t("providerSetup.primary")}</span>
-          : <Button variant="ghost" size="compact" disabled={busy} onClick={onPrimary}>{t("providerSetup.usePrimary")}</Button>}
-        <Button variant="dangerText" size="compact" disabled={busy} aria-label={t("codex.model.deleteModel", { model: entry.id })}
-          onClick={onRemove}>{t("providerSetup.remove")}</Button>
-      </div>
-    </div>
+  return <ModelCatalogCard app="codex" model={entry.id} primary={primary} busy={busy} sourceLabel={sourceLabel}
+    onPrimary={onPrimary} onRemove={onRemove}>
     <div className="asb-provider-model-limits">
       {limitField("contextWindow", "codex.model.contextWindow", contextPresets)}
       {limitField("maxOutputTokens", "codex.model.maxOutput", outputPresets)}
@@ -99,7 +89,7 @@ function ModelCard({ entry, primary, busy, onChange, onPrimary, onRemove, source
         </div>
       </>}
     </div>
-  </section>;
+  </ModelCatalogCard>;
 }
 
 export function CodexModelSection({ editor, busy, userConfigModel, userConfigWarnings }: {
@@ -159,7 +149,6 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
           onPrimary={() => setDraft((current) => ({ ...current, defaultModel: entry.id }))}
           onRemove={() => setDraft((current) => removeCatalogModel(current, entry.id))} />)
         : <p className="asb-field-help">{t("providerSetup.noModels")}</p>}
-      <CodexModelMapping editor={editor} busy={busy} />
       {userConfigModel && <p className="asb-field-help">{t("codex.model.userConfigModel", { model: userConfigModel })}</p>}
       {userConfigWarnings.map((warning) => <p key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</p>)}
     </div>

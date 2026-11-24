@@ -53,6 +53,11 @@ export function onTrayChanged(handler: () => void): Promise<() => void> {
   }
   return listen("tray-changed", handler);
 }
+/** The tray WebView is retained after its native window is hidden. */
+export function onTrayHidden(handler: () => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  return listen("tray-hidden", handler);
+}
 /** Emits whenever either real client configuration file changes on disk. */
 export function onClientConfigChanged(handler: () => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});

@@ -17,6 +17,9 @@ export function NewMcpDialog({ workspace: w }: Props) {
   return (
       <NewMcpForm
         busy={w.writeBlocked}
+        marketReturnFocus={w.nav.view === "market" ? w.nav.marketButton : undefined}
+        registryEntry={w.nav.dialog?.type === "newMcp" ? w.nav.dialog.registryEntry : undefined}
+        existingNames={w.items.filter((item) => item.kind === "mcp").map((item) => item.name)}
         onCancel={w.nav.closeDialog}
         onPutSecret={w.ext.putSecret}
         onSave={w.createMcp}

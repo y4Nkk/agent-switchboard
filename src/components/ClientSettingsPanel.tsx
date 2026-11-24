@@ -1,12 +1,12 @@
 import { commandErrorText } from "../i18n/errors";
-import { useId, useRef, useState, type ReactNode, type RefCallback } from "react";
+import { useEffect, useState, type ReactNode, type RefCallback } from "react";
 import { type AppKind, type CodexSubagentSettings, type SettingValue, type ConfigFileStatus } from "../api/client";
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
 import { useI18n, type TFunction } from "../i18n";
+import { AppDialog, AppDialogSuspension } from "./AppDialog";
 import { Button } from "./Button";
 import { ClientPicker } from "./ClientPicker";
-import { Collapsible } from "./Collapsible";
-import { CurrentConfigurationEditor } from "./CurrentConfigurationEditor";
+import { CurrentConfigurationEditor, type ConfigurationEditState } from "./CurrentConfigurationEditor";
 import {
   ClientConfigurationConfirmation,
   ClientConfigurationResetPanel,
@@ -18,8 +18,12 @@ import { OfficialSettingsDirectory } from "./OfficialSettingsDirectory";
 import { SettingsFields } from "./SettingsFields";
 import { CodexPermissionProfileNotice } from "./CodexPermissionProfileNotice";
 import { WorkspaceHeader } from "./WorkspaceHeader";
+import { useUnsavedChanges } from "./useUnsavedChanges";
 
 interface ClientSettingsPanelProps {
+  /** Whether this client's page is on screen. The header entries open
+   * dialogs, and a dialog never outlives the page or client route owning it. */
+  active: boolean;
   routeContentRef: RefCallback<HTMLElement>;
   app: AppKind;
   onSelectApp: (app: AppKind) => void;
@@ -33,6 +37,9 @@ interface ClientSettingsPanelProps {
   onReview: (app: AppKind) => void;
   onClaudeExtraChange: (app: AppKind, extra: Record<string, unknown>) => void;
   globalInstructions: ReactNode;
+  /** The draft facts behind `globalInstructions`, read by that dialog's close guard. */
+  globalInstructionsDirty: boolean;
+  onDiscardGlobalInstructions: () => void;
   /** Codex's directly-applied subagent resource sits after model behavior,
    * outside the application-owned client-preference store. */
   subagentSettings?: ReactNode;
@@ -51,36 +58,8 @@ function actionStatus(t: TFunction, props: ClientSettingsPanelProps) {
 }
 
 interface ConfigurationReviewProps extends ClientSettingsPanelProps {
-  open: boolean;
-}
-
-interface ConfigurationReviewButtonProps extends ConfigurationReviewProps {
-  reviewId: string;
-  onToggle: (trigger: HTMLButtonElement) => void;
-}
-
-function ClientConfigurationReviewButton({
-  editorState: state,
-  busy,
-  open,
-  reviewId,
-  onToggle,
-}: ConfigurationReviewButtonProps) {
-  const { t } = useI18n();
-  const label = state.currentConfigurationLoading
-    ? t("clientConfig.review.reading")
-    : open ? t("clientConfig.review.collapse") : t("clientConfig.review.title");
-  return (
-    <Button
-      variant="secondary"
-      aria-expanded={open}
-      aria-controls={open ? reviewId : undefined}
-      disabled={busy || state.currentConfigurationLoading}
-      onClick={(event) => onToggle(event.currentTarget)}
-    >
-      {label}
-    </Button>
-  );
+  onManualEditStateChange: (state: ConfigurationEditState) => void;
+  onExtraEditStateChange: (state: ConfigurationEditState) => void;
 }
 
 function ClientConfigurationReview({
@@ -90,6 +69,8 @@ function ClientConfigurationReview({
   onApplied,
   subagentDraft,
   onClaudeExtraChange,
+  onManualEditStateChange,
+  onExtraEditStateChange,
 }: ConfigurationReviewProps) {
   const { t } = useI18n();
   const source = state.currentConfiguration;
@@ -97,7 +78,7 @@ function ClientConfigurationReview({
     return <p className="asb-field-help" role="status">{t("clientConfig.review.preparing")}</p>;
   }
   return (
-    <div className="asb-client-configuration-review">
+    <>
       {state.currentConfigurationLoading && <p className="asb-field-help" role="status">{t("clientConfig.review.readingReal")}</p>}
       {state.currentConfigurationError && (
         <p className="asb-field-error" role="alert">
@@ -112,6 +93,7 @@ function ClientConfigurationReview({
           source={source}
           subagentDraft={subagentDraft}
           onApplied={onApplied}
+          onEditStateChange={onManualEditStateChange}
         />
       )}
       <section className="asb-client-configuration-review-scope" aria-label={t("clientConfig.review.scopeTitle")}>
@@ -126,9 +108,10 @@ function ClientConfigurationReview({
           extra={state.claudeExtra}
           busy={busy}
           onChange={(extra) => onClaudeExtraChange(app, extra)}
+          onEditStateChange={onExtraEditStateChange}
         />
       )}
-    </div>
+    </>
   );
 }
 function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
@@ -207,34 +190,18 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
 
 type ClientSettingsSection = "directory" | "review" | "instructions" | "reset";
 
-interface ClientSettingsToolbarProps {
-  panel: ClientSettingsPanelProps;
-  openSection: ClientSettingsSection | null;
-  directoryId: string;
-  reviewId: string;
-  instructionsId: string;
-  resetId: string;
-  configuration: ClientConfigurationActionState;
-  onSectionChange: (section: ClientSettingsSection | null, trigger: HTMLButtonElement) => void;
-}
-
 /** The page header: the client picker leads the navigation row, the four
- * disclosure entries sit right of it like every workspace's page actions. */
+ * dialog entries sit right of it like every workspace's page actions. */
 function ClientSettingsToolbar({
   panel,
-  openSection,
-  directoryId,
-  reviewId,
-  instructionsId,
-  resetId,
   configuration,
-  onSectionChange,
-}: ClientSettingsToolbarProps) {
+  onOpen,
+}: {
+  panel: ClientSettingsPanelProps;
+  configuration: ClientConfigurationActionState;
+  onOpen: (section: ClientSettingsSection) => void;
+}) {
   const { t } = useI18n();
-  const directoryOpen = openSection === "directory";
-  const reviewOpen = openSection === "review";
-  const instructionsOpen = openSection === "instructions";
-  const resetOpen = openSection === "reset";
   return (
     <WorkspaceHeader
       title={t("clientConfig.title")}
@@ -250,46 +217,37 @@ function ClientSettingsToolbar({
         <>
           <Button
             variant="secondary"
-            aria-expanded={directoryOpen}
-            aria-controls={directoryOpen ? directoryId : undefined}
             disabled={!panel.editorState.editor}
-            onClick={(event) => onSectionChange(directoryOpen ? null : "directory", event.currentTarget)}
+            onClick={() => onOpen("directory")}
           >
-            {directoryOpen ? t("clientConfig.toolbar.backFromDirectory") : t("clientConfig.toolbar.directory")}
+            {t("clientConfig.toolbar.directory")}
           </Button>
-          <ClientConfigurationReviewButton
-            {...panel}
-            open={reviewOpen}
-            reviewId={reviewId}
-            onToggle={(trigger) => {
-              const next = !reviewOpen;
-              onSectionChange(next ? "review" : null, trigger);
-              if (next) panel.onReview(panel.app);
-            }}
-          />
           <Button
             variant="secondary"
-            aria-expanded={instructionsOpen}
-            aria-controls={instructionsOpen ? instructionsId : undefined}
             disabled={panel.busy}
-            onClick={(event) => onSectionChange(instructionsOpen ? null : "instructions", event.currentTarget)}
+            onClick={() => {
+              onOpen("review");
+              panel.onReview(panel.app);
+            }}
           >
-            {instructionsOpen ? t("clientConfig.toolbar.collapseInstructions") : t("clientConfig.toolbar.instructions")}
+            {t("clientConfig.review.title")}
           </Button>
           <Button
             variant="secondary"
-            aria-expanded={resetOpen}
-            aria-controls={resetOpen ? resetId : undefined}
+            disabled={panel.busy}
+            onClick={() => onOpen("instructions")}
+          >
+            {t("clientConfig.toolbar.instructions")}
+          </Button>
+          <Button
+            variant="secondary"
             disabled={!configuration.canNativeReset || panel.busy || configuration.applying}
-            onClick={(event) => {
-              const next = !resetOpen;
-              onSectionChange(next ? "reset" : null, event.currentTarget);
-              if (next) configuration.prepareNativeReset("nativeDefaults");
+            onClick={() => {
+              onOpen("reset");
+              configuration.prepareNativeReset("nativeDefaults");
             }}
           >
-            {resetOpen && configuration.applying
-              ? configuration.resetView === "clearExtraConfiguration" ? t("clientConfig.toolbar.generatingClear") : t("clientConfig.toolbar.generatingNative")
-              : resetOpen ? t("clientConfig.toolbar.collapseReset") : t("clientConfig.reset.nativeTitle")}
+            {t("clientConfig.reset.nativeTitle")}
           </Button>
         </>
       }
@@ -299,20 +257,14 @@ function ClientSettingsToolbar({
 
 function ClientSettingsForm({
   panel,
-  directoryOpen,
-  reviewOpen,
-  resetOpen,
   configuration,
 }: {
   panel: ClientSettingsPanelProps;
-  directoryOpen: boolean;
-  reviewOpen: boolean;
-  resetOpen: boolean;
   configuration: ClientConfigurationActionState;
 }) {
   const { t } = useI18n();
   const status = configuration.status ?? actionStatus(t, panel);
-  return <div hidden={directoryOpen || reviewOpen || resetOpen}>
+  return <>
     {panel.configStatus?.clientSettingsError && (
       <p className="asb-field-error" role="alert">
         {t("clientConfig.status.extractError", { message: panel.configStatus.clientSettingsError })}
@@ -332,65 +284,108 @@ function ClientSettingsForm({
         </Button>
       </div>
     </section>
-  </div>;
+  </>;
+}
+
+interface ClientSettingsDialogProps {
+  panel: ClientSettingsPanelProps;
+  onClose: () => void;
+}
+
+/** A manual edit that is not applied yet asks before the dialog closes; the
+ * confirmation is what drops it, and a running write locks the dialog. */
+function ConfigurationReviewDialog({ panel, onClose }: ClientSettingsDialogProps) {
+  const { t } = useI18n();
+  const [manual, setManual] = useState({ dirty: false, working: false });
+  const [extra, setExtra] = useState({ dirty: false, working: false });
+  const working = panel.busy || manual.working || extra.working;
+  const leave = useUnsavedChanges(manual.dirty || extra.dirty, working);
+  return <>
+    <AppDialogSuspension suspended={Boolean(leave.confirmation)}>
+      <AppDialog title={t("clientConfig.review.title")} busy={working} wide onClose={() => leave.request(onClose)}>
+        <ClientConfigurationReview {...panel} onManualEditStateChange={setManual} onExtraEditStateChange={setExtra} />
+      </AppDialog>
+    </AppDialogSuspension>
+    {leave.confirmation}
+  </>;
+}
+
+/** The instruction draft outlives the dialog in the prompt model, so closing
+ * asks first and the confirmation is what discards that draft. */
+function GlobalInstructionsDialog({ panel, onClose }: ClientSettingsDialogProps) {
+  const { t } = useI18n();
+  const leave = useUnsavedChanges(panel.globalInstructionsDirty, panel.busy);
+  const discardAndClose = () => {
+    panel.onDiscardGlobalInstructions();
+    onClose();
+  };
+  return <>
+    <AppDialogSuspension suspended={Boolean(leave.confirmation)}>
+      <AppDialog title={t("clientConfig.toolbar.instructions")} busy={panel.busy}
+        onClose={() => leave.request(discardAndClose)}>
+        {panel.globalInstructions}
+      </AppDialog>
+    </AppDialogSuspension>
+    {leave.confirmation}
+  </>;
+}
+
+/** The title names the view being confirmed: the native restore, or the
+ * extra-settings clear reached from the action under its preview. */
+function NativeResetDialog({
+  panel,
+  onClose,
+  configuration,
+}: ClientSettingsDialogProps & { configuration: ClientConfigurationActionState }) {
+  const { t } = useI18n();
+  return (
+    <AppDialog
+      title={configuration.resetView === "clearExtraConfiguration"
+        ? t("clientConfig.reset.extraTitle")
+        : t("clientConfig.reset.nativeTitle")}
+      busy={panel.busy || configuration.applying}
+      onClose={onClose}
+      wide
+    >
+      <ClientConfigurationResetPanel app={panel.app} busy={panel.busy} configuration={configuration} />
+    </AppDialog>
+  );
 }
 
 export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
   const { t } = useI18n();
   const [openSection, setOpenSection] = useState<ClientSettingsSection | null>(null);
-  const directoryId = useId();
-  const reviewId = useId();
-  const instructionsId = useId();
-  const resetId = useId();
-  const panelTrigger = useRef<HTMLButtonElement>(null);
-  const directoryOpen = openSection === "directory";
-  const reviewOpen = openSection === "review";
-  const instructionsOpen = openSection === "instructions";
-  const resetOpen = openSection === "reset";
-  const changeSection = (section: ClientSettingsSection | null, trigger: HTMLButtonElement) => {
-    panelTrigger.current = trigger;
-    setOpenSection(section);
-  };
+  // A modal left inside a hidden page or client route would keep the rest of
+  // the application inert, so it closes with the surface that owns it.
+  useEffect(() => {
+    if (!props.active) setOpenSection(null);
+  }, [props.active]);
   const configuration = useClientConfigurationApply(props, () => setOpenSection(null));
+  const onClose = () => setOpenSection(null);
+  const dialog = { panel: props, onClose };
+  const section = props.active ? openSection : null;
   return <>
-    <div className="asb-client-settings-panel" aria-label={t("clientConfig.title")} onKeyDown={(event) => {
-      if (event.key !== "Escape" || !openSection) return;
-      event.preventDefault(); setOpenSection(null); panelTrigger.current?.focus();
-    }}>
-      <ClientSettingsToolbar
-        panel={props}
-        openSection={openSection}
-        directoryId={directoryId}
-        reviewId={reviewId}
-        instructionsId={instructionsId}
-        resetId={resetId}
-        configuration={configuration}
-        onSectionChange={changeSection}
-      />
+    <div className="asb-client-settings-panel" aria-label={t("clientConfig.title")}>
+      <ClientSettingsToolbar panel={props} configuration={configuration} onOpen={setOpenSection} />
       <div ref={props.routeContentRef}>
-        <Collapsible open={reviewOpen} id={reviewId} ariaLabel={t("clientConfig.review.title")}>
-          <ClientConfigurationReview {...props} open={reviewOpen} />
-        </Collapsible>
-        <Collapsible open={instructionsOpen} id={instructionsId} className="is-instructions"
-          ariaLabel={t("clientConfig.toolbar.instructionsEditor")}>
-          <div className="asb-client-settings-instructions">{props.globalInstructions}</div>
-        </Collapsible>
-        <Collapsible open={directoryOpen} id={directoryId} ariaLabel={t("clientConfig.toolbar.directory")}>
-          <OfficialSettingsDirectory entries={props.editorState.editor?.directory ?? []} />
-        </Collapsible>
-        <Collapsible open={resetOpen} id={resetId} ariaLabel={t("clientConfig.reset.nativeTitle")}>
-          <ClientConfigurationResetPanel app={props.app} busy={props.busy} configuration={configuration} />
-        </Collapsible>
-        <ClientSettingsForm panel={props} directoryOpen={directoryOpen} reviewOpen={reviewOpen} resetOpen={resetOpen} configuration={configuration} />
+        <ClientSettingsForm panel={props} configuration={configuration} />
       </div>
     </div>
-    <ClientConfigurationConfirmation
+    {section === "directory" && (
+      <AppDialog title={t("clientConfig.toolbar.directory")} busy={props.busy} onClose={onClose} wide tall>
+        <OfficialSettingsDirectory entries={props.editorState.editor?.directory ?? []} />
+      </AppDialog>
+    )}
+    {section === "review" && <ConfigurationReviewDialog {...dialog} />}
+    {section === "instructions" && <GlobalInstructionsDialog {...dialog} />}
+    {section === "reset" && <NativeResetDialog {...dialog} configuration={configuration} />}
+    {props.active && <ClientConfigurationConfirmation
       app={props.app}
       busy={props.busy}
       applying={configuration.applying}
       pending={configuration.pendingApply}
       onConfirm={configuration.commitApply}
       onCancel={configuration.cancelApply}
-    />
+    />}
   </>;
 }

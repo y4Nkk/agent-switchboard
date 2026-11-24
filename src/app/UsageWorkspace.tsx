@@ -20,6 +20,7 @@ import { useResourceUsage } from "../pages/use-resource-usage";
 import { useModelUsageReport } from "../pages/use-model-usage-report";
 import { useRequestUsage } from "../pages/use-request-usage";
 import { UsageWorkspaceHeader } from "./UsageWorkspaceHeader";
+import { useOnReturnToRoot } from "./PageRoot";
 import type { UsageSection } from "./navigation";
 
 function UsagePanel({ id, section, selected, active, children }: {
@@ -70,6 +71,8 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
   const [radarOpened, setRadarOpened] = useState(section === "radar");
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const showHistory = section === "radar" && historyOpen;
+  useOnReturnToRoot(active && showHistory, () => setHistoryOpen(false));
   const [range, setRange] = useState<ModelUsageRange>("last7Days");
   useEffect(() => { if (section === "radar") setRadarOpened(true); }, [section]);
   const consumptionActive = visible && section === "consumption";
@@ -83,7 +86,6 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
   const quotaActive = visible && section === "quota";
   const quotaProfiles = useMemo(() => quotaProviders(claudeRecords, codexRecords), [claudeRecords, codexRecords]);
   const providerQuota = useProviderQuotaRefresh(quotaActive, quotaProfiles);
-  const showHistory = section === "radar" && historyOpen;
   const officialReset = useCodexOfficialReset(quotaActive);
   const resetSignal = useCodexResetSignal(quotaActive);
   return (
@@ -118,9 +120,9 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
         </UsagePanel>
       </div>
       {historyOpened && (
-        <div className="asb-editor-route" hidden={!showHistory}>
+        <div className="asb-subpage-route" hidden={!showHistory}>
           <PageErrorBoundary active={active && showHistory}>
-            <CodexProbeHistory active={radarActive && showHistory} probe={probe} onClose={() => setHistoryOpen(false)}
+            <CodexProbeHistory open={showHistory} active={radarActive && showHistory} probe={probe} onClose={() => setHistoryOpen(false)}
               onReuseQuestion={reuseQuestion} onChanged={probe.refresh} />
           </PageErrorBoundary>
         </div>

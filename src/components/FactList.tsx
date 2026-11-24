@@ -8,7 +8,7 @@ export interface FactListRow {
 /** The one key/value facts primitive: every pair renders as
  * <div><dt/><dd/></div> inside a single two-column grid, so all labels share
  * the widest label's column and all values start at the same left edge.
- * `inline` lays the pairs on one wrapping rail instead (gateway summary).
+ * `inline` keeps pair wrappers visible for horizontal groups.
  * DOM and visual contract are owned by `.asb-fact-row` in
  * styles/base/panels.css; value-internal layout stays in the row value. */
 export function FactList({ rows, inline = false }: { rows: FactListRow[]; inline?: boolean }) {

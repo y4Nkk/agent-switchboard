@@ -77,9 +77,10 @@ function Fixture() {
       profiles: value.profiles.filter(({ profile }) => profile.id !== id) })),
     snapshot: () => structuredClone(inventory),
   } });
-  return <main style={{ padding: 24 }}><ModelRoutingWorkspace inventory={inventory}
+  return <main style={{ padding: 24 }}><ModelRoutingWorkspace inventory={inventory} visible={false}
     initialApp={query.get("client") === "claude" ? "claude" : "codex"} busy={busy}
     runtimeSummary={<p data-testid="runtime-observation">Isolated runtime observation. No gateway listener is started.</p>}
+    runtimeObservation={null}
     onEdit={(app, profileId, role) => entries.push({ app, profileId, role })}
     onProviders={(app) => providerEntries.push(app)} /></main>;
 }

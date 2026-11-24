@@ -1,12 +1,12 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useState } from "react";
 import type { AppKind, GatewayRouteStatus, GatewaySample, GatewayStatus } from "../api/client";
 import { useI18n } from "../i18n";
 import { clientFullName } from "../lib/client-name";
 import { NATIVE_PROTOCOL, isProtocolTranslation, protocolLabel } from "../lib/protocol";
 import { Button } from "./Button";
 import { ClientLogo } from "./ClientLogo";
-import type { ClientFilterValue } from "./ClientFilter";
-import { GatewayDeviceArt, GatewayTopologyFloor } from "./GatewayDeviceArt";
+import { ClientFilter, type ClientFilterValue } from "./ClientFilter";
+import { GatewayDeviceArt } from "./GatewayDeviceArt";
 import { GatewayTopologyWires } from "./GatewayTopologyWires";
 import { ConfirmGatewayRecoveryDiscard } from "./GatewayPagePrimitives";
 
@@ -18,36 +18,39 @@ interface Props {
   failed: boolean;
   profileNames: Map<string, string>;
   focus: ClientFilterValue;
-  onFocus: (app: AppKind) => void;
+  onFocusChange: (value: ClientFilterValue) => void;
 }
 
-export function GatewayTopology({ status, failed, profileNames, focus, onFocus }: Props) {
+export function GatewayTopology({ status, failed, profileNames, focus, onFocusChange }: Props) {
   const { t } = useI18n();
-  const sceneRef = useRef<HTMLDivElement>(null);
+  const [scene, setScene] = useState<HTMLDivElement | null>(null);
   const { routes } = status;
   const rows = Math.max(APP_ORDER.length, routes.length);
   const traffic = useTrafficCounts(status.metrics.samples, routes);
   const translated = routes.filter((route) => isProtocolTranslation(NATIVE_PROTOCOL[route.app], route.upstreamProtocol)).length;
+  const toggleFocus = (app: AppKind) => onFocusChange(focus === app ? "all" : app);
   return (
     <section className={`asb-gateway-map${failed ? " is-failure" : ""}`} aria-label={t("gateway.mapAriaLabel")}>
       <header className="asb-gateway-map-heading">
-        <h3 className="asb-section-title">{t("gateway.topologyTitle")}</h3>
-        <span className="asb-gateway-section-count">
-          {t("gateway.topologySummary", { translated, direct: routes.length - translated })}
-        </span>
+        <div className="asb-gateway-map-heading-copy">
+          <h3 className="asb-section-title">{t("gateway.topologyTitle")}</h3>
+          <span className="asb-gateway-section-count">
+            {t("gateway.topologySummary", { translated, direct: routes.length - translated })}
+          </span>
+        </div>
+        <ClientFilter value={focus} onChange={onFocusChange} label={t("gateway.focusAriaLabel")} showLogos />
       </header>
-      <div ref={sceneRef} className="asb-gateway-map-canvas" style={{ gridTemplateRows: `repeat(${rows}, auto)` }}>
-        <GatewayTopologyFloor />
-        <GatewayTopologyWires sceneRef={sceneRef} routes={routes} focus={focus} failed={failed} />
-        <GatewayClientNodes rows={[1, rows]} routes={routes} counts={traffic.byApp} focus={focus} onFocus={onFocus} />
+      <div ref={setScene} className="asb-gateway-map-canvas" style={{ gridTemplateRows: `repeat(${rows}, auto)` }}>
+        <GatewayTopologyWires scene={scene} routes={routes} focus={focus} failed={failed} />
+        <GatewayClientNodes rows={[1, rows]} routes={routes} counts={traffic.byApp} focus={focus} onFocus={toggleFocus} />
         <div data-gateway-node="hub" className="asb-gateway-node is-hub" style={{ gridRow: `1 / span ${rows}` }}>
-          <GatewayDeviceArt kind="hub" /><strong>{t("gateway.title")}</strong>
+          <GatewayDeviceArt kind="hub" connected={routes.length > 0} /><strong>{t("gateway.title")}</strong>
           <span className="asb-gateway-node-caption">{status.baseUrl ?? t("gateway.addressNotListening")}</span>
         </div>
-        <GatewayProviderNodes routes={routes} profileNames={profileNames} counts={traffic.byRoute} focus={focus} onFocus={onFocus} />
+        <GatewayProviderNodes routes={routes} profileNames={profileNames} counts={traffic.byRoute} focus={focus} onFocus={toggleFocus} />
         {routes.length === 0 && (
           <div className="asb-gateway-node is-empty" style={{ gridRow: `1 / span ${rows}` }} role="status">
-            <GatewayDeviceArt kind="provider" />
+            <GatewayDeviceArt kind="provider" connected={false} />
             <strong>{t("gateway.emptyRoutesTitle")}</strong>
             <span>{t("gateway.emptyRoutesCopy")}</span>
           </div>
@@ -108,7 +111,7 @@ function GatewayClientNodes({ rows, routes, counts, focus, onFocus }: FocusProps
             <ClientLogo app={app} className="asb-gateway-node-logo" />
             <span className="asb-gateway-node-caption">{t("gateway.client")}</span>
           </span>
-          <GatewayDeviceArt kind="client" />
+          <GatewayDeviceArt kind="client" connected={routeCount > 0} />
           <strong>{clientFullName(app)}</strong>
           <span className="asb-gateway-route-protocol">
             {t("gateway.requestFormat", { format: protocolLabel(t, NATIVE_PROTOCOL[app]) })}

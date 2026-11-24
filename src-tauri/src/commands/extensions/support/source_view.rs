@@ -42,7 +42,7 @@ fn safe_ref(name: &str) -> bool {
         && !asb_core::redact::is_secret_value(name)
 }
 
-pub(super) fn skill_source_view(source: SourceRef) -> SkillSourceViewDto {
+pub(in crate::commands::extensions) fn skill_source_view(source: SourceRef) -> SkillSourceViewDto {
     let resolved_commit = source.resolved_commit.filter(|commit| {
         (7..=64).contains(&commit.len()) && commit.bytes().all(|b| b.is_ascii_hexdigit())
     });

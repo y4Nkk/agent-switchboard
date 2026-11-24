@@ -24,7 +24,9 @@ function EmptyLibrary({ workspace }: { workspace: ExtensionWorkspace }) {
           ? t(nav.kind === "skill" ? "extensions.library.emptySkills" : "extensions.library.emptyMcp")
           : t("extensions.library.noFilterMatches")}
       </h3>
-      {!empty && (
+      {empty ? (
+        <Button variant="primary" onClick={nav.openMarket}>{t("extensions.registry.market")}</Button>
+      ) : (
         <Button variant="secondary" onClick={nav.clearFilters}>
           {t("common.clearSearch")}
         </Button>
@@ -54,7 +56,6 @@ function LibraryState({ workspace }: { workspace: ExtensionWorkspace }) {
 
 export function ExtensionLibraryPanel({ workspace }: { workspace: ExtensionWorkspace }) {
   const { t } = useI18n();
-  if (workspace.nav.kind === null) return null;
   const loaded = workspace.ext.loaded && workspace.ext.workspace !== null;
   const filtered = loaded && workspace.visible.length !== workspace.kindItems.length;
   return (

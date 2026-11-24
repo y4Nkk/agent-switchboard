@@ -7,7 +7,7 @@ use std::fs;
 use asb_core::contracts::AppKind;
 use asb_core::extensions::contracts::{
     ExtensionDefinition, ExtensionKind, ExtensionPayload, ObservedOrigin, SkillDefinition,
-    SkillManifest, SourceRef, EXTENSIONS_SCHEMA_VERSION,
+    SkillManifest, EXTENSIONS_SCHEMA_VERSION,
 };
 use asb_core::extensions::mcp::{
     import_claude_project_private_server, import_claude_server, import_codex_server,
@@ -25,15 +25,19 @@ use crate::extensions::store::ExtensionStore;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillCandidateDto {
+    candidate_id: String,
     digest: String,
     pub(super) name: String,
     description: Option<String>,
     file_count: usize,
     diagnostics: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<SkillSourceViewDto>,
 }
 
 pub(super) fn candidate_dto(candidate: &SkillCandidate) -> SkillCandidateDto {
     SkillCandidateDto {
+        candidate_id: candidate_id(candidate),
         digest: candidate.content_digest.clone(),
         name: candidate.name.clone(),
         description: candidate.description.clone(),
@@ -43,35 +47,25 @@ pub(super) fn candidate_dto(candidate: &SkillCandidate) -> SkillCandidateDto {
             .filter(|entry| entry.kind == asb_core::extensions::validate::ContentEntryKind::File)
             .count(),
         diagnostics: candidate.diagnostics.clone(),
+        source: candidate.resolved_commit.as_ref().map(|_| skill_source_view(candidate.source_ref())),
     }
 }
 
-/// A digest cannot select between two origins. Reject ambiguous source
-/// scans before inserting anything, and never replace a cached provenance.
-pub(super) fn cache_candidates(list: Vec<SkillCandidate>) -> Result<(), CommandError> {
+pub(super) fn candidate_id(candidate: &SkillCandidate) -> String {
+    let key = serde_json::to_vec(&(candidate.source_ref(), &candidate.content_digest))
+        .expect("serializable Skill candidate identity");
+    sha_hex(&key)
+}
+
+pub(super) fn cache_candidates(list: Vec<SkillCandidate>) {
     let mut cache = candidates().lock().expect("candidates");
-    let mut staged = std::collections::BTreeMap::<String, SkillCandidate>::new();
     for candidate in list {
-        if let Some(previous) = cache
-            .get(&candidate.content_digest)
-            .or_else(|| staged.get(&candidate.content_digest))
-        {
-            if previous.source_identity != candidate.source_identity
-                || previous.subpath != candidate.subpath
-                || previous.ref_name != candidate.ref_name
-            {
-                return Err(CommandError::new("candidate-source-conflict",
-                    "Identical content is already cached from another source; the existing source was retained. Import that candidate or restart the app before choosing a different source."));
-            }
-        }
-        staged
-            .entry(candidate.content_digest.clone())
-            .or_insert(candidate);
+        cache.entry(candidate_id(&candidate)).or_insert(candidate);
     }
-    for (digest, candidate) in staged {
-        cache.entry(digest).or_insert(candidate);
-    }
-    Ok(())
+}
+
+pub(super) fn cached_candidate(id: &str) -> Option<SkillCandidate> {
+    candidates().lock().expect("candidates").get(id).cloned()
 }
 
 pub(super) fn detailed_source_error(error: sources::SourceError) -> CommandError {
@@ -92,7 +86,7 @@ pub async fn scan_local_skill_source(
         let scanned =
             sources::scan_local_source(std::path::Path::new(&root), None).map_err(source_error)?;
         let dtos: Vec<SkillCandidateDto> = scanned.iter().map(candidate_dto).collect();
-        cache_candidates(scanned)?;
+        cache_candidates(scanned);
         Ok(dtos)
     })
     .await
@@ -109,7 +103,7 @@ pub async fn resolve_skill_source(
         let scanned = sources::resolve_github_source(&repo, &subpath, ref_name.as_deref(), fetch)
             .map_err(source_error)?;
         let dtos: Vec<SkillCandidateDto> = scanned.iter().map(candidate_dto).collect();
-        cache_candidates(scanned)?;
+        cache_candidates(scanned);
         Ok(dtos)
     })
     .await
@@ -121,7 +115,7 @@ pub async fn scan_skill_zip(path: String) -> Result<Vec<SkillCandidateDto>, Comm
         let scanned =
             sources::scan_zip_source(std::path::Path::new(&path)).map_err(detailed_source_error)?;
         let dtos = scanned.iter().map(candidate_dto).collect();
-        cache_candidates(scanned)?;
+        cache_candidates(scanned);
         Ok(dtos)
     })
     .await
@@ -129,22 +123,19 @@ pub async fn scan_skill_zip(path: String) -> Result<Vec<SkillCandidateDto>, Comm
 
 /// Imports one cached candidate into the library: the immutable content
 /// version first, then a definition pointing at it. Nothing is deployed.
-pub(super) fn import_cached_skill_candidate(
+fn import_cached_skill_candidate(
     store: &ExtensionStore,
-    digest: &str,
+    candidate_id: &str,
     name: String,
     host_scoped: Option<AppKind>,
 ) -> Result<ExtensionMutationDto, CommandError> {
-    let candidate = candidates()
-        .lock()
-        .expect("candidates")
-        .get(digest)
-        .cloned()
-        .ok_or_else(|| CommandError::keyed("candidate-expired", "errors.extlib.candidateExpiredRescan", "候选内容已过期；请重新扫描来源"))?;
+    let candidate = cached_candidate(candidate_id).ok_or_else(|| {
+        CommandError::keyed("candidate-expired", "errors.extlib.candidateExpiredRescan", "候选内容已过期；请重新扫描来源")
+    })?;
     import_candidate_content(store, &candidate, name, host_scoped)
 }
 
-fn import_candidate_content(
+pub(super) fn import_candidate_content(
     store: &ExtensionStore,
     candidate: &SkillCandidate,
     name: String,
@@ -165,6 +156,7 @@ fn import_candidate_content(
     }
     let definition = ExtensionDefinition {
         mcp_metadata: None,
+        mcp_config_revision: None,
         schema_version: EXTENSIONS_SCHEMA_VERSION,
         id: new_id("ext"),
         name,
@@ -174,12 +166,7 @@ fn import_candidate_content(
         payload: ExtensionPayload::Skill(SkillDefinition {
             content_digest: candidate.content_digest.clone(),
             manifest,
-            source: Some(SourceRef {
-                source_id: candidate.source_identity.clone(),
-                subpath: candidate.subpath.clone(),
-                ref_name: candidate.ref_name.clone(),
-                resolved_commit: candidate.resolved_commit.clone(),
-            }),
+            source: Some(candidate.source_ref()),
             host_scoped,
             compatibility,
             dependencies: Vec::new(),
@@ -205,8 +192,11 @@ fn candidate_manifest(candidate: &SkillCandidate) -> Result<SkillManifest, Comma
             candidate.diagnostics.join("；"),
         ));
     }
-    let text = candidate
-        .entries
+    manifest_from_entries(&candidate.entries)
+}
+
+pub(super) fn manifest_from_entries(entries: &[asb_core::extensions::skill::ContentEntry]) -> Result<SkillManifest, CommandError> {
+    let text = entries
         .iter()
         .find(|entry| entry.relative_path == "SKILL.md")
         .and_then(|entry| std::str::from_utf8(&entry.bytes).ok())
@@ -230,14 +220,14 @@ fn candidate_manifest(candidate: &SkillCandidate) -> Result<SkillManifest, Comma
 #[tauri::command]
 pub async fn import_skill_candidate(
     app: AppHandle,
-    digest: String,
+    candidate_id: String,
     name: String,
     host_scoped: Option<AppKind>,
 ) -> Result<ExtensionMutationDto, CommandError> {
     blocking(move || {
         let state = state(&app)?;
         let store = extension_store(&state);
-        import_cached_skill_candidate(&store, &digest, name, host_scoped)
+        import_cached_skill_candidate(&store, &candidate_id, name, host_scoped)
     })
     .await
 }
@@ -375,6 +365,7 @@ pub async fn import_discovered_mcp(
         }
         let definition = ExtensionDefinition {
             mcp_metadata: None,
+            mcp_config_revision: None,
             schema_version: EXTENSIONS_SCHEMA_VERSION,
             id: new_id("ext"),
             name: observed.name,
@@ -432,11 +423,12 @@ mod source_tests {
         candidate.ref_name = Some("feature/skills".into());
         candidate.resolved_commit = Some("0123456789abcdef0123456789abcdef01234567".into());
         let digest = candidate.content_digest.clone();
-        cache_candidates(vec![candidate.clone()]).unwrap();
+        let id = candidate_id(&candidate);
+        cache_candidates(vec![candidate.clone()]);
         fs::write(root.join("SKILL.md"), "changed after scan").unwrap();
         let store = ExtensionStore::from_root(temp.path().join("library"));
-        let first = import_cached_skill_candidate(&store, &digest, name.clone(), None).unwrap();
-        let second = import_cached_skill_candidate(&store, &digest, name, None).unwrap();
+        let first = import_cached_skill_candidate(&store, &id, name.clone(), None).unwrap();
+        let second = import_cached_skill_candidate(&store, &id, name, None).unwrap();
         assert_eq!(first.id, second.id);
         let definitions = store.list_definitions().unwrap();
         assert_eq!(definitions.len(), 1);
@@ -460,10 +452,10 @@ mod source_tests {
         let candidate = sources::scan_local_source(temp.path(), None)
             .unwrap()
             .remove(0);
-        let digest = candidate.content_digest.clone();
-        cache_candidates(vec![candidate]).unwrap();
+        let id = candidate_id(&candidate);
+        cache_candidates(vec![candidate]);
         let store = ExtensionStore::from_root(temp.path().join("library"));
-        assert!(import_cached_skill_candidate(&store, &digest, "invalid".into(), None).is_err());
+        assert!(import_cached_skill_candidate(&store, &id, "invalid".into(), None).is_err());
         assert!(!temp.path().join("library").exists());
     }
 }

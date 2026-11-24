@@ -262,11 +262,13 @@ export interface ExtensionDiscovery {
 }
 
 export interface SkillCandidateDto {
+  candidateId: string;
   digest: string;
   name: string;
   description: string | null;
   fileCount: number;
   diagnostics: string[];
+  source?: SkillSourceView;
 }
 
 export type SkillFileChangeAction = "added" | "removed" | "modified";
@@ -279,15 +281,13 @@ export interface SkillFileChange {
 /** One skill's source-freshness result. Batch checks keep going when a
  * single skill fails; that failure lands in `error` instead of aborting
  * the whole request. */
-export interface SkillUpdateReport {
-  definitionId: string;
-  upToDate: boolean;
-  currentCommit: string | null;
-  newCommit: string | null;
-  newDigest: string | null;
-  changedFiles: SkillFileChange[];
-  error: string | null;
-}
+export type SkillUpdateReport = { definitionId: string; revision: number } & (
+  | { status: "current" }
+  | { status: "available"; candidateId: string; commit: string; digest: string; changedFiles: SkillFileChange[] }
+  | { status: "failed"; message: string }
+);
+
+export type SkillUpdate = Extract<SkillUpdateReport, { status: "available" }>;
 
 export type CapabilityVerification =
   | { verification: "verified"; clientVersion: string; verifiedOn: string }

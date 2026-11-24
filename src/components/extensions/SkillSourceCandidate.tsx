@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, ExternalLink, FileArchive, FolderGit2, LoaderCircle } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { isBrowserDevelopment } from "../../lib/runtime";
+import { clientName } from "../../lib/client-name";
 import { Button } from "../Button";
 import { Tooltip } from "../Tooltip";
 import { CheckIcon, FolderOpenIcon } from "../icons";
@@ -33,16 +34,20 @@ interface CandidateProps {
   source: SkillSourceKind;
   busy: boolean;
   installs?: number;
+  hasOtherVersion?: boolean;
 }
 
-export function SkillSourceCandidate({ row, installed, imports, source, busy, installs }: CandidateProps) {
+export function SkillSourceCandidate({ row, installed, imports, source, busy, installs, hasOtherVersion }: CandidateProps) {
   const { t } = useI18n();
   const { candidate } = row;
-  const installing = imports.active === candidate.digest;
+  const installing = imports.active === candidate.candidateId;
   const rejected = candidate.diagnostics.length > 0;
+  const host = skillCandidateHost(candidate);
+  const clients = host ? clientName(host) : `${clientName("codex")} / ${clientName("claude")}`;
   const label = installed ? t("extensions.sources.installed")
     : installing ? t("extensions.sources.installingBadge")
-    : rejected ? t("extensions.sources.uninstallable") : t("extensions.sources.install");
+    : rejected ? t("extensions.sources.uninstallable") : source === "directory"
+      ? t("extensions.registry.installSkillFor", { clients }) : t("extensions.sources.install");
   return (
     <li className="asb-skill-source-card" aria-label={candidate.name}>
       <div className="asb-skill-source-card-heading">
@@ -61,17 +66,18 @@ export function SkillSourceCandidate({ row, installed, imports, source, busy, in
       </ul>}
       <div className="asb-skill-source-card-footer">
         <span className="asb-skill-source-meta">
-          <span>{skillCandidateHost(candidate) ? t("extensions.sources.hostClaudeOnly") : t("extensions.sources.hostBoth")}</span>
+          <span>{host ? t("extensions.sources.hostClaudeOnly") : t("extensions.sources.hostBoth")}</span>
           <span className="asb-num">{t("extensions.sources.fileCount", { count: candidate.fileCount })}</span>
+          {source === "directory" && candidate.source?.resolvedCommit && <code>{candidate.source.resolvedCommit.slice(0, 12)}</code>}
           {installs !== undefined && <span className="asb-num">{t("extensions.sources.installs", { count: installs.toLocaleString() })}</span>}
         </span>
-        <Button variant={installed ? "secondary" : "primary"}
+        {hasOtherVersion && !installed ? <span>{t("extensions.registry.useSkillUpdate")}</span> : <Button variant={installed ? "secondary" : "primary"}
           disabled={busy || imports.busy || installed || rejected}
           onClick={() => void imports.install(candidate)} aria-label={`${label} ${candidate.name}`}>
           {installed ? <CheckIcon /> : installing ?
             <LoaderCircle size={16} className="asb-skill-source-spinner" /> : <Download size={16} />}
           {label}
-        </Button>
+        </Button>}
       </div>
     </li>
   );

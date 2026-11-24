@@ -1,6 +1,8 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { useRef, useState } from "react";
+import { useContext } from "react";
+import { useDialogFieldPopup } from "./AppDialog";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
+import { OverlayMotionContext } from "./overlay-motion";
 
 export interface SelectOption {
   value: string;
@@ -29,28 +31,28 @@ interface Props {
  * visuals are owned here; all values come from styles/tokens.css.
  */
 export function Select({ value, options, onChange, placeholder, ariaLabel, disabled = false, contentClassName }: Props) {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const [container, setContainer] = useState<HTMLElement>();
+  const animate = useContext(OverlayMotionContext);
+  // Radix handles an outside press before React Aria completes the gesture.
+  const popup = useDialogFieldPopup(disabled, true);
   return (
     <SelectPrimitive.Root
       value={value ?? ""}
       onValueChange={onChange}
-      disabled={disabled}
-      onOpenChange={(open) => {
-        // Keep the listbox inside its modal's focus and accessibility boundary.
-        if (open) setContainer(trigger.current?.closest<HTMLElement>('[role="dialog"]') ?? undefined);
-      }}
+      disabled={popup.disabled}
+      open={popup.open}
+      onOpenChange={popup.onOpenChange}
     >
-      <SelectPrimitive.Trigger ref={trigger} className="asb-select-trigger" aria-label={ariaLabel}>
+      <SelectPrimitive.Trigger className="asb-select-trigger" aria-label={ariaLabel}>
         {/* Radix Value discards className, so its wrapper owns truncation. */}
         <span className="asb-select-value"><SelectPrimitive.Value placeholder={placeholder} /></span>
         <SelectPrimitive.Icon className="asb-select-chevron">
           <ChevronDownIcon />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal container={container}>
+      <SelectPrimitive.Portal container={popup.container}>
         <SelectPrimitive.Content
           className={["asb-select-content", contentClassName].filter(Boolean).join(" ")}
+          data-overlay-motion={animate || undefined}
           position="popper"
           sideOffset={4}
           onEscapeKeyDown={(event) => event.stopPropagation()}

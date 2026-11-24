@@ -16,6 +16,7 @@ export function ExtensionManagementDialog({
   const { t } = useI18n();
   const [targets, setTargets] = useState<string[]>([]);
   const updateReport = w.updates.reportMap.get(item.id) ?? null;
+  const registryUpdate = w.registryUpdates.reportMap.get(item.id);
   return (
     <AppDialog title={t("extensions.management.dialogTitle", { name: item.name })} busy={w.busy} onClose={w.nav.closeDialog} wide>
       <ExtensionManagement
@@ -27,6 +28,7 @@ export function ExtensionManagementDialog({
         installTargets={targets}
         onInstallTargetsChange={setTargets}
         updateReport={updateReport}
+        registryUpdate={registryUpdate}
         projectNames={w.projectNames}
         onInstall={() =>
           void w.applies.run({
@@ -54,10 +56,12 @@ export function ExtensionManagementDialog({
         }
         onToggleLock={(binding, locked) => void w.ext.toggleBindingLock(binding.id, locked)}
         onDelete={() => w.nav.setDialog({ type: "remove", item })}
-        onCheckUpdates={() => void w.updates.check([item.id])}
+        onCheckUpdates={() => void (item.kind === "skill" ? w.updates.check([item.id]) : w.registryUpdates.check([item.id]))}
         onApplyUpdate={() => {
-          if (updateReport) void w.updates.update([updateReport]);
+          if (registryUpdate?.status === "available") w.nav.setDialog({ type: "mcpRegistryUpdate", report: registryUpdate });
+          else if (updateReport?.status === "available") void w.updates.update([updateReport]);
         }}
+        onEditUpdateConfig={() => void w.edit(item)}
         onDeployCurrent={() =>
           void w.applies.run({ operations: [{ operation: "update", definitionId: item.id }] })
         }

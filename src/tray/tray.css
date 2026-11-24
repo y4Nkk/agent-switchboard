@@ -196,6 +196,7 @@ html, body, #root { background: transparent; overflow: hidden; }
 .tray-provider-main:not(:disabled):hover .tray-provider-switch,
 .tray-provider-main:focus-visible .tray-provider-switch,
 .tray-provider-switch.is-current,
+.tray-provider.is-armed .tray-provider-switch,
 .tray-provider.is-switching .tray-provider-switch {
   visibility: visible;
 }
@@ -242,3 +243,12 @@ html, body, #root { background: transparent; overflow: hidden; }
 
 .tray-usage-measure { position: fixed; visibility: hidden; pointer-events: none; display: flex; width: max-content; inset: 0 auto auto 0; }
 .tray-usage-measure > [data-measure="fixed"] { display: inline-flex; }
+
+.tray-switch-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

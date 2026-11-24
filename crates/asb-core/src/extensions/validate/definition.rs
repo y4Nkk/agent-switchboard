@@ -29,6 +29,12 @@ pub fn validate_definition(
     if definition.revision == 0 {
         return reject("revision", "扩展版本号必须从 1 开始");
     }
+    if definition.mcp_config_revision.is_some_and(|revision| {
+        revision == 0 || revision >= definition.revision
+            || !matches!(definition.payload, ExtensionPayload::Mcp(_))
+    }) {
+        return reject("mcpConfigRevision", "MCP 配置修订必须早于当前定义修订");
+    }
     if definition.created_at.trim().is_empty() || definition.updated_at.trim().is_empty() {
         return reject("createdAt", "扩展时间戳不能为空");
     }

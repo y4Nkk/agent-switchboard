@@ -96,7 +96,6 @@ export function ClientConfigurationResetPreview({
   const native = resetKind !== "clearExtraConfiguration";
   const changes = visibleResetChanges(resetKind, preview);
   const { t } = useI18n();
-  const title = native ? t("clientConfig.reset.nativeTitle") : t("clientConfig.reset.extraTitle");
   const changeLabel = native
     ? deep ? t("clientConfig.reset.changeFields") : t("clientConfig.reset.changeStandard")
     : t("clientConfig.reset.changeExtra");
@@ -104,8 +103,7 @@ export function ClientConfigurationResetPreview({
     ? t("clientConfig.reset.confirmExtra", { count: extraConfigurationCount })
     : deep ? t("clientConfig.reset.confirmDeep") : t("clientConfig.reset.confirmNative");
   return (
-    <section className="asb-client-settings-reset-preview" aria-label={t("clientConfig.reset.previewAria", { title })}>
-      <h3 className="asb-section-title">{title}</h3>
+    <div className="asb-client-settings-reset-preview">
       <p className="asb-client-settings-reset-lead">
         {!native
           ? t("clientConfig.reset.extraLead")
@@ -163,7 +161,7 @@ export function ClientConfigurationResetPreview({
           {confirmLabel}
         </Button>
       </div>
-    </section>
+    </div>
   );
 }
 

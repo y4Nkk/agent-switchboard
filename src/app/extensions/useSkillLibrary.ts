@@ -5,7 +5,7 @@ import {
   forkLocalSkill,
   getSkillEditor,
   listSkillVersions,
-  updateSkillDefinition,
+  setSkillVersion,
   updateSkillDependencies,
   updateSkillFiles,
   type ExtensionMutation,
@@ -44,14 +44,12 @@ function useSkillSourceUpdates({ refresh, runExclusive }: SkillLibraryDeps) {
    * expired candidate never blocks the rest of the batch; the caller deploys
    * the advanced ids through the shared apply pipeline. */
   const advanceSkillUpdates = useCallback(
-    (entries: Array<{ definitionId: string; newDigest: string }>) =>
+    (entries: Array<{ definitionId: string; candidateId: string; expectedRevision: number }>) =>
       runExclusive(async (): Promise<SkillBatchAdvance> => {
-        const advanced: string[] = [];
         const failed: Array<{ definitionId: string; error: unknown }> = [];
         for (const entry of entries) {
           try {
-            await updateSkillDefinition(entry.definitionId, entry.newDigest);
-            advanced.push(entry.definitionId);
+            await setSkillVersion(entry.definitionId, entry.expectedRevision, { kind: "upstream", candidateId: entry.candidateId });
           } catch (caught) {
             failed.push({
               definitionId: entry.definitionId,
@@ -65,20 +63,20 @@ function useSkillSourceUpdates({ refresh, runExclusive }: SkillLibraryDeps) {
           title: toastMessage("extensions.skillOp.batchUnverified"),
           description: toastMessage("extensions.skillOp.batchUnverifiedBody"),
         });
-        return { advanced, failed, workspace };
+        return { failed, workspace };
       }),
     [refresh, runExclusive],
   );
 
-  const applySkillUpdate = useCallback(
-    (definitionId: string, newDigest: string) =>
+  const restoreSkillVersion = useCallback(
+    (definitionId: string, digest: string, expectedRevision: number) =>
       runExclusive(async (): Promise<SkillUpdatePreparation> => {
-        const definition = await updateSkillDefinition(definitionId, newDigest);
+        const definition = await setSkillVersion(definitionId, expectedRevision, { kind: "restore", digest });
         return definitionUpdatePreparation(definition, await refresh());
       }),
     [refresh, runExclusive],
   );
-  return { checkUpdates, advanceSkillUpdates, applySkillUpdate, restoreSkillVersion: applySkillUpdate };
+  return { checkUpdates, advanceSkillUpdates, restoreSkillVersion };
 }
 
 function useLocalSkills({ refresh, runExclusive }: SkillLibraryDeps) {

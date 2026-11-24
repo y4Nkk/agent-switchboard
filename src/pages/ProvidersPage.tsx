@@ -155,9 +155,10 @@ export function ProvidersPage(props: ProvidersPageProps) {
   const usageProfile = props.view.kind === "usage" ? props.view.profile : null;
   if (usageProfile) {
     return (
-      <div className="asb-editor-route" hidden={!props.active}>
+      <div className="asb-subpage-route" hidden={!props.active}>
         <UsageQueryWorkspace
           key={usageProfile.id}
+          active={props.active}
           providerName={usageProfile.name}
           value={usageProfile.usageQuery ?? null}
           apiKey={usageProfile.apiKey}
@@ -181,7 +182,7 @@ export function ProvidersPage(props: ProvidersPageProps) {
   }
   if (props.editorSession !== null) {
     return (
-      <div className="asb-editor-route" hidden={!props.active}>
+      <div className="asb-subpage-route" hidden={!props.active}>
         <ProviderEditView {...props} />
       </div>
     );

@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 fn fixture() -> (ExtensionDefinition, ExtensionBinding) {
     let definition = ExtensionDefinition {
+        mcp_config_revision: None,
         schema_version: EXTENSIONS_SCHEMA_VERSION, id: "fixture".into(), name: "fixture".into(),
         revision: 2, mcp_metadata: None, created_at: "2026-10-13T00:00:00Z".into(),
         updated_at: "2026-10-13T00:00:00Z".into(),

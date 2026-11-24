@@ -9,6 +9,7 @@
 
 pub mod checks;
 pub mod discovery;
+pub mod mcp_registry;
 pub mod migrate;
 pub mod paths;
 pub mod secrets;

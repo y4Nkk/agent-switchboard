@@ -20,6 +20,7 @@ tray-usage.ts 是托盘用量的唯一展示派生入口：一次转换缓存，
 
 - [原生玻璃外框](../../implemented/architecture/2026-10-14-unified-native-glass-shell.md)拥有主窗口材质与应用级主题；本次只使托盘消费相同染色，不替代该决定。
 - [托盘警示与刷新](../../implemented/feature/2026-10-14-tray-usage-alert-refresh.md)拥有警示派生、独立刷新按钮和串行操作。本次保留这些行为并更新其旧单行测量事实，两篇互链。
+- [托盘切换的两步确认](2026-11-23-tray-switch-two-step-confirm.md)拥有切换点击的标记与取消规则；本篇的首层「名称—状态槽」布局不变，标记期间只是状态槽文字变长。
 - 其余检索命中（图标、字体、用量可用性、出口策略）不拥有托盘布局，保留原决定。
 
 ## Alternatives considered

@@ -2,18 +2,18 @@ import type { OfficialSettingDirectoryEntry } from "../api/client";
 import { useState } from "react";
 import { useI18n } from "../i18n";
 import { catalogText } from "../i18n/errors";
-import { Input } from "./Input";
-import { Button } from "./Button";
+import { SearchInput } from "./SearchInput";
 
 interface Props {
   entries: OfficialSettingDirectoryEntry[];
 }
 
 /**
- * A coverage map, not a second configuration editor. The backend directory
- * owns every path and its real write boundary; this component only makes that
- * boundary inspectable before a user expects a project, policy, or login
- * resource to be changed by a supplier activation.
+ * The official settings directory dialog's body: a coverage map, not a second
+ * configuration editor. The backend directory owns every path and its real
+ * write boundary; this component only makes that boundary inspectable before
+ * a user expects a project, policy, or login resource to be changed by a
+ * supplier activation.
  */
 export function OfficialSettingsDirectory({ entries }: Props) {
   const { t } = useI18n();
@@ -27,11 +27,9 @@ export function OfficialSettingsDirectory({ entries }: Props) {
     preserveOnly: t("clientConfig.directory.dispositionPreserve"),
   };
   return (
-    <section className="asb-official-directory" aria-label={t("clientConfig.directory.title")}>
-      <h3 className="asb-official-directory-title">{t("clientConfig.directory.title")}</h3>
-      <Input type="search" value={query} aria-label={t("clientConfig.directory.search")}
-        placeholder={t("clientConfig.directory.search")} onChange={(event) => setQuery(event.target.value)} />
-      {needle && <Button variant="secondary" onClick={() => setQuery("")}>{t("common.clearFilters")}</Button>}
+    <div className="asb-official-directory">
+      <SearchInput value={query} ariaLabel={t("clientConfig.directory.search")}
+        placeholder={t("clientConfig.directory.search")} onChange={setQuery} />
       <div className="asb-official-directory-list">
         {visible.length === 0 && <p role="status">{t("clientConfig.directory.noMatches")}</p>}
         {visible.map((entry) => (
@@ -47,6 +45,6 @@ export function OfficialSettingsDirectory({ entries }: Props) {
           </article>
         ))}
       </div>
-    </section>
+    </div>
   );
 }

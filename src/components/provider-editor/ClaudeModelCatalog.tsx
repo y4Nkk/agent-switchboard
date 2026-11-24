@@ -5,7 +5,7 @@ import { catalogModel, providerPreset } from "../../lib/provider-catalog";
 import { formatCompactTokenCount } from "../../lib/token-format";
 import { Button } from "../Button";
 import { Input } from "../Input";
-import { Table } from "../Table";
+import { ModelCatalogCard } from "./ModelCatalogCard";
 import { ModelPickerDialog, type PickerCandidate } from "./ModelPickerDialog";
 import type { ProviderEditorState } from "./useProviderEditor";
 
@@ -62,18 +62,14 @@ export function ClaudeModelCatalog({ editor, busy }: { editor: ProviderEditorSta
     </div>
     {connection.modelsError && <p className="asb-field-error" role="alert">{connection.modelsError}</p>}
     {connection.modelsEndpointError && <p className="asb-field-help">{connection.modelsEndpointError}</p>}
-    {models.length > 0 && <Table rows={models} rowKey={(model) => model} ariaLabel={t("providerSetup.catalog")} columns={[
-      { key: "model", header: t("providers.editor.availableModels"), render: (model) => <code>{model}</code> },
-      { key: "primary", header: t("providerSetup.primary"), render: (model) => model === draft.model
-        ? <span className="asb-provider-primary-pill">{t("providerSetup.primary")}</span>
-        : <Button variant="ghost" size="compact" disabled={busy} onClick={() => setDraft((current) => ({ ...current, model }))}>{t("providerSetup.usePrimary")}</Button> },
-      { key: "remove", header: t("providerSetup.actions"), render: (model) => <Button variant="dangerText" size="compact" disabled={busy}
-        aria-label={t("codex.model.deleteModel", { model })}
-        onClick={() => setDraft((current) => ({ ...current,
+    {models.length ? <div className="asb-model-catalog-grid">
+      {models.map((model) => <ModelCatalogCard key={model} app="claude" model={model} primary={model === draft.model} busy={busy}
+        onPrimary={() => setDraft((current) => ({ ...current, model }))}
+        onRemove={() => setDraft((current) => ({ ...current,
           model: current.model === model ? null : current.model,
           modelOptions: claudeOptions(current.modelOptions, { availableModels: models.filter((item) => item !== model) }),
-        }))}>{t("providerSetup.remove")}</Button> },
-    ]} />}
+        }))} />)}
+    </div> : <p className="asb-field-help">{t("providerSetup.noModels")}</p>}
     {picking && <ModelPickerDialog title={t("providerSetup.pickerTitle")} candidates={candidates} busy={busy}
       selected={new Set(models)}
       onApply={(ids) => setDraft((current) => ({ ...current,

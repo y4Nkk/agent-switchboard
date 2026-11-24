@@ -34,9 +34,9 @@ export function useExtensionImport({ refresh, runExclusive }: ImportDeps) {
   );
 
   const importCandidate = useCallback(
-    (digest: string, name: string, hostScoped: AppKind | null) =>
+    (candidateId: string, name: string, hostScoped: AppKind | null) =>
       runExclusive(async (): Promise<ExtensionMutation> => {
-        const definition = await importSkillCandidate(digest, name, hostScoped);
+        const definition = await importSkillCandidate(candidateId, name, hostScoped);
         await refresh();
         toast({ kind: "success", title: toastMessage("extensions.importOp.importedSkill"), description: definition.name });
         return definition;

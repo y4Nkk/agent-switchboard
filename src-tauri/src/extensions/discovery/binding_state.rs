@@ -12,7 +12,7 @@ pub fn binding_file_state(
 ) -> FileState {
     if binding.last_applied_revision.is_none() { return FileState::NotDeployed; }
     match &definition.payload {
-        ExtensionPayload::Mcp(_) => mcp_state(binding, definition.revision, baseline, projects),
+        ExtensionPayload::Mcp(_) => mcp_state(binding, definition, baseline, projects),
         ExtensionPayload::Skill(skill) => skill_state(
             binding.locked_digest.as_deref().unwrap_or(&skill.content_digest), baseline,
         ),
@@ -20,7 +20,7 @@ pub fn binding_file_state(
 }
 
 fn mcp_state(
-    binding: &ExtensionBinding, revision: u64,
+    binding: &ExtensionBinding, definition: &ExtensionDefinition,
     baseline: Option<&ManagedBaselineFile>, projects: &[ProjectRegistration],
 ) -> FileState {
     let Some(ManagedBaseline::DocumentEntry {
@@ -52,8 +52,12 @@ fn mcp_state(
         );
         if !unchanged { return FileState::ExternalChange; }
     }
-    if binding.last_applied_revision == Some(revision) { FileState::InSync }
-    else { FileState::PendingApply }
+    let config_revisions = definition.mcp_config_revision()..=definition.revision;
+    if binding.last_applied_revision.is_some_and(|applied| config_revisions.contains(&applied)) {
+        FileState::InSync
+    } else {
+        FileState::PendingApply
+    }
 }
 
 fn skill_state(desired_digest: &str, baseline: Option<&ManagedBaselineFile>) -> FileState {
