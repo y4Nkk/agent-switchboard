@@ -150,7 +150,7 @@ function ScenarioGallery({ view, selectedId, disabled, onSelect }: {
 
 /** The actions for the selected scenario. It appears with the selection, so an
  * unselected gallery never carries empty groups or placeholder hints. */
-function ScenarioPanel({ view, selected, operations, name, setName, deleting, setDeleting, setPreview, clearOutcome, reset }: {
+function ScenarioPanel({ view, selected, operations, name, setName, deleting, setDeleting, setPreview, clearOutcome, reset, onDelete }: {
   view: api.CodexProjectPlansView;
   selected: api.CodexProjectPlan;
   operations: CodexOperations;
