@@ -432,14 +432,6 @@
   }
 }
 
-/* Backup row actions */
-.asb-backup-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--asb-space-2);
-}
-
-
 .asb-quota-loading { display: grid; gap: var(--asb-space-3); }
 .asb-quota-loading > .asb-skeleton:first-child { height: 14rem; }
 .asb-quota-loading > .asb-skeleton:last-child { height: 7rem; }

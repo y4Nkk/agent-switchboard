@@ -92,7 +92,7 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
         <div className="asb-skill-source-empty"><p>{t("extensions.repo.none")}</p></div>}
       <ul className="asb-skill-repository-list" aria-label={t("extensions.repo.listAria")}>
         {repositories.items.map((repo) => <RepositoryRow key={repo.id} repo={repo} count={catalog.count(repo.id)}
-          failed={catalog.result?.failures.some((failure) => failure.repositoryId === repo.id) ?? false}
+          failed={catalog.failedRepositoryIds.has(repo.id)}
           busy={disabled} removing={removing === repo.id}
           onEdit={() => { if (formOpen && editing?.id === repo.id) return;
             leave.request(() => { setEditing(repo); setFormOpen(true); setRemoving(null); }); }}

@@ -10,10 +10,11 @@ import { SearchIcon } from "../icons";
 import { ExtensionLoading } from "./ExtensionLoading";
 import { SkillDirectoryResults } from "./SkillDirectoryResults";
 import { SkillRepositoryManager } from "./SkillRepositoryManager";
+import { SkillRepositoryScanPanel } from "./SkillRepositoryScanPanel";
 import { SkillSourceCandidate } from "./SkillSourceCandidate";
 import { SkillSourceForm } from "./SkillSourceForm";
-import { sourceErrorMessage, type SkillSourceFilter } from "./skill-source-model";
-import { skillRepositoryLabel, skillRepositoryName } from "./skill-repository-model";
+import type { SkillSourceFilter } from "./skill-source-model";
+import { skillRepositoryLabel } from "./skill-repository-model";
 import { useSkillSource, type SkillSourceActions, type SkillSourceState } from "./useSkillSource";
 
 interface Props extends SkillSourceActions {
@@ -49,6 +50,7 @@ function SourceResults({ state, busy }: { state: SkillSourceState; busy: boolean
       <Plus size={16} />{t("extensions.repo.add")}
     </Button>
   </div>;
+  if (state.candidates === null && state.source === "catalog" && state.catalog.loading) return null;
   if (state.candidates === null) return state.loading ? (
     <section className="asb-skill-source-results" aria-label={t("extensions.sources.resultsAria")} aria-busy="true">
       <ExtensionLoading />
@@ -68,11 +70,11 @@ function SourceResults({ state, busy }: { state: SkillSourceState; busy: boolean
           total: state.candidates.length,
           installed: state.installedCount,
         })}
-        {state.loading && t("extensions.sources.rescanning")}
+        {state.loading && state.source !== "catalog" && t("extensions.sources.rescanning")}
       </p>
       {state.visible.length === 0 ? (
         <div className="asb-skill-source-empty">
-          <p>{state.candidates.length === 0 ? (state.source === "catalog" && state.catalog.result?.failures.length ?
+          <p>{state.candidates.length === 0 ? (state.source === "catalog" && state.catalog.failedRepositoryIds.size > 0 ?
             t("extensions.sources.noCandidates") : t("extensions.sources.noSkillMd")) : t("extensions.sources.noFilterMatches")}</p>
           {state.candidates.length > 0 && <Button variant="secondary" onClick={() => {
             state.setQuery(""); state.setFilter("all"); state.setRepository("all");
@@ -99,21 +101,6 @@ function SourceErrors({ state, busy }: { state: SkillSourceState; busy: boolean 
       <Button variant="secondary" disabled={disabled || state.repositories.loading}
         onClick={() => void state.repositories.reload()}><RefreshCw size={16} />{t("extensions.repo.retryLoad")}</Button>
     </div>}
-    {state.source === "catalog" && Boolean(state.catalog.result?.failures.length) &&
-      <div className="asb-skill-source-error" role="alert">
-        <ul className="asb-skill-source-diagnostics">
-          {state.catalog.result!.failures.map((failure) => <li key={failure.repositoryId}>
-            {t("extensions.sources.failureLine", {
-              repo: skillRepositoryName(failure.repo) ?? t("extensions.repo.fallbackName"),
-              message: sourceErrorMessage(failure.message, t("extensions.sources.refreshFailed")),
-            })}
-            {state.catalog.count(failure.repositoryId) !== null && t("extensions.sources.staleResults")}
-          </li>)}
-        </ul>
-        <Button variant="secondary" disabled={disabled || state.repositories.loading} onClick={() => void state.search()}>
-          <RefreshCw size={16} />{t("extensions.sources.retryRefresh")}
-        </Button>
-      </div>}
   </>;
 }
 
@@ -136,6 +123,9 @@ export function SkillSourceBrowser(props: Props) {
         viewportRef={results} tabIndex={0} hidden={state.managerOpen}>
         <div className="asb-skill-source-browser">
           <SourceErrors state={state} busy={props.busy} />
+          {state.source === "catalog" && (state.catalog.loading || state.catalog.progress) &&
+            <SkillRepositoryScanPanel progress={state.catalog.progress} running={state.catalog.loading}
+              unavailable={state.catalog.progressUnavailable} hasPrevious={(id) => state.catalog.count(id) !== null} />}
           {state.source === "directory" ? <SkillDirectoryResults state={state} busy={props.busy} items={props.items} /> :
             <SourceResults state={state} busy={props.busy} />}
         </div>

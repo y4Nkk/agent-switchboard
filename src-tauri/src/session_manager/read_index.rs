@@ -1,13 +1,16 @@
 use super::layout;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, UNIX_EPOCH};
 pub(crate) mod prefix;
+mod maintenance;
 mod schema;
+pub(crate) use maintenance::{clear as clear_cached_index, storage_bytes};
 
+const DATABASE_NAME: &str = "read-index.sqlite3";
 static SCHEMA_GATE: Mutex<()> = Mutex::new(());
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,11 +53,10 @@ impl ReadIndex {
         let directory = layout::directory(root);
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         if directory.is_symlink() { return Err("会话读取索引目录不能是符号链接".into()); }
-        let path = directory.join("read-index.sqlite3");
+        let path = index_path(root);
         if path.is_symlink() { return Err("会话读取索引不能是符号链接".into()); }
         let _guard = super::read_observer::lock(&SCHEMA_GATE, checkpoint)?;
-        let connection = Connection::open(&path).map_err(|error| format!("会话读取索引 {} 不可用：{error}", path.display()))?;
-        connection.busy_timeout(Duration::from_secs(5)).map_err(error)?;
+        let connection = connect(&path, OpenFlags::default())?;
         schema::initialize(&connection)?;
         let mode: String = connection.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0)).map_err(error)?;
         if !mode.eq_ignore_ascii_case("wal") { return Err("会话读取索引未能启用并发读写".into()); }
@@ -149,6 +151,15 @@ impl ReadIndex {
         self.put(kind, &cache_key, &encoded, &value)?;
         Ok(value)
     }
+}
+
+fn index_path(root: &Path) -> PathBuf { layout::directory(root).join(DATABASE_NAME) }
+
+fn connect(path: &Path, flags: OpenFlags) -> Result<Connection, String> {
+    let connection = Connection::open_with_flags(path, flags)
+        .map_err(|error| format!("会话读取索引 {} 不可用：{error}", path.display()))?;
+    connection.busy_timeout(Duration::from_secs(5)).map_err(error)?;
+    Ok(connection)
 }
 
 fn error(error: rusqlite::Error) -> String { format!("会话读取索引不可用：{error}") }

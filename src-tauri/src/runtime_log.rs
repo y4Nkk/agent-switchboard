@@ -87,6 +87,7 @@ pub enum RuntimeLogAction {
     WebviewMemoryLow,
     WebviewMemoryNormal,
     StorageCacheMaintained,
+    StorageSessionIndexCleared,
     StorageHistoryArchived,
     StorageBackupsCleaned,
     StorageSessionsCleaned,

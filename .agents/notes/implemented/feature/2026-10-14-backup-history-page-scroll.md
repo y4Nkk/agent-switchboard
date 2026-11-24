@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-本地备份页签回归流式页面布局，不再接管工作区高度：tables-backups.css 的整条接管链（`.asb-main` 的 overflow 锁、page-stack/settings-content/tabpanel/panel 的高度链、`.asb-backup-local` 的 flex 拉伸）全部删除；`.asb-backups` 不再是滚动容器，flex/min-height/overflow 与 sticky 表头一并移除，工具栏与危险行的 `flex: none` 随 flex 父级消亡。页面滚动归 `.asb-main` 组合的共享 ScrollArea 原生视口；返回顶部由[共享滚动原语](2026-10-16-global-back-to-top.md)拥有。备份模块的 TSX 结构不变：`.asb-backups` 保留为包裹表格与分页的普通块级容器。备份表因此退出「受限滚动页」名单，DESIGN.md 的铬件契约与 workspace-main.css 注释同步去除「备份表」。
+本地备份页签使用流式页面布局，页面滚动归 `.asb-main` 组合的共享 ScrollArea 原生视口。返回顶部由[共享滚动原语](2026-10-16-global-back-to-top.md)拥有。当前备份记录使用[归档设备与时间轴](../architecture/2026-11-24-settings-device-layouts.md)，列表与差异继续随页面展开。
 
 ## Alternatives considered
 

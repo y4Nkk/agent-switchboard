@@ -1,0 +1,238 @@
+/* Match the gateway's device surface. Cache has a separate threshold and
+   stays outside the application-data readout. */
+.asb-storage-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
+
+.asb-storage-settings > .asb-module-header { margin-block-end: 0; }
+
+.asb-storage-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: radial-gradient(ellipse at top,
+    color-mix(in srgb, var(--asb-action) 8%, var(--asb-content-muted)), var(--asb-content-muted) 72%);
+}
+
+.asb-storage-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--asb-space-3) var(--asb-space-4);
+}
+
+.asb-storage-artwork {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.asb-storage-art {
+  display: block;
+  inline-size: min(100%, 34rem);
+  block-size: auto;
+  max-block-size: 14rem;
+  color: var(--asb-action);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Drawer lights blink in turn, only while the section is shown; every light
+   stays lit as a still composition when motion is reduced. */
+.asb-storage-led { opacity: .92; }
+
+.asb-storage-led-glow { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .asb-storage-art[data-active] .asb-storage-led-glow {
+    animation: asb-storage-led-light calc(var(--asb-motion-ambient) * 4) ease-in-out infinite;
+  }
+}
+
+@keyframes asb-storage-led-light {
+  0%, 16% { opacity: 0; }
+  28% { opacity: .62; }
+  44%, 100% { opacity: 0; }
+}
+
+.asb-storage-total {
+  display: grid;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.asb-storage-total > p { margin: 0; }
+
+/* The refresh sits with the figure it re-reads. */
+.asb-storage-total-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+}
+
+.asb-storage-total-label {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-storage-total-line > .asb-num {
+  color: var(--asb-text);
+  font: var(--asb-text-instrument);
+  font-variant-numeric: var(--asb-num-font-variant);
+}
+
+.asb-storage-bays {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-storage-bay {
+  display: grid;
+  align-content: start;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-storage-bay > .asb-btn { justify-self: start; }
+
+.asb-storage-bay-title {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 650;
+}
+
+.asb-storage-reading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--asb-space-2);
+}
+
+.asb-storage-reading > .asb-num { font-weight: 600; }
+
+.asb-storage-note {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+/* Reading placeholders reserve the final figure's footprint: one body line. */
+.asb-storage-placeholder {
+  display: inline-block;
+  inline-size: 7rem;
+  block-size: 1lh;
+}
+
+.asb-storage-total-line > .asb-storage-placeholder { inline-size: 9rem; }
+
+/* One part's share of its whole: an action-blue fill on a muted rail. The
+   printed share beside it stays the exact reading. */
+.asb-storage-meter {
+  overflow: hidden;
+  block-size: 6px;
+  border-radius: var(--asb-radius-pill);
+  background: color-mix(in srgb, var(--asb-action) 10%, var(--asb-content-muted));
+}
+
+.asb-storage-meter[data-unknown] {
+  border: 1px dashed var(--asb-hairline-strong);
+  background: transparent;
+}
+
+.asb-storage-meter > span {
+  display: block;
+  inline-size: var(--asb-storage-meter-fill);
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--asb-action);
+}
+
+.asb-storage-meter[data-exceeded] > span { background: var(--asb-warning); }
+
+/* A bench is the bay of a flow with controls: facts on the left, the controls
+   on the right, the policy note and the receipt across the full width. */
+.asb-storage-bench {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  grid-template-areas:
+    "facts controls"
+    "note note"
+    "receipt receipt";
+  align-items: center;
+  gap: var(--asb-space-2) var(--asb-space-4);
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: var(--asb-content-muted);
+}
+
+.asb-storage-cache {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.asb-storage-bench-facts {
+  grid-area: facts;
+  display: grid;
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+.asb-storage-bench-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-3);
+}
+
+.asb-storage-bench-controls > .asb-cutoff-field {
+  flex: 1 1 13rem;
+  min-width: 0;
+}
+
+.asb-storage-bench-controls > .asb-btn {
+  flex: none;
+}
+
+.asb-storage-bench > .asb-field-help { grid-area: note; }
+
+.asb-storage-receipt {
+  grid-area: receipt;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.asb-storage-receipt > p { margin: 0; }
+
+@media (max-height: 680px) {
+  .asb-storage-art { max-block-size: 8.5rem; }
+}
+
+@container settings-content (max-width: 640px) {
+  .asb-storage-hero { padding: var(--asb-space-3); }
+  .asb-storage-art { max-block-size: 9rem; }
+  .asb-storage-overview { grid-template-columns: minmax(0, 1fr); }
+  .asb-storage-bays { grid-template-columns: minmax(0, 1fr); }
+
+  .asb-storage-bench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "facts"
+      "controls"
+      "note"
+      "receipt";
+  }
+}

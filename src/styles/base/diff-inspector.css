@@ -28,6 +28,52 @@
   color: var(--asb-text);
 }
 
+.asb-diff-list {
+  container: diff-list / inline-size;
+  display: grid;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  list-style: none;
+}
+
+.asb-diff-list > li {
+  display: grid;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border-block-start: 1px solid var(--asb-hairline);
+  overflow-wrap: anywhere;
+}
+
+.asb-diff-list .asb-diff-key {
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+  font-weight: 600;
+}
+
+.asb-diff-list dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-2) var(--asb-space-3);
+  margin: 0;
+}
+
+.asb-diff-list dt {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-diff-list dd {
+  margin: var(--asb-space-hairline) 0 0;
+  font: var(--asb-text-code);
+  white-space: pre-wrap;
+}
+
+@container diff-list (max-width: 28rem) {
+  .asb-diff-list dl { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Red/green diff semantics (user-directed 2026-08-28): the outgoing value
    reads red on a soft red tint, the incoming value green on a green tint;
    column headings and removal text keep the state legible without color

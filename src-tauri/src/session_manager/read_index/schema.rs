@@ -34,26 +34,32 @@ const USAGE: &[(&str, &str)] = &[
     ("usage_call_issues", "CREATE INDEX usage_call_issues ON usage_calls(scope) WHERE issues<>'[]'"),
 ];
 
-pub(super) fn initialize(connection: &Connection) -> Result<(), String> {
+pub(super) fn validate(connection: &Connection) -> Result<i64, String> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).map_err(error)?;
     if !(0..=3).contains(&version) { return Err("会话读取索引版本不受支持，已保留原件".into()); }
-    let objects: i64 = connection.query_row("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'", [], |row| row.get(0)).map_err(error)?;
+    let objects: usize = connection.query_row("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'", [], |row| row.get(0)).map_err(error)?;
     if version == 0 && objects != 0 { return Err("会话读取索引模式未知，已保留原件".into()); }
     if version > 0 { validate_object(connection, "entries", ENTRIES)?; }
-    if version < 3 {
-        if version > 0 && objects != 1 { return Err("会话读取索引旧模式无效，已保留原件".into()); }
-        let transaction = connection.unchecked_transaction().map_err(error)?;
-        if version == 0 { transaction.execute_batch(ENTRIES).map_err(error)?; }
-        if version == 1 { transaction.execute("DELETE FROM entries", []).map_err(error)?; }
-        for (_, sql) in USAGE { transaction.execute_batch(sql).map_err(error)?; }
-        if version == 2 { transfer_snapshot(&transaction)?; }
-        transaction.execute("DELETE FROM entries WHERE kind IN ('usage-file','usage-saved-events','usage-reports')", []).map_err(error)?;
-        transaction.pragma_update(None, "user_version", 3).map_err(error)?;
-        transaction.commit().map_err(error)?;
+    if version > 0 && version < 3 && objects != 1 { return Err("会话读取索引旧模式无效，已保留原件".into()); }
+    if version == 3 {
+        for (name, sql) in USAGE { validate_object(connection, name, sql)?; }
+        if objects != USAGE.len() + 1 { return Err("会话读取索引存在未知结构，已保留原件".into()); }
     }
-    for (name, sql) in USAGE { validate_object(connection, name, sql)?; }
-    let objects: usize = connection.query_row("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'", [], |row| row.get(0)).map_err(error)?;
-    if objects != USAGE.len() + 1 { return Err("会话读取索引存在未知结构，已保留原件".into()); }
+    Ok(version)
+}
+
+pub(super) fn initialize(connection: &Connection) -> Result<(), String> {
+    let version = validate(connection)?;
+    if version == 3 { return Ok(()); }
+    let transaction = connection.unchecked_transaction().map_err(error)?;
+    if version == 0 { transaction.execute_batch(ENTRIES).map_err(error)?; }
+    if version == 1 { transaction.execute("DELETE FROM entries", []).map_err(error)?; }
+    for (_, sql) in USAGE { transaction.execute_batch(sql).map_err(error)?; }
+    if version == 2 { transfer_snapshot(&transaction)?; }
+    transaction.execute("DELETE FROM entries WHERE kind IN ('usage-file','usage-saved-events','usage-reports')", []).map_err(error)?;
+    transaction.pragma_update(None, "user_version", 3).map_err(error)?;
+    transaction.commit().map_err(error)?;
+    validate(connection)?;
     Ok(())
 }
 

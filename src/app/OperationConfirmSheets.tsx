@@ -80,7 +80,7 @@ export function OperationConfirmSheets({
             ) : operations.undoDiff.state === "ready" && operations.undoDiff.changes.length === 0 ? (
               <li>{t("operations.undo.diffEmpty")}</li>
             ) : operations.undoDiff.state === "ready" ? (
-              <li><DiffView changes={operations.undoDiff.changes.map((change) => ({
+              <li><DiffView layout="list" changes={operations.undoDiff.changes.map((change) => ({
                 ...change,
                 before: change.after,
                 after: change.before,

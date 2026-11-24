@@ -128,26 +128,6 @@
   margin-top: var(--asb-space-3);
 }
 
-/* Local backup actions stay tied to their tab rather than the cloud flow. */
-.asb-backup-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--asb-space-3);
-}
-
-/* Destructive backup actions (undo, cloud restore) read after the object they
-   act on, on their own hairline row below the safe action cluster. */
-.asb-backup-danger-row {
-  display: flex;
-  justify-content: flex-end;
-  border-top: 1px solid var(--asb-hairline);
-  padding-top: var(--asb-space-3);
-}
-
-.asb-backup-local > .asb-backup-danger-row {
-  margin-bottom: var(--asb-space-3);
-}
-
 /* An open expansion row is a full-width region under its own row, never a
    squeezed cell; unlike data rows it stays hover-neutral. */
 .asb-table .asb-table-expansion-row:hover {
@@ -156,6 +136,267 @@
 
 .asb-backup-diff-loading {
   min-height: 96px;
+}
+
+/* Backup & Restore: one archive unit carries the three tabs. Each hero pairs
+   the device with the text that owns every fact; the art only decorates. */
+.asb-backup-local,
+.asb-backup-hero-copy,
+.asb-backup-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-backup-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--asb-space-3) var(--asb-space-4);
+  padding: var(--asb-space-3) var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: radial-gradient(ellipse at top,
+    color-mix(in srgb, var(--asb-action) 8%, var(--asb-content-muted)), var(--asb-content-muted) 72%);
+}
+
+.asb-backup-hero > * {
+  min-width: 0;
+}
+
+.asb-backup-hero-art {
+  display: grid;
+  place-items: center;
+}
+
+.asb-backup-hero-copy {
+  align-items: flex-start;
+}
+
+.asb-backup-archive-art {
+  display: block;
+  inline-size: min(100%, 15rem);
+  block-size: auto;
+  color: var(--asb-action);
+  user-select: none;
+  pointer-events: none;
+}
+
+.asb-backup-tray-light {
+  opacity: .92;
+}
+
+/* Tray lights breathe in turn, only while the owning tab is shown; a still
+   composition keeps every light lit when motion is reduced. */
+.asb-backup-tray-glow {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .asb-backup-archive-art[data-active] .asb-backup-tray-glow {
+    animation: asb-backup-tray-light calc(var(--asb-motion-ambient) * 4) ease-in-out infinite;
+  }
+}
+
+@keyframes asb-backup-tray-light {
+  0%, 14% { opacity: 0; }
+  34% { opacity: .48; }
+  62%, 100% { opacity: 0; }
+}
+
+.asb-backup-last-write {
+  margin: 0;
+  max-width: var(--asb-measure-prose);
+  font: var(--asb-text-body);
+  overflow-wrap: anywhere;
+}
+
+/* The date and its preview action share one row; the row spans the copy
+   column so the picker keeps a form width instead of shrinking to content. */
+.asb-backup-cleanup-controls {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) max-content;
+  align-items: end;
+  gap: var(--asb-space-3);
+}
+
+.asb-backup-cleanup-result {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.asb-backup-cleanup-result > p { margin: 0; }
+
+.asb-backup-history-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--asb-space-1) var(--asb-space-3);
+}
+
+.asb-backup-history-count {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+/* Restore points share one vertical line through their client marks. Each
+   point draws only the two segments beside its own mark, so the line starts
+   at the first mark and ends at the last whatever the rows contain. The axis
+   is the row's inline padding plus half the mark. */
+.asb-backup-points {
+  --asb-backup-node-size: 2rem;
+  --asb-backup-axis: calc(var(--asb-space-2) + var(--asb-backup-node-size) / 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-backup-point {
+  --asb-backup-client: var(--asb-action);
+  position: relative;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  grid-template-areas:
+    "node body actions"
+    ". diff diff";
+  align-items: start;
+  gap: 0 var(--asb-space-2);
+  /* Inline padding keeps the highlighted pending row clear of its content. */
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border-radius: var(--asb-radius);
+}
+
+.asb-backup-point[data-client="claude"] {
+  --asb-backup-client: var(--asb-claude);
+}
+
+/* The unfinished transaction is the one point to act on: it reads as a
+   warning row, and its text and action name say why. */
+.asb-backup-point[data-pending] {
+  --asb-backup-client: var(--asb-warning);
+  background: color-mix(in srgb, var(--asb-warning) 9%, var(--asb-content));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asb-warning) 42%, transparent);
+}
+
+.asb-backup-point::before,
+.asb-backup-point::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: var(--asb-backup-axis);
+  width: 2px;
+  margin-inline-start: -1px;
+  background: var(--asb-hairline-strong);
+}
+
+.asb-backup-point::before {
+  top: 0;
+  height: var(--asb-space-1);
+}
+
+.asb-backup-point::after {
+  top: calc(var(--asb-space-1) + var(--asb-backup-node-size));
+  bottom: 0;
+}
+
+.asb-backup-point:first-child::before,
+.asb-backup-point:last-child::after {
+  display: none;
+}
+
+.asb-backup-point-node {
+  grid-area: node;
+  display: grid;
+  place-items: center;
+  width: var(--asb-backup-node-size);
+  height: var(--asb-backup-node-size);
+  border: 2px solid var(--asb-backup-client);
+  border-radius: var(--asb-radius);
+  background: var(--asb-text-on-action);
+}
+
+.asb-backup-point-node > img {
+  width: var(--asb-icon-size-lg);
+  height: var(--asb-icon-size-lg);
+  object-fit: contain;
+}
+
+.asb-backup-point-body {
+  grid-area: body;
+  display: grid;
+  gap: var(--asb-space-hairline);
+  min-width: 0;
+}
+
+/* The lead line shares the node's height, so mark, text and actions sit on
+   one axis; a long reason wraps inside the same lead. */
+.asb-backup-point-lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--asb-space-2);
+  min-height: var(--asb-backup-node-size);
+  margin: 0;
+  font: var(--asb-text-body);
+}
+
+.asb-backup-point-lead > strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.asb-backup-point-time {
+  color: var(--asb-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.asb-backup-point-meta,
+.asb-backup-point-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
+.asb-backup-point-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-1);
+  min-height: var(--asb-backup-node-size);
+}
+
+.asb-backup-point-diff {
+  grid-area: diff;
+}
+
+.asb-backup-point-diff-body {
+  padding-block: var(--asb-space-1) var(--asb-space-2);
+}
+
+@container settings-content (max-width: 640px) {
+  .asb-backup-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asb-backup-cleanup-controls {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .asb-backup-point {
+    grid-template-columns: 3rem minmax(0, 1fr);
+    grid-template-areas:
+      "node body"
+      ". actions"
+      ". diff";
+  }
+
+  .asb-backup-point-actions {
+    justify-content: flex-start;
+  }
 }
 
 /* The cloud-backup controls fill their own tab and remain a clearly bounded
@@ -167,33 +408,41 @@
   margin: 0;
 }
 
-/* The setup sequence is documentation for a user-owned remote service, not a
-   second card: its ordered structure stays adjacent to the fields it explains. */
-.asb-cloud-backup-guide {
+.asb-cloud-backup-controls {
   display: grid;
-  gap: var(--asb-space-2);
-  margin: 0;
-  padding: var(--asb-space-3) 0;
-  border-top: 1px solid var(--asb-hairline);
-  border-bottom: 1px solid var(--asb-hairline);
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--asb-space-3);
 }
 
-.asb-cloud-backup-guide-title,
-.asb-cloud-backup-guide-list p {
-  margin: 0;
+.asb-cloud-backup-group,
+.asb-cloud-backup-sql {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
 }
 
-.asb-cloud-backup-guide-title {
-  color: var(--asb-text);
-  font: var(--asb-text-title);
+.asb-cloud-backup-group {
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: var(--asb-content-muted);
 }
 
-.asb-cloud-backup-guide-heading {
+.asb-cloud-backup-group > .asb-form { max-width: none; }
+
+.asb-cloud-backup-sql {
+  border-block-start: 1px solid var(--asb-hairline);
+  padding-block-start: var(--asb-space-3);
+}
+
+.asb-cloud-backup-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
   gap: var(--asb-space-2);
+}
+
+@container settings-content (max-width: 760px) {
+  .asb-cloud-backup-controls { grid-template-columns: minmax(0, 1fr); }
 }
 
 .asb-cloud-backup-guide-list {
@@ -212,9 +461,8 @@
   border-top: 1px solid var(--asb-hairline);
 }
 
-
 .asb-cloud-backup-guide-list p {
-  margin-top: var(--asb-space-1);
+  margin: var(--asb-space-1) 0 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }

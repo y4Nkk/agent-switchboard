@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronsLeft,
+  Cloud,
   Copy,
   Download,
   Eye,
@@ -96,3 +97,5 @@ export const DashIcon = icon(Minus, 14, 3.6);
 /** Extension kind glyphs, paired with the library empty state's imagery. */
 export const SkillKindIcon = icon(Sparkles, 14, 2.9);
 export const McpKindIcon = icon(Server, 14, 2.9);
+/** Work-scenario slot glyphs; MCP and Skill share the library's kind glyphs. */
+export const ProviderKindIcon = icon(Cloud, 14, 2.9);

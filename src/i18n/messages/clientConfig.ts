@@ -186,7 +186,6 @@ export const messages = {
   "clientConfig.tools.title": ["客户端工具", "Client tools"],
   "clientConfig.tools.clientLabel": ["客户端", "Client"],
   "clientConfig.integration.title": ["客户端集成", "Client integration"],
-  "clientConfig.integration.description": ["直接改写 Claude 客户端文件中的单个键，其余内容原样保留。", "Rewrites a single key in Claude's client files in place, keeping everything else untouched."],
   "clientConfig.integration.refreshLabel": ["重新读取 Claude 客户端集成状态", "Reload Claude client integration status"],
   "clientConfig.integration.pluginTitle": ["插件 API Key 标记", "Plugin API key marker"],
   "clientConfig.integration.pluginNote": ["第三方供应商生效时写入 primaryApiKey=any，Claude Code 插件 / VS Code 扩展不再要求登录；官方登录时清除。", "Writes primaryApiKey=any while a third-party provider is active so Claude Code plugins / the VS Code extension no longer require login; cleared on official login."],

@@ -16,12 +16,15 @@ use asb_core::extensions::validate::{validate_content_paths, validate_skill_name
 
 pub use github::{fetch_github_subtree, resolve_github_commit, resolve_github_source};
 pub(crate) use github::{
-    repository as normalize_github_repository, validate_ref_name as validate_source_ref,
-    validate_subpath as validate_source_subpath,
+    repository as normalize_github_repository, resolve_github_source_with_requests,
+    validate_ref_name as validate_source_ref, validate_subpath as validate_source_subpath,
+    GitHubRequest,
 };
 pub use local::scan_local_source;
 pub use transport::http_fetch;
-pub(crate) use transport::{fetch_bytes as fetch_source_bytes, MAX_DIRECTORY_DOWNLOAD};
+pub(crate) use transport::{
+    fetch_bytes as fetch_source_bytes, http_fetch_with_progress, HttpTransfer, MAX_DIRECTORY_DOWNLOAD,
+};
 pub use zip::scan_zip_source;
 
 pub(super) const MAX_SOURCE_ENTRIES: usize = 20_000;

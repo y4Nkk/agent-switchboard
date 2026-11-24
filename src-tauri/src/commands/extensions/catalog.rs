@@ -1,19 +1,24 @@
 //! Read-only source discovery and catalog configuration. No library import
 //! or client deployment is authorized by any command in this module.
 
+use std::time::{Duration, Instant};
+
 use serde::Serialize;
 use tauri::AppHandle;
+use uuid::Uuid;
 
 use crate::commands::error::{blocking, state, CommandError};
 use crate::extensions::skill_catalog::{
-    self, CatalogError, SkillRepository, SkillRepositoryCatalog,
-    SkillRepositoryFailure,
+    self, CatalogError, CatalogScanMonitor, CatalogScanProgress, RepositoryScan, SkillRepository,
+    SkillRepositoryCatalog,
 };
 use crate::extensions::sources::{self, SkillCandidate};
 
 pub use crate::extensions::skill_catalog::{SkillDirectoryEntry, SkillRepositoryInput};
 
 use super::sources::{cache_candidates, candidate_dto, detailed_source_error, SkillCandidateDto};
+
+const REPOSITORY_SCAN_NETWORK_BUDGET: Duration = Duration::from_secs(45);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,11 +32,11 @@ pub struct SkillCatalogCandidate {
     readme_url: Option<String>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillCatalogResult {
     candidates: Vec<SkillCatalogCandidate>,
-    failures: Vec<SkillRepositoryFailure>,
+    progress: CatalogScanProgress,
 }
 
 fn catalog(app: &AppHandle) -> Result<SkillRepositoryCatalog, CommandError> {
@@ -70,23 +75,41 @@ pub async fn remove_skill_repository(app: AppHandle, id: String) -> Result<(), C
 }
 
 #[tauri::command]
-pub async fn scan_skill_repositories(app: AppHandle) -> Result<SkillCatalogResult, CommandError> {
+pub async fn scan_skill_repositories(
+    app: AppHandle,
+    scan_id: String,
+) -> Result<SkillCatalogResult, CommandError> {
+    let scan_id = parse_scan_id(&scan_id)?;
     blocking(move || {
-        let repositories = catalog(&app)?.list().map_err(catalog_error)?;
-        Ok(cache_catalog_scan(skill_catalog::scan_repositories(
+        let mut repositories = catalog(&app)?.list().map_err(catalog_error)?;
+        repositories.retain(|repo| repo.enabled);
+        let started_at = Instant::now();
+        let monitor = CatalogScanMonitor::begin(scan_id, started_at, &repositories).ok_or_else(|| {
+            CommandError::new("skill-scan-already-active", "此仓库扫描已在进行")
+        })?;
+        let scanned = skill_catalog::scan_repositories(
             &repositories,
-            &sources::http_fetch,
-        )))
+            started_at + REPOSITORY_SCAN_NETWORK_BUDGET,
+            &monitor,
+        );
+        let candidates = cache_catalog_candidates(scanned);
+        Ok(SkillCatalogResult { candidates, progress: monitor.snapshot() })
     })
     .await
 }
 
-fn cache_catalog_scan(scan: skill_catalog::CatalogScan) -> SkillCatalogResult {
-    let mut result = SkillCatalogResult {
-        candidates: Vec::new(),
-        failures: scan.failures,
-    };
-    for group in scan.repositories {
+#[tauri::command]
+pub async fn read_skill_repository_scan(scan_id: String) -> Result<Option<CatalogScanProgress>, CommandError> {
+    Ok(CatalogScanMonitor::read(parse_scan_id(&scan_id)?))
+}
+
+fn parse_scan_id(id: &str) -> Result<Uuid, CommandError> {
+    Uuid::parse_str(id).map_err(|_| CommandError::new("skill-scan-invalid-id", "仓库扫描标识无效"))
+}
+
+fn cache_catalog_candidates(repositories: Vec<RepositoryScan>) -> Vec<SkillCatalogCandidate> {
+    let mut result = Vec::new();
+    for group in repositories {
         let repository = group.repository;
         let dtos: Vec<_> = group
             .candidates
@@ -101,12 +124,9 @@ fn cache_catalog_scan(scan: skill_catalog::CatalogScan) -> SkillCatalogResult {
             })
             .collect();
         cache_candidates(group.candidates);
-        result.candidates.extend(dtos);
+        result.extend(dtos);
     }
-    for failure in &mut result.failures {
-        failure.message = CommandError::new("skill-source-failed", &failure.message).message;
-    }
-    result.candidates.sort_by(|a, b| {
+    result.sort_by(|a, b| {
         a.candidate
             .name
             .to_lowercase()

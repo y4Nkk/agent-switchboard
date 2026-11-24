@@ -360,7 +360,6 @@ export const messages = {
   "extensions.sources.noFilterMatches": ["没有符合筛选条件的 Skill", "No skills match the filters"],
   "extensions.sources.clearFilters": ["清除筛选", "Clear filters"],
   "extensions.sources.refreshFailed": ["仓库刷新失败", "Repository refresh failed"],
-  "extensions.sources.failureLine": ["{repo}：{message}", "{repo}: {message}"],
   "extensions.sources.staleResults": ["；仍显示上次结果", "; showing the previous results"],
   "extensions.sources.retryRefresh": ["重试刷新", "Retry refresh"],
   "extensions.sources.searching": ["正在搜索…", "Searching…"],

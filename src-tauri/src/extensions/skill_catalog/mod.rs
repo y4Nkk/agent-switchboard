@@ -2,14 +2,17 @@
 //! never imports a definition, deploys content, or executes source files.
 
 mod directory;
+mod progress;
 mod repositories;
 mod scan;
 
 use serde::{Deserialize, Serialize};
 
 pub use directory::{resolve_directory_skill, search_directory};
+pub(crate) use progress::CatalogScanMonitor;
+pub use progress::CatalogScanProgress;
 pub use repositories::SkillRepositoryCatalog;
-pub use scan::{scan_repositories, CatalogScan};
+pub(crate) use scan::{scan_repositories, RepositoryScan};
 
 pub const MAX_REPOSITORIES: usize = 32;
 
@@ -31,14 +34,6 @@ pub struct SkillRepositoryInput {
     pub subpath: String,
     pub ref_name: Option<String>,
     pub enabled: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillRepositoryFailure {
-    pub repository_id: String,
-    pub repo: String,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

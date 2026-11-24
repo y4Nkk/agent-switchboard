@@ -70,7 +70,7 @@ Windows PowerShell 5 包装器直接接收 `ConvertFrom-Json` 返回的参数数
 
 Tauri 与开发桥共同注册 read_client_software、select_client_software、refresh_client_software、prepare_client_update、start_client_update、read_client_update、cancel_client_update。选择位置由后端系统对话框返回，前端不能提交任意路径、Shell、包名、下载地址或提权参数。
 
-React 版本区使用既有 Table / Button / AppDialog / FactList / Time / CollapsibleSection / CodePreview 和双语词典。Codex 与 Claude 的主表每行只呈现安装类型、使用情况、本机版本、渠道版本、简短状态和操作，每格一个事实；操作只保留准备更新与详情并排显示。安装方式、官网版本、更新渠道、路径、来源与检查时间以及完整策略和诊断分组放在共享行内详情，官方更新说明也由详情承载。三种版本来源的事实继续保留；简短状态只负责呈现，更新准入仍由后端 updateAllowed 和原计划校验唯一裁决。主表不堆叠比较结论、阻止原因和原始错误。详情、更新计划和单次任务的键值事实仍由 FactList 拥有。表格仅拥有横向溢出，纵向随设置页展开，不保留安装卡片的平行渲染路径。更新计划与任务独立于所选客户端页签，切页继续执行；失败任务默认展开已有安装器输出，用户仍可收起，新任务重置展开选择。失败保留旧读数、来源时间与诊断，不把探测失败显示为未安装。
+React 版本区使用[设备图、安装卡与版本轨道](../architecture/2026-11-24-settings-device-layouts.md)，复用 Button、AppDialog、FactList、Time、Collapsible、CodePreview 和双语词典。每份安装呈现安装类型、使用情况、可用版本读数、简短状态和操作。详情展示完整路径、版本来源、检查时间、原始输出、策略和诊断。更新准入由后端 updateAllowed 和原计划校验裁决。更新计划与任务独立于所选客户端页签，切页继续执行。失败任务默认展开已有安装器输出，用户可收起，新任务重置展开选择。失败保留旧读数、来源时间与诊断。
 
 雷达启动回归的测试路径覆盖只选择隔离夹具入口，仍复用真实安装身份解析，不直接伪造手动安装。Windows 夹具声明 npm 包名与 JavaScript 入口，经已确认的 Node/npm 运行环境启动；未知 .cmd/.bat 入口继续拒绝执行。这样回归覆盖实际归属与启动链，避免测试与生产采用不同命令规则。
 

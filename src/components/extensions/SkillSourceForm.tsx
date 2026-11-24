@@ -53,8 +53,9 @@ export function SkillSourceForm({ state, busy }: { state: SkillSourceState; busy
   const scanning = source === "directory" ? state.directory.searching : state.loading;
   const scanDisabled = busy || state.loading || state.imports.busy || (source === "catalog" &&
     (!repositories.ready || repositories.loading || !repositories.items.some((repo) => repo.enabled)));
+  const retryCatalog = state.catalog.error !== null || state.catalog.failedRepositoryIds.size > 0;
   const scanLabel = scanning ? t(source === "directory" ? "extensions.sources.searching" : "extensions.sources.scanning")
-    : t(source === "catalog" ? "extensions.sources.refreshRepos" : source === "directory" ? "extensions.sources.search"
+    : t(source === "catalog" ? (retryCatalog ? "extensions.sources.retryRefresh" : "extensions.sources.refreshRepos") : source === "directory" ? "extensions.sources.search"
       : source === "zip" ? "extensions.sources.scanZip" : "extensions.sources.scanSource");
   return (
     <form className="asb-ext-market-form" aria-label={t("extensions.sources.formAria")} onSubmit={(event) => {

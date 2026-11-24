@@ -1,5 +1,6 @@
 use asb_core::contracts::AppKind;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use serde_json::value::RawValue;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,9 +37,13 @@ pub(crate) struct RequestUsageRow {
     pub outcome: RequestOutcome,
     pub status: Option<u16>,
     pub error_type: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
     pub duration_ms: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
     pub first_token_ms: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
     pub first_content_ms: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
     pub output_tokens_per_second: Option<f64>,
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
@@ -47,6 +52,21 @@ pub(crate) struct RequestUsageRow {
     pub reasoning_tokens: Option<u64>,
     pub estimated_cost_usd: Option<String>,
     pub attempt_count: Option<u64>,
+}
+
+// Speed validation requires the stored decimals to round-trip to the original floats.
+fn deserialize_optional_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(raw) = Option::<&RawValue>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    let value = raw.get().parse::<f64>().map_err(D::Error::custom)?;
+    if !value.is_finite() {
+        return Err(D::Error::custom("原生性能记录浮点数超出范围"));
+    }
+    Ok(Some(value))
 }
 
 impl RequestUsageRow {

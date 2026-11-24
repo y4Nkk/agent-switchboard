@@ -1,44 +1,76 @@
+import { useCallback, useState } from "react";
 import {
-  scanSkillRepositories, type SkillCatalogResult, type SkillRepository,
+  scanSkillRepositories, type SkillCatalogResult, type SkillRepository, type SkillRepositoryScanProgress,
 } from "../../api/extensions/skill-sources";
 import { sameSkillRepository } from "./skill-repository-model";
 import { useSkillSourceRequests } from "./useSkillSourceRequests";
 
-interface CatalogSnapshot extends SkillCatalogResult { scanned: SkillRepository[]; configured: SkillRepository[] }
+interface CatalogSnapshot extends SkillCatalogResult { scanned: SkillRepository[] }
 
-function mergeCatalog(next: SkillCatalogResult, previous: CatalogSnapshot | null, repositories: SkillRepository[]) {
-  const failed = new Set(next.failures.map((failure) => failure.repositoryId));
-  const retained = previous?.scanned.filter((repo) => failed.has(repo.id) &&
-    repositories.some((current) => sameSkillRepository(current, repo))) ?? [];
-  const retainedIds = new Set(retained.map((repo) => repo.id));
+function filterCatalog(snapshot: SkillCatalogResult, repositories: SkillRepository[]): SkillCatalogResult {
+  const rows = snapshot.progress.repositories.filter(({ repository }) =>
+    repositories.some((current) => sameSkillRepository(current, repository)));
+  const allowed = new Set(rows.map(({ repository }) => repository.id));
   return {
-    ...next,
-    candidates: [...next.candidates, ...(previous?.candidates.filter((row) => retainedIds.has(row.repositoryId)) ?? [])],
-    scanned: [...repositories.filter((repo) => repo.enabled && !failed.has(repo.id)), ...retained],
-    configured: repositories,
+    candidates: snapshot.candidates.filter((row) => allowed.has(row.repositoryId)),
+    progress: { ...snapshot.progress, repositories: rows },
   };
 }
 
+function mergeCatalog(next: SkillCatalogResult, previous: CatalogSnapshot | null, repositories: SkillRepository[]) {
+  const fresh = filterCatalog(next, repositories);
+  const failed = fresh.progress.repositories.filter((row) => row.state === "failed");
+  const retained = previous?.scanned.filter((repo) =>
+    failed.some(({ repository }) => sameSkillRepository(repository, repo))) ?? [];
+  const retainedIds = new Set(retained.map((repo) => repo.id));
+  const completed = fresh.progress.repositories.filter((row) => row.state === "complete").map((row) => row.repository);
+  return {
+    ...fresh,
+    candidates: [...fresh.candidates, ...(previous?.candidates.filter((row) => retainedIds.has(row.repositoryId)) ?? [])],
+    scanned: [...completed, ...retained],
+  };
+}
+
+const INITIAL_PROGRESS = { snapshot: null, unavailable: false };
+
 export function useSkillSourceCatalog(busy: boolean) {
   const requests = useSkillSourceRequests<CatalogSnapshot>(busy);
+  const [live, setLive] = useState<{ snapshot: SkillRepositoryScanProgress | null; unavailable: boolean }>(INITIAL_PROGRESS);
+  const cancel = useCallback(() => {
+    requests.cancel();
+    setLive(INITIAL_PROGRESS);
+  }, [requests.cancel]);
   const refresh = async (repositories: SkillRepository[]) => {
-    await requests.run(async () => mergeCatalog(await scanSkillRepositories(), requests.result, repositories));
+    await requests.run(async (isCurrent) => {
+      setLive(INITIAL_PROGRESS);
+      try {
+        const next = await scanSkillRepositories(isCurrent, (snapshot) => setLive((previous) =>
+          snapshot ? { snapshot, unavailable: false } : { ...previous, unavailable: true }));
+        return mergeCatalog(next, requests.result, repositories);
+      } finally {
+        if (isCurrent()) setLive(INITIAL_PROGRESS);
+      }
+    });
   };
   const reconcile = (repositories: SkillRepository[] | null) => {
-    requests.cancel();
+    cancel();
     requests.update((previous) => {
       if (!previous || !repositories) return null;
-      const allowed = new Set(previous.configured.filter((repo) =>
-        repositories.some((current) => sameSkillRepository(current, repo))).map((repo) => repo.id));
+      const current = filterCatalog(previous, repositories);
+      if (current.progress.repositories.length === 0) return null;
       return {
-        candidates: previous.candidates.filter((row) => allowed.has(row.repositoryId)),
-        failures: previous.failures.filter((row) => allowed.has(row.repositoryId)),
-        scanned: previous.scanned.filter((repo) => allowed.has(repo.id)),
-        configured: previous.configured.filter((repo) => allowed.has(repo.id)),
+        ...current,
+        scanned: previous.scanned.filter((repo) => repositories.some((next) => sameSkillRepository(next, repo))),
       };
     });
   };
   const count = (id: string) => requests.result?.scanned.some((repo) => repo.id === id) ?
     requests.result.candidates.filter((candidate) => candidate.repositoryId === id).length : null;
-  return { ...requests, refresh, reconcile, count };
+  const failedRepositoryIds = new Set(requests.result?.progress.repositories
+    .filter((row) => row.state === "failed").map((row) => row.repository.id));
+  return {
+    ...requests, cancel, refresh, reconcile, count, failedRepositoryIds,
+    progress: requests.loading ? live.snapshot : requests.result?.progress ?? null,
+    progressUnavailable: requests.loading && live.unavailable,
+  };
 }

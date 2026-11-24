@@ -1,5 +1,5 @@
-use std::io::Read;
-use std::time::Duration;
+use std::io::{self, Read};
+use std::time::{Duration, Instant};
 
 use super::{HttpFetch, SourceError};
 
@@ -7,7 +7,23 @@ pub(super) const MAX_ARCHIVE_DOWNLOAD: u64 = 64 * 1024 * 1024;
 pub(super) const MAX_API_DOWNLOAD: u64 = 8 * 1024 * 1024;
 pub(crate) const MAX_DIRECTORY_DOWNLOAD: u64 = 1024 * 1024;
 
+#[derive(Clone, Copy, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct HttpTransfer {
+    pub http_status: Option<u16>,
+    received_bytes: u64,
+    total_bytes: Option<u64>,
+}
+
 pub fn http_fetch(url: &str) -> Result<(u16, Vec<u8>), String> {
+    http_fetch_with_progress(url, None, &|_| {})
+}
+
+pub(crate) fn http_fetch_with_progress(
+    url: &str,
+    deadline: Option<Instant>,
+    report: &dyn Fn(HttpTransfer),
+) -> Result<(u16, Vec<u8>), String> {
     let parsed = reqwest::Url::parse(url).map_err(|error| error.to_string())?;
     let (limit, service) = match (parsed.scheme(), parsed.host_str()) {
         ("https", Some("api.github.com")) => (MAX_API_DOWNLOAD, "GitHub"),
@@ -32,7 +48,14 @@ pub fn http_fetch(url: &str) -> Result<(u16, Vec<u8>), String> {
             .build()
             .expect("static source HTTP configuration")
     }).map_err(|error| error.to_string())?;
-    let timeout = Duration::from_secs(if service == "GitHub" { 45 } else { 10 });
+    let mut timeout = Duration::from_secs(if service == "GitHub" { 45 } else { 10 });
+    if let Some(deadline) = deadline {
+        timeout = timeout.min(deadline.saturating_duration_since(Instant::now()));
+        if timeout.is_zero() {
+            return Err("本轮仓库扫描的网络等待已达上限，请减少启用的仓库后重试".into());
+        }
+    }
+    report(HttpTransfer::default());
     let response = client
         .get(parsed)
         .timeout(timeout)
@@ -44,23 +67,64 @@ pub fn http_fetch(url: &str) -> Result<(u16, Vec<u8>), String> {
                 format!("{service} 请求失败：{error}")
             }
         })?;
+    read_response(response, limit, service, report)
+}
+
+fn read_response(
+    response: reqwest::blocking::Response,
+    limit: u64,
+    service: &str,
+    report: &dyn Fn(HttpTransfer),
+) -> Result<(u16, Vec<u8>), String> {
     let status = response.status().as_u16();
-    if response.content_length().is_some_and(|size| size > limit) {
+    let mut progress = HttpTransfer {
+        http_status: Some(status),
+        received_bytes: 0,
+        total_bytes: response.content_length(),
+    };
+    report(progress);
+    if progress.total_bytes.is_some_and(|size| size > limit) {
         return Err(format!(
             "{service} 响应超过下载上限 {limit} 字节；请缩小来源范围"
         ));
     }
+    let mut response = response.take(limit + 1);
     let mut bytes = Vec::new();
-    response
-        .take(limit + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("{service} 响应读取失败：{error}"))?;
+    let mut chunk = [0u8; 32 * 1024];
+    let mut last_report = Instant::now();
+    let read_result = loop {
+        match response.read(&mut chunk) {
+            Ok(0) => break Ok(()),
+            Ok(size) => bytes.extend_from_slice(&chunk[..size]),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => break Err(error),
+        }
+        if last_report.elapsed() >= Duration::from_millis(200) {
+            progress.received_bytes = bytes.len() as u64;
+            report(progress);
+            last_report = Instant::now();
+        }
+    };
+    progress.received_bytes = bytes.len() as u64;
+    report(progress);
+    read_result.map_err(|error| response_read_error(service, error))?;
     if bytes.len() as u64 > limit {
         return Err(format!(
             "{service} 响应超过下载上限 {limit} 字节；未接受截断内容"
         ));
     }
     Ok((status, bytes))
+}
+
+fn response_read_error(service: &str, error: io::Error) -> String {
+    let timed_out = error.kind() == io::ErrorKind::TimedOut
+        || error.get_ref().and_then(|source| source.downcast_ref::<reqwest::Error>())
+            .is_some_and(reqwest::Error::is_timeout);
+    if timed_out {
+        format!("{service} 响应体读取超时，请检查网络后重试")
+    } else {
+        format!("读取 {service} 响应体时遇到错误（{error}）")
+    }
 }
 
 pub(crate) fn fetch_bytes(url: &str, limit: u64, fetch: HttpFetch) -> Result<Vec<u8>, SourceError> {

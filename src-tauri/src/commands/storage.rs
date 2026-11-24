@@ -45,6 +45,20 @@ pub(crate) async fn clear_webview_cache(app: AppHandle) -> Result<(), CommandErr
 }
 
 #[tauri::command]
+pub(crate) async fn clear_session_index(app: AppHandle) -> Result<u64, CommandError> {
+    let local = state(&app)?;
+    blocking(move || {
+        let result = crate::session_manager::read_index::clear_cached_index(local.root());
+        let action = crate::runtime_log::RuntimeLogAction::StorageSessionIndexCleared;
+        match &result {
+            Ok(_) => crate::runtime_log::record_success(action),
+            Err(_) => crate::runtime_log::record_failure(action, "storage-session-index-cleanup-failed"),
+        }
+        result.map_err(storage_error)
+    }).await
+}
+
+#[tauri::command]
 pub(crate) async fn preview_history_archive(app: AppHandle, cutoff: String) -> Result<HistoryArchivePlan, CommandError> {
     let local = state(&app)?;
     blocking(move || storage::archive::plan(&local, &cutoff, &mut std::io::sink()).map_err(storage_error)).await

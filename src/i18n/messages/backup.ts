@@ -6,6 +6,7 @@ export const messages = {
   "backup.logs.coverage": ["显示当前筛选最新 {shown} 条，共匹配 {total} 条；完整日志可从日志文件夹查看。", "Showing the latest {shown} of {total} matching events. Full logs are available in the log folder."],
   "backup.logs.skipped": ["有 {count} 条日志无法解析或超过单条读取上限，未计入当前结果。", "{count} log records could not be parsed or exceeded the record limit and are excluded."],
   "backup.action.storageCacheMaintained": ["维护浏览器缓存", "Maintain browser cache"],
+  "backup.action.storageSessionIndexCleared": ["清理会话与用量索引", "Clear session and usage index"],
   "backup.action.outboundProxySaved": ["保存出站代理", "Save outbound proxy"],
   "backup.action.configurationReadFailed": ["读取配置失败", "Configuration read failed"],
   "backup.col.configurationPath": ["配置位置", "Configuration location"],
@@ -34,12 +35,10 @@ export const messages = {
   "backup.undoSwitch": ["撤回上一次切换", "Undo last switch"],
   "backup.undoWrite": ["撤回上一次配置写入", "Undo last configuration write"],
 
-  // Shared table columns and confirm label
+  // Shared column and dialog-fact labels, and the confirm label
   "backup.col.time": ["时间", "Time"],
   "backup.col.client": ["客户端", "Client"],
-  "backup.col.reason": ["原因", "Reason"],
   "backup.col.hash": ["内容哈希", "Content hash"],
-  "backup.col.actions": ["操作", "Actions"],
   "backup.col.level": ["级别", "Level"],
   "backup.col.event": ["事件", "Event"],
   "backup.col.errorCode": ["错误代码", "Error code"],
@@ -67,8 +66,10 @@ export const messages = {
   "backup.history.restoreBusy": ["有操作正在进行，请稍后重试。", "An operation is in progress. Try again shortly."],
   "backup.history.restoreFailed": ["恢复失败。{reason}", "Restore failed. {reason}"],
   "backup.history.viewDiff": ["查看差异", "View diff"],
+  "backup.diff.loading": ["正在读取备份差异", "Reading backup differences"],
   "backup.history.empty": ["暂无备份", "No backups yet"],
-  "backup.history.tableAria": ["备份历史", "Backup history"],
+  "backup.history.title": ["备份历史", "Backup history"],
+  "backup.history.count": ["共 {count} 份", "{count} backups"],
   "backup.history.paginationAria": ["备份历史分页", "Backup history pagination"],
   "backup.history.confirmTitle": ["恢复备份", "Restore backup"],
   "backup.history.confirmTransactionTitle": ["恢复未完成事务", "Restore unfinished transaction"],
@@ -136,8 +137,6 @@ export const messages = {
 
   // Cloud backup panel: setup guide
   "backup.cloud.guideTitle": ["从零配置 Supabase", "Set up Supabase from scratch"],
-  "backup.cloud.guideCollapse": ["收起配置教程", "Hide setup guide"],
-  "backup.cloud.guideExpand": ["展开配置教程", "Show setup guide"],
   "backup.cloud.guide.create.title": ["创建项目", "Create a project"],
   "backup.cloud.guide.create.before": ["在 ", "Create a new project in "],
   "backup.cloud.guide.create.after": [" 新建项目，等待项目状态变为 Healthy。创建项目时设置的数据库密码只用于数据库连接，不填入本应用。", ", then wait for the project status to become Healthy. The database password set when creating the project is only used for the database connection and is never entered into this app."],
@@ -168,6 +167,10 @@ export const messages = {
 
   // Cloud backup panel: forms and confirmations
   "backup.cloud.loadingAria": ["正在读取云端备份设置", "Reading cloud backup settings"],
+  "backup.cloud.encryptedTitle": ["加密云端备份", "Encrypted cloud backup"],
+  "backup.cloud.scope": ["将供应商档案、客户端设置和切换记录加密保存到你的 Supabase 项目。", "Store encrypted provider profiles, client settings, and switch records in your Supabase project."],
+  "backup.cloud.connection": ["项目连接", "Project connection"],
+  "backup.cloud.saveBeforeTransfer": ["保存项目连接后，即可上传备份或从云端恢复。", "Save the project connection to upload a backup or restore from the cloud."],
   "backup.cloud.formAria": ["Supabase 云端备份设置", "Supabase cloud backup settings"],
   "backup.cloud.projectUrl": ["Supabase 项目地址", "Supabase project URL"],
   "backup.cloud.authEmail": ["项目 Auth 登录邮箱", "Project Auth sign-in email"],

@@ -5,6 +5,7 @@ export const RUNTIME_LOG_ACTION_LABELS = {
   webviewMemoryLow: "backup.action.webviewMemoryLow",
   webviewMemoryNormal: "backup.action.webviewMemoryNormal",
   storageCacheMaintained: "backup.action.storageCacheMaintained",
+  storageSessionIndexCleared: "backup.action.storageSessionIndexCleared",
   storageHistoryArchived: "backup.action.storageHistoryArchived",
   storageBackupsCleaned: "backup.action.storageBackupsCleaned",
   storageSessionsCleaned: "backup.action.storageSessionsCleaned",

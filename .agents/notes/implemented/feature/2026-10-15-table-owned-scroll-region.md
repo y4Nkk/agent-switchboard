@@ -10,7 +10,7 @@ Status: implemented
 
 - `Table` 组件以 `.asb-table-scroll` 组合共享 `ScrollArea`，原生视口拥有 `tabIndex={0}`、横向平移和返回顶部。纵向归属由[工作面滚动契约](../architecture/2026-10-16-table-scroll-ownership.md)拥有：默认自然展开；主列表显式选择 viewport，由共享层统一设置有界滚动、稳定槽位与固定表头。
 - 表格边框、圆角与裁切由组件的固定 `.asb-table-scroll` 框统一拥有；内部 table 只承载内容并在视口内平移，横向溢出时右侧边框仍保持可见。删除单元格四角的重复圆角规则，表头、展开行与悬停底色统一由外框裁切。网关请求表已有的无边框语义在同一框上声明，不增加模块私有滚动壳。
-- `Table` 契约补上可选行内展开行 `renderExpansion`：返回节点即在该行下方发出占满整行的 `.asb-table-expansion-row`，hover 保持中性（吸收原 `.asb-backup-diff-row` 规则）。备份历史迁移到共享 `Table` + `renderExpansion`，裸 `<table>` 镜像与 `Fragment`/`cx` 复制路径删除；分页边距只保留 `.asb-table-scroll + .asb-pagination` 一条路径。全库数据表格只剩 Table.tsx 一处 `<table>` 标记（DatePicker 日历网格是其原语自有语法，DESIGN.md §90，不属数据表格契约）。
+- `Table` 的 `renderExpansion` 在对应行下方呈现占满整行的 `.asb-table-expansion-row`，悬停使用中性样式。表格与分页相邻时使用 `.asb-table-scroll + .asb-pagination` 的共享边距。备份历史现在采用[时间轴布局](../architecture/2026-11-24-settings-device-layouts.md)，仍使用共享分页。数据表格标记由 Table.tsx 拥有，DatePicker 自行渲染日历网格。
 - 删除全部模块级滚动壳及其规则：四个 `-table-wrap`/网关 div、扩展管理 9 处 `asb-ext-table-scroll`（CSS 规则整条删除）、重置面板 `asb-codex-reset-daily-data`。检测结果的 aria-live/aria-busy 播报使用无样式的纯语义 div（不承担滚动与布局）；日额度只保留相邻间距，不再限制表格高度。用量统计随页面展开，无私有 flex / sticky 规则；网关类名位于表格元素上。
 - 模块级 `min-width`（runtime-log 680px、gateway 56rem、扩展管理 600px、用量/雷达 max-content）原样保留在表格元素上：宽度约束是模块事实，滚动与展开行是组件契约，两者分层。
 - DESIGN.md §8 `Table` 条款与 tables-backups.css 头注释同批更新，声明组件包裹层是唯一表格滚动面、展开行由组件标记发出。

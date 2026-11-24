@@ -1,24 +1,135 @@
-.asb-client-management-content {
-  display: grid;
-  gap: var(--asb-space-6);
-  min-width: 0;
+.asb-software-card[data-featured] {
+  grid-template-areas:
+    "art ident"
+    "art rail"
+    "art foot"
+    "details details";
+  grid-template-columns: minmax(8rem, 13rem) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--asb-space-4);
+  row-gap: var(--asb-space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.asb-software-task,
-.asb-software-details,
-.asb-software-detail-section {
+.asb-software-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   gap: var(--asb-space-3);
   min-width: 0;
 }
 
-.asb-software-task {
-  padding: var(--asb-space-4);
-  background: var(--asb-content-muted);
-  border-radius: var(--asb-radius-medium);
+.asb-software-others {
+  display: grid;
+  gap: var(--asb-space-2);
+  min-width: 0;
 }
 
-.asb-software-heading,
+.asb-software-others > .asb-group-title {
+  color: var(--asb-text);
+  font: var(--asb-text-section);
+}
+
+/* The installation's device; the client tone is the accent inside the metal. */
+.asb-software-art {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+/* Only a featured card names grid areas; a compact card stacks its blocks. */
+.asb-software-card[data-featured] .asb-software-art {
+  grid-area: art;
+}
+
+.asb-software-card .asb-gateway-device {
+  inline-size: 100%;
+  max-inline-size: 8.5rem;
+  color: var(--asb-tool-tone);
+}
+
+.asb-software-card[data-featured] .asb-gateway-device {
+  max-inline-size: 13rem;
+}
+
+/* The identity block is the device beside the name. A featured card opens the
+ * block (display: contents) so the device spans its own column. */
+.asb-software-ident {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  column-gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-software-card[data-featured] .asb-software-ident {
+  display: contents;
+}
+
+.asb-software-card[data-featured] .asb-software-titles {
+  grid-area: ident;
+}
+
+.asb-software-titles {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--asb-space-1);
+  min-width: 0;
+}
+
+.asb-software-name {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 650;
+}
+
+.asb-software-card[data-featured] .asb-software-name {
+  font: var(--asb-text-section);
+}
+
+.asb-software-meta {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  overflow-wrap: anywhere;
+}
+
+.asb-software-card[data-featured] > .asb-tool-rail {
+  grid-area: rail;
+}
+
+/* A compact card's rail is as short as its readings: one reading sits on a
+ * single line, and no action row follows that needs the station height. */
+.asb-software-card:not([data-featured]) .asb-tool-rail .asb-fact-row dd {
+  min-height: 0;
+}
+
+.asb-software-card:not([data-featured]) .asb-tool-rail:not(:has(.asb-tool-dot[data-link])) .asb-fact-row.is-inline > div {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--asb-space-2);
+  padding-top: 0;
+}
+
+.asb-software-card:not([data-featured]) .asb-tool-rail:not(:has(.asb-tool-dot[data-link])) .asb-tool-dot {
+  display: none;
+}
+
+.asb-software-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+}
+
+.asb-software-card[data-featured] > .asb-software-foot {
+  grid-area: foot;
+}
+
 .asb-software-actions {
   display: flex;
   align-items: center;
@@ -26,62 +137,97 @@
   gap: var(--asb-space-2);
 }
 
-.asb-software-heading time {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-}
-
-.asb-software-table p,
-.asb-software-task p,
-.asb-software-details p {
-  margin: 0;
-}
-
-.asb-software-table code,
-.asb-software-task code {
-  font: var(--asb-text-code);
-  overflow-wrap: anywhere;
-}
-
-.asb-software-table {
-  min-width: 52rem;
-}
-
-.asb-software-table > tbody > tr:not(.asb-table-expansion-row) > td {
-  vertical-align: middle;
+.asb-software-actions > .asb-btn {
   white-space: nowrap;
 }
 
-.asb-software-table .asb-software-actions {
-  min-width: max-content;
-  flex-wrap: nowrap;
+.asb-software-card[data-featured] > .asb-collapsible {
+  grid-area: details;
 }
 
-.asb-software-table .asb-software-actions > .asb-btn {
-  white-space: nowrap;
-}
-
-.asb-software-table .asb-table-expansion-row > td {
-  padding: 0;
-}
-
-.asb-software-table .asb-table-expansion-row:has(> td:empty) {
-  display: none;
-}
-
-.asb-software-table .asb-software-details {
-  padding: var(--asb-space-3);
+.asb-software-card .asb-software-details {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
 }
 
 .asb-software-detail-columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   gap: var(--asb-space-4);
   min-width: 0;
 }
 
 .asb-software-detail-section {
+  display: grid;
   align-content: start;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-software-details > .asb-btn {
+  justify-self: start;
+}
+
+/* Loading placeholders reserve the featured card's footprint. */
+.asb-software-skeleton {
+  display: grid;
+  grid-template-columns: minmax(8rem, 13rem) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--asb-space-4);
+}
+
+.asb-software-skeleton > .asb-skeleton:first-child {
+  aspect-ratio: 160 / 116;
+}
+
+.asb-software-skeleton-lines {
+  display: grid;
+  gap: var(--asb-space-2);
+}
+
+.asb-software-skeleton-lines > .asb-skeleton {
+  height: var(--asb-space-4);
+}
+
+.asb-software-skeleton-lines > .asb-skeleton:first-child {
+  height: var(--asb-space-5);
+}
+
+.asb-software-skeleton-lines > .asb-skeleton:last-child {
+  width: 55%;
+}
+
+.asb-software-empty {
+  grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+  align-items: center;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-software-empty > .asb-gateway-device {
+  inline-size: min(100%, 10rem);
+  color: var(--asb-tool-tone);
+}
+
+.asb-software-empty p {
+  margin: 0 0 var(--asb-space-2);
+}
+
+/* Discovery diagnostics and the extra scan location close the module. */
+.asb-software-foot-module {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+}
+
+.asb-software-foot-module > .asb-collapsible-section {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 
 .asb-software-issues {
@@ -91,7 +237,66 @@
   overflow-wrap: anywhere;
 }
 
-.asb-software-task > .asb-btn,
-.asb-software-details > .asb-btn {
+/* One update operation as a card: the phase rail shows the real phase only. */
+.asb-software-task {
+  border-radius: var(--asb-radius-medium);
+}
+
+.asb-software-task-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+}
+
+.asb-software-task-head > strong {
+  font: var(--asb-text-body);
+  font-weight: 650;
+}
+
+.asb-software-task-head > time {
+  margin-inline-start: auto;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-software-task > .asb-btn {
   justify-self: start;
+}
+
+@container client-tools (max-width: 36rem) {
+  .asb-software-card[data-featured] {
+    grid-template-areas:
+      "art"
+      "ident"
+      "rail"
+      "foot"
+      "details";
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .asb-software-card[data-featured] .asb-software-art {
+    inline-size: 100%;
+  }
+
+  .asb-software-card[data-featured] .asb-gateway-device {
+    max-inline-size: 10rem;
+  }
+
+  .asb-software-skeleton {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asb-software-skeleton > .asb-skeleton:first-child {
+    inline-size: min(100%, 10rem);
+    justify-self: center;
+  }
+}
+
+@container client-tools (max-width: 28rem) {
+  .asb-software-empty {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
 }

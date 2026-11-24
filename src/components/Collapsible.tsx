@@ -122,16 +122,19 @@ interface CollapsibleTriggerProps {
   label: ReactNode;
   value?: ReactNode;
   size?: "standard" | "compact";
+  /** Blocks the trigger while a caller's operation is running. */
+  disabled?: boolean;
   className?: string;
 }
 
 export function CollapsibleTrigger({
-  open, onOpenChange, contentId, label, value, size = "compact", className,
+  open, onOpenChange, contentId, label, value, size = "compact", disabled, className,
 }: CollapsibleTriggerProps) {
   return (
     <Button
       variant="ghost"
       size={size}
+      disabled={disabled}
       className={["asb-collapsible-trigger", className].filter(Boolean).join(" ")}
       aria-expanded={open}
       aria-controls={open ? contentId : undefined}

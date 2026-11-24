@@ -1,36 +1,28 @@
-/* Shared skeleton for the one client-owned feature rendered in each tab.
- * The page header and the client tabs stay the only heading pair, so the
- * module identifies itself with a quiet eyebrow bar. Both tabs share the
- * same status-first row rhythm without turning either workflow into a
- * nested card. */
-.asb-client-management-module,
-.asb-client-management-module-content,
-.asb-client-management-group {
+/* Client tools page. The selected client's tone drives the stage wash, the
+ * device accents and the selected surfaces; state colors come from the shared
+ * status roles and always travel with their status text. */
+.asb-client-management-page {
+  --asb-tool-tone: var(--asb-action);
+  container: client-tools / inline-size;
+}
+
+.asb-client-management-page[data-client="claude"] {
+  --asb-tool-tone: var(--asb-claude);
+}
+
+.asb-client-management-content {
   display: grid;
-  gap: var(--asb-space-3);
+  gap: var(--asb-space-6);
   min-width: 0;
 }
 
-/* Groups are the module's major sections: the content gap plus each group's
-   own padding-top keeps between-group whitespace at twice the in-group
-   rhythm. */
-.asb-client-management-module-content {
+.asb-client-management-module {
+  display: grid;
   gap: var(--asb-space-4);
+  min-width: 0;
 }
 
-/* The module owns its spacing through the grid gap rather than stacking
- * default margins with another layout gap. */
-.asb-client-management-module > .asb-scope-note,
-.asb-client-management-group > .asb-scope-note,
-.asb-client-management-group > .asb-warn-text,
-.asb-client-management-module-content > .asb-warn-text,
-.asb-client-management-group > p,
-.asb-client-management-group > ul {
-  margin: 0;
-}
-
-/* Eyebrow bar: the module title reads as a quiet label beside the icon
- * refresh action, never as a second module header. */
+/* Module title row: the section title with its icon refresh action. */
 .asb-client-management-bar {
   display: flex;
   align-items: center;
@@ -38,93 +30,349 @@
   gap: var(--asb-space-2);
 }
 
-.asb-client-management-eyebrow {
+.asb-client-management-module > .asb-field-error,
+.asb-client-management-module > .asb-warn-text,
+.asb-client-management-module > .asb-scope-note {
   margin: 0;
-  font: var(--asb-text-label);
-  font-weight: 600;
-  color: var(--asb-text-muted);
 }
 
-/* File paths and other verbatim values keep the code voice. */
-.asb-client-management-group code {
+.asb-client-management-module code {
   color: var(--asb-text);
   font: var(--asb-text-code);
   overflow-wrap: anywhere;
 }
 
-/* Loading placeholders reserve the module's row footprint. */
-.asb-client-management-skeleton {
+/* The stage seats the page's devices on a low-contrast wash in the client's
+ * tone — the gateway overview's listener recipe. */
+.asb-tool-stage {
   display: grid;
-  gap: var(--asb-space-2);
+  gap: var(--asb-space-4);
+  min-width: 0;
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: radial-gradient(ellipse at top,
+    color-mix(in srgb, var(--asb-tool-tone) 8%, var(--asb-content-muted)), var(--asb-content-muted) 72%);
 }
 
-.asb-client-management-skeleton > .asb-skeleton {
-  height: var(--asb-touch-target);
+.asb-tool-card {
+  --asb-tool-state: var(--asb-text-muted);
+  display: grid;
+  align-content: start;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-group);
+  background: var(--asb-content);
+  box-shadow: var(--asb-inset-highlight);
 }
 
-/* A divider is only used when a workflow reveals a locally confirmable step
- * or an independent client marker; it is not a second work surface. */
-.asb-client-management-group {
-  padding-top: var(--asb-space-3);
-}
+.asb-tool-card[data-tone="update"] { --asb-tool-state: var(--asb-action); }
+.asb-tool-card[data-tone="current"] { --asb-tool-state: var(--asb-safe); }
+.asb-tool-card[data-tone="warning"] { --asb-tool-state: var(--asb-warning); }
 
-/* A marker row leads with its state pill; the title rides beside it and the
- * target file stays one step quieter. */
-.asb-client-management-marker-head {
+.asb-tool-status {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--asb-space-2);
+  margin: 0;
+  color: color-mix(in srgb, var(--asb-tool-state) 72%, var(--asb-text));
+  font: var(--asb-text-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.asb-client-management-marker-meta {
-  font: var(--asb-text-caption);
+.asb-tool-lamp {
+  flex: none;
+  width: var(--asb-space-1);
+  height: var(--asb-space-1);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-tool-state);
+}
+
+/* —— Rail: readings or phases as stations ——
+ * A rail is a FactList whose pairs sit on one row; each dot and the link to
+ * the next station are drawn in the padding above the pair. */
+.asb-tool-rail {
+  --asb-tool-track: var(--asb-text-muted);
+  min-width: 0;
+}
+
+.asb-tool-rail:has(.asb-tool-dot[data-link="upgrade"]) {
+  --asb-tool-track: var(--asb-action);
+}
+
+.asb-tool-rail > .asb-fact-row.is-inline {
+  display: grid;
+  grid-template-columns: repeat(var(--asb-track-stations), minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-tool-rail > .asb-fact-row.is-inline > div {
+  position: relative;
+  display: grid;
+  gap: var(--asb-space-hairline);
+  min-width: 0;
+  padding-top: 16px;
+}
+
+/* The link runs from this station's dot to the next one. */
+.asb-tool-rail > .asb-fact-row.is-inline > div:not(:last-child)::after {
+  position: absolute;
+  top: 4px;
+  right: calc(-1 * var(--asb-space-2) + 1px);
+  left: 11px;
+  border-top: 2px solid var(--asb-hairline-strong);
+  content: "";
+}
+
+.asb-tool-rail > .asb-fact-row.is-inline > div:has(.asb-tool-dot[data-link="upgrade"])::after {
+  border-top-color: var(--asb-action);
+}
+
+.asb-tool-rail > .asb-fact-row.is-inline > div:has(.asb-tool-dot[data-link="await"])::after {
+  border-top-style: dashed;
+}
+
+.asb-tool-rail > .asb-fact-row.is-inline > div:has(.asb-tool-dot[data-link="done"])::after {
+  border-top-color: var(--asb-safe);
+}
+
+.asb-tool-rail > .asb-fact-row.is-inline > div:has(.asb-tool-dot[data-link="upgrade"])::before {
+  position: absolute;
+  top: 1.5px;
+  right: calc(-1 * var(--asb-space-2) + 3px);
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid var(--asb-action);
+  border-right: 2px solid var(--asb-action);
+  content: "";
+  rotate: 45deg;
+}
+
+.asb-tool-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--asb-tool-track);
+  border-radius: 50%;
+  background: var(--asb-content);
+}
+
+/* A reading is taken at the first station, so its dot is filled. */
+.asb-tool-rail[data-reading] > .asb-fact-row.is-inline > div:first-child .asb-tool-dot[data-state="known"] {
+  background: var(--asb-tool-track);
+}
+
+.asb-tool-dot[data-state="unknown"],
+.asb-tool-dot[data-state="pending"] {
+  border-color: var(--asb-hairline-strong);
+  border-style: dashed;
+  background: transparent;
+}
+
+.asb-tool-dot[data-state="done"] {
+  border-color: var(--asb-safe);
+  background: var(--asb-safe);
+}
+
+.asb-tool-dot[data-state="current"] {
+  border-color: var(--asb-action);
+}
+
+.asb-tool-dot[data-state="failed"] {
+  border-color: var(--asb-danger);
+  background: var(--asb-danger);
+}
+
+.asb-tool-dot[data-state="attention"] {
+  border-color: var(--asb-warning);
+  background: var(--asb-warning);
+}
+
+.asb-tool-dot[data-state="cancelled"] {
+  border-color: var(--asb-text-muted);
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .asb-tool-dot[data-state="current"] {
+    animation: asb-tool-step-pulse var(--asb-motion-ambient) var(--asb-easing) infinite;
+  }
+}
+
+@keyframes asb-tool-step-pulse {
+  from { opacity: 1; }
+  to { opacity: .45; }
+}
+
+.asb-tool-rail .asb-fact-row dd {
+  display: flex;
+  align-items: center;
+  min-height: var(--asb-control-height-compact);
+  font: var(--asb-text-code);
+  font-weight: 600;
+}
+
+.asb-tool-rail[data-emphasis] > .asb-fact-row.is-inline > div:first-child dd {
+  font: var(--asb-text-instrument);
+}
+
+.asb-tool-rail .asb-fact-row dd:empty {
+  display: none;
+}
+
+/* —— Slot strip: the four things a scenario holds —— */
+.asb-slot-strip > .asb-fact-row.is-inline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-slot-strip > .asb-fact-row.is-inline > div {
+  display: grid;
+  align-content: start;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-slot-strip > .asb-fact-row.is-inline > div:has(.asb-slot-empty) {
+  border-style: dashed;
+  background: transparent;
+}
+
+.asb-slot-strip .asb-fact-row dt {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  color: color-mix(in srgb, var(--asb-tool-tone) 72%, var(--asb-text));
+  font-weight: 600;
+}
+
+.asb-slot-strip .asb-fact-row dt:has(+ dd .asb-slot-empty) {
   color: var(--asb-text-muted);
 }
 
-/* The row-local confirmable step: preview and confirmation render inside the
- * marker row that triggered them, on a quiet inset surface. */
-.asb-client-management-preview {
+/* The glyph rides inside a sized span: a bare svg class cannot be sized. */
+.asb-slot-glyph {
+  display: flex;
+  flex: none;
+}
+
+.asb-slot-glyph svg {
+  width: var(--asb-icon-size-xs);
+  height: var(--asb-icon-size-xs);
+}
+
+.asb-slot-strip .asb-fact-row dd {
+  display: flex;
+  align-items: center;
+  min-height: var(--asb-control-height-compact);
+  font-weight: 600;
+}
+
+.asb-slot-strip .asb-fact-row dd:has(.asb-slot-empty) {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+/* —— Work scenarios —— */
+.asb-plan-stage-title,
+.asb-plan-section > .asb-group-title {
+  color: var(--asb-text);
+  font: var(--asb-text-section);
+}
+
+.asb-plan-section {
   display: grid;
   gap: var(--asb-space-2);
-  padding: var(--asb-space-2);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
+  min-width: 0;
 }
 
-.asb-client-management-preview > p {
-  margin: 0;
-}
-
-/* Saved-scenario ledger: one selectable row per scenario, the same
- * status-first rhythm as the marker rows. The clipped native radio keeps the
- * keyboard and screen-reader contract; the row surface carries the visible
- * selection. */
-.asb-client-management-ledger {
+/* Reserves the stage's footprint until the scenarios are read. */
+.asb-plan-skeleton {
   display: grid;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-3);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
 }
 
-.asb-client-management-option {
+.asb-plan-skeleton-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-plan-skeleton-slots > .asb-skeleton {
+  height: var(--asb-space-6);
+}
+
+.asb-plan-skeleton > .asb-skeleton {
+  height: var(--asb-space-5);
+  width: 60%;
+}
+
+.asb-plan-save {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-plan-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-plan-empty {
+  margin: 0;
+  padding: var(--asb-space-4);
+  border: 1px dashed var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-medium);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+/* One selectable card per saved scenario. The clipped native radio keeps the
+ * keyboard and screen-reader contract; the card surface carries the visible
+ * selection. */
+.asb-plan-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-content: start;
   gap: var(--asb-space-2);
-  padding: var(--asb-space-1) var(--asb-space-2);
-  border-radius: var(--asb-radius);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-medium);
+  background: var(--asb-content);
+  box-shadow: var(--asb-inset-highlight);
   cursor: pointer;
+  transition: border-color var(--asb-motion-press) var(--asb-easing),
+    background-color var(--asb-motion-press) var(--asb-easing);
 }
 
-.asb-client-management-option:hover {
-  background: var(--asb-content-muted);
+.asb-plan-card:hover {
+  border-color: var(--asb-hairline-strong);
 }
 
-.asb-client-management-option.is-active {
-  background: var(--asb-row-selected);
+.asb-plan-card.is-selected {
+  border-color: var(--asb-tool-tone);
+  background: color-mix(in srgb, var(--asb-tool-tone) 7%, var(--asb-content));
 }
 
-.asb-client-management-option input {
+.asb-plan-card input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -134,64 +382,200 @@
   white-space: nowrap;
 }
 
-.asb-client-management-option:has(input:focus-visible) {
+.asb-plan-card:has(input:focus-visible) {
   outline: 2px solid var(--asb-focus-ring);
   outline-offset: calc(-1 * var(--asb-space-hairline));
 }
 
-.asb-client-management-option:has(input:disabled) {
+.asb-plan-card:has(input:disabled) {
   cursor: default;
 }
 
-.asb-client-management-option-text {
-  display: grid;
-  gap: var(--asb-space-hairline);
+.asb-plan-card-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--asb-space-1) var(--asb-space-2);
   min-width: 0;
+  padding-inline-end: var(--asb-space-3);
 }
 
-.asb-client-management-option-name {
-  overflow-wrap: anywhere;
+.asb-plan-card-name {
+  color: var(--asb-text);
   font: var(--asb-text-body);
-  font-weight: 600;
-}
-
-.asb-client-management-option-meta {
+  font-weight: 650;
   overflow-wrap: anywhere;
-  font: var(--asb-text-caption);
-  color: var(--asb-text-muted);
 }
 
-/* Record maintenance is separate from the restore/preview action. */
-.asb-project-plan-action-grid {
-  display: grid;
+/* Inside a card the slots are quiet fills, not a second frame. */
+.asb-plan-card .asb-slot-strip > .asb-fact-row.is-inline {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--asb-space-2);
+  gap: var(--asb-space-1);
+  margin-top: var(--asb-space-1);
 }
 
-.asb-project-plan-action-grid > .asb-btn {
-  width: 100%;
+.asb-plan-card .asb-slot-strip > .asb-fact-row.is-inline > div {
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 0;
+  background: var(--asb-content-muted);
 }
 
-.asb-project-plan-delete-confirmation {
+.asb-plan-card .asb-slot-strip > .asb-fact-row.is-inline > div:has(.asb-slot-empty) {
+  background: transparent;
+}
+
+.asb-plan-card .asb-slot-strip .asb-fact-row dd {
+  min-height: 0;
+  font: var(--asb-text-label);
+}
+
+/* The actions of the selected scenario: one panel that appears with the
+ * selection instead of a standing stack of groups. */
+.asb-plan-panel {
   display: grid;
-  gap: var(--asb-space-2);
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: var(--asb-content-muted);
 }
 
-.asb-project-plan-delete-confirmation > .asb-warn-text {
+.asb-plan-panel > .asb-scope-note,
+.asb-plan-panel > .asb-warn-text,
+.asb-plan-confirm > .asb-warn-text {
   margin: 0;
 }
 
-@media (max-width: 560px) {
-  .asb-project-plan-action-grid {
+.asb-plan-panel-head,
+.asb-plan-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+}
+
+.asb-plan-panel-head > .asb-field {
+  flex: 0 1 18rem;
+  min-width: 0;
+}
+
+/* The destructive action leaves the safe rail: spacing first, then the shared
+ * hairline that the danger-text variant draws before itself. */
+.asb-plan-actions > .asb-btn-danger-text {
+  margin-inline-start: auto;
+}
+
+.asb-plan-confirm {
+  display: grid;
+  gap: var(--asb-space-2);
+}
+
+.asb-plan-steps {
+  display: grid;
+  gap: var(--asb-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: var(--asb-text-body);
+}
+
+@container client-tools (max-width: 36rem) {
+  .asb-slot-strip > .asb-fact-row.is-inline,
+  .asb-plan-skeleton-slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* —— Claude client integration: one marker, one card —— */
+.asb-marker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-marker-skeleton {
+  height: 11rem;
+  border-radius: var(--asb-radius-group);
+}
+
+/* A marker whose preview is open takes the full row: the change table needs
+ * the width. */
+.asb-marker-card.is-previewing {
+  grid-column: 1 / -1;
+}
+
+.asb-marker-head {
+  display: grid;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--asb-space-3);
+}
+
+.asb-marker-art {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  color: var(--asb-tool-tone);
+}
+
+/* The target file does not exist yet: the slot is only outlined. */
+.asb-marker-art[data-state="pending"] {
+  opacity: .74;
+}
+
+.asb-marker-art[data-state="pending"] .asb-marker-slot {
+  stroke-dasharray: 2.5 2.5;
+}
+
+.asb-marker-titles {
+  display: grid;
+  justify-items: start;
+  gap: var(--asb-space-1);
+  min-width: 0;
+}
+
+.asb-marker-titles > .asb-group-title {
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 650;
+}
+
+.asb-marker-note,
+.asb-marker-meta {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
+.asb-marker-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-marker-preview {
+  display: grid;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-marker-preview > p {
+  margin: 0;
+}
+
+@container client-tools (max-width: 36rem) {
+  .asb-marker-head {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .asb-project-plan-delete-confirmation .asb-form-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .asb-project-plan-delete-confirmation .asb-btn {
-    width: 100%;
+  .asb-marker-art {
+    max-inline-size: 8.5rem;
   }
 }

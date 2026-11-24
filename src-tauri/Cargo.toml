@@ -67,7 +67,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 rusqlite = { version = "0.32", features = ["bundled", "backup", "hooks", "limits"], default-features = false }
 rquickjs = "0.12.2"
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
 semver = "1"
 thiserror = { workspace = true }
 sha2 = "0.10"

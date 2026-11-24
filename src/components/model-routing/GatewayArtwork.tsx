@@ -11,7 +11,8 @@ function paint(id: string, layer: string) {
   return `url(#${id}-${layer})`;
 }
 
-function ChassisPaints({ id }: { id: string }) {
+/** The device material palette; the backup archive device paints with it too. */
+export function ChassisPaints({ id }: { id: string }) {
   return <defs>
     <radialGradient id={`${id}-shadow`}>
       <stop stopColor="#263957" stopOpacity=".48" />

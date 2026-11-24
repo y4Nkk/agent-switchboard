@@ -1,7 +1,10 @@
-use super::{SkillRepository, SkillRepositoryFailure};
+use std::time::Instant;
+
+use super::progress::{CatalogScanMonitor, RepositoryState};
+use super::SkillRepository;
 use crate::extensions::sources::{
-    resolve_github_source, HttpFetch, SkillCandidate, SourceError, MAX_SOURCE_BYTES,
-    MAX_SOURCE_CANDIDATES,
+    http_fetch_with_progress, resolve_github_source_with_requests, SkillCandidate, SourceError,
+    MAX_SOURCE_BYTES, MAX_SOURCE_CANDIDATES,
 };
 
 #[derive(Debug)]
@@ -10,19 +13,25 @@ pub struct RepositoryScan {
     pub candidates: Vec<SkillCandidate>,
 }
 
-#[derive(Debug, Default)]
-pub struct CatalogScan {
-    pub repositories: Vec<RepositoryScan>,
-    pub failures: Vec<SkillRepositoryFailure>,
-}
-
 /// Each enabled repository is pinned independently. A failed source does not
 /// discard other sources, and aggregate limits also bound a many-repo scan.
-pub fn scan_repositories(repositories: &[SkillRepository], fetch: HttpFetch) -> CatalogScan {
-    let mut result = CatalogScan::default();
+pub(crate) fn scan_repositories(
+    repositories: &[SkillRepository],
+    deadline: Instant,
+    monitor: &CatalogScanMonitor,
+) -> Vec<RepositoryScan> {
+    let mut result = Vec::new();
     let (mut count, mut bytes) = (0usize, 0u64);
-    for repo in repositories.iter().filter(|repo| repo.enabled) {
-        let scanned = resolve_github_source(&repo.repo, &repo.subpath, repo.ref_name.as_deref(), fetch)
+    for (index, repo) in repositories.iter().enumerate() {
+        monitor.set_state(index, RepositoryState::Running);
+        let fetch = |step, url: &str| {
+            let result = http_fetch_with_progress(url, Some(deadline), &|transfer| {
+                monitor.update_request(index, step, transfer);
+            });
+            monitor.finish_request(index, step, result.is_ok());
+            result
+        };
+        let scanned = resolve_github_source_with_requests(&repo.repo, &repo.subpath, repo.ref_name.as_deref(), fetch)
             .and_then(|candidates| {
                 let source_bytes: u64 = candidates.iter().flat_map(|item| &item.entries)
                     .map(|entry| entry.size()).sum();
@@ -36,14 +45,12 @@ pub fn scan_repositories(repositories: &[SkillRepository], fetch: HttpFetch) -> 
                 Ok(candidates)
             });
         match scanned {
-            Ok(candidates) => result.repositories.push(RepositoryScan {
-                repository: repo.clone(),
-                candidates,
-            }),
-            Err(error) => result.failures.push(SkillRepositoryFailure {
-                repository_id: repo.id.clone(),
-                repo: repo.repo.clone(),
-                message: error.to_string(),
+            Ok(candidates) => {
+                monitor.set_state(index, RepositoryState::Complete { candidate_count: candidates.len() });
+                result.push(RepositoryScan { repository: repo.clone(), candidates });
+            }
+            Err(error) => monitor.set_state(index, RepositoryState::Failed {
+                message: asb_core::adapter::scrub_message(error.to_string()),
             }),
         }
     }

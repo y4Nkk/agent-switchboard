@@ -9,6 +9,7 @@ pub(super) const CACHE_BUDGET_BYTES: u64 = 64 * 1024 * 1024;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StorageUsage {
     pub data_bytes: u64,
+    pub session_index_bytes: u64,
     pub backup_bytes: u64,
     pub history_bytes: u64,
     pub cache_bytes: u64,
@@ -32,7 +33,9 @@ pub(crate) fn usage(local: &LocalState, identifier: &str) -> Result<StorageUsage
     // configuration write history. Request ledger, probe records, and the
     // session preservation database belong to their own domains.
     let history_bytes = size(&root.join("configuration/history"))?;
-    Ok(StorageUsage { data_bytes: size(root)?, backup_bytes: size(&local.backup_dir())?, history_bytes,
+    Ok(StorageUsage { data_bytes: size(root)?,
+        session_index_bytes: crate::session_manager::read_index::storage_bytes(root)?,
+        backup_bytes: size(&local.backup_dir())?, history_bytes,
         cache_bytes: cache_bytes(identifier)?, cache_budget_bytes: CACHE_BUDGET_BYTES,
         cache_maintenance: cfg!(windows), cache_clearing: super::cache::is_clearing() })
 }

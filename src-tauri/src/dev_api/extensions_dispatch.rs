@@ -68,8 +68,13 @@ pub(super) async fn dispatch(
             argument(&request.args, "id")?,
         )),
         "scan_skill_repositories" => {
-            command!(commands::extensions::scan_skill_repositories(app.clone()))
+            command!(commands::extensions::scan_skill_repositories(
+                app.clone(), argument(&request.args, "scanId")?,
+            ))
         }
+        "read_skill_repository_scan" => command!(commands::extensions::read_skill_repository_scan(
+            argument(&request.args, "scanId")?,
+        )),
         "search_skill_directory" => command!(commands::extensions::search_skill_directory(
             argument(&request.args, "query")?,
         )),

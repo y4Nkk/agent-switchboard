@@ -203,12 +203,31 @@ pub fn resolve_github_source(
     ref_name: Option<&str>,
     fetch: HttpFetch,
 ) -> Result<Vec<SkillCandidate>, SourceError> {
+    resolve_github_source_with_requests(repo, subpath, ref_name, |_, url| fetch(url))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum GitHubRequest {
+    Commit,
+    Tree,
+    Archive,
+}
+
+pub(crate) fn resolve_github_source_with_requests(
+    repo: &str,
+    subpath: &str,
+    ref_name: Option<&str>,
+    fetch: impl Fn(GitHubRequest, &str) -> Result<(u16, Vec<u8>), String>,
+) -> Result<Vec<SkillCandidate>, SourceError> {
     let repo = repository(repo)?;
     let subpath = subpath.trim();
     validate_subpath(subpath)?;
     let ref_name = ref_name.map(str::trim).filter(|name| !name.is_empty());
-    let commit = resolve_github_commit(&repo, ref_name.unwrap_or("HEAD"), fetch)?;
-    let files = tree_files(&repo, &commit, subpath, fetch)?;
+    let commit = resolve_github_commit(&repo, ref_name.unwrap_or("HEAD"), &|url| {
+        fetch(GitHubRequest::Commit, url)
+    })?;
+    let files = tree_files(&repo, &commit, subpath, &|url| fetch(GitHubRequest::Tree, url))?;
     let roots: Vec<_> = files
         .keys()
         .filter_map(|path| {
@@ -232,7 +251,7 @@ pub fn resolve_github_source(
         }
         return Ok(Vec::new());
     }
-    let entries = download_entries(&repo, &commit, subpath, fetch)?;
+    let entries = download_entries(&repo, &commit, subpath, &|url| fetch(GitHubRequest::Archive, url))?;
     verify_tree_content(&files, &entries)?;
     let mut candidates = Vec::new();
     for root in roots {

@@ -3,7 +3,6 @@
  * 本模块只做类型化调用；真实写入由后端逐项交回各资源域所有者完成。
  */
 import { invoke, type LocalizedMessage } from "./client";
-import { tr } from "../i18n/current";
 
 /** 槽位语义：`null` = 从未拍过快照（应用时不动）；空数组/空串 = 拍到的就是空。 */
 export interface CodexProjectSlot {
@@ -108,26 +107,3 @@ export const applyCodexProjectPlan = (
   confirmWrite: boolean,
 ): Promise<CodexProjectApplyOutcome> =>
   invoke("apply_codex_project_plan", { planId, expectedRevision, confirmWrite });
-
-/** 项目方案槽位的一句话摘要；空槽位显示「未拍过」。 */
-export function describeCodexProjectSlot(
-  slot: CodexProjectSlot,
-  label: (id: string) => string,
-): string {
-  const parts: string[] = [];
-  if (slot.providers !== null) {
-    parts.push(tr("codex.plans.slotProvider",
-      { name: slot.providers ? label(slot.providers) : tr("codex.plans.noActiveProvider") }));
-  }
-  if (slot.mcp !== null) {
-    parts.push(tr("codex.plans.slotMcp", { count: slot.mcp.length }));
-  }
-  if (slot.skills !== null) {
-    parts.push(tr("codex.plans.slotSkill", { count: slot.skills.length }));
-  }
-  if (slot.prompts !== null) {
-    parts.push(tr("codex.plans.slotPrompt",
-      { name: slot.prompts ? label(slot.prompts) : tr("codex.plans.noActivePrompt") }));
-  }
-  return parts.length ? parts.join(" · ") : tr("codex.plans.slotEmpty");
-}

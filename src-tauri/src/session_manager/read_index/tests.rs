@@ -76,7 +76,34 @@ fn an_unknown_database_is_preserved_and_never_reinterpreted_as_an_empty_index() 
     drop(connection);
     let before = fs::read(&path).unwrap();
     assert!(ReadIndex::open(temporary.path()).is_err());
+    assert!(clear_cached_index(temporary.path()).is_err());
     assert_eq!(fs::read(path).unwrap(), before);
+}
+
+#[test]
+fn clears_the_closed_index_and_rebuilds_on_next_open() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path();
+    let index = ReadIndex::open(root).unwrap();
+    let preserved = layout::directory(root).join("claude.sqlite3");
+    fs::write(&preserved, b"session material").unwrap();
+    index.put("identity", "source", "current", &"cached").unwrap();
+    assert!(storage_bytes(root).unwrap() > fs::metadata(index_path(root)).unwrap().len());
+    assert!(clear_cached_index(root).is_err());
+    assert_eq!(index.get::<String>("identity", "source", "current").unwrap().as_deref(), Some("cached"));
+    drop(index);
+
+    let before = storage_bytes(root).unwrap();
+    assert!(before > 0);
+    assert_eq!(clear_cached_index(root).unwrap(), before);
+    assert_eq!(storage_bytes(root).unwrap(), 0);
+    assert_eq!(clear_cached_index(root).unwrap(), 0);
+    assert_eq!(fs::read(preserved).unwrap(), b"session material");
+
+    let rebuilt = ReadIndex::open(root).unwrap();
+    assert!(rebuilt.previous::<String>("identity", "source").unwrap().is_none());
+    rebuilt.put("identity", "source", "current", &"rebuilt").unwrap();
+    assert_eq!(rebuilt.get::<String>("identity", "source", "current").unwrap().as_deref(), Some("rebuilt"));
 }
 
 #[test]

@@ -21,13 +21,14 @@ const CLAUDE: &str = r#"{"resourceLogs":[{"scopeLogs":[{"logRecords":[{
         {"key":"cache_creation_tokens","value":{"intValue":"5"}},
         {"key":"cost_usd_micros","value":{"intValue":"123"}}
     ]}]}]}]}"#;
+// The derived speed requires exact floating-point parsing on readback.
 const CLAUDE_SPAN: &str = r#"{"resourceSpans":[{"scopeSpans":[{"spans":[{
     "name":"claude_code.llm_request","traceId":"1234567890abcdef1234567890abcdef",
     "spanId":"1234567890abcdef","startTimeUnixNano":"1700000000000000000",
-    "endTimeUnixNano":"1700000001000000000","attributes":[
+    "endTimeUnixNano":"1700000002345000000","attributes":[
         {"key":"model","value":{"stringValue":"sandbox-claude"}},
         {"key":"success","value":{"boolValue":true}},
-        {"key":"duration_ms","value":{"intValue":"1000"}},
+        {"key":"duration_ms","value":{"intValue":"2345"}},
         {"key":"output_tokens","value":{"intValue":"50"}}
     ]}]}]}]}"#;
 
@@ -54,7 +55,7 @@ fn both_client_http_routes_persist_filter_and_deduplicate_native_records() {
     assert_eq!(report.summary.records, 2);
     assert!(report.summary.mixed_measurements);
     for (app, model, rate) in [(AppKind::Codex, "sandbox-codex", None),
-        (AppKind::Claude, "sandbox-claude", Some(50.0))] {
+        (AppKind::Claude, "sandbox-claude", Some(50_000.0 / 2345.0))] {
         let mut selected = query(MeasurementScope::Generation);
         selected.app = Some(app);
         selected.model = Some(model.into());

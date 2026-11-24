@@ -26,12 +26,14 @@ pub use apply::{
     prepare_extension_restore,
 };
 pub use catalog::{
-    __cmd__list_skill_repositories, __cmd__remove_skill_repository, __cmd__resolve_directory_skill,
+    __cmd__list_skill_repositories, __cmd__read_skill_repository_scan, __cmd__remove_skill_repository,
+    __cmd__resolve_directory_skill,
     __cmd__save_skill_repository, __cmd__scan_skill_repositories, __cmd__search_skill_directory,
-    __tauri_command_name_list_skill_repositories, __tauri_command_name_remove_skill_repository,
+    __tauri_command_name_list_skill_repositories, __tauri_command_name_read_skill_repository_scan,
+    __tauri_command_name_remove_skill_repository,
     __tauri_command_name_resolve_directory_skill, __tauri_command_name_save_skill_repository,
     __tauri_command_name_scan_skill_repositories, __tauri_command_name_search_skill_directory,
-    list_skill_repositories, remove_skill_repository, resolve_directory_skill,
+    list_skill_repositories, read_skill_repository_scan, remove_skill_repository, resolve_directory_skill,
     save_skill_repository, scan_skill_repositories, search_skill_directory,
 };
 // The two catalog types only surface through the browser-development IPC

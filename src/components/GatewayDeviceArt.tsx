@@ -6,6 +6,7 @@ type DeviceKind = "client" | "hub" | "provider";
 function paint(id: string, layer: string) {
   return `url(#${id}-${layer})`;
 }
+export { paint as devicePaint };
 
 /** Device ports mark the visual endpoints for the live topology. */
 export function GatewayDeviceArt({ kind, connected = true }: { kind: DeviceKind; connected?: boolean }) {
@@ -31,7 +32,8 @@ export function GatewayDeviceArt({ kind, connected = true }: { kind: DeviceKind;
   );
 }
 
-function DevicePaints({ id }: { id: string }) {
+/** The topology device material; the client software devices paint with it too. */
+export function DevicePaints({ id }: { id: string }) {
   return <defs>
     <radialGradient id={`${id}-shadow`}>
       <stop stopColor="#263a57" stopOpacity=".32" />

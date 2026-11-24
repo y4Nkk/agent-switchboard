@@ -25,6 +25,7 @@
 @import "./base/preference-previews.css";
 @import "./base/settings-preview.css";
 @import "./base/settings-workspace.css";
+@import "./base/storage-settings.css";
 @import "./base/setting-input.css";
 @import "./base/client-management.css";
 @import "./base/client-software.css";

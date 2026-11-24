@@ -25,7 +25,7 @@ export function ClientManagementPage({ onChanged, active }: ClientManagementPage
   const contentId = "client-management-content";
 
   return (
-    <section className="asb-panel" aria-label={t("clientConfig.tools.title")}>
+    <section className="asb-panel asb-client-management-page" aria-label={t("clientConfig.tools.title")} data-client={client}>
       <ModuleHeader
         title={t("clientConfig.tools.title")}
         primary={
