@@ -168,7 +168,7 @@ function effectiveClaudeRoute(document: ProfileDocument, role: PurposeRole): Cla
 
 /** The purpose's own route; null while automatic, and always for the main model. */
 export function roleRoute(document: RouteDocument, role: RouteRole): PurposeRoute | null {
-  if (document.kind === "codex") return role === "subagent" ? document.draft.subagentRoute : null;
+  if (document.kind === "codex") return role === "subagent" ? document.draft.subagentRoute ?? null : null;
   return role === "main" ? null : claudeRoute(document, role);
 }
 
