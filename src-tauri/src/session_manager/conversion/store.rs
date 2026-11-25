@@ -25,6 +25,15 @@ impl Drop for Temporary { fn drop(&mut self) { let _ = fs::remove_file(&self.0);
 
 fn directory(root: &Path) -> PathBuf { layout::directory(root).join("converted") }
 
+pub(super) fn committed(root: &Path, key: &str) -> Result<Option<(Header, PathBuf)>, String> {
+    if key.len() != 64 || !key.bytes().all(|byte| byte.is_ascii_hexdigit()) { return Ok(None); }
+    let directory = directory(root);
+    if directory.is_symlink() { return Err("转换记录目录不能是符号链接".into()); }
+    let path = directory.join(format!("{key}.jsonl"));
+    if !path.try_exists().map_err(|error| error.to_string())? { return Ok(None); }
+    Ok(Some((header(&path)?, path)))
+}
+
 fn header(path: &Path) -> Result<Header, String> {
     if path.is_symlink() { return Err("转换记录不能是符号链接".into()); }
     let mut reader = BufReader::new(File::open(path).map_err(|error| error.to_string())?);
@@ -120,7 +129,7 @@ fn line(writer: &mut impl Write, value: &impl Serialize) -> Result<(), String> {
     writer.write_all(b"\n").map_err(|error| error.to_string())
 }
 
-pub(super) fn visit(
+pub(in crate::session_manager) fn visit(
     path: &Path,
     mut visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>,
 ) -> Result<Vec<String>, String> {

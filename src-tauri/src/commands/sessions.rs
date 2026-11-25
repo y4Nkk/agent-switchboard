@@ -148,6 +148,13 @@ pub async fn delete_session_bookmark(
     .await
 }
 
+#[tauri::command]
+pub async fn get_session_first_messages(app_handle: AppHandle, app: AppKind, session_id: String)
+    -> Result<Vec<session_manager::FirstMessage>, CommandError> {
+    let local = state(&app_handle)?;
+    blocking(move || session_manager::load_first_messages(local.root(), app, &session_id).map_err(session_content_error)).await
+}
+
 /// Loads one transcript after resolving its source from the approved session
 /// roots. No session file is created, modified, or deleted by this command.
 #[tauri::command]

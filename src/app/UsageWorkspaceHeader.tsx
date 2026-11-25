@@ -186,7 +186,7 @@ export function UsageWorkspaceHeader({ id, section, onSectionChange, consumption
       {t(resources.refreshing ? "usage.action.refreshing" : "usage.action.refresh")}
     </Button>;
     status = resources.read ? <span className="asb-resource-sampled-at">
-      {t("resources.sampledAt")}<Time iso={resources.read.sampledAt} precision="second" />
+      {t(resources.resampling ? "resources.resampling" : "resources.sampledAt")}<Time iso={resources.read.sampledAt} precision="second" />
     </span> : t("resources.noReadings");
   } else if (section === "radar") {
     actions = <RadarControls {...radar} />;

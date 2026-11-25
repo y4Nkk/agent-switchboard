@@ -1,6 +1,6 @@
 use super::*;
 
-fn register(root: &Path, result: Option<Result<SessionSearchPage, String>>) -> (String, Arc<SearchControl>) {
+fn register(root: &Path, result: Option<Result<SearchResult, String>>) -> (String, Arc<SearchControl>) {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed).to_string();
     let control = Arc::new(SearchControl::default());
     *control.touched.lock().unwrap() = Some(Instant::now());
@@ -42,12 +42,27 @@ fn cancellation_and_expired_read_lease_abort_processing() {
 fn terminal_result_is_consumed_once_and_failures_are_terminal_too() {
     let root = tempfile::tempdir().unwrap();
     let page = SessionSearchPage { results: vec![], total: 0, issues: vec![], projects: vec![], tags: vec![] };
-    let (id, _) = register(root.path(), Some(Ok(page)));
-    assert!(matches!(read(root.path(), &id).unwrap(), SearchTaskState::Completed { .. }));
+    let (id, _) = register(root.path(), Some(Ok(SearchResult::Library(page))));
+    let completed = serde_json::to_value(read(root.path(), &id).unwrap()).unwrap();
+    assert_eq!(completed["state"], "completed");
+    assert_eq!(completed["result"]["scope"], "library");
+    assert_eq!(completed["result"]["value"]["total"], 0);
     assert!(read(root.path(), &id).is_err());
     let (id, _) = register(root.path(), Some(Err("unreadable".into())));
     assert!(matches!(read(root.path(), &id).unwrap(), SearchTaskState::Failed { .. }));
     assert!(read(root.path(), &id).is_err());
+}
+
+#[test]
+fn only_accepts_explicit_search_scopes() {
+    let library = serde_json::json!({ "query":"test", "offset":0, "pinnedOnly":false, "archived":false });
+    assert!(serde_json::from_value::<SearchRequest>(library.clone()).is_err());
+    assert!(matches!(serde_json::from_value::<SearchRequest>(serde_json::json!({
+        "scope": "library", "value": library
+    })).unwrap(), SearchRequest::Library(_)));
+    assert!(matches!(serde_json::from_value::<SearchRequest>(serde_json::json!({
+        "scope": "transcript", "value": { "app":"codex", "sessionId":"one", "query":"test", "offset":0, "revision":null }
+    })).unwrap(), SearchRequest::Transcript(_)));
 }
 
 #[test]

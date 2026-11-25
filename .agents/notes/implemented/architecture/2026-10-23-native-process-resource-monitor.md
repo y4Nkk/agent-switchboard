@@ -32,6 +32,8 @@ Status: implemented
 
 界面线程只取得 WebView 关联的进程键，包含 PID 与当时的原生创建标识；阻塞采集再次比对身份和 WebView 映像。一个进程身份读取失败不丢弃已核实的其他界面进程。原生枚举与资源计数在阻塞池运行，不持有采样状态锁等待 UI 返回。
 
+两个窗口的关联请求同时等待，重新进入显示上次采样及其时间。[用量工作区的读取性能](2026-11-25-usage-workspace-read-performance.md)拥有打开计时与读取顺序。
+
 ### 身份与归属
 
 纯安装身份的文件布局、原生包和编辑器包证据由 `client_software/identity` 共享拥有；`resource_monitor/executables` 保留资源分组投影；更新占用检查只读候选映像名与可证实映像路径，不再复用用户范围与出生身份（见[更新占用守卫](../bug-fix/2026-11-09-update-occupancy-guard.md)）。边界见[客户端版本管理](../feature/2026-11-04-client-software-version-management.md)。该次提取未重跑自动化测试，历史验证结果不代表新增更新路径已验收。

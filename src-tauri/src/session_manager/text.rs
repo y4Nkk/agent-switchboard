@@ -1,27 +1,20 @@
+use std::collections::VecDeque;
+use std::ops::{ControlFlow, Range};
+
 pub(super) fn compact_chars(text: &str) -> impl Iterator<Item = char> + '_ {
     text.split_whitespace().enumerate().flat_map(|(index, word)| {
         (index > 0).then_some(' ').into_iter().chain(word.chars())
     })
 }
 
-pub(super) fn raw_offset(text: &str, compact_offset: usize) -> Option<usize> {
-    let mut compact = 0;
-    let mut started = false;
-    let mut gap = None;
-    for (raw, character) in text.chars().enumerate() {
-        if character.is_whitespace() {
-            if started && gap.is_none() { gap = Some(raw); }
-            continue;
-        }
-        if let Some(space) = gap.take() {
-            if compact == compact_offset { return Some(space); }
-            compact += 1;
-        }
-        if compact == compact_offset { return Some(raw); }
-        compact += 1;
-        started = true;
-    }
-    None
+pub(super) fn validate_query(text: &str) -> Result<(), String> {
+    if text.chars().count() > 4000 { return Err("搜索内容最多 4000 个字符".into()); }
+    Ok(())
+}
+
+pub(super) struct TextMatch {
+    pub compact_offset: usize,
+    pub range: Range<usize>,
 }
 
 pub(super) struct TextQuery {
@@ -50,24 +43,54 @@ impl TextQuery {
 
     pub(super) fn find(&self, text: &str) -> Option<usize> {
         if self.is_empty() { return Some(0); }
+        self.first_match(text, &|| Ok(())).ok().flatten().map(|found| found.compact_offset)
+    }
+
+    pub(super) fn first_match(&self, text: &str, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Option<TextMatch>, String> {
+        self.scan_matches(text, checkpoint, ControlFlow::Break)
+    }
+
+    pub(super) fn scan_matches(&self, text: &str, checkpoint: &dyn Fn() -> Result<(), String>,
+        mut visit: impl FnMut(TextMatch) -> ControlFlow<TextMatch>,
+    ) -> Result<Option<TextMatch>, String> {
+        if self.is_empty() { return Ok(None); }
         let mut matched = 0;
-        let mut positions = std::collections::VecDeque::with_capacity(self.pattern.len());
-        for (position, character) in compact_chars(text).enumerate() {
+        let mut positions = VecDeque::with_capacity(self.pattern.len());
+        let mut compact = 0;
+        let mut previous_space = true;
+        for (raw, original) in text.chars().enumerate() {
+            if raw % 4096 == 0 { checkpoint()?; }
+            let space = original.is_whitespace();
+            if space && previous_space { continue; }
+            previous_space = space;
+            let character = if space { ' ' } else { original };
             for lower in character.to_lowercase().map(fold_sigma) {
                 if positions.len() == self.pattern.len() { positions.pop_front(); }
-                positions.push_back(position);
+                positions.push_back((compact, raw));
                 while matched > 0 && lower != self.pattern[matched] {
                     matched = self.prefix[matched - 1];
                 }
                 if lower == self.pattern[matched] { matched += 1; }
-                if matched == self.pattern.len() { return positions.front().copied(); }
+                if matched == self.pattern.len() {
+                    let (compact_offset, start) = positions[0];
+                    if let ControlFlow::Break(found) = visit(TextMatch { compact_offset, range: start..raw + 1 }) {
+                        return Ok(Some(found));
+                    }
+                    matched = 0;
+                    break;
+                }
             }
+            compact += 1;
         }
-        None
+        Ok(None)
     }
 
     pub(super) fn excerpt(&self, text: &str) -> String {
-        let start = self.find(text).unwrap_or(0).saturating_sub(70);
+        self.excerpt_at(text, self.find(text).unwrap_or(0))
+    }
+
+    pub(super) fn excerpt_at(&self, text: &str, position: usize) -> String {
+        let start = position.saturating_sub(70);
         let length = self.pattern.len().saturating_add(140).max(220);
         let mut characters = compact_chars(text).skip(start);
         let excerpt: String = characters.by_ref().take(length).collect();
@@ -96,14 +119,16 @@ mod tests {
     }
 
     #[test]
-    fn maps_compact_match_positions_back_to_original_characters() {
+    fn visits_each_non_overlapping_match_with_original_character_ranges() {
         let text = "  😀\n\t  İ目标   tail ";
-        for (compact, raw) in [(0, 2), (1, 3), (2, 7), (3, 8), (4, 9), (5, 10), (6, 13)] {
-            assert_eq!(raw_offset(text, compact), Some(raw));
-        }
-        let found = TextQuery::new("İ目标").find(text).unwrap();
-        assert_eq!(text.chars().skip(raw_offset(text, found).unwrap()).take(3).collect::<String>(), "İ目标");
-        assert_eq!(raw_offset("  \n ", 0), None);
-        assert_eq!(raw_offset("x  ", 1), None);
+        let found = TextQuery::new("İ目标 tail").first_match(text, &|| Ok(())).unwrap().unwrap();
+        assert_eq!(found.compact_offset, 2);
+        assert_eq!(found.range, 7..17);
+        let mut ranges = Vec::new();
+        let _ = TextQuery::new("aa").scan_matches("😀AaA aa", &|| Ok(()), |found| {
+            ranges.push(found.range);
+            ControlFlow::Continue(())
+        }).unwrap();
+        assert_eq!(ranges, [1..3, 5..7]);
     }
 }

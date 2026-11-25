@@ -153,7 +153,7 @@ export const messages = {
   "backup.cloud.guide.dataApi.title": ["启用 Data API 并创建备份表", "Enable the Data API and create the backup table"],
   "backup.cloud.guide.dataApi.before": ["在 ", "In "],
   "backup.cloud.guide.dataApi.mid1": [" 保持 ", ", keep "],
-  "backup.cloud.guide.dataApi.mid2": [" 开启；再点击下方「显示初始化 SQL」，将全部 SQL 粘贴到 ", " enabled; then click “Show setup SQL” below and paste the entire SQL into a new query in "],
+  "backup.cloud.guide.dataApi.mid2": [" 开启；再点击下方「复制」，将全部 SQL 粘贴到 ", " enabled; then click “Copy” below and paste the entire SQL into a new query in "],
   "backup.cloud.guide.dataApi.after": [" 新查询中，并执行一次。", " and run it once."],
   "backup.cloud.guide.auth.title": ["创建项目 Auth 用户", "Create the project Auth user"],
   "backup.cloud.guide.auth.before": ["打开 ", "Open "],
@@ -161,9 +161,10 @@ export const messages = {
   "backup.cloud.guide.auth.mid2": ["，填写邮箱和新密码并保持 ", ", enter the email and a new password, and keep "],
   "backup.cloud.guide.auth.after": [" 勾选。可使用自己的 Supabase 登录邮箱；Dashboard 或 GitHub 的原有登录密码不能使用。", " checked. You can use your own Supabase sign-in email; the existing Dashboard or GitHub login password cannot be used."],
   "backup.cloud.guide.fill.title": ["填写并测试", "Fill in and test"],
-  "backup.cloud.guide.fill.body": ["在下方填写项目地址、Publishable key、项目 Auth 邮箱和新密码，然后点击「测试连接」。测试只验证登录和备份表读取权限；成功后会在当前窗口保留项目 Auth 密码，上传或恢复成功后才清空。", "Fill in the project URL, publishable key, project Auth email and a new password below, then click “Test connection”. The test only verifies sign-in and read access to the backup table; after it succeeds the project Auth password stays in this window and is only cleared once an upload or restore succeeds."],
+  "backup.cloud.guide.fill.body": ["关闭本指南后，在页面填写项目地址、Publishable key、项目 Auth 邮箱和新密码，然后点击「测试连接」。测试只验证登录和备份表读取权限；成功后会在当前窗口保留项目 Auth 密码，上传或恢复成功后才清空。", "After closing this guide, fill in the project URL, publishable key, project Auth email and a new password on the page, then click “Test connection”. The test only verifies sign-in and read access to the backup table; after it succeeds the project Auth password stays in this window and is only cleared once an upload or restore succeeds."],
   "backup.cloud.guide.save.title": ["保存并备份", "Save and back up"],
   "backup.cloud.guide.save.body": ["测试成功后点击「保存连接」。首次备份会加密完整供应商档案（含运行参数、API 格式和最大输出 token）、客户端设置和切换记录；备份密码至少 8 位，恢复需同一条密码，应用不保存它。", "After the test succeeds, click “Save connection”. The first backup encrypts the complete provider profiles (including run parameters, API format and max output tokens), client settings and switch records; the backup password needs at least 8 characters, restores must use the same password, and the app never stores it."],
+  "backup.cloud.setupSqlTitle": ["Supabase 初始化 SQL", "Supabase setup SQL"],
 
   // Cloud backup panel: forms and confirmations
   "backup.cloud.loadingAria": ["正在读取云端备份设置", "Reading cloud backup settings"],
@@ -175,13 +176,8 @@ export const messages = {
   "backup.cloud.projectUrl": ["Supabase 项目地址", "Supabase project URL"],
   "backup.cloud.authEmail": ["项目 Auth 登录邮箱", "Project Auth sign-in email"],
   "backup.cloud.authPassword": ["项目 Auth 登录密码", "Project Auth sign-in password"],
-  "backup.cloud.showSetupSql": ["显示初始化 SQL", "Show setup SQL"],
-  "backup.cloud.hideSetupSql": ["收起初始化 SQL", "Hide setup SQL"],
-  "backup.cloud.copySetupSql": ["复制初始化 SQL", "Copy setup SQL"],
   "backup.cloud.testConnection": ["测试连接", "Test connection"],
   "backup.cloud.saveConnection": ["保存连接", "Save connection"],
-  "backup.cloud.setupSqlLabel": ["在 Supabase SQL Editor 执行一次", "Run once in the Supabase SQL Editor"],
-  "backup.cloud.setupSqlAria": ["Supabase 初始化 SQL", "Supabase setup SQL"],
   "backup.cloud.backupOrRestore": ["备份或恢复", "Back up or restore"],
   "backup.cloud.backupPassword": ["备份密码（自行设置）", "Backup password (set your own)"],
   "backup.cloud.upload": ["备份到云端", "Back up to cloud"],
@@ -197,8 +193,6 @@ export const messages = {
 
   // Cloud backup toasts
   "backup.cloud.setupSqlError": ["无法读取初始化 SQL", "Could not read the setup SQL"],
-  "backup.cloud.setupSqlCopied": ["已复制初始化 SQL", "Setup SQL copied"],
-  "backup.cloud.setupSqlCopyFailed": ["无法复制初始化 SQL", "Could not copy the setup SQL"],
   "backup.cloud.savedToast": ["已保存云端备份连接", "Cloud backup connection saved"],
   "backup.cloud.uploadedToast": ["已上传加密云端备份", "Encrypted cloud backup uploaded"],
   "backup.cloud.uploadedDetail": ["包含 {count} 个供应商档案", "Includes {count} provider profiles"],

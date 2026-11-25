@@ -49,11 +49,10 @@ pub use copy::{load_copy_text, SessionCopySource};
 
 pub use bookmarks::{delete_bookmark, load_bookmark_content, save_bookmark, search_bookmarks,
     BookmarkPage, BookmarkSearchRequest, BookmarkSummary};
-pub use messages::{load_content, load_page, ContentPage, MessageContentRequest, MessagePage, MessagePageRequest};
+pub use messages::{load_content, load_first_messages, load_page, ContentPage, FirstMessage, MessageContentRequest, MessagePage, MessagePageRequest};
 pub use export::export_markdown;
-pub use search::{SessionSearchPage, SessionSearchRequest};
 #[cfg(test)]
-pub use search::search_sessions;
+pub use search::{search_sessions, SessionSearchPage, SessionSearchRequest};
 pub use organization::{update_session_organization, SessionOrganizationChange};
 
 use asb_core::contracts::AppKind;
@@ -264,8 +263,13 @@ fn remove_claude_source(
 }
 
 pub(crate) fn resolve_session(root: &Path, app: AppKind, session_id: &str) -> Result<SessionSource, String> {
+    resolve_session_observed(root, app, session_id, &|| Ok(()))
+}
+
+fn resolve_session_observed(root: &Path, app: AppKind, session_id: &str,
+    checkpoint: &dyn Fn() -> Result<(), String>) -> Result<SessionSource, String> {
     if !parser::valid_session_id(session_id) { return Err("会话 ID 无效".into()); }
-    let (sources, issues) = scan_filtered_sources(root, Some(app), Some(session_id))?;
+    let (sources, issues) = scan_filtered_sources_observed(root, Some(app), Some(session_id), checkpoint)?;
     locate(&sources, &issues, app, session_id).cloned()
 }
 

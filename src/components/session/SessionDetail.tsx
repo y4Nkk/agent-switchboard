@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Copy } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Copy, Search } from "lucide-react";
 import { ActionMenu } from "../ActionMenu";
 import { exportSessionMarkdown, resumeSession, type SessionMeta } from "../../api/client";
 import { useI18n, type MessageKey } from "../../i18n";
@@ -15,7 +15,8 @@ import { ScrollArea } from "../ScrollArea";
 import { copyText, sessionTitle } from "./session-content";
 import { SessionOrganizationEditor } from "./SessionOrganizationEditor";
 import type { SessionOrganization } from "./use-session-organization";
-import { SessionTranscript } from "./SessionTranscript";
+import { SessionTranscript, SessionTranscriptPreview } from "./SessionTranscript";
+import { SessionFind } from "./SessionFind";
 import type { SessionDetailState } from "./use-session-detail";
 import type { SessionBookmarks } from "./use-session-bookmarks";
 
@@ -92,13 +93,45 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
   const actions = useDetailActions(session);
   const [organizing, setOrganizing] = useState(false);
   const [informationOpen, setInformationOpen] = useState(false);
-  return <ScrollArea as="section" className="asb-session-detail" aria-label={t("sessions.detail.aria")}>
-    <header className="asb-session-detail-head">
+  const [findSelection, setFindSelection] = useState<number | null>(null);
+  const findId = useId();
+  const findInput = useRef<HTMLInputElement>(null);
+  const findButton = useRef<HTMLButtonElement>(null);
+  const { active, clearMatch } = detail;
+  const canFind = active && !!detail.page && !deleting;
+  const findOpen = active && findSelection === detail.selectionRevision;
+  const openFind = () => setFindSelection(detail.selectionRevision);
+  useEffect(() => {
+    if (active) return;
+    setFindSelection(null); clearMatch();
+  }, [active, clearMatch]);
+  useEffect(() => {
+    if (findOpen) findInput.current?.focus();
+  }, [findOpen]);
+  const closeFind = () => {
+    setFindSelection(null); clearMatch(); findButton.current?.focus();
+  };
+  return <ScrollArea as="section" className="asb-session-detail" aria-label={t("sessions.detail.aria")}
+    onKeyDown={(event) => {
+      if (!active || deleting || event.defaultPrevented || event.nativeEvent.isComposing || event.altKey || event.shiftKey
+        || (!event.ctrlKey && !event.metaKey) || event.key.toLowerCase() !== "f"
+        || !(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      event.preventDefault();
+      if (!canFind) return;
+      if (findOpen) { findInput.current?.focus(); findInput.current?.select(); }
+      else openFind();
+    }}>
+    <header className="asb-session-detail-head asb-session-conversation-head">
       <div className="asb-session-detail-title">
         <span className="asb-session-client"><ClientLogo app={session.app} className="asb-session-logo" />
           {clientFullName(session.app)}</span><h3 className="asb-section-title" title={sessionTitle(session)}>{sessionTitle(session)}</h3>
       </div>
       <div className="asb-session-actions">
+        <Button ref={findButton} variant="secondary" disabled={!canFind}
+          aria-expanded={findOpen} aria-controls={findOpen ? findId : undefined} aria-keyshortcuts="Control+F Meta+F"
+          onClick={() => findOpen ? closeFind() : openFind()}>
+          <Search size={16} aria-hidden="true" />{t("sessions.find.label")}
+        </Button>
         <Button variant="primary" disabled={actions.busy || deleting} onClick={() => void actions.run("resume")}>{t("sessions.resume.action")}</Button>
         <SessionMoreActions session={session} organization={organization}
           disabled={actions.busy || organization.busy || deleting || detail.busy}
@@ -120,9 +153,13 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
       disabled={deleting || detail.busy} onClose={() => setOrganizing(false)} />}
     {actions.status && <p className="asb-scope-note" role="status">{actions.status}</p>}
     {actions.error && <p className="asb-warn-text" role="alert">{actions.error}</p>}
-    {detail.busy && <p role="status">{t("sessions.transcript.loading.aria")}</p>}
+    {findOpen && <SessionFind id={findId} session={session} input={findInput} refreshRevision={detail.refreshRevision}
+      navigationFailed={detail.error !== null} onMatch={detail.revealMatch} onClear={clearMatch} onClose={closeFind}
+      onRetry={() => { clearMatch(); detail.setError(null); }} />}
+    {detail.busy && !detail.preview.length && <p role="status">{t("sessions.transcript.loading.aria")}</p>}
     {detail.error && <p className="asb-warn-text" role="alert">{detail.error}</p>}
-    {detail.page && <SessionTranscript key={`${session.app}:${session.sessionId}:${detail.page.offset}`}
+    {!detail.page && detail.preview.length > 0 && <SessionTranscriptPreview detail={detail} />}
+    {detail.page && <SessionTranscript key={`${detail.selectionRevision}:${detail.refreshRevision}:${detail.page.snapshot.revision}`}
       session={session} detail={detail} bookmarks={bookmarks} />}
   </ScrollArea>;
 }

@@ -80,7 +80,9 @@ fn a_failed_source_transaction_leaves_cursor_calls_and_buckets_unchanged() {
     let cursor: String = index.connection().query_row("SELECT cursor FROM usage_sources",[],|row|row.get(0)).unwrap();
     assert_eq!(cursor,original);
     assert_eq!(index.connection().query_row::<u64,_,_>("SELECT count(*) FROM usage_calls",[],|row|row.get(0)).unwrap(),1);
-    assert_eq!(buckets::read(index.connection(),"fixture").unwrap().iter().map(|bucket|bucket.tokens.total).sum::<u64>(),12);
+    let mut tokens = 0;
+    buckets::visit(index.connection(), "fixture", |bucket| { tokens += bucket.tokens.total; Ok(()) }).unwrap();
+    assert_eq!(tokens, 12);
 }
 
 #[test]

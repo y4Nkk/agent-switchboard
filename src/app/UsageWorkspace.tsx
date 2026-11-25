@@ -5,6 +5,7 @@ import { CUSTOM_PROBE_QUESTION_ID, type CodexProbeGradingVersion, type CodexProb
 import { ProviderQuotaOverview } from "../components/ProviderQuotaOverview";
 import { quotaProviders } from "../lib/quota-profiles";
 import { useProviderQuotaRefresh } from "../pages/use-provider-quota-refresh";
+import { useProviderQuotaRead } from "../pages/use-provider-quota-read";
 import { CodexOfficialResetPanel } from "../components/CodexOfficialResetPanel";
 import { CodexProbeHistory } from "../components/CodexProbeHistory";
 import { CodexProbePanel, type CodexProbeFormState } from "../components/CodexProbePanel";
@@ -21,6 +22,7 @@ import { useModelUsageReport } from "../pages/use-model-usage-report";
 import { useRequestUsage } from "../pages/use-request-usage";
 import { UsageWorkspaceHeader } from "./UsageWorkspaceHeader";
 import { useOnReturnToRoot } from "./PageRoot";
+import { useUsageOpenTiming } from "./usage-open-timing";
 import type { UsageSection } from "./navigation";
 
 function UsagePanel({ id, section, selected, active, children }: {
@@ -86,8 +88,17 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
   const quotaActive = visible && section === "quota";
   const quotaProfiles = useMemo(() => quotaProviders(claudeRecords, codexRecords), [claudeRecords, codexRecords]);
   const providerQuota = useProviderQuotaRefresh(quotaActive, quotaProfiles);
+  const quotaRead = useProviderQuotaRead(quotaActive, quotaProfiles);
   const officialReset = useCodexOfficialReset(quotaActive);
   const resetSignal = useCodexResetSignal(quotaActive);
+  const hasData: Record<UsageSection, boolean> = {
+    consumption: usage.read !== null,
+    requestPerformance: performance.report !== null,
+    quota: quotaRead.ready && (!officialReset.cacheLoading || !resetSignal.runway.cacheLoading || !resetSignal.hub.cacheLoading),
+    resources: resources.read !== null,
+    radar: probe.questions !== null && probe.synchronized,
+  };
+  useUsageOpenTiming(visible ? section : null, hasData[section]);
   return (
     <section className="asb-page-stack" aria-label={t("usage.workspace.aria")}>
       <div hidden={showHistory}>
@@ -107,13 +118,13 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
         </UsagePanel>
         <UsagePanel id={id} section="quota" selected={section} active={active}>
           {quotaActive && <div className="asb-page-stack">
-            <ProviderQuotaOverview profiles={quotaProfiles} />
+            <ProviderQuotaOverview profiles={quotaProfiles} quota={quotaRead} />
             <CodexOfficialResetPanel read={officialReset} />
             <CodexResetPanel read={resetSignal} />
           </div>}
         </UsagePanel>
         <UsagePanel id={id} section="radar" selected={section} active={active && !showHistory}>
-          {radarOpened && <CodexProbePanel probe={probe} form={form} active={radarActive && !showHistory} />}
+          {(section === "radar" || radarOpened) && <CodexProbePanel probe={probe} form={form} active={radarActive && !showHistory} />}
         </UsagePanel>
         <UsagePanel id={id} section="resources" selected={section} active={active}>
           {showResources && <ResourceUsagePage resources={resources} />}

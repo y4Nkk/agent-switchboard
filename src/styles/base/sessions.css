@@ -209,6 +209,27 @@
   gap: var(--asb-space-2);
 }
 
+.asb-session-conversation-head > .asb-session-actions { flex-wrap: wrap; }
+
+.asb-session-find {
+  display: grid;
+  gap: var(--asb-space-2);
+}
+
+.asb-session-find-controls,
+.asb-session-find-actions,
+.asb-session-find-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-session-find-input { flex: 1 1 12rem; min-width: 0; }
+.asb-session-find-input > input { width: 100%; }
+.asb-session-find-status { color: var(--asb-text-muted); font: var(--asb-text-label); }
+.asb-session-find p { margin: 0; }
+
 .asb-session-resume-fact {
   display: flex;
   align-items: center;
@@ -334,6 +355,13 @@
   padding-right: var(--asb-space-1);
 }
 
+.asb-session-message-batch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding-block-end: var(--asb-space-2);
+}
+
 /* Chat-bubble layout: the user reads on the right with the selected-row tint;
    every other role (assistant, system, tool) reads on the left on the plain
    content surface. Both sides share the same hairline bubble. */
@@ -445,4 +473,9 @@
   .asb-session-toc { order: -1; width: 100%; max-height: 8rem; padding-left: 0; flex: none; }
   .asb-session-toc-items > .asb-scroll-viewport { flex-direction: row; gap: var(--asb-space-1); }
   .asb-session-toc-items > .asb-scroll-viewport > .asb-btn { flex: 0 0 12rem; }
+}
+
+@container transcript (max-width: 29rem) {
+  .asb-session-conversation-head { grid-template-columns: minmax(0, 1fr); gap: var(--asb-space-2); }
+  .asb-session-conversation-head > .asb-session-actions { justify-content: flex-start; }
 }

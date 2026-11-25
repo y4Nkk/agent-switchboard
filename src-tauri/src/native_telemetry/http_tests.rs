@@ -1,5 +1,5 @@
 use super::*;
-use crate::native_telemetry::{tests::{logs, span, query}, MeasurementScope, RequestOutcome};
+use crate::native_telemetry::{tests::{logs, span, query, report as usage_report}, MeasurementScope, RequestOutcome};
 use serde_json::json;
 use std::io::{Cursor, Write};
 
@@ -51,7 +51,7 @@ fn both_client_http_routes_persist_filter_and_deduplicate_native_records() {
     }
     assert_eq!(status.lock().unwrap().accepted_records, 3);
     assert!(status.lock().unwrap().last_export_at_ms.is_some());
-    let report = crate::request_usage::read(temp.path(), query(MeasurementScope::Generation)).unwrap();
+    let report = usage_report(temp.path(), query(MeasurementScope::Generation));
     assert_eq!(report.summary.records, 2);
     assert!(report.summary.mixed_measurements);
     for (app, model, rate) in [(AppKind::Codex, "sandbox-codex", None),
@@ -59,17 +59,17 @@ fn both_client_http_routes_persist_filter_and_deduplicate_native_records() {
         let mut selected = query(MeasurementScope::Generation);
         selected.app = Some(app);
         selected.model = Some(model.into());
-        let report = crate::request_usage::read(temp.path(), selected).unwrap();
+        let report = usage_report(temp.path(), selected);
         assert_eq!(report.summary.records, 1);
-        assert_eq!(report.rows[0].outcome, RequestOutcome::Succeeded);
-        assert_eq!(report.rows[0].output_tokens_per_second, rate);
+        assert_eq!(report.pages.rows[0].outcome, RequestOutcome::Succeeded);
+        assert_eq!(report.pages.rows[0].output_tokens_per_second, rate);
     }
-    let report = crate::request_usage::read(temp.path(), query(MeasurementScope::Transport)).unwrap();
+    let report = usage_report(temp.path(), query(MeasurementScope::Transport));
     assert_eq!(report.summary.records, 1);
-    assert_eq!(report.rows[0].app, AppKind::Claude);
-    assert_eq!(report.rows[0].duration_ms, Some(1200.0));
-    assert_eq!(report.rows[0].input_tokens, Some(35));
-    assert_eq!(report.rows[0].estimated_cost_usd.as_deref(), Some("0.000123"));
+    assert_eq!(report.pages.rows[0].app, AppKind::Claude);
+    assert_eq!(report.pages.rows[0].duration_ms, Some(1200.0));
+    assert_eq!(report.pages.rows[0].input_tokens, Some(35));
+    assert_eq!(report.pages.rows[0].estimated_cost_usd.as_deref(), Some("0.000123"));
     let connection = rusqlite::Connection::open(temp.path().join("state/request-performance.sqlite3")).unwrap();
     assert_eq!(connection.query_row("SELECT count(*) FROM observations", [], |r| r.get::<_, u64>(0)).unwrap(), 3);
 }
@@ -115,7 +115,7 @@ fn invalid_http_inputs_return_explicit_errors_without_mutating_saved_facts() {
     receive(request("/claude/v1/traces", "invalid"), temp.path(), &status);
     assert!(status.lock().unwrap().error.is_some());
     assert_eq!(status.lock().unwrap().accepted_records, 1);
-    let report = crate::request_usage::read(temp.path(), query(MeasurementScope::Generation)).unwrap();
+    let report = usage_report(temp.path(), query(MeasurementScope::Generation));
     assert_eq!(report.summary.records, 1);
     receive(request("/claude/v1/logs", "{}"), temp.path(), &status);
     assert_eq!(status.lock().unwrap().error, None);
@@ -131,7 +131,7 @@ fn later_identity_conflict_rolls_back_earlier_new_record_in_the_same_batch() {
     new.id = "claude:distinct-native-span".into();
     original.model = Some("conflicting-model".into());
     assert!(store::append(temp.path(), &[new, original]).is_err());
-    let report = crate::request_usage::read(temp.path(), query(MeasurementScope::Generation)).unwrap();
+    let report = usage_report(temp.path(), query(MeasurementScope::Generation));
     assert_eq!(report.summary.records, 1);
-    assert_eq!(report.rows[0].model.as_deref(), Some("test-model"));
+    assert_eq!(report.pages.rows[0].model.as_deref(), Some("test-model"));
 }

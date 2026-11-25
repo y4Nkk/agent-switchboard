@@ -1,5 +1,6 @@
-use super::{search, SessionSearchPage, SessionSearchRequest};
-use serde::Serialize;
+use super::search::{self, transcript::{self, TranscriptSearchPage, TranscriptSearchRequest},
+    SessionSearchPage, SessionSearchRequest};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{atomic::{AtomicBool, AtomicU64, Ordering}, Arc, LazyLock, Mutex, Once};
@@ -83,14 +84,28 @@ impl SearchControl {
 struct Task {
     root: PathBuf,
     control: Arc<SearchControl>,
-    result: Arc<Mutex<Option<Result<SessionSearchPage, String>>>>,
+    result: Arc<Mutex<Option<Result<SearchResult, String>>>>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "scope", content = "value", rename_all = "camelCase", deny_unknown_fields)]
+pub enum SearchRequest {
+    Library(SessionSearchRequest),
+    Transcript(TranscriptSearchRequest),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "scope", content = "value", rename_all = "camelCase")]
+pub enum SearchResult {
+    Library(SessionSearchPage),
+    Transcript(TranscriptSearchPage),
 }
 
 #[derive(Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum SearchTaskState {
     Running { progress: SearchProgress },
-    Completed { page: SessionSearchPage },
+    Completed { result: SearchResult },
     Failed { message: String },
 }
 
@@ -124,7 +139,7 @@ fn start_reaper() {
     });
 }
 
-pub(crate) fn start(root: PathBuf, request: SessionSearchRequest) -> Result<String, String> {
+pub(crate) fn start(root: PathBuf, request: SearchRequest) -> Result<String, String> {
     start_reaper();
     let mut tasks = TASKS.lock().map_err(|_| "搜索任务锁不可用")?;
     reap(&mut tasks);
@@ -137,7 +152,10 @@ pub(crate) fn start(root: PathBuf, request: SessionSearchRequest) -> Result<Stri
     let task_id = id.clone();
     tauri::async_runtime::spawn(async move {
         let worker_control = control.clone();
-        let outcome = tauri::async_runtime::spawn_blocking(move || search::search_observed(&root, request, &worker_control)).await
+        let outcome = tauri::async_runtime::spawn_blocking(move || match request {
+            SearchRequest::Library(request) => search::search_observed(&root, request, &worker_control).map(SearchResult::Library),
+            SearchRequest::Transcript(request) => transcript::search(&root, request, &worker_control).map(SearchResult::Transcript),
+        }).await
             .unwrap_or_else(|error| Err(format!("会话搜索执行失败：{error}")));
         let mut tasks = match TASKS.lock() {
             Ok(tasks) => tasks,
@@ -169,7 +187,7 @@ pub(crate) fn read(root: &Path, id: &str) -> Result<SearchTaskState, String> {
     if let Some(result) = result {
         tasks.remove(id);
         return Ok(match result {
-            Ok(page) => SearchTaskState::Completed { page },
+            Ok(result) => SearchTaskState::Completed { result },
             Err(message) => SearchTaskState::Failed { message: asb_core::adapter::scrub_message(message) },
         });
     }

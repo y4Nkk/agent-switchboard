@@ -62,10 +62,16 @@ pub(crate) fn query_digest(query: &UsageQuery) -> Result<String, String> {
 pub(crate) fn get(state: &LocalState, profile: &ProviderProfile) -> Result<Option<UsageSnapshot>, String> {
     let Some(query) = profile.usage_query.as_ref() else { return Ok(None); };
     let Some(cache) = state.load_usage_cache()? else { return Ok(None); };
-    let digest = query_digest(query)?;
-    Ok(cache.entries.get(&profile.id)
-        .filter(|cached| cached.query_digest == digest)
-        .map(|cached| cached.snapshot.clone()))
+    cache.snapshot(&profile.id, Some(query))
+}
+
+impl UsageCache {
+    pub(crate) fn snapshot(&self, id: &str, query: Option<&UsageQuery>) -> Result<Option<UsageSnapshot>, String> {
+        let Some(query) = query else { return Ok(None); };
+        let digest = query_digest(query)?;
+        Ok(self.entries.get(id).filter(|cached| cached.query_digest == digest)
+            .map(|cached| cached.snapshot.clone()))
+    }
 }
 
 /// Replaces the snapshot for one profile, stamping the supplied attempt

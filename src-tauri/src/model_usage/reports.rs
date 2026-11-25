@@ -30,28 +30,21 @@ struct Accumulator {
     sessions: BTreeMap<GroupKey, HashSet<String>>,
     days: BTreeMap<NaiveDate, TokenTotals>,
     undated: TokenTotals,
-    measured: HashSet<(AppKind, String)>,
-    undated_event_tokens: u64,
 }
 impl Accumulator {
     fn new(calendar: CalendarRange) -> Self {
         Self { calendar, groups: BTreeMap::new(), sessions: BTreeMap::new(), days: BTreeMap::new(),
-            undated: TokenTotals::default(), measured: HashSet::new(), undated_event_tokens: 0 }
+            undated: TokenTotals::default() }
     }
     fn add(&mut self, event: &buckets::Bucket) -> Result<(), String> {
-        self.measured.insert((event.app, event.session.clone()));
-        if event.tokens.total == 0 { return Ok(()); }
-        if event.day.is_none() {
-            self.undated_event_tokens = self.undated_event_tokens.checked_add(event.tokens.total).ok_or("无日期用量计数溢出")?;
-        }
         let Some(assignment) = self.calendar.assignment(event.day) else { return Ok(()); };
         let key = GroupKey { app: event.app, model: event.model.clone() };
-        let totals = self.groups.entry(key.clone()).or_default().checked_add(event.tokens)?;
+        let totals = self.groups.entry(key.clone()).or_default();
+        *totals = totals.checked_add(event.tokens)?;
         match assignment {
             Some(date) => { let destination = self.days.entry(date).or_default(); *destination = destination.checked_add(event.tokens)?; }
             None => self.undated = self.undated.checked_add(event.tokens)?,
         }
-        self.groups.insert(key.clone(), totals);
         self.sessions.entry(key).or_default().insert(event.session.clone());
         Ok(())
     }
@@ -78,16 +71,24 @@ fn finish(
 pub(super) fn build(connection: &rusqlite::Connection, scope: &str,
     sources: &[crate::session_manager::SessionSource], scanned_files: u64,
     issues: Vec<ModelUsageIssue>, now: DateTime<Local>) -> Result<Vec<ModelUsageReport>, String> {
-    let buckets = buckets::read(connection, scope)?;
-    let mut results = Vec::new();
-    for range in [ModelUsageRange::Today, ModelUsageRange::Last7Days, ModelUsageRange::Last30Days, ModelUsageRange::All] {
-        let mut aggregate = Accumulator::new(CalendarRange::new(range, now));
-        for bucket in &buckets { aggregate.add(bucket)?; }
-        let coverage = ModelUsageCoverage { source_sessions: sources.len() as u64, scanned_files,
-            sessions_without_usage: sources.iter().filter(|source|
-                !aggregate.measured.contains(&(source.meta.app, source.meta.session_id.clone()))).count() as u64,
-            undated_event_tokens: aggregate.undated_event_tokens };
-        results.push(finish(range, now, aggregate, coverage, issues.clone()));
-    }
-    Ok(results)
+    let mut ranges = [ModelUsageRange::Today, ModelUsageRange::Last7Days, ModelUsageRange::Last30Days, ModelUsageRange::All]
+        .map(|range| (range, Accumulator::new(CalendarRange::new(range, now))));
+    let mut measured = HashSet::new();
+    let mut undated_event_tokens = 0u64;
+    buckets::visit(connection, scope, |bucket| {
+        if bucket.tokens.total > 0 {
+            if bucket.day.is_none() {
+                undated_event_tokens = undated_event_tokens.checked_add(bucket.tokens.total).ok_or("无日期用量计数溢出")?;
+            }
+            for (_, aggregate) in &mut ranges { aggregate.add(&bucket)?; }
+        }
+        measured.insert((bucket.app, bucket.session));
+        Ok(())
+    })?;
+    let coverage = ModelUsageCoverage { source_sessions: sources.len() as u64, scanned_files,
+        sessions_without_usage: sources.iter().filter(|source|
+            !measured.contains(&(source.meta.app, source.meta.session_id.clone()))).count() as u64,
+        undated_event_tokens };
+    Ok(ranges.into_iter().map(|(range, aggregate)|
+        finish(range, now, aggregate, coverage.clone(), issues.clone())).collect())
 }

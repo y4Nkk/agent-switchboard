@@ -56,6 +56,64 @@ impl SessionSource {
     }
 }
 
+pub(super) fn codex_candidates(root: &Path, id: &str) -> Result<(Option<native::NativeThread>, Vec<PathBuf>), String> {
+    let codex = super::codex_root()?;
+    let roots = super::codex_session_roots()?;
+    let thread = native::threads_matching(&codex, Some(id), &|| Ok(()))
+        .inspect_err(|error| log::warn!("无法预读原生会话 {id}: {error}"))
+        .ok().and_then(|(threads, _)| threads.into_iter().next());
+    let index = ReadIndex::open(root)?;
+    let mut paths = index.identity_paths(id)?;
+    paths.extend(thread.iter().map(|thread| thread.rollout.clone()));
+    paths.sort();
+    paths.dedup();
+    paths.retain(|path| super::record_file::transcript(path) && roots.iter().any(|root| approved_file(root, path)));
+    let mut current = Vec::new();
+    for path in paths {
+        match index.file_prefix("identity", &path, &|| Ok(()), |reader|
+            parser::session_identity_reader(&path, reader, &|| Ok(())).map_err(|error| error.to_string())) {
+            Ok(Some(identity)) if identity.id == id => current.push(path),
+            Err(error) => log::warn!("无法预读会话来源 {}: {error}", path.display()),
+            _ => {}
+        }
+    }
+    Ok((thread, current))
+}
+
+pub(super) fn for_snapshot(root: &Path, app: AppKind, id: &str) -> Result<SessionSource, String> {
+    if !parser::valid_session_id(id) { return Err("会话 ID 无效".into()); }
+    let changed = "会话记录已更新，请刷新会话后重试";
+    if app == AppKind::Claude {
+        let source = if id.starts_with("workflow-") { conversion::committed_source(root, id)? }
+            else { super::history::committed_session(root, id)? };
+        return source.ok_or_else(|| changed.into());
+    }
+    let (thread, paths) = codex_candidates(root, id)?;
+    if let Some(thread) = thread {
+        return Ok(SessionSource { spawn_parent: thread.meta.parent_session_id.clone(), meta: thread.meta,
+            paths, native_database: Some(thread.database), archived: thread.archived,
+            native_history: thread.history.is_file().then_some(thread.history),
+            converted: None, index_root: root.into(), retained: Vec::new() });
+    }
+    let index = ReadIndex::open(root)?;
+    let mut indexed = HashMap::new();
+    for path in paths {
+        index_file(root, app, path, &mut indexed, &index, Some(id), &|| Ok(()))?;
+    }
+    indexed.remove(&(app, id.into())).ok_or_else(|| changed.into())
+}
+
+fn approved_file(root: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(root) else { return false; };
+    if relative.as_os_str().is_empty()
+        || relative.components().any(|component| !matches!(component, std::path::Component::Normal(_))) {
+        return false;
+    }
+    path.ancestors().take_while(|ancestor| ancestor.starts_with(root)).all(|ancestor|
+        fs::symlink_metadata(ancestor).is_ok_and(|metadata| !is_link(&metadata) &&
+            if ancestor == path { metadata.is_file() } else { metadata.is_dir() }))
+}
+
 pub(crate) struct CollectedFiles {
     pub paths: Vec<PathBuf>,
     pub issues: Vec<String>,
@@ -122,8 +180,7 @@ pub(super) fn scan_observed(root: &Path, app: Option<AppKind>, session: Option<&
             for thread in threads {
                 checkpoint()?;
                 let mut paths = Vec::new();
-                if roots.iter().any(|(app, root)| *app == AppKind::Codex && thread.rollout.starts_with(root))
-                    && thread.rollout.is_file() && !thread.rollout.is_symlink() {
+                if roots.iter().any(|(app, root)| *app == AppKind::Codex && approved_file(root, &thread.rollout)) {
                     match index.file_prefix("identity", &thread.rollout, checkpoint, |reader| parser::session_identity_reader(&thread.rollout, reader, checkpoint).map_err(|error| error.to_string())) {
                         Ok(Some(identity)) if identity.id == thread.meta.session_id => paths.push(thread.rollout),
                         Ok(Some(identity)) => issues.push(SessionIssue::new(AppKind::Codex,
@@ -237,14 +294,14 @@ fn index_file(root: &Path, app: AppKind, path: PathBuf, indexed: &mut HashMap<(A
         return Err(format!("{} 不含可识别的会话身份", path.display()));
     };
     let id = identity.id;
-    let spawn_parent = if app == AppKind::Codex && identity.parent.is_some() {
-        index.file_prefix("codex-spawn-parent", &path, checkpoint,
-            |reader| parser::spawn_parent_reader(&path, reader, checkpoint).map_err(|error| error.to_string()))?
-    } else { None };
     let child = app == AppKind::Claude && path.components().any(|component| component.as_os_str() == "subagents");
     let key_id = if child { format!("{id}-{}", path.file_stem().and_then(|name| name.to_str()).ok_or("子代理文件名无效")?) } else { id.clone() };
     if session.is_some_and(|requested| requested != key_id) { return Ok(issues); }
     if !parser::valid_session_id(&key_id) { return Err(format!("{} 的会话身份超出当前契约", path.display())); }
+    let spawn_parent = if app == AppKind::Codex && identity.parent.is_some() {
+        index.file_prefix("codex-spawn-parent", &path, checkpoint,
+            |reader| parser::spawn_parent_reader(&path, reader, checkpoint).map_err(|error| error.to_string()))?
+    } else { None };
     if let Some(source) = indexed.get_mut(&(app, key_id.clone())) {
         if app == AppKind::Codex {
             if source.meta.parent_session_id.is_none() { source.meta.parent_session_id = identity.parent; }

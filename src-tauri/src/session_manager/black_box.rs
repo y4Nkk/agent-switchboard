@@ -75,7 +75,7 @@ fn search(root: &Path, query: &str) -> SessionSearchPage {
 }
 
 fn page(root: &Path, id: &str) -> MessagePage {
-    load_page(root, MessagePageRequest { app: AppKind::Claude, session_id: id.into(), offset: 0, anchor_id: None }).unwrap()
+    load_page(root, MessagePageRequest { app: AppKind::Claude, session_id: id.into(), offset: 0, anchor_id: None, snapshot: None }).unwrap()
 }
 
 fn capture(root: &Path, state: &Path) {
@@ -86,7 +86,7 @@ fn capture(root: &Path, state: &Path) {
     assert_eq!(both.total, 2);
     assert!(both.issues.is_empty());
     let page = page(state, A);
-    assert_eq!(page.total, 1);
+    assert_eq!(page.snapshot.total, 1);
     assert!(page.session.preservation.as_ref().unwrap().source_available);
     let bookmark = save_bookmark(state, AppKind::Claude, A, &page.items[0].id).unwrap();
     fs::write(root.join("bookmark-id"), bookmark.id).unwrap();
@@ -103,7 +103,11 @@ fn read_and_delete(root: &Path, state: &Path) {
     assert!(!page.session.preservation.as_ref().unwrap().source_available);
     let id = &page.items[0].id;
     let content = load_content(state, MessageContentRequest { app: AppKind::Claude,
-        session_id: A.into(), message_id: id.clone(), offset: 0 }).unwrap();
+        session_id: A.into(), message_id: id.clone(), offset: 0,
+        content_revision: page.items[0].content_revision.clone() }).unwrap();
+    assert!(load_content(state, MessageContentRequest { app: AppKind::Claude,
+        session_id: A.into(), message_id: id.clone(), offset: 0,
+        content_revision: "stale".into() }).is_err());
     assert!(content.content.contains("account A"));
     assert_eq!(content.images, vec![format!("data:image/png;base64,{PNG}")]);
     let copied = load_copy_text(state, SessionCopySource::Session { app: AppKind::Claude,
@@ -139,7 +143,7 @@ fn corrupt(root: &Path, state: &Path) {
     assert_eq!(fs::read(path).unwrap(), b"corrupt sandbox database");
     assert!(load_metadata(state, AppKind::Claude, "../../outside").is_err());
     assert!(search_sessions(state, SessionSearchRequest { query: "x".repeat(4001), ..Default::default() }).is_err());
-    assert!(load_page(state, MessagePageRequest { app: AppKind::Claude, session_id: A.into(), offset: 1, anchor_id: None }).is_err());
+    assert!(load_page(state, MessagePageRequest { app: AppKind::Claude, session_id: A.into(), offset: 1, anchor_id: None, snapshot: None }).is_err());
     assert!(history::add_root(state, root).is_err());
 }
 

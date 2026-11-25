@@ -27,14 +27,27 @@ pub(crate) struct RequestUsageQuery {
     pub group_page: usize,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase", deny_unknown_fields)]
+pub(crate) enum RequestUsageRead {
+    Refresh { query: RequestUsageQuery },
+    Page { snapshot_id: String, page: usize, group_page: usize },
+}
+
 impl RequestUsageQuery {
     pub(super) fn validate(&self) -> Result<(), String> {
-        if self.page == 0 || self.page > 1_000_000 || self.group_page == 0 || self.group_page > 1_000_000 {
-            return Err("请求性能页码无效".into());
-        }
+        validate_pages(self.page, self.group_page)?;
         if self.model.as_ref().is_some_and(|text| text.trim().is_empty() || text.len() > 2048
             || text.chars().any(char::is_control)) { return Err("请求性能筛选值无效".into()); }
         Ok(())
+    }
+}
+
+pub(super) fn validate_pages(page: usize, group_page: usize) -> Result<(), String> {
+    if [page, group_page].into_iter().all(|page| (1..=1_000_000).contains(&page)) {
+        Ok(())
+    } else {
+        Err("请求性能页码无效".into())
     }
 }
 
@@ -111,6 +124,7 @@ pub(crate) struct RequestUsageSource {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RequestUsageReport {
+    pub snapshot_id: String,
     pub generated_at_ms: u64,
     pub start_at_ms: u64,
     pub end_at_ms: u64,
@@ -118,12 +132,26 @@ pub(crate) struct RequestUsageReport {
     pub scope: MeasurementScope,
     pub summary: RequestUsageMetrics,
     pub sources: Vec<RequestUsageSource>,
+    pub trend: Vec<RequestUsageBucket>,
+    #[serde(flatten)]
+    pub pages: RequestUsagePages,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RequestUsagePages {
     pub groups: Vec<RequestUsageGroup>,
     pub total_groups: usize,
     pub group_page: usize,
     pub group_page_size: usize,
-    pub trend: Vec<RequestUsageBucket>,
     pub rows: Vec<RequestUsageRow>,
     pub page: usize,
     pub page_size: usize,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub(crate) enum RequestUsageResult {
+    Report(RequestUsageReport),
+    Page(RequestUsagePages),
 }

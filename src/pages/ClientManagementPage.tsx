@@ -50,8 +50,8 @@ export function ClientManagementPage({ onChanged, active }: ClientManagementPage
         <ClientSoftwarePanel client={client} active={active} />
         {operations.error && <p role="alert" className="asb-field-error">{operations.error}</p>}
         {operations.notice && <p role="status" className="asb-scope-note">{operations.notice}</p>}
-        <div hidden={client !== "codex"}><ProjectPlansPane operations={codex} /></div>
-        <div hidden={client !== "claude"}><IntegrationPane operations={claude} /></div>
+        <div hidden={client !== "codex"}><ProjectPlansPane operations={codex} active={active && client === "codex"} /></div>
+        <div hidden={client !== "claude"}><IntegrationPane operations={claude} active={active && client === "claude"} /></div>
       </div>
     </section>
   );

@@ -415,8 +415,7 @@
   gap: var(--asb-space-3);
 }
 
-.asb-cloud-backup-group,
-.asb-cloud-backup-sql {
+.asb-cloud-backup-group {
   display: grid;
   gap: var(--asb-space-3);
   min-width: 0;
@@ -429,11 +428,6 @@
 }
 
 .asb-cloud-backup-group > .asb-form { max-width: none; }
-
-.asb-cloud-backup-sql {
-  border-block-start: 1px solid var(--asb-hairline);
-  padding-block-start: var(--asb-space-3);
-}
 
 .asb-cloud-backup-actions {
   display: flex;
@@ -465,6 +459,11 @@
   margin: var(--asb-space-1) 0 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
+}
+
+/* The setup SQL follows the paragraph of its guide step at breathing distance. */
+.asb-cloud-backup-guide-list .asb-filepreview {
+  margin-block-start: var(--asb-space-2);
 }
 
 .asb-cloud-backup-guide-list code {

@@ -15,16 +15,15 @@ pub(super) async fn usage(app: &AppHandle, request: &InvokeRequest) -> Result<Op
             argument(&request.args, "target")?,
             argument(&request.args, "profileId")?,
         )),
-        "read_profile_usage" => command!(commands::read_profile_usage(
+        "read_profile_usages" => command!(commands::read_profile_usages(
             app.clone(),
-            argument(&request.args, "target")?,
-            argument(&request.args, "profileId")?,
+            argument(&request.args, "profiles")?,
         )),
         "read_model_usage_snapshot" => command!(commands::model_usage::read_model_usage_snapshot(app.clone())),
         "refresh_model_usage" => command!(commands::model_usage::refresh_model_usage(app.clone())),
         "read_model_usage_refresh" => command!(commands::model_usage::read_model_usage_refresh(app.clone(), argument(&request.args, "id")?)),
         "read_request_usage" => command!(commands::request_usage::read_request_usage(
-            app.clone(), argument(&request.args, "query")?)),
+            app.clone(), argument(&request.args, "request")?)),
         "read_native_telemetry" => command!(commands::native_telemetry::read_native_telemetry(app.clone())),
         "retry_native_telemetry" => command!(commands::native_telemetry::retry_native_telemetry(app.clone())),
         "preview_native_telemetry" => command!(commands::native_telemetry::preview_native_telemetry(

@@ -26,6 +26,7 @@ export const messages = {
   "resources.memoryNoteSharedPages": ["CPU 以整机在线逻辑处理器容量为 100%。驻留内存包含共享页，多进程合计并非去重后的物理内存，也不代表关闭后可释放的容量。", "CPU is normalized to 100% of the machine’s online logical processors. Resident memory includes shared pages; process sums are not deduplicated physical memory or a promise of memory released on exit."],
   "resources.previousReading": ["表中保留上次读数，请留意采样时间。", "The table retains the previous reading; check its sample time."],
   "resources.sampledAt": ["最近采样：", "Last sample: "],
+  "resources.resampling": ["采样中 · 上次采样：", "Sampling · Previous sample: "],
   "resources.platform": ["{name} · 当前系统用户", "{name} · current OS user"],
   "resources.loading": ["正在读取本机进程…", "Reading local processes…"],
   "resources.noReadings": ["尚无资源占用读数。", "No resource readings yet."],

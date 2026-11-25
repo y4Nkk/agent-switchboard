@@ -63,6 +63,19 @@ pub(super) fn committed_sources(root: &Path) -> Result<(Vec<SessionSource>, Vec<
     Ok((sources, warnings))
 }
 
+pub(super) fn committed_session(root: &Path, session: &str) -> Result<Option<SessionSource>, String> {
+    let path = store::path(root);
+    if !path.try_exists().map_err(|error| error.to_string())? { return Ok(None); }
+    let connection = store::read(&path)?;
+    Ok(reading::sources_observed(&connection, &path, Some(session), &|| Ok(()))?.into_iter().next())
+}
+
+pub(super) fn committed_deleted(root: &Path, id: &str) -> Result<bool, String> {
+    let path = store::path(root);
+    if !path.try_exists().map_err(|error| error.to_string())? { return Ok(false); }
+    deleted(&store::read(&path)?, id, None)
+}
+
 pub(crate) fn visit_committed_usage(source: &Transcript, offset: u64,
     begin: impl FnOnce(u64), visitor: impl FnMut(usize, u64, &[u8]) -> Result<(), String>) -> Result<(), String> {
     reading::visit_committed_usage(source, offset, begin, visitor)
@@ -77,7 +90,7 @@ pub(super) fn scan_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), Str
         Ok(issues) => issues,
         Err(error) => issues(vec![error]),
     };
-    Ok((reading::sources_observed(&connection, &store::path(root), checkpoint)?, issues))
+    Ok((reading::sources_observed(&connection, &store::path(root), None, checkpoint)?, issues))
 }
 
 pub(crate) fn preserve_before_switch(root: &Path) -> Result<(), String> {

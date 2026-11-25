@@ -19,7 +19,7 @@ Status: implemented
 - 内容组件原样挂在弹窗主体里，不另造固定 footer：指令的动作行、通用配置文件的三态模块动作、恢复预览的确认行都紧跟各自的作用对象。宽度取 `wide`（目录、通用配置文件、恢复，分别承载多列条目、配置正文和三列差异）与标准档（全局指令）。
 - 内联形态的盒层与变量随之下线：`.asb-client-configuration-review`、`.asb-client-settings-instructions`、`.asb-official-directory-title`，以及 `.asb-client-settings-panel` 作用域下的四处模块表面覆盖；`--asb-settings-module-bg` 失去全部消费者后一并删除（`-border` 仍被 Claude 模型偏好行使用）。词典删除 9 个只服务于展开 / 收起的键，两处「收起通用配置文件后」改为「关闭」。
 
-折叠原语的边界不变：设置行自己的代码证据继续使用 Collapsible，四区块只是不再属于「工具栏驱动的内联展开」这一消费场景，见[全局折叠原语](../architecture/2026-10-14-unified-collapsible-primitive.md)。路由切换控制器与「配置组件隐藏但不卸载」见[客户端页签切换](../architecture/2026-10-16-client-route-transition-owner.md)。写入、备份与恢复语义未改，仍由[当前配置契约](2026-10-12-current-client-configuration-contract.md)和 DESIGN.md「写入与恢复」拥有。
+折叠原语的边界不变：设置行自己的代码证据继续使用 Collapsible，四区块只是不再属于「工具栏驱动的内联展开」这一消费场景，见[全局折叠原语](../architecture/2026-10-14-unified-collapsible-primitive.md)。云端备份页签的配置指南按同一条边界由弹窗承载，见[云端备份配置指南弹窗](2026-11-25-cloud-backup-setup-guide-dialog.md)。路由切换控制器与「配置组件隐藏但不卸载」见[客户端页签切换](../architecture/2026-10-16-client-route-transition-owner.md)。写入、备份与恢复语义未改，仍由[当前配置契约](2026-10-12-current-client-configuration-contract.md)和 DESIGN.md「写入与恢复」拥有。
 
 同主题审计：上述三篇活跃笔记部分重叠，只在原篇更新「四区块 / 展开状态」的事实句，各自的决定不变；[双客户端当前配置目录](2026-11-04-current-client-settings-expansion.md)拥有目录字段与权限边界，不受影响；已归档的 `2026-10-16-client-configuration-tab-slide.md` 早已被路由控制器笔记吸收，不改。
 

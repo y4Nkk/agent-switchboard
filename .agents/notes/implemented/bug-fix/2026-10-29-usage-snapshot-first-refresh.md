@@ -14,6 +14,7 @@ Status: implemented
 
 ## Related decisions
 
+- [用量工作区的读取性能](../architecture/2026-11-25-usage-workspace-read-performance.md)使用只读连接读取该快照，并把四个范围的报告合并到一次日桶遍历。
 - [按调用增量计量与真实刷新进度](../architecture/2026-11-04-incremental-usage-ledger.md)：部分取代；移除长请求门禁、整块用量状态和仅计时反馈，接管当前任务、模式升级和真实进度。本篇的快照先显及四范围选择继续成立。
 - [会话读取索引](../../implemented/architecture/2026-10-22-incremental-session-read-index.md)：部分重叠；本篇接管消费页加载、范围选择和刷新合并，保留该篇的来源索引、真实调用、完整前缀验证和日期规则。
 - [完整本地会话与用量](../../implemented/architecture/2026-10-16-complete-local-session-usage.md)：部分重叠；来源覆盖、统计口径和隐藏页不调度新读取仍成立。

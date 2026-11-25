@@ -21,6 +21,7 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "read_session_search" => command!(commands::read_session_search(app.clone(), argument(&request.args, "id")?)),
         "cancel_session_search" => command!(commands::cancel_session_search(app.clone(), argument(&request.args, "id")?)),
         "get_session_message_page" => command!(commands::get_session_message_page(app.clone(), argument(&request.args, "request")?)),
+        "get_session_first_messages" => command!(commands::get_session_first_messages(app.clone(), argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),
         "get_session_message_content" => command!(commands::get_session_message_content(app.clone(), argument(&request.args, "request")?)),
         "get_session_copy_text" => command!(commands::get_session_copy_text(app.clone(), argument(&request.args, "source")?)),
         "get_session_metadata" => command!(commands::get_session_metadata(app.clone(),

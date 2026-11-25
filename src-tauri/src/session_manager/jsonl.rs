@@ -89,10 +89,29 @@ fn indexed(index: &ReadIndex, source: &records::Source, checkpoint: &dyn Fn() ->
 
 fn scan(path: &records::Source, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<FilePositions, String> {
     let mut entries = Vec::new();
+    let issues = visit_positions(path, checkpoint, |position, _| {
+        entries.push(position);
+        ControlFlow::Continue(())
+    })?;
+    Ok(FilePositions { entries, issues })
+}
+
+pub(super) fn first(path: &records::Source, limit: usize) -> Result<Vec<super::messages::FirstMessage>, String> {
+    let mut messages = Vec::new();
+    visit_positions(path, &|| Ok(()), |position, message| {
+        messages.push(super::messages::FirstMessage::from_message(position.id, message));
+        if messages.len() == limit { ControlFlow::Break(()) } else { ControlFlow::Continue(()) }
+    })?;
+    Ok(messages)
+}
+
+fn visit_positions(path: &records::Source, checkpoint: &dyn Fn() -> Result<(), String>,
+    mut visitor: impl FnMut(RecordPosition, super::SessionMessage) -> ControlFlow<()>,
+) -> Result<Vec<String>, String> {
     let mut occurrences = HashMap::<String, usize>::new();
     let mut prefix = Sha256::new();
     let mut order_at = None;
-    let issues = path.visit_observed(0, checkpoint, |_, offset, value| {
+    path.visit_observed(0, checkpoint, |_, offset, value| {
         let encoded = value.to_string();
         prefix.update(encoded.as_bytes());
         prefix.update(b"\n");
@@ -105,12 +124,11 @@ fn scan(path: &records::Source, checkpoint: &dyn Fn() -> Result<(), String>) -> 
             && value.pointer("/payload/type").and_then(serde_json::Value::as_str) == Some("item_completed") {
             value.pointer("/payload/item").map(parser::native_identity)
         } else { None };
-        entries.push(RecordPosition { offset, id: parser::claude_record_id(&value)
+        let position = RecordPosition { offset, id: parser::claude_record_id(&value)
                 .unwrap_or_else(|| format!("raw-{:x}-{}", prefix.clone().finalize(), *occurrence)),
-            digest, occurrence: *occurrence, at: message.at, order_at: order_at.clone(), projected });
-        Ok(ControlFlow::Continue(()))
-    })?;
-    Ok(FilePositions { entries, issues })
+            digest, occurrence: *occurrence, at: message.at.clone(), order_at: order_at.clone(), projected };
+        Ok(visitor(position, message))
+    })
 }
 
 fn read_value(path: &Path, offset: u64, digest: &str, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<serde_json::Value, String> {

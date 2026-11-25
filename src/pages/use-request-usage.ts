@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readRequestUsage, type RequestUsageQuery, type RequestUsageReport } from "../api/client";
+import { readRequestUsagePages, refreshRequestUsage, type RequestUsageQuery, type RequestUsageReport } from "../api/client";
 import type { RequestUsageAnalysisSelection } from "../components/request-usage/RequestUsageAnalysis";
 import { useI18n } from "../i18n";
 import { errorText } from "../i18n/errors";
 
 const INITIAL_QUERY: RequestUsageQuery = { range: "last24Hours", app: null, scope: "generation", model: null, page: 1, groupPage: 1 };
 const INITIAL_ANALYSIS: RequestUsageAnalysisSelection = { view: "trend", trend: null, models: null, requests: null };
+const REFRESH_INTERVAL = 30_000;
+
+interface SavedReport {
+  scope: string;
+  revision: number;
+  refreshedAt: number;
+  page: number;
+  groupPage: number;
+  report: RequestUsageReport;
+}
 
 export function useRequestUsage(active: boolean) {
   const [query, setQuery] = useState(INITIAL_QUERY);
@@ -42,41 +52,62 @@ function useRequestUsageReport(active: boolean, query: RequestUsageQuery) {
   const { t } = useI18n();
   const key = JSON.stringify(query);
   const scope = JSON.stringify([query.range, query.app, query.scope, query.model]);
-  const [saved, setSaved] = useState<{ scope: string; report: RequestUsageReport } | null>(null);
+  const [saved, setSaved] = useState<SavedReport | null>(null);
   const [failure, setFailure] = useState<{ scope: string; error: unknown } | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
-  const flight = useRef<{ key: string; promise: Promise<RequestUsageReport> } | null>(null);
+  const last = useRef<SavedReport | null>(null);
+  const flight = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (!active) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const read = async () => {
-      setBusyKey(key);
-      if (flight.current && flight.current.key !== key) {
-        await flight.current.promise.catch(() => {});
+    const selected = JSON.parse(key) as RequestUsageQuery;
+    const { page, groupPage } = selected;
+    const schedule = (delay: number) => {
+      timer = setTimeout(() => void read(true), Math.max(0, delay));
+    };
+    const read = async (periodic = false) => {
+      while (flight.current) {
+        await flight.current;
         if (stopped) return;
       }
-      let pending = flight.current?.key === key ? flight.current.promise : null;
-      if (!pending) {
-        pending = readRequestUsage(JSON.parse(key) as RequestUsageQuery);
-        const current = { key, promise: pending };
-        flight.current = current;
-        const release = () => { if (flight.current === current) flight.current = null; };
-        void pending.then(release, release);
+      const current = last.current;
+      const cached = current?.scope === scope && current.revision === revision ? current : null;
+      const shouldRefresh = periodic || cached === null;
+      if (!shouldRefresh && cached && cached.page === page && cached.groupPage === groupPage) {
+        setSaved(cached);
+        setBusyKey(null);
+        schedule(cached.refreshedAt + REFRESH_INTERVAL - Date.now());
+        return;
       }
-      try {
-        const report = await pending;
-        if (!stopped) {
-          setSaved({ scope, report });
-          setFailure(null);
+      setBusyKey(key);
+      const pending = (async () => {
+        try {
+          const report = !shouldRefresh && cached
+            ? { ...cached.report, ...await readRequestUsagePages(cached.report.snapshotId, page, groupPage) }
+            : await refreshRequestUsage(selected);
+          const result = { scope, revision, page, groupPage, report,
+            refreshedAt: shouldRefresh || !cached ? Date.now() : cached.refreshedAt };
+          last.current = result;
+          if (!stopped) {
+            setSaved(result);
+            setFailure(null);
+            schedule(result.refreshedAt + REFRESH_INTERVAL - Date.now());
+          }
+        } catch (error) {
+          if (!stopped) {
+            setFailure({ scope, error });
+            schedule(REFRESH_INTERVAL);
+          }
+        } finally {
+          if (!stopped) setBusyKey(null);
         }
-      } catch (error) {
-        if (!stopped) setFailure({ scope, error });
-      } finally {
-        if (!stopped) { setBusyKey(null); timer = setTimeout(() => void read(), 30_000); }
-      }
+      })();
+      flight.current = pending;
+      await pending;
+      if (flight.current === pending) flight.current = null;
     };
     void read();
     return () => { stopped = true; if (timer) clearTimeout(timer); };

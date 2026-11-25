@@ -199,7 +199,7 @@ export const messages = {
   "clientConfig.integration.policySaved": ["Claude 客户端集成策略已保存。", "Claude client integration policy saved."],
   "clientConfig.integration.write": ["写入", "Write"],
   "clientConfig.integration.clear": ["清除", "Clear"],
-  "clientConfig.integration.previewAria": ["{title}变更预览", "{title} change preview"],
+  "clientConfig.integration.previewTitle": ["{title}变更预览", "{title} change preview"],
   "clientConfig.integration.previewNote": ["写入前备份，与配置切换备份分开保存。", "Backed up before writing; kept separately from configuration-switch backups."],
   "clientConfig.integration.alreadyApplied": ["已是目标状态，无需写入。", "Already in the target state; nothing to write."],
   "clientConfig.integration.changeLabel": ["{title}变更", "{title} changes"],

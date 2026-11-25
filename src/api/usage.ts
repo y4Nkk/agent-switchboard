@@ -1,5 +1,5 @@
 import { invoke } from "./client";
-import type { AppKind, CodexTransportClass, UpstreamProtocol } from "./shared";
+import type { AppKind, CodexTransportClass, CommandError, UpstreamProtocol } from "./shared";
 import type { ProviderConnectionOptions } from "./providers";
 import type { UsageReading } from "./usage-reading";
 export type { UsageReading, UsageAvailability } from "./usage-reading";
@@ -143,8 +143,17 @@ export function queryProfileUsage(target: AppKind, profileId: string): Promise<v
 
 /** Reads the last completed query and any retained readings.
  * Null means no attempt has completed; this never contacts upstream. */
-export function readProfileUsage(target: AppKind, profileId: string): Promise<UsageSnapshot | null> {
-  return invoke<UsageSnapshot | null>("read_profile_usage", { target, profileId });
+export interface ProfileUsageKey { target: AppKind; profileId: string }
+export interface ProfileUsageRead { snapshot: UsageSnapshot | null; error: CommandError | null }
+
+export function readProfileUsages(profiles: ProfileUsageKey[]): Promise<ProfileUsageRead[]> {
+  return invoke("read_profile_usages", { profiles });
+}
+
+export async function readProfileUsage(target: AppKind, profileId: string): Promise<UsageSnapshot | null> {
+  const [result] = await readProfileUsages([{ target, profileId }]);
+  if (result.error) throw result.error;
+  return result.snapshot;
 }
 
 /** Refreshes the official profile's account-bound cache without accepting

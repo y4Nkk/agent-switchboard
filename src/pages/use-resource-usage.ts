@@ -48,6 +48,7 @@ export function useResourceUsage(active: boolean) {
   const currentDetails = result !== null && selectionKey(result.selection) === selectionKey(selection);
   return { read: result?.read ?? null, details, memoryMaximum: result?.memoryMaximum ?? null,
     initialLoading: activity === "initial" && result === null,
+    resampling: activity === "initial" && result !== null,
     refreshing: activity === "manual",
     detailsLoading: selection !== null && activity !== null && (activity === "details" || !currentDetails),
     selection, toggle, setPage, refresh, error };

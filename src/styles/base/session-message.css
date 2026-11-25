@@ -13,6 +13,34 @@
   font: inherit;
 }
 
+.asb-session-plain-content mark {
+  background: color-mix(in srgb, var(--asb-action) 24%, var(--asb-content));
+  color: var(--asb-text);
+  box-shadow: inset 0 -1px var(--asb-action);
+}
+
+.asb-session-message.is-target .asb-collapsible { transition: none; }
+
+.asb-reading-window { flex: none; min-width: 0; }
+.asb-reading-window > [aria-hidden="true"] { overflow-anchor: none; }
+.asb-reading-block { display: flow-root; }
+
+.asb-reading-placeholder { min-height: var(--asb-reading-estimate); }
+.asb-reading-placeholder > * {
+  position: sticky;
+  inset-block-start: 0;
+  margin: 0;
+  padding: var(--asb-space-2);
+  color: var(--asb-text-muted);
+}
+
+.asb-continuous-text .asb-session-plain-content {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .asb-session-images {
   display: grid;
   gap: var(--asb-space-3);

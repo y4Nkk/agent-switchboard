@@ -25,6 +25,8 @@ Status: implemented
 
 扩展扫描警告摘要也直接消费 CollapsibleTrigger，使用可见汇总作为按钮名称，并由 aria-expanded 表达开闭；删除私有 banner-toggle、恒定 aria-controls、重复描述 ID 及其退役文案。控件与菜单的其他接入边界由[扩展共享控件](2026-10-24-extension-shared-controls.md)拥有。
 
+云端备份页签只剩备份历史的「查看差异」一个折叠消费者；「从零配置 Supabase」指南连同初始化 SQL 的显隐切换由[云端备份配置指南弹窗](../feature/2026-11-25-cloud-backup-setup-guide-dialog.md)接管，使用 AppDialog。
+
 **范围外（非容器折叠，不接入）**：侧栏展开收起（外框 grid 几何，`shell.css` 拥有）、气泡弹层与下拉（GlobalInformation、FontPicker、ModelPicker、Select、Tooltip）、模态弹窗、页内视图/路由切换（运行参数页、发现面板、仓库管理等）、代码预览的高度档位切换（同一滚动元素 16rem↔65dvh 的上限调整，元素从不卸载，不是显隐折叠）——这些是与容器折叠不同的交互家族，强套折叠原语会破坏其交互契约。
 
 同主题笔记审计：`implemented/simplification/2026-10-13-provider-advanced-settings-always-visible.md` 相邻（其"高级设置不重新引入折叠"的边界被本决策保持，互不覆盖）；`2026-10-13-ui-copy-density-reduction` 与 `2026-10-13-linuxdo-pelican-animation` 中被否/声明的"不做折叠"决定不受影响。无旧笔记持有折叠语法决策。

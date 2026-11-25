@@ -66,17 +66,17 @@ pub(super) fn calendar(connection: &Connection, scope: &str, progress: &Progress
     Ok(())
 }
 
-pub(super) fn read(connection: &Connection, scope: &str) -> Result<Vec<Bucket>, String> {
+pub(super) fn visit(connection: &Connection, scope: &str,
+    mut consume: impl FnMut(Bucket) -> Result<(), String>) -> Result<(), String> {
     let mut statement = connection.prepare("SELECT app,model,day,session,data FROM usage_buckets WHERE scope=?1").map_err(error)?;
     let mut rows = statement.query([scope]).map_err(error)?;
-    let mut values = Vec::new();
     while let Some(row) = rows.next().map_err(error)? {
         let day: String = row.get(2).map_err(error)?;
         let totals: Totals = serde_json::from_str(&row.get::<_,String>(4).map_err(error)?).map_err(error)?;
-        values.push(Bucket { app: serde_json::from_str(&row.get::<_,String>(0).map_err(error)?).map_err(error)?,
+        consume(Bucket { app: serde_json::from_str(&row.get::<_,String>(0).map_err(error)?).map_err(error)?,
             model: serde_json::from_str(&row.get::<_,String>(1).map_err(error)?).map_err(error)?,
             day: if day.is_empty() { None } else { Some(day.parse().map_err(error)?) },
-            session: row.get(3).map_err(error)?, tokens: totals.tokens });
+            session: row.get(3).map_err(error)?, tokens: totals.tokens })?;
     }
-    Ok(values)
+    Ok(())
 }

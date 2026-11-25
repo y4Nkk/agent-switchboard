@@ -61,11 +61,11 @@ export function ClientSoftwarePanel({ client, active }: { client: AppKind; activ
         </div>
       </div>
     </div>}
-    {software.task && <UpdateTask key={software.task.id} task={software.task} busy={software.busy} onCancel={() => void software.cancel()} />}
     {featured && <div className="asb-tool-stage">
       <SoftwareCard key={featured.id} item={featured} featured disabled={disabled} expanded={expandedId === featured.id}
         onExpandedChange={(open) => setExpandedId(open ? featured.id : null)} onUpdate={(id) => void software.prepare(id)} />
     </div>}
+    {software.task && <UpdateTask key={software.task.id} task={software.task} busy={software.busy} onCancel={() => void software.cancel()} />}
     {others.length > 0 && <section className="asb-software-others" aria-labelledby={othersId}>
       <h4 className="asb-group-title" id={othersId}>{t("software.otherInstallations")}</h4>
       <div className="asb-software-grid">

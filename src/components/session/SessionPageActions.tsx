@@ -30,7 +30,7 @@ export function SessionPageActions({ filter, onFilterChange, refresh, busy, load
     <ClientFilter value={filter} onChange={onFilterChange} label={t("sessions.filter.aria")} showLogos />
     {history && <ActionMenu key={filter} ariaLabel={moreLabel} disabled={busy} items={items}
       label={<><Ellipsis size={16} strokeWidth={1.7} aria-hidden="true" />{moreLabel}</>} />}
-    <Button variant="icon" disabled={busy || loading} onClick={refresh}
+    <Button variant="icon" className="asb-session-toolbar-button" disabled={busy || loading} onClick={refresh}
       aria-label={t(refreshKey)} title={t(refreshKey)}><RefreshCw aria-hidden="true" /></Button>
   </>;
 }

@@ -45,6 +45,11 @@
 }
 
 .asb-session-search-field > .asb-tooltip-anchor { flex: none; }
+
+.asb-session-toolbar-button {
+  border: 1px solid var(--asb-hairline-strong);
+}
+
 .asb-session-filter-button { position: relative; }
 .asb-session-filter-button.is-active::after {
   content: "";

@@ -164,7 +164,7 @@ fn newly_discovered_children_reject_the_original_preview() {
 #[test]
 fn archived_delete_cleans_markers_and_keeps_bookmarked_content() {
     fixture(1, |root, _| {
-        let page = sessions::load_page(root, sessions::MessagePageRequest { app: AppKind::Claude, session_id: id(0), offset: 0, anchor_id: None }).unwrap();
+        let page = sessions::load_page(root, sessions::MessagePageRequest { app: AppKind::Claude, session_id: id(0), offset: 0, anchor_id: None, snapshot: None }).unwrap();
         sessions::save_bookmark(root, AppKind::Claude, &id(0), &page.items[0].id).unwrap();
         let operations = Operations::default();
         let preview = operations.preview(root, request(None, false), Action::Archive).unwrap(); operations.execute(root, &preview.id, true).unwrap();

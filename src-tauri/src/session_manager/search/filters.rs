@@ -41,7 +41,7 @@ pub(super) struct Filters {
 
 impl Filters {
     pub(super) fn parse(request: SessionSearchRequest) -> Result<Self, String> {
-        if request.query.chars().count() > 4000 { return Err("搜索内容最多 4000 个字符".into()); }
+        super::super::text::validate_query(&request.query)?;
         if request.tag.as_ref().is_some_and(|tag| tag.is_empty() || tag.chars().count() > 40 || tag.trim() != tag) {
             return Err("筛选标签无效".into());
         }

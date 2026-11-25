@@ -1,5 +1,5 @@
-use super::{messages::{aligned_content_offset, content_page, ContentPage, MessagePreview, PREVIEW_CHARS},
-    organization, resolve_session, text::{raw_offset, TextQuery}, SessionMessage, SessionMeta};
+use super::{messages::{aligned_content_offset, content_page, ContentPage, MessagePreview, CONTENT_PAGE_CHARS, PREVIEW_CHARS},
+    organization, resolve_session, text::TextQuery, SessionMessage, SessionMeta};
 #[cfg(test)]
 use super::parser::collect_messages;
 use asb_core::contracts::AppKind;
@@ -33,6 +33,7 @@ struct SessionBookmark {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookmarkSummary {
+    pub content_page_size: usize,
     pub image_count: usize,
     pub id: String,
     pub app: AppKind,
@@ -50,7 +51,7 @@ pub struct BookmarkSummary {
 
 impl From<SessionBookmark> for BookmarkSummary {
     fn from(bookmark: SessionBookmark) -> Self {
-        Self { image_count: bookmark.images.len(), id: bookmark.id, app: bookmark.app, session_id: bookmark.session_id,
+        Self { content_page_size: CONTENT_PAGE_CHARS, image_count: bookmark.images.len(), id: bookmark.id, app: bookmark.app, session_id: bookmark.session_id,
             session_title: bookmark.session_title, project_dir: bookmark.project_dir,
             message_id: bookmark.message_id, role: bookmark.role, at: bookmark.at,
             saved_at: bookmark.saved_at, content_length: bookmark.content.chars().count(), content_offset: 0,
@@ -94,10 +95,8 @@ pub fn search_bookmarks(root: &Path, request: BookmarkSearchRequest) -> Result<B
         if page.total >= page.offset && page.items.len() < PAGE_SIZE {
             let mut item = summary_from_row(row).map_err(database_error)?;
             let content = borrowed_text(row, 7).map_err(database_error)?;
-            if !query.is_empty() {
-                if let Some(position) = query.find(content) {
-                    item.content_offset = aligned_content_offset(raw_offset(content, position).ok_or("搜索收藏位置无效")?);
-                }
+            if let Some(found) = query.first_match(content, &|| Ok(()))? {
+                item.content_offset = aligned_content_offset(found.range.start);
             }
             page.items.push(item);
         }
@@ -233,7 +232,7 @@ fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BookmarkSummary
         _ => return Err(rusqlite::Error::InvalidQuery),
     };
     let content = borrowed_text(row, 7)?;
-    Ok(BookmarkSummary { image_count: row.get(10)?, id: row.get(0)?, app, session_id: row.get(2)?, session_title: row.get(3)?,
+    Ok(BookmarkSummary { content_page_size: CONTENT_PAGE_CHARS, image_count: row.get(10)?, id: row.get(0)?, app, session_id: row.get(2)?, session_title: row.get(3)?,
         project_dir: row.get(4)?, message_id: row.get(5)?, role: row.get(6)?,
         excerpt: content.chars().take(PREVIEW_CHARS).collect(), content_length: content.chars().count(),
         content_offset: 0, at: row.get(8)?, saved_at: row.get(9)? })

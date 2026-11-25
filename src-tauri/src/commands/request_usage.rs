@@ -1,11 +1,13 @@
 use super::error::{blocking, state, CommandError};
-use crate::request_usage::{RequestUsageQuery, RequestUsageReport};
+use crate::request_usage::{RequestUsageRead, RequestUsageReader, RequestUsageResult};
+use tauri::Manager;
 
 #[tauri::command]
 pub(crate) async fn read_request_usage(
-    app: tauri::AppHandle, query: RequestUsageQuery,
-) -> Result<RequestUsageReport, CommandError> {
+    app: tauri::AppHandle, request: RequestUsageRead,
+) -> Result<RequestUsageResult, CommandError> {
     let state = state(&app)?;
-    blocking(move || crate::request_usage::read(state.root(), query)
+    let reader = app.state::<RequestUsageReader>().inner().clone();
+    blocking(move || reader.read(state.root(), request)
         .map_err(|error| CommandError::new("request-usage-unavailable", error))).await
 }

@@ -79,30 +79,58 @@ pub(crate) fn visit(
     root: &Path, app: Option<AppKind>, scope: MeasurementScope, start: u64, end: u64,
     mut consume: impl FnMut(RequestUsageRow),
 ) -> Result<(), String> {
+    let connection = open_reader(root)?;
+    let sql = if app.is_some() {
+        "SELECT id, app, scope, at_ms, body FROM observations WHERE scope=?1 AND at_ms BETWEEN ?2 AND ?3
+         AND app=?4 ORDER BY at_ms DESC, id DESC"
+    } else {
+        "SELECT id, app, scope, at_ms, body FROM observations WHERE scope=?1 AND at_ms BETWEEN ?2 AND ?3
+         ORDER BY at_ms DESC, id DESC"
+    };
+    let mut statement = connection.prepare(sql).map_err(|e| e.to_string())?;
+    let mut cursor = match app {
+        Some(app) => statement.query(params![scope.key(), start, end, app_key(app)]),
+        None => statement.query(params![scope.key(), start, end]),
+    }.map_err(|e| e.to_string())?;
+    while let Some(record) = cursor.next().map_err(|e| e.to_string())? {
+        consume(observation(record)?);
+    }
+    Ok(())
+}
+
+pub(crate) fn read_rows(root: &Path, ids: &[String]) -> Result<Vec<RequestUsageRow>, String> {
+    if ids.is_empty() { return Ok(Vec::new()); }
+    let connection = open_reader(root)?;
+    let mut statement = connection.prepare(
+        "SELECT id, app, scope, at_ms, body FROM observations WHERE id=?1"
+    ).map_err(|e| e.to_string())?;
+    ids.iter().map(|id| {
+        let mut rows = statement.query([id]).map_err(|e| e.to_string())?;
+        observation(rows.next().map_err(|e| e.to_string())?
+            .ok_or("请求性能快照所引用的记录已不存在")?)
+    }).collect()
+}
+
+fn open_reader(root: &Path) -> Result<Connection, String> {
     let connection = Connection::open_with_flags(path(root), OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| e.to_string())?;
     configure(&connection)?;
     current(&connection)?;
-    let mut statement = connection.prepare(
-        "SELECT id, app, scope, at_ms, body FROM observations WHERE scope=?1 AND at_ms BETWEEN ?2 AND ?3
-         AND (?4 IS NULL OR app=?4) ORDER BY at_ms DESC, id DESC",
-    ).map_err(|e| e.to_string())?;
-    let mut cursor = statement.query(params![scope.key(), start, end, app.map(app_key)])
-        .map_err(|e| e.to_string())?;
-    while let Some(record) = cursor.next().map_err(|e| e.to_string())? {
-        let body: String = record.get(4).map_err(|e| e.to_string())?;
-        let row: RequestUsageRow = serde_json::from_str(&body).map_err(|_| "原生性能库包含无效记录，已保留原件")?;
-        row.validate()?;
-        let id: String = record.get(0).map_err(|e| e.to_string())?;
-        let app: String = record.get(1).map_err(|e| e.to_string())?;
-        let scope: String = record.get(2).map_err(|e| e.to_string())?;
-        let at: u64 = record.get(3).map_err(|e| e.to_string())?;
-        if row.id != id || app_key(row.app) != app || row.scope.key() != scope || row.at_ms != at {
-            return Err("原生性能库记录与索引不一致，已保留原件".into());
-        }
-        consume(row);
+    Ok(connection)
+}
+
+fn observation(record: &rusqlite::Row<'_>) -> Result<RequestUsageRow, String> {
+    let body: String = record.get(4).map_err(|e| e.to_string())?;
+    let row: RequestUsageRow = serde_json::from_str(&body).map_err(|_| "原生性能库包含无效记录，已保留原件")?;
+    row.validate()?;
+    let id: String = record.get(0).map_err(|e| e.to_string())?;
+    let app: String = record.get(1).map_err(|e| e.to_string())?;
+    let scope: String = record.get(2).map_err(|e| e.to_string())?;
+    let at: u64 = record.get(3).map_err(|e| e.to_string())?;
+    if row.id != id || app_key(row.app) != app || row.scope.key() != scope || row.at_ms != at {
+        return Err("原生性能库记录与索引不一致，已保留原件".into());
     }
-    Ok(())
+    Ok(row)
 }
 
 fn app_key(app: AppKind) -> &'static str {

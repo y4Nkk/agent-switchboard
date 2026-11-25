@@ -8,11 +8,11 @@ import {
 } from "../api/client";
 import { Button } from "./Button";
 import { BackupArchiveArt } from "./BackupArchiveArt";
-import { CollapsibleSection } from "./Collapsible";
+import { AppDialog } from "./AppDialog";
+import { CodePreview } from "./CodePreview";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { Input } from "./Input";
 import { ExportIcon, UpdateIcon } from "./icons";
-import { Textarea } from "./Textarea";
 import { useI18n } from "../i18n";
 import { errorText } from "../i18n/errors";
 import { toast, toastMessage } from "./use-toast";
@@ -65,9 +65,10 @@ interface Props {
   onRestore: (accountPassword: string, backupPassword: string) => Promise<boolean>;
 }
 
-function CloudBackupGuide({ projectUrl }: { projectUrl: string }) {
+/** The first-run Supabase walkthrough: a read-and-leave task in its own
+    dialog, closed before the connection form on the page is filled in. */
+function CloudBackupGuide({ projectUrl, onClose }: { projectUrl: string; onClose: () => void }) {
   const { t } = useI18n();
-  const [guideOpen, setGuideOpen] = useState(false);
   const dashboardLinks = supabaseDashboardLinks(projectUrl);
   const openGuideLink = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -76,7 +77,7 @@ function CloudBackupGuide({ projectUrl }: { projectUrl: string }) {
   };
 
   return (
-    <CollapsibleSection open={guideOpen} onOpenChange={setGuideOpen} label={t("backup.cloud.guideTitle")}>
+    <AppDialog title={t("backup.cloud.guideTitle")} busy={false} onClose={onClose}>
       <ol className="asb-cloud-backup-guide-list">
         <li>
           <h4 className="asb-group-title">{t("backup.cloud.guide.create.title")}</h4>
@@ -117,6 +118,7 @@ function CloudBackupGuide({ projectUrl }: { projectUrl: string }) {
             <a className="asb-cloud-backup-guide-link" href={dashboardLinks.sqlEditor} onClick={openGuideLink}>SQL Editor</a>
             {t("backup.cloud.guide.dataApi.after")}
           </p>
+          <SetupSql />
         </li>
         <li>
           <h4 className="asb-group-title">{t("backup.cloud.guide.auth.title")}</h4>
@@ -139,51 +141,30 @@ function CloudBackupGuide({ projectUrl }: { projectUrl: string }) {
           <p>{t("backup.cloud.guide.save.body")}</p>
         </li>
       </ol>
-    </CollapsibleSection>
+    </AppDialog>
   );
 }
 
-function SetupSql({ busy }: { busy: boolean }) {
+/** The SQL the third guide step runs once, read when the dialog mounts. */
+function SetupSql() {
   const { t } = useI18n();
-  const sqlId = useId();
-  const [setupSql, setSetupSql] = useState<string | null>(null);
-  const revealSetupSql = () => {
-    if (setupSql !== null) {
-      setSetupSql(null);
-      return;
-    }
-    void getCloudBackupSetupSql()
-      .then(setSetupSql)
+  const [sql, setSql] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    getCloudBackupSetupSql()
+      .then((next) => {
+        if (active) setSql(next);
+      })
       .catch((caught) => {
+        if (!active) return;
         const error = caught as CommandError;
         toast({ kind: "error", title: toastMessage("backup.cloud.setupSqlError"), description: <CommandErrorLines error={error} /> });
       });
-  };
-
-  const copySetupSql = async () => {
-    if (setupSql === null) return;
-    try {
-      await navigator.clipboard.writeText(setupSql);
-      toast({ kind: "success", title: toastMessage("backup.cloud.setupSqlCopied") });
-    } catch {
-      toast({ kind: "error", title: toastMessage("backup.cloud.setupSqlCopyFailed") });
-    }
-  };
-
-  return <div className="asb-cloud-backup-sql">
-    <div className="asb-cloud-backup-actions">
-      <Button variant="secondary" size="compact" disabled={busy} onClick={revealSetupSql}
-        aria-expanded={setupSql !== null} aria-controls={setupSql === null ? undefined : sqlId}>
-        {t(setupSql === null ? "backup.cloud.showSetupSql" : "backup.cloud.hideSetupSql")}
-      </Button>
-      {setupSql !== null && <Button variant="secondary" size="compact" disabled={busy}
-        onClick={() => void copySetupSql()}>{t("backup.cloud.copySetupSql")}</Button>}
-    </div>
-    {setupSql !== null && <label className="asb-field" id={sqlId}>
-      <span>{t("backup.cloud.setupSqlLabel")}</span>
-      <Textarea readOnly aria-label={t("backup.cloud.setupSqlAria")} value={setupSql} />
-    </label>}
-  </div>;
+    return () => {
+      active = false;
+    };
+  }, []);
+  return sql === null ? null : <CodePreview target={t("backup.cloud.setupSqlTitle")} content={sql} />;
 }
 
 interface ConnectionProps extends Pick<Props, "busy" | "onSave" | "onTestConnection"> {
@@ -234,7 +215,6 @@ function CloudBackupConnection({ busy, onSave, onTestConnection, draft, onDraftC
         <Button type="submit" variant="primary" disabled={busy}>{t("backup.cloud.saveConnection")}</Button>
       </div>
     </form>
-    <SetupSql busy={busy} />
   </div>;
 }
 
@@ -291,6 +271,7 @@ export function CloudBackupPanel({ settings, loaded, active, visible, busy, onSa
   const [accountPassword, setAccountPassword] = useState("");
   const [backupPassword, setBackupPassword] = useState("");
   const [pending, setPending] = useState<PendingOperation | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const baseline = useRef<CloudBackupSettings | null>(null);
 
   useEffect(() => {
@@ -299,6 +280,10 @@ export function CloudBackupPanel({ settings, loaded, active, visible, busy, onSa
     setBackupPassword("");
     setPending(null);
   }, [active, busy]);
+
+  /* The tab stays mounted while hidden; an overlay left open there would keep
+     the rest of the app inert once the user returns. */
+  useEffect(() => { if (!active) setGuideOpen(false); }, [active]);
 
   useEffect(() => {
     if (!settings) return;
@@ -323,9 +308,9 @@ export function CloudBackupPanel({ settings, loaded, active, visible, busy, onSa
       <div className="asb-backup-hero-copy">
         <h4 className="asb-section-title">{t("backup.cloud.encryptedTitle")}</h4>
         <p className="asb-field-help">{t("backup.cloud.scope")}</p>
+        <Button variant="secondary" onClick={() => setGuideOpen(true)}>{t("backup.cloud.guideTitle")}</Button>
       </div>
     </div>
-    <CloudBackupGuide projectUrl={draft.projectUrl} />
     {!loaded ? (
       <div className="asb-cloud-backup-loading" role="status" aria-label={t("backup.cloud.loadingAria")}>
         <div className="asb-skeleton" />
@@ -340,6 +325,7 @@ export function CloudBackupPanel({ settings, loaded, active, visible, busy, onSa
           onPasswordChange={setBackupPassword} onReview={setPending} />
       </div>
     )}
+    {active && guideOpen && <CloudBackupGuide projectUrl={draft.projectUrl} onClose={() => setGuideOpen(false)} />}
     {pending && <CloudBackupReview pending={pending} busy={busy}
       onConfirm={() => void confirm()} onClose={() => setPending(null)} />}
   </section>;

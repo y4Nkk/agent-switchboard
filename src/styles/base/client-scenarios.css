@@ -1,0 +1,269 @@
+/* —— Slot strip: the four things a scenario holds —— */
+.asb-slot-strip > .asb-fact-row.is-inline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-slot-strip > .asb-fact-row.is-inline > div {
+  display: grid;
+  align-content: start;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-slot-strip > .asb-fact-row.is-inline > div:has(.asb-slot-empty) {
+  border-style: dashed;
+  background: transparent;
+}
+
+.asb-slot-strip .asb-fact-row dt {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  color: color-mix(in srgb, var(--asb-tool-tone) 72%, var(--asb-text));
+  font-weight: 600;
+}
+
+.asb-slot-strip .asb-fact-row dt:has(+ dd .asb-slot-empty) {
+  color: var(--asb-text-muted);
+}
+
+/* The glyph rides inside a sized span: a bare svg class cannot be sized. */
+.asb-slot-glyph {
+  display: flex;
+  flex: none;
+}
+
+.asb-slot-glyph svg {
+  width: var(--asb-icon-size-xs);
+  height: var(--asb-icon-size-xs);
+}
+
+.asb-slot-strip .asb-fact-row dd {
+  display: flex;
+  align-items: center;
+  min-height: var(--asb-control-height-compact);
+  font-weight: 600;
+}
+
+.asb-slot-strip .asb-fact-row dd:has(.asb-slot-empty) {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+/* —— Work scenarios —— */
+.asb-plan-stage-title,
+.asb-plan-section > .asb-group-title {
+  color: var(--asb-text);
+  font: var(--asb-text-section);
+}
+
+.asb-plan-section {
+  display: grid;
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+/* Reserves the stage's footprint until the scenarios are read. */
+.asb-plan-skeleton {
+  display: grid;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-3);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-plan-skeleton-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-plan-skeleton-slots > .asb-skeleton {
+  height: var(--asb-space-6);
+}
+
+.asb-plan-skeleton > .asb-skeleton {
+  height: var(--asb-space-5);
+  width: 60%;
+}
+
+/* A name field with its action beside it. The action ends on the input's
+ * line: the label stands above the input and both controls share the control
+ * height, so a button centered on the whole field would float between the
+ * two lines. A name is a name, so the field takes the medium width in full. */
+.asb-plan-save,
+.asb-plan-panel-head {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+}
+
+.asb-plan-save > .asb-field,
+.asb-plan-panel-head > .asb-field {
+  flex: 0 1 18rem;
+  min-width: 0;
+}
+
+.asb-plan-save {
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-plan-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-plan-empty {
+  margin: 0;
+  padding: var(--asb-space-4);
+  border: 1px dashed var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-medium);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+/* One selectable card per saved scenario. The clipped native radio keeps the
+ * keyboard and screen-reader contract; the card surface carries the visible
+ * selection. */
+.asb-plan-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-medium);
+  background: var(--asb-content);
+  box-shadow: var(--asb-inset-highlight);
+  cursor: pointer;
+  transition: border-color var(--asb-motion-press) var(--asb-easing),
+    background-color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-plan-card:hover {
+  border-color: var(--asb-hairline-strong);
+}
+
+.asb-plan-card:has(input:checked) {
+  border-color: var(--asb-tool-tone);
+  background: color-mix(in srgb, var(--asb-tool-tone) 7%, var(--asb-content));
+}
+
+.asb-plan-card input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.asb-plan-card:has(input:focus-visible) {
+  outline: 2px solid var(--asb-focus-ring);
+  outline-offset: calc(-1 * var(--asb-space-hairline));
+}
+
+.asb-plan-card:has(input:disabled) {
+  cursor: default;
+}
+
+.asb-plan-card-title::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+}
+
+.asb-plan-card-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--asb-space-1) var(--asb-space-2);
+  min-width: 0;
+  padding-inline-end: var(--asb-space-3);
+}
+
+.asb-plan-card-name {
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+/* Inside a card the slots are quiet fills, not a second frame. */
+.asb-plan-card .asb-slot-strip > .asb-fact-row.is-inline {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-1);
+  margin-top: var(--asb-space-1);
+}
+
+.asb-plan-card .asb-slot-strip > .asb-fact-row.is-inline > div {
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 0;
+  background: var(--asb-content-muted);
+}
+
+.asb-plan-card .asb-slot-strip > .asb-fact-row.is-inline > div:has(.asb-slot-empty) {
+  background: transparent;
+}
+
+.asb-plan-card .asb-slot-strip .asb-fact-row dd {
+  min-height: 0;
+  font: var(--asb-text-label);
+}
+
+/* The actions of the selected scenario: one panel that appears with the
+ * selection instead of a standing stack of groups. */
+.asb-plan-panel {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-group);
+  background: var(--asb-content-muted);
+}
+
+.asb-plan-panel > .asb-scope-note {
+  margin: 0;
+}
+
+.asb-plan-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2) var(--asb-space-3);
+}
+
+/* The destructive action leaves the safe rail: spacing first, then the shared
+ * hairline that the danger-text variant draws before itself. */
+.asb-plan-actions > .asb-btn-danger-text {
+  margin-inline-start: auto;
+}
+
+.asb-plan-steps {
+  display: grid;
+  gap: var(--asb-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: var(--asb-text-body);
+}
+
+@container client-tools (max-width: 36rem) {
+  .asb-slot-strip > .asb-fact-row.is-inline,
+  .asb-plan-skeleton-slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

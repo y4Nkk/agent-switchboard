@@ -17,7 +17,7 @@ fn cache_key() -> Result<String, String> {
 }
 
 pub(crate) fn read_cached(state: &LocalState) -> Result<Option<ModelUsageRead>, String> {
-    let index = ReadIndex::open(state.root())?;
+    let Some(index) = ReadIndex::open_snapshot(state.root())? else { return Ok(None); };
     read_snapshot(&index, &cache_key()?)
 }
 

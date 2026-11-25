@@ -48,6 +48,21 @@ impl ReadIndex {
         Self::open_observed(root, &|| Ok(()))
     }
 
+    pub(crate) fn open_snapshot(root: &Path) -> Result<Option<Self>, String> {
+        let path = index_path(root);
+        if layout::directory(root).is_symlink() || path.is_symlink() {
+            return Err("会话读取索引路径不能是符号链接".into());
+        }
+        match fs::metadata(&path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.to_string()),
+        }
+        let connection = connect(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        if schema::validate(&connection)? != schema::CURRENT_VERSION { return Ok(None); }
+        Ok(Some(Self { connection }))
+    }
+
     pub(super) fn open_observed(root: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Self, String> {
         checkpoint()?;
         let directory = layout::directory(root);
@@ -68,6 +83,18 @@ impl ReadIndex {
             "SELECT data FROM entries WHERE kind=?1 AND cache_key=?2 AND revision=?3",
             params![kind, cache_key, revision], |row| row.get(0)).optional().map_err(error)?;
         self.decode(kind, cache_key, raw)
+    }
+
+    pub(super) fn identity_paths(&self, id: &str) -> Result<Vec<PathBuf>, String> {
+        let mut statement = self.connection.prepare(
+            "SELECT cache_key FROM entries WHERE kind='identity' AND json_valid(data) AND json_extract(data,'$.id')=?1",
+        ).map_err(error)?;
+        let keys = statement.query_map([id], |row| row.get::<_, String>(0)).map_err(error)?;
+        let mut paths = Vec::new();
+        for key in keys {
+            if let Ok(path) = serde_json::from_str(&key.map_err(error)?) { paths.push(path); }
+        }
+        Ok(paths)
     }
 
     pub(crate) fn previous<T: DeserializeOwned>(&self, kind: &str, cache_key: &str) -> Result<Option<T>, String> {

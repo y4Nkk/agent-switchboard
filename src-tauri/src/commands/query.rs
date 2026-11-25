@@ -217,21 +217,61 @@ pub async fn query_profile_usage(
     result
 }
 
-/// Reads the last completed query, including failure and retained readings.
-/// `null` means this query has never completed. No network access.
-#[tauri::command]
-pub async fn read_profile_usage(
-    app: tauri::AppHandle,
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ProfileUsageKey {
     target: asb_core::contracts::AppKind,
     profile_id: String,
-) -> Result<Option<asb_core::contracts::UsageSnapshot>, CommandError> {
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProfileUsageRead {
+    snapshot: Option<asb_core::contracts::UsageSnapshot>,
+    error: Option<CommandError>,
+}
+
+/// Results follow the requested profile order and share one cache read.
+#[tauri::command]
+pub(crate) async fn read_profile_usages(
+    app: tauri::AppHandle,
+    profiles: Vec<ProfileUsageKey>,
+) -> Result<Vec<ProfileUsageRead>, CommandError> {
+    use asb_core::contracts::AppKind;
+    use std::collections::BTreeMap;
+
+    if profiles.is_empty() { return Ok(Vec::new()); }
     let state = state(&app)?;
     let gate = app.state::<super::ConfigWriteGate>().inner().clone();
     gate.run(move || {
-        let profile = crate::usage_query::scheduler::usage_profile(&state, target, &profile_id)
-            .map_err(|error| operation_error("profile-not-found", error))?;
-        crate::usage_cache::get(&state, &profile)
-            .map_err(|error| CommandError::new("usage-cache-read-failed", error))
+        let store = state.configuration();
+        let cache = state.load_usage_cache()
+            .map_err(|error| CommandError::new("usage-cache-read-failed", error))?.unwrap_or_default();
+        let queries = [AppKind::Codex, AppKind::Claude].into_iter()
+            .filter(|target| profiles.iter().any(|profile| profile.target == *target))
+            .map(|target| {
+                let result: Result<BTreeMap<String, Option<UsageQuery>>, CommandError> = match target {
+                    AppKind::Codex => store.list_codex_providers()
+                        .map(|rows| rows.into_iter().map(|row| (row.profile.id, row.usage_query)).collect())
+                        .map_err(super::error::store_error),
+                    AppKind::Claude => crate::config_store::providers::load_provider_files(&store, target)
+                        .map(|rows| rows.into_iter().map(|row| (row.id, row.usage_query)).collect())
+                        .map_err(|error| operation_error("profile-not-found", error.into())),
+                };
+                (target, result)
+            }).collect::<BTreeMap<_, _>>();
+        Ok(profiles.into_iter().map(|profile| {
+            let result = queries.get(&profile.target).expect("requested client is loaded").as_ref()
+                .map_err(Clone::clone)
+                .and_then(|queries| queries.get(&profile.profile_id)
+                    .ok_or_else(|| CommandError::new("profile-not-found", "供应商不存在")))
+                .and_then(|query| cache.snapshot(&profile.profile_id, query.as_ref())
+                    .map_err(|error| CommandError::new("usage-cache-read-failed", error)));
+            match result {
+                Ok(snapshot) => ProfileUsageRead { snapshot, error: None },
+                Err(error) => ProfileUsageRead { snapshot: None, error: Some(error) },
+            }
+        }).collect())
     })
     .await
 }

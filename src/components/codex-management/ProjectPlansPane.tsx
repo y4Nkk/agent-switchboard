@@ -1,15 +1,21 @@
-import { uiMessage } from "../../i18n/errors";
-import { useEffect, useId, useState, type ComponentType } from "react";
+import { useEffect, useId, useRef, useState, type ComponentType, type Ref } from "react";
 import * as api from "../../api/codex-project-plans";
 import type { MessageKey, TFunction } from "../../i18n";
 import { useI18n } from "../../i18n";
-import { localizedMessageText } from "../../i18n/errors";
+import { localizedMessageText, uiMessage } from "../../i18n/errors";
+import { AppDialog } from "../AppDialog";
 import { Button } from "../Button";
+import { ConfirmSheet } from "../ConfirmSheet";
 import { FactList } from "../FactList";
 import { Input } from "../Input";
 import { ClientManagementModule } from "../client-management/ClientManagementModule";
+import { useClientToolDialog } from "../client-management/use-client-tool-dialog";
 import { McpKindIcon, ProviderKindIcon, ScrollTextIcon, SkillKindIcon } from "../icons";
 import type { CodexOperations } from "./operations";
+
+type ScenarioDialog =
+  | { kind: "restore"; view: api.CodexProjectPlansView; preview: api.CodexProjectApplyPreview }
+  | { kind: "delete"; plan: api.CodexProjectPlan; revision: string };
 
 const ACTION_LABELS: Record<api.CodexProjectApplyStep["action"], MessageKey> = {
   switch: "codex.plans.actionSwitch", enable: "codex.plans.actionEnable",
@@ -120,48 +126,49 @@ function CurrentStateStage({ view, operations, newName, setNewName, reset, onCre
   </div>;
 }
 
-function ScenarioGallery({ view, selectedId, disabled, onSelect }: {
-  view: api.CodexProjectPlansView; selectedId: string | null; disabled: boolean; onSelect: (id: string) => void;
+function ScenarioGallery({ view, selectedId, disabled, headingRef, onSelect }: {
+  view: api.CodexProjectPlansView; selectedId: string | null; disabled: boolean;
+  headingRef: Ref<HTMLHeadingElement>; onSelect: (id: string) => void;
 }) {
   const { t } = useI18n();
   const headingId = useId();
   const groupName = useId();
   return <section className="asb-plan-section" aria-labelledby={headingId}>
-    <h4 className="asb-group-title" id={headingId}>{t("codex.plans.savedScenarios")}</h4>
+    <h4 className="asb-group-title" id={headingId} ref={headingRef} tabIndex={-1}>{t("codex.plans.savedScenarios")}</h4>
     {view.plans.length === 0 ? <p className="asb-plan-empty">{t("codex.plans.empty")}</p> : (
       <div role="radiogroup" aria-label={t("codex.plans.selectAria")} className="asb-plan-gallery">
-        {view.plans.map((plan) => {
-          const selected = plan.id === selectedId;
-          return <label key={plan.id} className={"asb-plan-card" + (selected ? " is-selected" : "")}>
-            <input type="radio" name={groupName} checked={selected} disabled={disabled} onChange={() => onSelect(plan.id)} />
-            <span className="asb-plan-card-title">
+        {view.plans.map((plan) => (
+          <div key={plan.id} className="asb-plan-card">
+            <label className="asb-plan-card-title">
+              <input type="radio" name={groupName} checked={plan.id === selectedId} disabled={disabled}
+                onChange={() => onSelect(plan.id)} />
               <span className="asb-plan-card-name">{plan.name}</span>
               {plan.id === view.current && <span className="asb-status-pill is-ok">
                 <span className="asb-status-pill-dot" aria-hidden="true" />{t("codex.plans.currentPill")}
               </span>}
-            </span>
+            </label>
             <SlotStrip values={scenarioSlots(view, plan, t)} />
-          </label>;
-        })}
+          </div>
+        ))}
       </div>
     )}
   </section>;
 }
 
 /** The actions for the selected scenario. It appears with the selection, so an
- * unselected gallery never carries empty groups or placeholder hints. */
-function ScenarioPanel({ view, selected, operations, name, setName, deleting, setDeleting, setPreview, clearOutcome, reset, onDelete }: {
+ * unselected gallery never carries empty groups or placeholder hints. The
+ * delete confirmation and the restore preview are the pane's dialogs. */
+function ScenarioPanel({ view, selected, operations, name, setName, onPreview, reset, onDelete }: {
   view: api.CodexProjectPlansView;
   selected: api.CodexProjectPlan;
   operations: CodexOperations;
   name: string;
   setName: (name: string) => void;
-  deleting: boolean;
-  setDeleting: (deleting: boolean) => void;
-  setPreview: (preview: api.CodexProjectApplyPreview | null) => void;
-  clearOutcome: () => void;
+  /** Asks the pane to preview restoring the selected scenario. */
+  onPreview: (action: HTMLButtonElement) => void;
   reset: (next: api.CodexProjectPlansView) => void;
-  onDelete: () => void;
+  /** Asks the pane to confirm deleting the selected scenario. */
+  onDelete: (action: HTMLButtonElement) => void;
 }) {
   const { run, busy, changed } = operations;
   const { t } = useI18n();
@@ -175,51 +182,40 @@ function ScenarioPanel({ view, selected, operations, name, setName, deleting, se
         changed(uiMessage("codex.plans.nameSaved"));
       })}>{t("codex.plans.saveName")}</Button>
     </div>
-    {deleting ? (
-      <div className="asb-plan-confirm" role="group" aria-label={t("codex.plans.deleteConfirmAria")}>
-        <p className="asb-warn-text">{t("codex.plans.deleteConfirm", { name: selected.name })}</p>
-        <div className="asb-form-actions">
-          <Button variant="secondary" disabled={busy} onClick={() => setDeleting(false)}>{t("codex.plans.keep")}</Button>
-          <Button variant="danger" disabled={busy} onClick={() => void run(async () => {
-            reset(await api.deleteCodexProjectPlan(selected.id, view.revision));
-            onDelete();
-            changed(uiMessage("codex.plans.deleted"));
-          })}>{t("codex.plans.confirmDelete")}</Button>
-        </div>
-      </div>
-    ) : (
-      <div className="asb-plan-actions">
-        <Button variant="primary" disabled={busy} onClick={() => void run(async () => {
-          clearOutcome();
-          setPreview(await api.previewCodexProjectPlanApply(selected.id, view.revision));
-        })}>{t("codex.plans.previewApply")}</Button>
-        <Button variant="secondary" disabled={busy} onClick={() => void run(async () => {
-          reset(await api.resnapshotCodexProjectPlan(selected.id, view.revision));
-          changed(uiMessage("codex.plans.updatedFromCurrent"));
-        })}>{t("codex.plans.updateFromCurrent")}</Button>
-        <Button variant="secondary" disabled={busy} onClick={() => void run(async () => {
-          reset(await api.setCurrentCodexProjectPlan(isCurrent ? null : selected.id, view.revision));
-          changed(isCurrent ? uiMessage("codex.plans.clearedCurrent") : uiMessage("codex.plans.setCurrentDone"));
-        })}>{t(isCurrent ? "codex.plans.clearCurrent" : "codex.plans.setCurrentLabel")}</Button>
-        <Button variant="dangerText" disabled={busy} onClick={() => setDeleting(true)}>{t("codex.plans.deleteGroup")}</Button>
-      </div>
-    )}
+    <div className="asb-plan-actions">
+      <Button variant="primary" disabled={busy} onClick={(event) => onPreview(event.currentTarget)}>{t("codex.plans.previewApply")}</Button>
+      <Button variant="secondary" disabled={busy} onClick={() => void run(async () => {
+        reset(await api.resnapshotCodexProjectPlan(selected.id, view.revision));
+        changed(uiMessage("codex.plans.updatedFromCurrent"));
+      })}>{t("codex.plans.updateFromCurrent")}</Button>
+      <Button variant="secondary" disabled={busy} onClick={() => void run(async () => {
+        reset(await api.setCurrentCodexProjectPlan(isCurrent ? null : selected.id, view.revision));
+        changed(isCurrent ? uiMessage("codex.plans.clearedCurrent") : uiMessage("codex.plans.setCurrentDone"));
+      })}>{t(isCurrent ? "codex.plans.clearCurrent" : "codex.plans.setCurrentLabel")}</Button>
+      <Button variant="dangerText" disabled={busy} onClick={(event) => onDelete(event.currentTarget)}>{t("codex.plans.deleteGroup")}</Button>
+    </div>
   </section>;
 }
 
-function RestorePreview({ view, preview, operations, setView, setPreview, setApplied, setWarnings }: {
+/** The restore plan as a dialog: what will be written and what is saved first,
+ * then the one confirmation that applies it. A failed apply stays here with its
+ * reason; a successful one is reported on the page. */
+function RestorePreview({ view, preview, operations, onClose, onApplied }: {
   view: api.CodexProjectPlansView;
   preview: api.CodexProjectApplyPreview;
   operations: CodexOperations;
-  setView: (view: api.CodexProjectPlansView) => void;
-  setPreview: (preview: api.CodexProjectApplyPreview | null) => void;
-  setApplied: (applied: api.CodexProjectApplyStep[]) => void;
-  setWarnings: (warnings: api.CodexProjectApplyOutcome["warnings"]) => void;
+  onClose: () => void;
+  onApplied: (outcome: api.CodexProjectApplyOutcome) => void;
 }) {
-  const { run, busy, changed } = operations;
+  const { run, busy, error } = operations;
   const { t } = useI18n();
-  return <section className="asb-plan-panel asb-plan-preview" aria-label={t("codex.plans.previewAria")}>
-    <h4 className="asb-group-title">{t("codex.plans.previewGroup")}</h4>
+  return <AppDialog title={t("codex.plans.previewGroup")} busy={busy} onClose={onClose} footer={<>
+    <Button autoFocus variant="secondary" disabled={busy} onClick={onClose}>{t("codex.plans.backToScenarios")}</Button>
+    <Button variant="primary" disabled={busy} onClick={() => void run(async () => {
+      onApplied(await api.applyCodexProjectPlan(preview.planId, view.revision, true));
+    })}>{t("codex.plans.confirmApply")}</Button>
+  </>}>
+    {error && <p role="alert" className="asb-field-error">{error}</p>}
     <p className="asb-scope-note">{preview.autosavePlanId
       ? t("codex.plans.autosaveNote", { name: projectPlanName(view, preview.autosavePlanId) })
       : t("codex.plans.noAutosave")}</p>
@@ -227,66 +223,94 @@ function RestorePreview({ view, preview, operations, setView, setPreview, setApp
       ? <ul className="asb-plan-steps">{preview.steps.map((step, index) => <li key={`${step.kind}-${step.target}-${index}`}>{stepText(step, t)}</li>)}</ul>
       : <p className="asb-scope-note">{t("codex.plans.uptodate")}</p>}
     {preview.warnings.map((warning) => <p key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</p>)}
-    <div className="asb-form-actions">
-      <Button variant="secondary" disabled={busy} onClick={() => setPreview(null)}>{t("codex.plans.backToScenarios")}</Button>
-      <Button variant="primary" disabled={busy} onClick={() => void run(async () => {
-        const outcome = await api.applyCodexProjectPlan(preview.planId, view.revision, true);
-        setView(outcome.view); setPreview(null);
-        setApplied(outcome.steps); setWarnings(outcome.warnings);
-        changed(outcome.warnings.length
-          ? uiMessage("codex.plans.appliedWithWarnings")
-          : uiMessage("codex.plans.appliedClean"));
-      })}>{t("codex.plans.confirmApply")}</Button>
-    </div>
-  </section>;
+  </AppDialog>;
 }
 
-/** Creates, maintains, previews, and applies Codex project snapshots. */
-export function ProjectPlansPane({ operations }: { operations: CodexOperations }) {
-  const { run, busy } = operations;
+function DeleteScenarioConfirmation({ plan, revision, operations, onCancel, onDeleted }: {
+  plan: api.CodexProjectPlan;
+  revision: api.CodexProjectPlansView["revision"];
+  operations: CodexOperations;
+  onCancel: () => void;
+  onDeleted: (view: api.CodexProjectPlansView) => void;
+}) {
+  const { busy, error, run } = operations;
+  const { t } = useI18n();
+  return <ConfirmSheet title={t("codex.plans.deleteTitle")} busy={busy} destructive
+    confirmLabel={t("codex.plans.confirmDelete")}
+    onConfirm={() => void run(async () => onDeleted(await api.deleteCodexProjectPlan(plan.id, revision)))}
+    onCancel={onCancel}>
+    <ul className="asb-dialog-details">
+      <li>{t("codex.plans.deleteLine1", { name: plan.name })}</li>
+      <li>{t("codex.plans.deleteLine2")}</li>
+    </ul>
+    {error && <p role="alert" className="asb-field-error">{error}</p>}
+  </ConfirmSheet>;
+}
+
+/** Creates, maintains, previews, and applies Codex project snapshots. Its two
+ * dialogs close with the pane: one left in a hidden page keeps the app inert. */
+export function ProjectPlansPane({ operations, active }: { operations: CodexOperations; active: boolean }) {
+  const { run, busy, changed, setError } = operations;
   const { t } = useI18n();
   const [view, setView] = useState<api.CodexProjectPlansView | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [newName, setNewName] = useState("");
-  const [preview, setPreview] = useState<api.CodexProjectApplyPreview | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [applied, setApplied] = useState<api.CodexProjectApplyStep[]>([]);
-  const [warnings, setWarnings] = useState<api.CodexProjectApplyOutcome["warnings"]>([]);
+  const [outcome, setOutcome] = useState<Pick<api.CodexProjectApplyOutcome, "steps" | "warnings"> | null>(null);
+  const galleryHeading = useRef<HTMLHeadingElement>(null);
+  const { dialog, open, load, close } = useClientToolDialog<ScenarioDialog>(active, busy);
   const reload = () => void run(async () => setView(await api.listCodexProjectPlans()));
-  const clearOutcome = () => { setApplied([]); setWarnings([]); };
   const reset = (next: api.CodexProjectPlansView) => {
-    setView(next); setPreview(null); clearOutcome();
+    setView(next); setOutcome(null);
   };
-  // Selecting another scenario drops its pending preview, delete step and result.
   const select = (id: string) => {
     const plan = view?.plans.find((item) => item.id === id) ?? null;
     setSelectedId(plan?.id ?? null); setName(plan?.name ?? "");
-    setPreview(null); setDeleting(false); clearOutcome();
+    setOutcome(null);
   };
 
   useEffect(() => { void run(async () => setView(await api.listCodexProjectPlans())); }, [run]);
 
-  if (!view) return (
-    <ClientManagementModule title={t("codex.plans.title")} refreshLabel={t("codex.plans.refresh")} busy={busy} onRefresh={reload}>
-      <PlanSkeleton />
-    </ClientManagementModule>
-  );
+  if (!view) return <ClientManagementModule title={t("codex.plans.title")} refreshLabel={t("codex.plans.refresh")} busy={busy} onRefresh={reload}>
+    {busy && <PlanSkeleton />}
+  </ClientManagementModule>;
 
   const selected = view.plans.find((plan) => plan.id === selectedId) ?? null;
+  const openPreview = (action: HTMLButtonElement, planId: string) => void load(async () => {
+    setOutcome(null);
+    return { kind: "restore", view, preview: await api.previewCodexProjectPlanApply(planId, view.revision) };
+  }, run, () => action);
   return <ClientManagementModule title={t("codex.plans.title")} refreshLabel={t("codex.plans.refresh")} busy={busy} onRefresh={reload}>
     <CurrentStateStage view={view} operations={operations} newName={newName} setNewName={setNewName} reset={reset}
       onCreated={(plan) => { setSelectedId(plan?.id ?? null); setName(plan?.name ?? ""); setNewName(""); }} />
-    <ScenarioGallery view={view} selectedId={selectedId} disabled={busy} onSelect={select} />
+    <ScenarioGallery view={view} selectedId={selectedId} disabled={busy} headingRef={galleryHeading} onSelect={select} />
     {selected && <ScenarioPanel view={view} selected={selected} operations={operations} name={name} setName={setName}
-      deleting={deleting} setDeleting={setDeleting} setPreview={setPreview} clearOutcome={clearOutcome} reset={reset}
-      onDelete={() => { setSelectedId(null); setName(""); setDeleting(false); }} />}
-    {preview && <RestorePreview view={view} preview={preview} operations={operations} setView={setView}
-      setPreview={setPreview} setApplied={setApplied} setWarnings={setWarnings} />}
-    {applied.length > 0 && <section className="asb-plan-panel asb-plan-result" aria-label={t("codex.plans.resultAria")}>
+      onPreview={(action) => openPreview(action, selected.id)} reset={reset}
+      onDelete={(action) => {
+        setError(null);
+        open({ kind: "delete", plan: selected, revision: view.revision },
+          () => action.isConnected ? action : galleryHeading.current);
+      }} />}
+    {outcome && outcome.steps.length > 0 && <section className="asb-plan-panel" aria-label={t("codex.plans.resultAria")}>
       <h4 className="asb-group-title">{t("codex.plans.resultGroup")}</h4>
-      {applied.map((entry, index) => <p key={`${entry.kind}-${entry.target}-${index}`} className="asb-scope-note">{stepText(entry, t)}</p>)}
+      {outcome.steps.map((entry, index) => <p key={`${entry.kind}-${entry.target}-${index}`} className="asb-scope-note">{stepText(entry, t)}</p>)}
     </section>}
-    {warnings.map((warning) => <p key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</p>)}
+    {outcome?.warnings.map((warning) => <p key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</p>)}
+    {dialog?.kind === "restore" && <RestorePreview view={dialog.view} preview={dialog.preview} operations={operations}
+      onClose={close}
+      onApplied={({ view: next, steps, warnings }) => {
+        setView(next); close();
+        setOutcome({ steps, warnings });
+        changed(warnings.length
+          ? uiMessage("codex.plans.appliedWithWarnings")
+          : uiMessage("codex.plans.appliedClean"));
+      }} />}
+    {dialog?.kind === "delete" && <DeleteScenarioConfirmation plan={dialog.plan} revision={dialog.revision}
+      operations={operations} onCancel={close}
+      onDeleted={(next) => {
+        reset(next);
+        setSelectedId(null); setName(""); close();
+        changed(uiMessage("codex.plans.deleted"));
+      }} />}
   </ClientManagementModule>;
 }

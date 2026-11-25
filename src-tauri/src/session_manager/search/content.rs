@@ -1,5 +1,5 @@
 use super::super::{messages::aligned_content_offset, read_index::{key, ReadIndex},
-    text::{raw_offset, TextQuery}, timeline, SessionSource};
+    text::TextQuery, timeline, SessionSource};
 use serde::{Deserialize, Serialize};
 use std::ops::ControlFlow;
 
@@ -27,10 +27,9 @@ pub(super) fn matches(source: &SessionSource, query: &TextQuery, control: &super
     let mut hits = Vec::new();
     let issues = messages.visit_observed(|completed, total| control.messages(completed, total), &|| control.checkpoint(), |message| {
         control.checkpoint()?;
-        if let Some(position) = query.find(&message.content) {
-            let raw = raw_offset(&message.content, position).ok_or("搜索正文位置无效")?;
-            hits.push(ContentMatch { message_id: message.id, content_offset: aligned_content_offset(raw),
-                excerpt: query.excerpt(&message.content) });
+        if let Some(found) = query.first_match(&message.content, &|| control.checkpoint())? {
+            hits.push(ContentMatch { message_id: message.id, content_offset: aligned_content_offset(found.range.start),
+                excerpt: query.excerpt_at(&message.content, found.compact_offset) });
         }
         Ok(ControlFlow::Continue(()))
     })?;

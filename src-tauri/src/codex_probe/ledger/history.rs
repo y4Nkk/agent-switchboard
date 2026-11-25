@@ -7,9 +7,10 @@ impl ProbeLedger {
         let Some(connection) = self.open_read()? else {
             return Ok(ProbeHistoryPage { items: Vec::new(), total: 0, offset: query.offset, limit });
         };
+        let transaction = connection.unchecked_transaction().map_err(db_error)?;
         let total: u32 = {
             let refs: Vec<&dyn rusqlite::ToSql> = bindings.iter().map(|value| value as &dyn rusqlite::ToSql).collect();
-            connection
+            transaction
                 .query_row(
                     &format!("SELECT count(*) FROM probe_batches b {where_clause}"),
                     rusqlite::params_from_iter(refs.iter()),
@@ -17,18 +18,21 @@ impl ProbeLedger {
                 )
                 .map_err(db_error)?
         };
-        let mut statement = connection
+        let mut statement = transaction
             .prepare(&format!(
-                "SELECT b.id, b.started_at, b.finished_at, b.status, b.question_label, \
+                "WITH page AS (SELECT b.rowid AS batch_order, b.id, b.started_at, b.finished_at, \
+                 b.status, b.question_label, b.profile_id, b.profile_name, b.grading_version \
+                 FROM probe_batches b {where_clause} \
+                 ORDER BY b.started_at DESC, b.rowid DESC LIMIT ?{} OFFSET ?{}) \
+                 SELECT b.id, b.started_at, b.finished_at, b.status, b.question_label, \
                  b.profile_id, b.profile_name, \
                  count(r.id), \
                  sum(CASE WHEN r.status='passed' THEN 1 ELSE 0 END), \
                  sum(CASE WHEN r.status IN ('passed','failed') THEN 1 ELSE 0 END), \
                  sum(CASE WHEN r.total_tokens IS NOT NULL THEN 1 ELSE 0 END), \
                  sum(r.total_tokens), b.grading_version \
-                 FROM probe_batches b LEFT JOIN probe_runs r ON r.batch_id = b.id \
-                 {where_clause} \
-                 GROUP BY b.id ORDER BY b.started_at DESC, b.rowid DESC LIMIT ?{} OFFSET ?{}",
+                 FROM page b LEFT JOIN probe_runs r ON r.batch_id = b.id \
+                 GROUP BY b.id ORDER BY b.started_at DESC, b.batch_order DESC",
                 bindings.len() + 1,
                 bindings.len() + 2
             ))
@@ -61,6 +65,8 @@ impl ProbeLedger {
             })
             .map_err(db_error)?;
         let items = rows.collect::<Result<Vec<_>, _>>().map_err(db_error)?;
+        drop(statement);
+        transaction.commit().map_err(db_error)?;
         Ok(ProbeHistoryPage { items, total, offset: query.offset, limit })
     }
 

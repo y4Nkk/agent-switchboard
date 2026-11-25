@@ -1,9 +1,14 @@
 use rusqlite::{Connection, OptionalExtension};
 
+pub(super) const CURRENT_VERSION: i64 = 4;
+
 const ENTRIES: &str = "CREATE TABLE entries (
  kind TEXT NOT NULL, cache_key TEXT NOT NULL, revision TEXT NOT NULL, data TEXT NOT NULL,
  PRIMARY KEY(kind,cache_key)
 ) STRICT";
+
+const IDENTITIES: &str = "CREATE INDEX session_identity ON entries(json_extract(data,'$.id'))
+ WHERE kind='identity' AND json_valid(data)";
 
 const USAGE: &[(&str, &str)] = &[
     ("usage_calendar", "CREATE TABLE usage_calendar (scope TEXT PRIMARY KEY NOT NULL,zone TEXT NOT NULL) STRICT"),
@@ -36,28 +41,34 @@ const USAGE: &[(&str, &str)] = &[
 
 pub(super) fn validate(connection: &Connection) -> Result<i64, String> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).map_err(error)?;
-    if !(0..=3).contains(&version) { return Err("会话读取索引版本不受支持，已保留原件".into()); }
+    if !(0..=CURRENT_VERSION).contains(&version) { return Err("会话读取索引版本不受支持，已保留原件".into()); }
     let objects: usize = connection.query_row("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'", [], |row| row.get(0)).map_err(error)?;
     if version == 0 && objects != 0 { return Err("会话读取索引模式未知，已保留原件".into()); }
     if version > 0 { validate_object(connection, "entries", ENTRIES)?; }
     if version > 0 && version < 3 && objects != 1 { return Err("会话读取索引旧模式无效，已保留原件".into()); }
-    if version == 3 {
+    if version >= 3 {
         for (name, sql) in USAGE { validate_object(connection, name, sql)?; }
-        if objects != USAGE.len() + 1 { return Err("会话读取索引存在未知结构，已保留原件".into()); }
+        if version == CURRENT_VERSION { validate_object(connection, "session_identity", IDENTITIES)?; }
+        if objects != USAGE.len() + if version == CURRENT_VERSION { 2 } else { 1 } {
+            return Err("会话读取索引存在未知结构，已保留原件".into());
+        }
     }
     Ok(version)
 }
 
 pub(super) fn initialize(connection: &Connection) -> Result<(), String> {
     let version = validate(connection)?;
-    if version == 3 { return Ok(()); }
+    if version == CURRENT_VERSION { return Ok(()); }
     let transaction = connection.unchecked_transaction().map_err(error)?;
     if version == 0 { transaction.execute_batch(ENTRIES).map_err(error)?; }
     if version == 1 { transaction.execute("DELETE FROM entries", []).map_err(error)?; }
-    for (_, sql) in USAGE { transaction.execute_batch(sql).map_err(error)?; }
-    if version == 2 { transfer_snapshot(&transaction)?; }
-    transaction.execute("DELETE FROM entries WHERE kind IN ('usage-file','usage-saved-events','usage-reports')", []).map_err(error)?;
-    transaction.pragma_update(None, "user_version", 3).map_err(error)?;
+    if version < 3 {
+        for (_, sql) in USAGE { transaction.execute_batch(sql).map_err(error)?; }
+        if version == 2 { transfer_snapshot(&transaction)?; }
+        transaction.execute("DELETE FROM entries WHERE kind IN ('usage-file','usage-saved-events','usage-reports')", []).map_err(error)?;
+    }
+    transaction.execute_batch(IDENTITIES).map_err(error)?;
+    transaction.pragma_update(None, "user_version", CURRENT_VERSION).map_err(error)?;
     transaction.commit().map_err(error)?;
     validate(connection)?;
     Ok(())

@@ -49,7 +49,9 @@ export interface SessionMessagePreview {
   id: string;
   role: string;
   content: string;
+  contentRevision: string;
   contentLength: number;
+  contentPageSize: number;
   at: string | null;
   bookmarked: boolean | null;
   imageCount: number;
@@ -59,7 +61,7 @@ export interface SessionMessagePage {
   session: SessionMeta;
   items: SessionMessagePreview[];
   offset: number;
-  total: number;
+  snapshot: { total: number; revision: string };
   pageSize: number;
   bookmarkIssue: LocalizedMessage | null;
   issues: string[];
@@ -138,6 +140,7 @@ export function updateSessionOrganization(
 }
 
 export interface SessionBookmarkSummary {
+  contentPageSize: number;
   imageCount: number;
   id: string;
   app: AppKind;
@@ -180,12 +183,20 @@ export function getSessionMetadata(app: AppKind, sessionId: string): Promise<{ s
   return invoke("get_session_metadata", { app, sessionId });
 }
 
-export function getSessionMessagePage(app: AppKind, sessionId: string, offset: number, anchorId: string | null): Promise<SessionMessagePage> {
-  return invoke("get_session_message_page", { request: { app, sessionId, offset, anchorId } });
+export function getSessionMessagePage(app: AppKind, sessionId: string, offset: number, anchorId: string | null,
+  snapshot: SessionMessagePage["snapshot"] | null): Promise<SessionMessagePage> {
+  return invoke("get_session_message_page", { request: { app, sessionId, offset, anchorId, snapshot } });
 }
 
-export function getSessionMessageContent(app: AppKind, sessionId: string, messageId: string, offset: number): Promise<SessionContentPage> {
-  return invoke("get_session_message_content", { request: { app, sessionId, messageId, offset } });
+export type SessionFirstMessage = Pick<SessionMessagePreview, "id" | "role" | "at" | "content"> & { truncated: boolean };
+
+export function getSessionFirstMessages(app: AppKind, sessionId: string): Promise<SessionFirstMessage[]> {
+  return invoke("get_session_first_messages", { app, sessionId });
+}
+
+export function getSessionMessageContent(app: AppKind, sessionId: string, messageId: string, offset: number,
+  contentRevision: string): Promise<SessionContentPage> {
+  return invoke("get_session_message_content", { request: { app, sessionId, messageId, offset, contentRevision } });
 }
 
 export function getSessionBookmarkContent(id: string, offset: number): Promise<SessionContentPage> {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { SessionContentPage, SessionMessagePreview } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { useMessageState } from "../../i18n/use-message-state";
@@ -8,15 +8,16 @@ import { Collapsible } from "../Collapsible";
 import { copyText, messageRole } from "./session-content";
 import { toast, toastMessage } from "../use-toast";
 import { SessionContent, SessionText } from "./SessionContent";
+import type { ReadingTarget } from "./use-session-detail";
 
 interface Props {
-  message: SessionMessagePreview;
-  readContent: (id: string, offset: number) => Promise<SessionContentPage>;
+  message: Omit<SessionMessagePreview, "contentRevision">;
+  readContent: (offset: number) => Promise<SessionContentPage>;
   readCopyText: (id: string) => Promise<string>;
-  targeted: boolean;
+  target?: ReadingTarget;
+  navigate?: boolean;
   expanded: boolean;
-  contentOffset: number;
-  onContentOffsetChange: (id: string, offset: number) => void;
+  initialOffset?: number;
   onToggleExpanded?: (id: string) => void;
   onBookmark?: () => void;
   bookmarked?: boolean | null;
@@ -54,10 +55,10 @@ export function SessionMessageView({
   message,
   readContent,
   readCopyText,
-  targeted,
+  target,
+  navigate = false,
   expanded,
-  contentOffset,
-  onContentOffsetChange,
+  initialOffset = 0,
   onToggleExpanded,
   onBookmark,
   bookmarked,
@@ -65,29 +66,35 @@ export function SessionMessageView({
 }: Props) {
   const { t } = useI18n();
   const isLong = message.contentLength > [...message.content].length || message.imageCount > 0;
-  const read = useCallback((offset: number) => readContent(message.id, offset), [readContent, message.id]);
   // Preview and full reader render the same text, so only one may exist at a
   // time: the preview returns exactly when the collapse transition ends and
   // the shared disclosure unmounts the reader (Collapsible onClosed).
   const [previewShown, setPreviewShown] = useState(!expanded);
   const bodyId = useId();
+  const article = useRef<HTMLElement>(null);
   useEffect(() => {
     if (expanded) setPreviewShown(false);
   }, [expanded]);
+  useEffect(() => {
+    if (!navigate || !target || target.match || isLong) return;
+    article.current?.focus({ preventScroll: true });
+    article.current?.scrollIntoView({ block: "center", inline: "nearest" });
+  }, [target, navigate, isLong]);
 
   return (
     <article
-      className={`asb-session-message is-${message.role.toLowerCase()}${targeted ? " is-target" : ""}`}
+      ref={article}
       data-message-id={message.id}
-      tabIndex={targeted ? -1 : undefined}
+      className={`asb-session-message is-${message.role.toLowerCase()}${target ? " is-target" : ""}`}
+      tabIndex={target ? -1 : undefined}
     >
       <MessageHeader message={message} readCopyText={readCopyText}
         onBookmark={onBookmark} bookmarked={bookmarked} bookmarkBusy={bookmarkBusy} />
-      {!isLong ? <SessionText content={message.content} />
+      {!isLong ? <SessionText content={message.content} match={target?.match} navigate={navigate} />
         : previewShown ? <SessionText content={message.content} preview /> : null}
       {isLong && <Collapsible open={expanded} id={bodyId} onClosed={() => setPreviewShown(true)}>
-        <SessionContent read={read} offset={contentOffset}
-          onOffsetChange={(offset) => onContentOffsetChange(message.id, offset)} />
+        <SessionContent read={readContent} total={message.contentLength} sliceSize={message.contentPageSize}
+          target={expanded ? target : undefined} initialOffset={initialOffset} navigate={expanded && navigate} />
       </Collapsible>}
       {isLong && onToggleExpanded && (
         <Button

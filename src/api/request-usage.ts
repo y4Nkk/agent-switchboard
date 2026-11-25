@@ -76,7 +76,8 @@ export interface RequestUsageGroup {
   metrics: RequestUsageMetrics;
 }
 /** Native observations only. Generation and transport scopes never share a denominator. */
-export interface RequestUsageReport {
+export interface RequestUsageReport extends RequestUsagePages {
+  snapshotId: string;
   generatedAtMs: number;
   startAtMs: number;
   endAtMs: number;
@@ -84,17 +85,24 @@ export interface RequestUsageReport {
   scope: MeasurementScope;
   summary: RequestUsageMetrics;
   sources: Array<{ app: AppKind; verifiedRecords: number; earliestAtMs: number | null; latestAtMs: number | null }>;
+  trend: Array<{ atMs: number; speedP50: number | null; firstTokenP50Ms: number | null;
+    durationP50Ms: number | null; failureRate: number | null }>;
+}
+
+interface RequestUsagePages {
   groups: RequestUsageGroup[];
   totalGroups: number;
   groupPage: number;
   groupPageSize: number;
-  trend: Array<{ atMs: number; speedP50: number | null; firstTokenP50Ms: number | null;
-    durationP50Ms: number | null; failureRate: number | null }>;
   rows: RequestUsageRow[];
   page: number;
   pageSize: number;
 }
 
-export function readRequestUsage(query: RequestUsageQuery): Promise<RequestUsageReport> {
-  return invoke("read_request_usage", { query });
+export function refreshRequestUsage(query: RequestUsageQuery): Promise<RequestUsageReport> {
+  return invoke("read_request_usage", { request: { kind: "refresh", query } });
+}
+
+export function readRequestUsagePages(snapshotId: string, page: number, groupPage: number): Promise<RequestUsagePages> {
+  return invoke("read_request_usage", { request: { kind: "page", snapshotId, page, groupPage } });
 }

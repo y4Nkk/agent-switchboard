@@ -8,9 +8,9 @@ Status: implemented
 
 ## Decision
 
-三个设置分类沿用网关设备材质和语义色。本地备份以归档设备、数量和最近写入摘要承接时间轴。云端项目连接与备份传输相邻分组，清理页把日期和预览放在归档图旁。客户端安装使用各自的设备图和版本轨道，当前调用的安装只用一层背景。存储设备配应用数据读数，历史归档和浏览器缓存各有操作区。浏览器缓存轨道对应维护阈值，其他轨道对应应用数据容量。
+三个设置分类沿用网关设备材质和语义色。本地备份以归档设备、数量和最近写入摘要承接时间轴。云端归档图旁放「从零配置 Supabase」入口，项目连接与备份传输相邻分组；清理页把日期和预览放在归档图旁。客户端安装使用各自的设备图和版本轨道，当前调用的安装只用一层背景。存储设备配应用数据读数，历史归档和浏览器缓存各有操作区。浏览器缓存轨道对应维护阈值，其他轨道对应应用数据容量。
 
-DiffView 继续拥有差异文案、值和颜色。备份展开、恢复与撤销确认、Claude 集成预览显式选择按键分组的列表。常规配置预览沿用原表格布局。备份的[工作区滚动归属](../feature/2026-10-14-backup-history-page-scroll.md)、[客户端软件更新契约](../feature/2026-11-04-client-software-version-management.md)及[数据维护边界](2026-10-28-storage-reclamation-expansion.md)仍各自拥有对应事实。
+DiffView 继续拥有差异文案、值和颜色。备份展开、恢复与撤销确认、Claude 集成预览显式选择按键分组的列表。常规配置预览沿用原表格布局。备份的[工作区滚动归属](../feature/2026-10-14-backup-history-page-scroll.md)、[客户端软件更新契约](../feature/2026-11-04-client-software-version-management.md)及[数据维护边界](2026-10-28-storage-reclamation-expansion.md)仍各自拥有对应事实。云端配置指南及其初始化 SQL 由[配置指南弹窗](../feature/2026-11-25-cloud-backup-setup-guide-dialog.md)承载。
 
 ## Alternatives considered
 

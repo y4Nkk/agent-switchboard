@@ -1,6 +1,6 @@
 use crate::{client_config_watcher, client_software, codex_probe, commands, desktop_shortcut,
     gateway, local_state::LocalState, model_usage_cache, native_telemetry, provider_request,
-    resource_monitor, runtime_log, session_manager, storage, tray, update_temp_sweep, usage_query};
+    request_usage, resource_monitor, runtime_log, session_manager, storage, tray, update_temp_sweep, usage_query};
 use tauri::Manager;
 
 pub(crate) fn initialize_services(app: &tauri::AppHandle, local: &LocalState,
@@ -26,6 +26,7 @@ pub(crate) fn initialize_services(app: &tauri::AppHandle, local: &LocalState,
         app.manage(codex_probe::ProbeRegistry::new());
         app.manage(resource_monitor::ResourceMonitor::default());
         app.manage(model_usage_cache::ModelUsageManager::default());
+        app.manage(request_usage::RequestUsageReader::default());
         app.manage(native_telemetry::NativeTelemetry::start(local.root().to_path_buf()));
         if let Err(error) = codex_probe::recover_interrupted(local) {
             issues.push(commands::error::CommandError::new("probe-recovery-failed", error));

@@ -24,9 +24,7 @@ function softwareStatus(item: ClientSoftware, t: TFunction): { label: string; to
   return { label, tone };
 }
 
-/** The version readings on one rail. The link after the local reading restates
- * the backend's comparison; the channel and the official release are only
- * compared as text, so two different strings read as "awaiting". */
+/** An update is directional. Otherwise each link records whether both readings agree. */
 function versionStations(item: ClientSoftware, t: TFunction): ToolStation[] {
   const unknown = t("software.unknown");
   const local: ToolStation = { label: t("software.local"), value: item.version ?? unknown,
@@ -34,8 +32,10 @@ function versionStations(item: ClientSoftware, t: TFunction): ToolStation[] {
   if (item.form !== "cli") return [local];
   const channel = item.available?.version ?? null;
   const official = item.official?.version ?? null;
+  const localLink = item.comparison === "updateAvailable" ? "upgrade"
+    : item.version !== null && item.version === channel ? "same" : "await";
   return [
-    { ...local, link: item.comparison === "updateAvailable" ? "upgrade" : item.comparison === "unknown" ? "await" : "same" },
+    { ...local, link: localLink },
     { label: t("software.channelVersion"), value: channel ?? unknown, state: channel ? "known" : "unknown",
       link: channel !== null && channel === official ? "same" : "await" },
     { label: t("software.official"), value: official ?? unknown, state: official ? "known" : "unknown" },
@@ -47,7 +47,7 @@ interface Props {
   disabled: boolean;
   /** ASB launches this installation, so it takes the stage. */
   featured?: boolean;
-  /** One card's details are open at a time, like the table's expansion rows. */
+  /** One installation's details are open at a time. */
   expanded: boolean;
   onExpandedChange: (open: boolean) => void;
   onUpdate: (id: string) => void;
@@ -65,9 +65,6 @@ export function SoftwareCard({ item, disabled, featured = false, expanded, onExp
     <div className="asb-software-ident">
       <div className="asb-software-art"><SoftwareArt form={item.form} /></div>
       <div className="asb-software-titles">
-        {featured && <span className="asb-status-pill is-ok">
-          <span className="asb-status-pill-dot" aria-hidden="true" />{t("software.active")}
-        </span>}
         <h4 className="asb-software-name">{t(`software.form.${item.form}`)}</h4>
         <span className="asb-software-meta">{t(`software.manager.${item.manager}`)}{channel}</span>
       </div>

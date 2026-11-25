@@ -94,11 +94,9 @@ fn pagination_does_not_change_aggregation_and_groups_keep_native_operation() {
         let mut record = row();
         record.id = format!("record-{index}");
         record.at_ms -= index;
-        projection.add(record, &query(), 60_000);
+        projection.add(record, None, 60_000);
     }
-    assert_eq!(projection.matched, 32);
-    assert_eq!(projection.rows.len(), PAGE_SIZE);
-    assert_eq!(projection.tail.len(), PAGE_SIZE);
+    assert_eq!(projection.ids.len(), 32);
     assert_eq!(projection.groups.len(), 1);
     assert_eq!(projection.summary.finish().records, 32);
 }
@@ -108,6 +106,9 @@ fn obsolete_gateway_query_contract_is_rejected() {
     let previous = serde_json::json!({"range":"all", "app":null, "scope":"generation", "profileId":null,
         "model":null, "page":1, "groupPage":1});
     assert!(serde_json::from_value::<RequestUsageQuery>(previous).is_err());
+    assert!(serde_json::from_value::<RequestUsageRead>(serde_json::json!({
+        "range":"all", "app":null, "scope":"generation", "model":null, "page":1, "groupPage":1
+    })).is_err());
     let mut current = query();
     current.page = 0;
     assert!(current.validate().is_err());

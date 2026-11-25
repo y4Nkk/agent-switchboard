@@ -112,22 +112,18 @@ impl Accumulator {
     }
 
     pub(super) fn finish(mut self) -> RequestUsageMetrics {
-        self.speeds.sort_by(f64::total_cmp);
-        self.first_tokens.sort_by(f64::total_cmp);
-        self.first_contents.sort_by(f64::total_cmp);
-        self.durations.sort_by(f64::total_cmp);
         let m = &mut self.metrics;
         m.success_ratio = percentage(m.succeeded, m.succeeded + m.failed);
-        m.output_rate_p50 = percentile(&self.speeds, 0.5);
-        m.output_rate_p10 = percentile(&self.speeds, 0.1);
+        m.output_rate_p50 = percentile(&mut self.speeds, 0.5);
+        m.output_rate_p10 = percentile(&mut self.speeds, 0.1);
         m.speed_samples = self.speeds.len();
-        m.first_token_p50_ms = percentile(&self.first_tokens, 0.5);
-        m.first_token_p95_ms = percentile(&self.first_tokens, 0.95);
+        m.first_token_p50_ms = percentile(&mut self.first_tokens, 0.5);
+        m.first_token_p95_ms = percentile(&mut self.first_tokens, 0.95);
         m.first_token_samples = self.first_tokens.len();
-        m.first_content_p50_ms = percentile(&self.first_contents, 0.5);
+        m.first_content_p50_ms = percentile(&mut self.first_contents, 0.5);
         m.first_content_samples = self.first_contents.len();
-        m.duration_p50_ms = percentile(&self.durations, 0.5);
-        m.duration_p95_ms = percentile(&self.durations, 0.95);
+        m.duration_p50_ms = percentile(&mut self.durations, 0.5);
+        m.duration_p95_ms = percentile(&mut self.durations, 0.95);
         m.duration_samples = self.durations.len();
         m.cache_hit_rate = percentage(self.cache_read, self.cache_input);
         m.estimated_cost_usd = (m.cost_samples > 0).then(|| format!("{}.{:06}",
@@ -152,10 +148,13 @@ pub(super) fn percentage(numerator: u64, denominator: u64) -> Option<f64> {
     (denominator > 0).then(|| numerator as f64 * 100.0 / denominator as f64)
 }
 
-fn percentile(sorted: &[f64], fraction: f64) -> Option<f64> {
-    if sorted.is_empty() { return None; }
-    let position = (sorted.len() - 1) as f64 * fraction;
+fn percentile(values: &mut [f64], fraction: f64) -> Option<f64> {
+    if values.is_empty() { return None; }
+    let position = (values.len() - 1) as f64 * fraction;
     let lower = position.floor() as usize;
     let upper = position.ceil() as usize;
-    Some(sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower as f64))
+    let (_, value, greater) = values.select_nth_unstable_by(lower, f64::total_cmp);
+    if lower == upper { return Some(*value); }
+    let next = greater.iter().copied().min_by(f64::total_cmp).expect("upper percentile rank exists");
+    Some(*value + (next - *value) * (position - lower as f64))
 }

@@ -1,4 +1,5 @@
 mod store;
+pub(super) use store::visit as visit_messages;
 
 use super::{content, parser, records, sources, SessionIssue, SessionMessage, SessionMeta, SessionSource};
 use asb_core::contracts::AppKind;
@@ -40,6 +41,18 @@ struct SessionConversionOutcome {
 }
 
 pub(super) fn is_workflow(path: &Path) -> bool { workflow_location(path).is_some() }
+
+pub(super) fn committed_source(root: &Path, id: &str) -> Result<Option<SessionSource>, String> {
+    let Some(key) = id.strip_prefix("workflow-") else { return Ok(None); };
+    let Some((header, path)) = store::committed(root, key)? else { return Ok(None); };
+    if super::history::committed_deleted(root, id)? { return Ok(None); }
+    Ok(Some(converted_source(root, header.meta, path)))
+}
+
+fn converted_source(root: &Path, meta: SessionMeta, path: PathBuf) -> SessionSource {
+    SessionSource { meta, paths: Vec::new(), native_database: None, spawn_parent: None, archived: false,
+        native_history: None, converted: Some(path), retained: Vec::new(), index_root: root.into() }
+}
 
 fn workflow_location(path: &Path) -> Option<(String, String, PathBuf)> {
     if path.file_name()? != "journal.jsonl" { return None; }
@@ -122,9 +135,7 @@ pub(super) fn include_observed(root: &Path, sources: &mut Vec<SessionSource>, is
             continue;
         }
         completed.insert(format!("{}:{}", header.source_key, header.revision));
-        sources.push(SessionSource {
-            meta: header.meta, paths: Vec::new(), native_database: None, spawn_parent: None, archived: false, native_history: None,
-            converted: Some(path), retained: Vec::new(), index_root: root.into() });
+        sources.push(converted_source(root, header.meta, path));
     }
     issues.retain(|issue| issue.conversion_id.as_ref().is_none_or(|id| !completed.contains(id)));
     issues.extend(failures.into_iter().map(|message| SessionIssue::new(AppKind::Claude, message)));

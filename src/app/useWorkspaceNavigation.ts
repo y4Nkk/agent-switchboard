@@ -2,14 +2,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getStartupPage, onExitRecovery, rememberWorkspacePage, type CommandError } from "../api/client";
 import type { DiagnosticSection, ExtensionSection, Page, ProviderView, SettingsSection, UsageSection } from "./navigation";
 import type { PageRootRequest } from "./page-root";
+import { markUsageOpen } from "./usage-open-timing";
 
 export function useWorkspaceNavigation(settingsReady: boolean, settingsError: string | null, onError: (error: CommandError) => void) {
   const [page, setPageState] = useState<Page>("providers");
   const currentPage = useRef<Page>("providers");
+  const [usageSection, setUsageSectionState] = useState<UsageSection>("consumption");
+  const currentUsage = useRef<UsageSection>("consumption");
   const pageRevision = useRef(0);
   const changePage = useCallback((next: Page) => {
-    if (currentPage.current !== next) { currentPage.current = next; pageRevision.current += 1; }
+    if (currentPage.current !== next) {
+      if (next === "usage") markUsageOpen(currentUsage.current);
+      currentPage.current = next; pageRevision.current += 1;
+    }
     setPageState(next);
+  }, []);
+  const setUsageSection = useCallback((next: UsageSection) => {
+    if (currentUsage.current === next) return;
+    if (currentPage.current === "usage") markUsageOpen(next);
+    currentUsage.current = next; setUsageSectionState(next);
   }, []);
   const pageVersion = useCallback(() => pageRevision.current, []);
   const [navigationReady, setNavigationReady] = useState(false);
@@ -42,7 +53,6 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("application");
   const [diagnosticSection, setDiagnosticSection] = useState<DiagnosticSection>("configuration");
   const [extensionSection, setExtensionSection] = useState<ExtensionSection>("skill");
-  const [usageSection, setUsageSection] = useState<UsageSection>("consumption");
   const [settingsReturnToProviders, setSettingsReturnToProviders] = useState(false);
   const [backupRecoveryRequest, setBackupRecoveryRequest] = useState(0);
   const [pageRoot, setPageRoot] = useState<PageRootRequest | null>(null);
@@ -68,7 +78,7 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
   const openQuota = useCallback(() => {
     setUsageSection("quota");
     setPage("usage");
-  }, [setPage]);
+  }, [setPage, setUsageSection]);
   useRecoveryNavigation({ setUsageSection, setSettingsSection, setPage, setBackupRecoveryRequest, onError });
   return { page, pageVersion, setPage, selectPage, pageRoot, navigationReady, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
     extensionSection, setExtensionSection, usageSection, setUsageSection, settingsReturnToProviders,

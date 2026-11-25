@@ -1,4 +1,5 @@
 use super::*;
+use crate::request_usage::{RequestUsageQuery, RequestUsageRead, RequestUsageReader, RequestUsageReport, RequestUsageResult};
 use asb_core::contracts::AppKind;
 use serde_json::{json, Value};
 
@@ -34,8 +35,14 @@ pub(super) fn span() -> Value {
     }]}]}]})
 }
 
-pub(super) fn query(scope: MeasurementScope) -> crate::request_usage::RequestUsageQuery {
+pub(super) fn query(scope: MeasurementScope) -> RequestUsageQuery {
     serde_json::from_value(json!({"range":"all", "app":null,"scope":scope,"model":null,"page":1,"groupPage":1})).unwrap()
+}
+
+pub(super) fn report(root: &std::path::Path, query: RequestUsageQuery) -> RequestUsageReport {
+    let RequestUsageResult::Report(report) = RequestUsageReader::default()
+        .read(root, RequestUsageRead::Refresh { query }).unwrap() else { panic!("expected report"); };
+    report
 }
 
 #[test]
@@ -114,10 +121,10 @@ fn replay_is_idempotent_conflicts_rollback_and_private_content_is_not_persisted(
     let mut changed = batch.rows[0].clone();
     changed.model = Some("changed-model".into());
     assert!(store::append(temp.path(), &[changed]).is_err());
-    let report = crate::request_usage::read(temp.path(), query(MeasurementScope::Generation)).unwrap();
+    let report = report(temp.path(), query(MeasurementScope::Generation));
     assert_eq!(report.summary.records, 1);
-    assert_eq!(report.rows[0].model.as_deref(), Some("test-model"));
-    assert_eq!(crate::request_usage::read(temp.path(), query(MeasurementScope::Transport)).unwrap().summary.records, 1);
+    assert_eq!(report.pages.rows[0].model.as_deref(), Some("test-model"));
+    assert_eq!(self::report(temp.path(), query(MeasurementScope::Transport)).summary.records, 1);
     let connection = rusqlite::Connection::open(temp.path().join("state/request-performance.sqlite3")).unwrap();
     let body: String = connection.query_row("SELECT group_concat(body) FROM observations", [], |r| r.get(0)).unwrap();
     assert!(!body.contains("DO_NOT_STORE"));
@@ -157,16 +164,26 @@ fn out_of_order_native_spans_have_stable_pages_and_full_aggregates() {
         record["endTimeUnixNano"] = json!((1_700_000_001_000_000_000 + index * 1_000_000_000).to_string());
         store::append(temp.path(), &decode::traces(&value).unwrap().rows).unwrap();
     }
-    let first = crate::request_usage::read(temp.path(), query(MeasurementScope::Generation)).unwrap();
+    let reader = RequestUsageReader::default();
+    let RequestUsageResult::Report(first) = reader.read(temp.path(), RequestUsageRead::Refresh {
+        query: query(MeasurementScope::Generation),
+    }).unwrap() else { panic!("expected report"); };
     assert_eq!(first.summary.records, 32);
-    assert_eq!(first.rows.len(), 25);
-    assert!(first.rows[0].at_ms > first.rows[24].at_ms);
-    let mut next = query(MeasurementScope::Generation);
-    next.page = 2;
-    let second = crate::request_usage::read(temp.path(), next).unwrap();
+    assert_eq!(first.pages.rows.len(), 25);
+    assert!(first.pages.rows[0].at_ms > first.pages.rows[24].at_ms);
+    assert_eq!(store::append(temp.path(), &decode::traces(&span()).unwrap().rows).unwrap(), 1);
+    let RequestUsageResult::Page(second) = reader.read(temp.path(), RequestUsageRead::Page {
+        snapshot_id: first.snapshot_id.clone(), page: 2, group_page: 1,
+    }).unwrap() else { panic!("expected page"); };
     assert_eq!(second.rows.len(), 7);
-    assert_eq!(second.summary.records, 32);
-    assert!(second.rows[0].at_ms < first.rows[24].at_ms);
+    assert!(second.rows[0].at_ms < first.pages.rows[24].at_ms);
+    let RequestUsageResult::Report(updated) = reader.read(temp.path(), RequestUsageRead::Refresh {
+        query: query(MeasurementScope::Generation),
+    }).unwrap() else { panic!("expected refreshed report"); };
+    assert_eq!(updated.summary.records, 33);
+    assert!(reader.read(temp.path(), RequestUsageRead::Page {
+        snapshot_id: first.snapshot_id, page: 2, group_page: 1,
+    }).is_err());
 }
 
 #[test]
@@ -194,7 +211,7 @@ fn loopback_http_gzip_export_uses_the_real_decoder_and_store() {
     assert_eq!(response.text().unwrap(), "{}");
     worker.join().unwrap();
     assert_eq!(status.lock().unwrap().accepted_records, 1);
-    assert_eq!(crate::request_usage::read(temp.path(), query(MeasurementScope::Transport)).unwrap().summary.records, 1);
+    assert_eq!(report(temp.path(), query(MeasurementScope::Transport)).summary.records, 1);
 }
 
 #[test]

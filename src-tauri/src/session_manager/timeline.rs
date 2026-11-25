@@ -1,4 +1,5 @@
 mod native_index;
+pub(super) use native_index::first as first_native_messages;
 
 use super::{jsonl, native, parser, read_index::ReadIndex, records, SessionMessage, SessionSource};
 use rusqlite::Connection;
@@ -25,6 +26,16 @@ pub(super) struct Position {
     pub order_at: Option<String>,
     pub projected: bool,
     pub location: Location,
+}
+
+impl Position {
+    pub(super) fn record_revision(&self) -> &str {
+        match &self.location {
+            Location::Jsonl { digest, .. } | Location::Saved { digest, .. }
+                | Location::Converted { digest, .. } => digest,
+            Location::Native { .. } => &self.id,
+        }
+    }
 }
 
 pub(super) struct MessageIndex {
@@ -129,10 +140,13 @@ impl MessageIndex {
         results.into_values().collect()
     }
 
+    pub(super) fn entry(&self, id: &str) -> Result<&Position, String> {
+        self.entries.iter().find(|entry| entry.id == id)
+            .ok_or_else(|| if self.issues.is_empty() { "原消息已改变或不存在；请重新打开会话".into() } else { self.issues.join("；") })
+    }
+
     pub(super) fn find(&self, id: &str) -> Result<SessionMessage, String> {
-        let entry = self.entries.iter().find(|entry| entry.id == id)
-            .ok_or_else(|| if self.issues.is_empty() { "原消息已改变或不存在；请重新打开会话".into() } else { self.issues.join("；") })?;
-        self.load(entry)
+        self.load(self.entry(id)?)
     }
 
     pub(super) fn visit(&self, visitor: impl FnMut(SessionMessage) -> Result<ControlFlow<()>, String>) -> Result<Vec<String>, String> {

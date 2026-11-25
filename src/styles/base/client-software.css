@@ -16,7 +16,7 @@
 
 .asb-software-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr));
   gap: var(--asb-space-3);
   min-width: 0;
 }
@@ -237,9 +237,20 @@
   overflow-wrap: anywhere;
 }
 
-/* One update operation as a card: the phase rail shows the real phase only. */
+/* When the phase rows disappear, the receipt can wrap the still-focused
+ * output trigger inline. */
 .asb-software-task {
-  border-radius: var(--asb-radius-medium);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--asb-space-3);
+  min-inline-size: 0;
+}
+
+.asb-software-task[data-finished] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 var(--asb-space-1);
 }
 
 .asb-software-task-head {
@@ -247,21 +258,70 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--asb-space-2) var(--asb-space-3);
+  min-inline-size: 0;
 }
 
-.asb-software-task-head > strong {
-  font: var(--asb-text-body);
-  font-weight: 650;
+.asb-software-task[data-finished] .asb-software-task-head {
+  column-gap: var(--asb-space-2);
 }
 
+.asb-software-task .asb-tool-status {
+  color: var(--asb-text);
+}
+
+.asb-software-task-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: var(--asb-radius-pill);
+  color: color-mix(in srgb, var(--asb-tool-state) 65%, var(--asb-text));
+  background: color-mix(in srgb, var(--asb-tool-state) 14%, transparent);
+}
+
+.asb-software-task-start,
 .asb-software-task-head > time {
-  margin-inline-start: auto;
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
 }
 
-.asb-software-task > .asb-btn {
+.asb-software-task[data-finished] .asb-tool-status {
+  font-weight: 400;
+}
+
+/* The one action of a running operation ends its head row, where the module's
+ * own refresh sits. */
+.asb-software-task-head > .asb-btn-secondary {
+  margin-inline-start: auto;
+}
+
+/* The failure reads as one more row of the panel, on the same rhythm. */
+.asb-software-task > .asb-warn-text {
+  margin: 0;
+}
+
+/* The output reads as a quiet entry in both shapes. */
+.asb-software-task-output {
   justify-self: start;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-weight: 400;
+}
+
+/* While the output folds, its margin gives back the grid gap above it, so the
+ * closed row leaves no lane behind. */
+.asb-software-task:not([data-finished]) > .asb-collapsible:not(.is-open) {
+  margin-top: calc(-1 * var(--asb-space-3));
+}
+
+.asb-software-task[data-finished] > .asb-collapsible {
+  flex: 0 0 100%;
+  min-inline-size: 0;
+}
+
+.asb-software-task[data-finished] > .asb-collapsible.is-open {
+  margin-top: var(--asb-space-1);
 }
 
 @container client-tools (max-width: 36rem) {

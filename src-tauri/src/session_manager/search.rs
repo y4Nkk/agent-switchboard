@@ -1,5 +1,6 @@
 mod filters;
 mod content;
+pub(super) mod transcript;
 pub use filters::{SessionProject, SessionSearchRequest};
 use filters::{catalog, Filters};
 use super::{organization,

@@ -132,7 +132,26 @@ fn known_legacy_projections_are_retired_once_without_touching_business_material(
     let index = ReadIndex::open(temp.path()).unwrap();
     assert!(index.previous::<Option<String>>("identity", "source").unwrap().is_none());
     assert_eq!(fs::read(temp.path().join("collections-material")).unwrap(), b"keep");
-    assert_eq!(index.connection.pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0)).unwrap(), 3);
+    assert_eq!(index.connection.pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0)).unwrap(), 4);
+}
+
+#[test]
+fn version_three_indexes_existing_file_identities_and_keeps_usage_tables() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("source.jsonl");
+    let index = ReadIndex::open(temp.path()).unwrap();
+    index.connection.execute_batch("DROP INDEX session_identity; PRAGMA user_version=3").unwrap();
+    index.put("identity", &key(&path).unwrap(), "original", &serde_json::json!({"id": "sample"})).unwrap();
+    index.connection.execute("INSERT INTO entries VALUES('identity','corrupt','original','{')", []).unwrap();
+    index.connection.execute("INSERT INTO usage_calendar VALUES('sample','zone')", []).unwrap();
+    drop(index);
+
+    let index = ReadIndex::open(temp.path()).unwrap();
+    assert_eq!(index.identity_paths("sample").unwrap(), [path]);
+    assert!(index.identity_paths("other").unwrap().is_empty());
+    assert_eq!(schema::validate(&index.connection).unwrap(), 4);
+    let zone: String = index.connection.query_row("SELECT zone FROM usage_calendar WHERE scope='sample'", [], |row| row.get(0)).unwrap();
+    assert_eq!(zone, "zone");
 }
 
 #[test]

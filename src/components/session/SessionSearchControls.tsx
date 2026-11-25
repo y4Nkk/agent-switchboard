@@ -23,7 +23,8 @@ export function SessionSearchControls({ search, disabled, filtersOpen, onOpenFil
         }}
         onBlur={() => search.setComposing(false)} />
       <Tooltip label={filtersLabel} side="bottom">
-        <Button variant="icon" className={`asb-session-filter-button${search.filtersActive ? " is-active" : ""}`}
+        <Button variant="icon"
+          className={`asb-session-toolbar-button asb-session-filter-button${search.filtersActive ? " is-active" : ""}`}
           disabled={disabled} aria-label={filtersLabel} aria-haspopup="dialog" aria-expanded={filtersOpen}
           onClick={onOpenFilters}><ListFilter aria-hidden="true" /></Button>
       </Tooltip>

@@ -28,6 +28,7 @@
 @import "./base/storage-settings.css";
 @import "./base/setting-input.css";
 @import "./base/client-management.css";
+@import "./base/client-scenarios.css";
 @import "./base/client-software.css";
 @import "./base/field-controls.css";
 @import "./base/search-input.css";

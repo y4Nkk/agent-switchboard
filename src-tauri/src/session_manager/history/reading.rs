@@ -14,14 +14,16 @@ pub(super) fn roots(connection: &Connection) -> Result<Vec<HistoryRoot>, String>
 }
 
 pub(super) fn sources(connection: &Connection, database: &Path) -> Result<Vec<SessionSource>, String> {
-    sources_observed(connection, database, &|| Ok(()))
+    sources_observed(connection, database, None, &|| Ok(()))
 }
 
-pub(super) fn sources_observed(connection: &Connection, database: &Path, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<SessionSource>, String> {
-    let mut statement = connection.prepare("SELECT id,origin,meta,saved_at,available,issue,revision,capture_issue FROM transcripts
+pub(super) fn sources_observed(connection: &Connection, database: &Path, session: Option<&str>,
+    checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<SessionSource>, String> {
+    let filter = if session.is_some() { "AND session_id=?1" } else { "" };
+    let mut statement = connection.prepare(&format!("SELECT id,origin,meta,saved_at,available,issue,revision,capture_issue FROM transcripts
         WHERE session_id NOT IN (SELECT id FROM deleted_sessions)
-        AND (parent_id IS NULL OR parent_id NOT IN (SELECT id FROM deleted_sessions)) ORDER BY origin,generation").map_err(db_error)?;
-    let mut rows = statement.query([]).map_err(db_error)?;
+        AND (parent_id IS NULL OR parent_id NOT IN (SELECT id FROM deleted_sessions)) {filter} ORDER BY origin,generation")).map_err(db_error)?;
+    let mut rows = statement.query(rusqlite::params_from_iter(session)).map_err(db_error)?;
     let mut sources = BTreeMap::<String, SessionSource>::new();
     while let Some(row) = rows.next().map_err(db_error)? {
         checkpoint()?;

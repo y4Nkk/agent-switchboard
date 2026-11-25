@@ -1,5 +1,5 @@
 use super::error::{state, CommandError};
-use crate::session_manager::{search_tasks, SessionSearchRequest};
+use crate::session_manager::search_tasks;
 use tauri::AppHandle;
 
 fn search_error(message: String) -> CommandError {
@@ -8,7 +8,7 @@ fn search_error(message: String) -> CommandError {
 }
 
 #[tauri::command]
-pub async fn start_session_search(app: AppHandle, request: SessionSearchRequest) -> Result<String, CommandError> {
+pub async fn start_session_search(app: AppHandle, request: search_tasks::SearchRequest) -> Result<String, CommandError> {
     let local = state(&app)?;
     search_tasks::start(local.root().into(), request).map_err(search_error)
 }

@@ -5,7 +5,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::Path;
+use std::{ops::ControlFlow, path::Path};
 
 #[cfg(test)]
 thread_local! { static SOURCE_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
@@ -64,6 +64,18 @@ pub(super) fn positions_observed(index: &ReadIndex, connection: &Connection, his
 }
 
 fn rows(connection: &Connection, thread: &str, checkpoint: &dyn Fn() -> Result<(), String>) -> Result<Vec<NativeRow>, String> {
+    let mut result = Vec::new();
+    visit_rows(connection, thread, |row| {
+        checkpoint()?;
+        result.push(row);
+        Ok(ControlFlow::Continue(()))
+    })?;
+    Ok(result)
+}
+
+fn visit_rows(connection: &Connection, thread: &str,
+    mut visit: impl FnMut(NativeRow) -> Result<ControlFlow<()>, String>,
+) -> Result<(), String> {
     let mut statement = connection.prepare(
         "SELECT turn_id,item_id,created_at_ms,updated_at_ordinal,0,rollout_ordinal FROM thread_items WHERE thread_id=?1 \
          UNION ALL SELECT '',r.item_id,r.created_at_ms,0,1,r.rollout_ordinal FROM thread_realtime_items r \
@@ -71,9 +83,28 @@ fn rows(connection: &Connection, thread: &str, checkpoint: &dyn Fn() -> Result<(
          ORDER BY 6,3,2").map_err(|error| error.to_string())?;
     let rows = statement.query_map([thread], |row| Ok(NativeRow { turn: row.get(0)?, item: row.get(1)?,
         created: row.get(2)?, version: row.get(3)?, realtime: row.get(4)?, ordinal: row.get(5)? })).map_err(|error| error.to_string())?;
-    let mut result = Vec::new();
-    for row in rows { checkpoint()?; result.push(row.map_err(|error| error.to_string())?); }
-    Ok(result)
+    for row in rows {
+        if visit(row.map_err(|error| error.to_string())?)?.is_break() { break; }
+    }
+    Ok(())
+}
+
+pub(in crate::session_manager) fn first(history: &Path, thread: &str, limit: usize) -> Result<Vec<crate::session_manager::messages::FirstMessage>, String> {
+    use crate::session_manager::messages::FirstMessage;
+    let connection = super::native::open(history)?;
+    connection.execute_batch("BEGIN DEFERRED").map_err(|error| error.to_string())?;
+    let mut messages = Vec::new();
+    visit_rows(&connection, thread, |row| {
+        match value(&connection, thread, &row.turn, &row.item, row.realtime) {
+            Ok(value) => if let Some(mut message) = parser::message_from(&value) {
+                message.at = Utc.timestamp_millis_opt(row.created).single().map(|at| at.to_rfc3339());
+                messages.push(FirstMessage::from_message(parser::native_identity(&value), message));
+            },
+            Err(error) => log::warn!("无法预读会话 {thread} 的原生消息: {error}"),
+        }
+        Ok(if messages.len() == limit { ControlFlow::Break(()) } else { ControlFlow::Continue(()) })
+    })?;
+    Ok(messages)
 }
 
 fn position(connection: &Connection, thread: &str, row: &NativeRow) -> Result<Option<Position>, String> {
