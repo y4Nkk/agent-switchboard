@@ -96,7 +96,7 @@ fn compressed_only_sessions_support_actual_search_and_markdown_export() {
     let (plain, compressed) = fixture(&sessions);
     fs::remove_file(plain).unwrap();
     let original = fs::read(&compressed).unwrap();
-    let request = serde_json::from_value(json!({"query":"message 31","app":"codex","offset":0,
+    let request = serde_json::from_value(json!({"query":"message 31","app":"codex",
         "project":null,"tag":null,"pinnedOnly":false,"activeAfter":null,"activeBefore":null,"archived":false})).unwrap();
     let state = temp.path().join("state");
     let result = search_sessions(&state, request).unwrap();
