@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::commands::error::{blocking, state, CommandError};
 use crate::extensions::skill_catalog::{
     self, CatalogError, CatalogScanMonitor, CatalogScanProgress, RepositoryScan, SkillRepository,
-    SkillRepositoryCatalog,
+    SkillRepositoryCatalog, SkillRepositoryRecoveryRequest,
 };
 use crate::extensions::sources::{self, SkillCandidate};
 
@@ -37,6 +37,7 @@ pub struct SkillCatalogCandidate {
 pub struct SkillCatalogResult {
     candidates: Vec<SkillCatalogCandidate>,
     progress: CatalogScanProgress,
+    updated_repositories: Option<Vec<SkillRepository>>,
 }
 
 fn catalog(app: &AppHandle) -> Result<SkillRepositoryCatalog, CommandError> {
@@ -52,6 +53,7 @@ fn catalog_error(error: CatalogError) -> CommandError {
         CatalogError::Unsupported(_) => "skill-catalog-unsupported",
         CatalogError::NotFound => "skill-repository-not-found",
         CatalogError::Conflict => "skill-repository-conflict",
+        CatalogError::Changed => "skill-repository-changed",
     };
     CommandError::new(code, error.to_string())
 }
@@ -78,22 +80,43 @@ pub async fn remove_skill_repository(app: AppHandle, id: String) -> Result<(), C
 pub async fn scan_skill_repositories(
     app: AppHandle,
     scan_id: String,
+    recoveries: Vec<SkillRepositoryRecoveryRequest>,
 ) -> Result<SkillCatalogResult, CommandError> {
     let scan_id = parse_scan_id(&scan_id)?;
     blocking(move || {
-        let mut repositories = catalog(&app)?.list().map_err(catalog_error)?;
-        repositories.retain(|repo| repo.enabled);
+        let catalog = catalog(&app)?;
+        let mut repositories = catalog.list().map_err(catalog_error)?;
+        let recovery = skill_catalog::plan_repository_recovery(&repositories, recoveries)
+            .map_err(catalog_error)?;
+        if !recovery.targets.is_empty() {
+            repositories.sort_by_key(|repo| !recovery.targets.contains(&repo.id));
+        }
+        let enabled: Vec<_> = repositories.iter().filter(|repo| repo.enabled).cloned().collect();
         let started_at = Instant::now();
-        let monitor = CatalogScanMonitor::begin(scan_id, started_at, &repositories).ok_or_else(|| {
+        let monitor = CatalogScanMonitor::begin(scan_id, started_at, &enabled).ok_or_else(|| {
             CommandError::new("skill-scan-already-active", "此仓库扫描已在进行")
         })?;
         let scanned = skill_catalog::scan_repositories(
             &repositories,
+            &recovery.changes,
             started_at + REPOSITORY_SCAN_NETWORK_BUDGET,
             &monitor,
+            sources::cached_repository,
         );
+        let verified: Vec<_> = recovery.changes.iter().filter(|change| {
+            scanned.iter().any(|scan| scan.repository == change.replacement)
+        }).collect();
+        let updated_repositories = if verified.is_empty() {
+            None
+        } else {
+            let saved = catalog.apply_recovery(&verified).map_err(catalog_error)?;
+            for change in verified {
+                monitor.replace_repository(&change.replacement);
+            }
+            Some(saved)
+        };
         let candidates = cache_catalog_candidates(scanned);
-        Ok(SkillCatalogResult { candidates, progress: monitor.snapshot() })
+        Ok(SkillCatalogResult { candidates, progress: monitor.snapshot(), updated_repositories })
     })
     .await
 }
@@ -108,11 +131,12 @@ fn parse_scan_id(id: &str) -> Result<Uuid, CommandError> {
 }
 
 fn cache_catalog_candidates(repositories: Vec<RepositoryScan>) -> Vec<SkillCatalogCandidate> {
+    sources::cache_catalog_repositories(&repositories);
     let mut result = Vec::new();
     for group in repositories {
         let repository = group.repository;
         let dtos: Vec<_> = group
-            .candidates
+            .result.candidates
             .iter()
             .map(|candidate| SkillCatalogCandidate {
                 candidate: candidate_dto(candidate),
@@ -123,7 +147,6 @@ fn cache_catalog_candidates(repositories: Vec<RepositoryScan>) -> Vec<SkillCatal
                 readme_url: readme_url(&repository.repo, candidate),
             })
             .collect();
-        cache_candidates(group.candidates);
         result.extend(dtos);
     }
     result.sort_by(|a, b| {

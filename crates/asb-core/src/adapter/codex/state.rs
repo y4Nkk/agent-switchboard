@@ -105,6 +105,7 @@ fn leaf_repr(item: &Item) -> Option<String> {
 /// max_threads so every managed removal remains visible in the shared preview.
 fn diff_keep(path: &str) -> bool {
     is_owned(AppKind::Codex, path)
+        || path == super::DEFAULT_PERMISSIONS_KEY
         || crate::contracts::CodexSubagentKey::ALL.iter().any(|key| key.path() == path)
         || path == "agents.max_threads"
         || crate::ownership::RETIRED_CODEX_CLIENT_KEYS.contains(&path)

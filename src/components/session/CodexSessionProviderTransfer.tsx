@@ -1,3 +1,4 @@
+import { Archive, Database, Files, FolderOpen, MessagesSquare, Server } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { applyCodexSessionProviderTransfer, previewCodexSessionProviderTransfer, readCodexSessionProviderTransfer,
   restoreCodexSessionProviderTransfer, type CodexSessionProviderOperation, type CodexSessionProviderPreview } from "../../api/sessions";
@@ -12,20 +13,21 @@ function Summary({ plan }: { plan: CodexSessionProviderPreview }) {
   const { t } = useI18n();
   return <>
     <FactList rows={[
-      { label: t("sessions.transfer.historyRoot"), value: <code>{plan.historyRoot}</code> },
-      ...(plan.databasePath ? [{ label: t("sessions.transfer.databasePath"), value: <code>{plan.databasePath}</code> }] : []),
-      { label: t("sessions.transfer.target"), value: <code>{plan.targetProvider}</code> },
-      { label: t("sessions.transfer.sessions"), value: plan.sessions },
-      { label: t("sessions.transfer.rows"), value: plan.databaseRows },
-      { label: t("sessions.transfer.files"), value: plan.files },
+      { label: t("sessions.transfer.historyRoot"), icon: FolderOpen, format: "code", value: plan.historyRoot },
+      ...(plan.databasePath ? [{ label: t("sessions.transfer.databasePath"), icon: Database,
+        format: "code" as const, value: plan.databasePath }] : []),
+      { label: t("sessions.transfer.target"), icon: Server, format: "code", value: plan.targetProvider },
+      { label: t("sessions.transfer.sessions"), icon: MessagesSquare, format: "number", value: plan.sessions },
+      { label: t("sessions.transfer.rows"), icon: Database, format: "number", value: plan.databaseRows },
+      { label: t("sessions.transfer.files"), icon: Files, format: "number", value: plan.files },
       ...plan.providers.map((group) => ({ label: group.provider === null ? t("sessions.transfer.unspecified")
-        : group.provider || t("sessions.transfer.emptyProvider"),
+        : group.provider || t("sessions.transfer.emptyProvider"), icon: Server,
       value: t("sessions.transfer.group", { rows: group.databaseRows, files: group.files }) })),
     ]} />
     {plan.missingOriginals > 0 && <p className="asb-warn-text">{t("sessions.transfer.missing", { count: plan.missingOriginals })}</p>}
     {plan.externalFiles.length > 0 && <>
       <p className="asb-scope-note">{t("sessions.transfer.external", { count: plan.externalFiles.length })}</p>
-      <FactList rows={[{ label: t("sessions.transfer.externalPaths"),
+      <FactList rows={[{ label: t("sessions.transfer.externalPaths"), icon: FolderOpen,
         value: <ul>{plan.externalFiles.map((path) => <li key={path}><code>{path}</code></li>)}</ul> }]} />
     </>}
   </>;
@@ -91,7 +93,8 @@ export function CodexSessionProviderTransfer({ onClose, onChanged }: { onClose: 
         : <Checkbox checked={confirmed} disabled={busy} onChange={setConfirmed} label={t("sessions.transfer.confirmScope")} />}</>}
     {latest && <section aria-label={t("sessions.transfer.lastOperation")}>
       <p role="status">{t(`sessions.transfer.phase.${latest.phase}`)}</p>
-      <FactList rows={[{ label: t("sessions.transfer.backup"), value: <code>{latest.backupDirectory}</code> }]} />
+      <FactList rows={[{ label: t("sessions.transfer.backup"), icon: Archive,
+        format: "code", value: latest.backupDirectory }]} />
       {mode === "transfer" && latest.phase !== "restored" && <Button variant="secondary" disabled={busy}
         onClick={() => { setMode("restore"); setPlan(null); setConfirmed(false); }}>{t("sessions.transfer.restore")}</Button>}
       {mode === "restore" && <><Summary plan={latest.preview} />

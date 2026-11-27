@@ -1,6 +1,7 @@
+import { FileText, Link2, LockKeyhole, Plug, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import { openConfigFileLocation, type AppKind, type ClaudeImportProposal, type CodexImportProposal, type DiscoveredFile, type DiscoveryReport } from "../../api/client";
 import { Button } from "../../components/Button";
-import { FactList, type FactListRow } from "../../components/FactList";
+import { FactList, FactStatus, type FactListRow } from "../../components/FactList";
 import { FactPath } from "../../components/FactPath";
 import { ModuleHeader } from "../../components/WorkspaceHeader";
 import { SearchIcon } from "../../components/icons";
@@ -28,14 +29,17 @@ function stateLabel(file: DiscoveredFile, t: TFunction): string {
 function localRouteFacts(file: DiscoveredFile, t: TFunction): FactListRow[] {
   if (file.state.kind !== "ok") return [];
   const { route, managed, warnings, importable } = file.state;
-  const rows: FactListRow[] = [{ label: t("importDiscovery.local.currentService"),
+  const rows: FactListRow[] = [{ label: t("importDiscovery.local.currentService"), icon: Plug,
     value: `${route.routeMode === "official" ? t("importDiscovery.label.official") : t("importDiscovery.local.customService")} · ${route.model ?? t("importDiscovery.local.defaultModel")}` }];
-  if (route.providerName) rows.push({ label: t("importDiscovery.label.provider"), value: route.providerName });
-  if (route.baseUrl) rows.push({ label: t("importDiscovery.local.serviceUrl"), value: <span className="asb-code">{route.baseUrl}</span> });
-  if (route.apiKey) rows.push({ label: t("importDiscovery.local.credentialVar"), value: <span className="asb-code">{route.apiKey}</span> });
-  rows.push({ label: t("importDiscovery.local.managedState"),
-    value: managed ? t("importDiscovery.local.managed") : t("importDiscovery.local.unmanaged") });
-  if (warnings.length > 0 || (!importable && !managed)) rows.push({ label: t("importDiscovery.local.warnings"),
+  if (route.providerName) rows.push({ label: t("importDiscovery.label.provider"), icon: Server, value: route.providerName });
+  if (route.baseUrl) rows.push({ label: t("importDiscovery.local.serviceUrl"), icon: Link2, format: "code", value: route.baseUrl });
+  if (route.apiKey) rows.push({ label: t("importDiscovery.local.credentialVar"), icon: LockKeyhole, format: "code", value: route.apiKey });
+  rows.push({ label: t("importDiscovery.local.managedState"), icon: ShieldCheck,
+    value: <FactStatus tone={managed ? "success" : "neutral"}>
+      {t(managed ? "importDiscovery.local.managed" : "importDiscovery.local.unmanaged")}
+    </FactStatus> });
+  if (warnings.length > 0 || (!importable && !managed)) rows.push({
+    label: t("importDiscovery.local.warnings"), icon: TriangleAlert, tone: "warning",
     value: <>
       {warnings.map((warning) => <span key={warning.key} className="asb-warn-text asb-status-warn">{localizedMessageText(warning, t)}</span>)}
       {!importable && !managed && <span className="asb-warn-text asb-status-warn">{t("importDiscovery.local.unimportable")}</span>}
@@ -59,11 +63,11 @@ function LocalConfigCard({ file, proposal, busy, onImport }: {
         </span>
       </header>
       <FactList rows={[
-        { label: t("importDiscovery.local.configFile"),
+        { label: t("importDiscovery.local.configFile"), icon: FileText,
           value: <FactPath path={file.path} open={() => openConfigFileLocation(file.app)} /> },
-        ...(file.state.kind === "readError" ? [{ label: t("importDiscovery.local.errorDetail"),
+        ...(file.state.kind === "readError" ? [{ label: t("importDiscovery.local.errorDetail"), icon: TriangleAlert, tone: "warning" as const,
           value: <span className="asb-warn-text">{localizedMessageText(file.state.message, t)}</span> }] : []),
-        ...(file.state.kind === "parseError" ? [{ label: t("importDiscovery.local.errorDetail"),
+        ...(file.state.kind === "parseError" ? [{ label: t("importDiscovery.local.errorDetail"), icon: TriangleAlert, tone: "warning" as const,
           value: <span className="asb-warn-text">
             {file.state.line !== null ? t("importDiscovery.local.errorLine", { line: file.state.line }) : ""}{file.state.message}
           </span> }] : []),

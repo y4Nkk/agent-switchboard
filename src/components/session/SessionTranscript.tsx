@@ -6,6 +6,7 @@ import { localizedMessageText } from "../../i18n/errors";
 import { Button } from "../Button";
 import { ScrollArea } from "../ScrollArea";
 import { Time } from "../Time";
+import { Tooltip } from "../Tooltip";
 import { ReadingPlaceholder, ReadingWindow } from "./ReadingWindow";
 import { SessionMessageView } from "./SessionMessageView";
 import { SessionText } from "./SessionContent";
@@ -97,10 +98,12 @@ function SessionOutline({ items, onSelect }: { items: OutlineEntry[]; onSelect: 
   return <nav className="asb-session-toc" aria-label={t("sessions.toc.aria")}>
     <div className="asb-session-toc-heading">{t("sessions.toc.heading")}</div>
     <ScrollArea className="asb-session-toc-items" aria-label={t("sessions.toc.aria")}>{items.map((item, index) =>
-      <Button variant="unstyled" key={item.id} onClick={() => onSelect(item)}>
-        <span className="asb-session-toc-index">{index + 1}</span>
-        <span className="asb-session-toc-preview" title={item.preview}>{item.preview}</span>
-      </Button>)}</ScrollArea>
+      <Tooltip key={item.id} asChild label={item.preview}>
+        <Button variant="unstyled" onClick={() => onSelect(item)}>
+          <span className="asb-session-toc-index">{index + 1}</span>
+          <span className="asb-session-toc-preview">{item.preview}</span>
+        </Button>
+      </Tooltip>)}</ScrollArea>
   </nav>;
 }
 

@@ -64,7 +64,7 @@ pub fn inspect(app: AppKind, launcher: &Path) -> Result<Installation, String> {
     Ok(item)
 }
 
-fn read_version(item: &mut Installation) {
+pub(crate) fn read_version(item: &mut Installation) {
     if item.form == Form::Cli {
         let output = launch::command(item).and_then(|mut command| {
             command.arg("--version");

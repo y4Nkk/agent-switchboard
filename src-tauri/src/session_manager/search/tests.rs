@@ -4,9 +4,13 @@ use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
 
-fn search(sources: Vec<SessionSource>, issues: Vec<SessionIssue>, query: &str, app: Option<AppKind>, offset: usize) -> SessionSearchPage {
-    let filters = Filters::parse(SessionSearchRequest { query: query.into(), app, offset, ..Default::default() }).unwrap();
-    super::search_sources(sources, issues, &filters)
+fn search(sources: Vec<SessionSource>, issues: Vec<SessionIssue>, query: &str, app: Option<AppKind>, page: usize) -> SessionSearchPage {
+    snapshot(sources, issues, query, app).page(page).unwrap()
+}
+
+fn snapshot(sources: Vec<SessionSource>, issues: Vec<SessionIssue>, query: &str, app: Option<AppKind>) -> SearchSnapshot {
+    let filters = Filters::parse(SessionSearchRequest { query: query.into(), app, ..Default::default() }).unwrap();
+    super::search_sources_observed(sources, issues, &filters, &SearchControl::default()).unwrap()
 }
 
 fn source(path: &Path, id: &str) -> SessionSource {
@@ -25,19 +29,24 @@ fn message(text: &str) -> String {
 }
 
 #[test]
-fn search_pagination_reuses_hits_and_append_invalidates_the_query_result() {
+fn pagination_keeps_exact_hits_across_source_append_until_search_refreshes() {
     let temp = tempdir().unwrap();
     let path = temp.path().join("search.jsonl");
     fs::write(&path, (0..80).map(|index| message(&format!("target {index}"))).collect::<String>()).unwrap();
     let source = source(&path, "search");
-    assert_eq!(search(vec![source.clone()], vec![], "target", None, 0).total, 80);
-    let before = super::super::records::decoded_record_count();
-    let next = search(vec![source.clone()], vec![], "target", None, 50);
-    assert_eq!(next.results.len(), 30);
-    assert_eq!(super::super::records::decoded_record_count(), before);
+    let snapshot = snapshot(vec![source.clone()], vec![], "target", None);
+    assert_eq!(snapshot.page(1).unwrap().total, 80);
     use std::io::Write;
     fs::OpenOptions::new().append(true).open(&path).unwrap().write_all(message("target appended").as_bytes()).unwrap();
-    assert_eq!(search(vec![source], vec![], "target", None, 0).total, 81);
+    let before = super::super::records::decoded_record_count();
+    let next = snapshot.page(2).unwrap();
+    assert_eq!(next.total, 80);
+    assert_eq!(next.page, 2);
+    assert_eq!(next.page_size, PAGE_SIZE);
+    assert_eq!(next.results.len(), 30);
+    assert_eq!(next.results[0].excerpt, "target 50");
+    assert_eq!(super::super::records::decoded_record_count(), before);
+    assert_eq!(search(vec![source], vec![], "target", None, 1).total, 81);
 }
 
 #[test]
@@ -46,7 +55,7 @@ fn searches_complete_transcripts_and_locates_unicode_cross_line_hits() {
     let path = temp.path().join("source.jsonl");
     let text = format!("{}\nÄPFEL   连接\n  Error42 tail", "before ".repeat(90));
     fs::write(&path, message(&text) + &message("second Äpfel 连接 Error42")).unwrap();
-    let page = search(vec![source(&path, "s")], vec![], "äpfel 连接 error42", None, 0);
+    let page = search(vec![source(&path, "s")], vec![], "äpfel 连接 error42", None, 1);
     assert_eq!(page.total, 2);
     assert!(page.issues.is_empty());
     assert!(page.results[0].excerpt.contains("ÄPFEL 连接 Error42"));
@@ -62,7 +71,7 @@ fn deep_unicode_match_opens_its_original_content_page() {
     let path = temp.path().join("source.jsonl");
     let text = format!("  {}\n\t  İ目标  跨行\n命中", "🙂 \t".repeat(20_000));
     fs::write(&path, message(&text)).unwrap();
-    let page = search(vec![source(&path, "s")], vec![], "İ目标 跨行 命中", None, 0);
+    let page = search(vec![source(&path, "s")], vec![], "İ目标 跨行 命中", None, 1);
     assert!(page.issues.is_empty());
     let offset = page.results[0].content_offset;
     assert!(offset > 0);
@@ -75,14 +84,14 @@ fn metadata_matches_only_without_message_hits_and_failures_are_visible() {
     let temp = tempdir().unwrap();
     let path = temp.path().join("source.jsonl");
     fs::write(&path, message("metadata title in message")).unwrap();
-    let page = search(vec![source(&path, "s")], vec![], "metadata", None, 0);
+    let page = search(vec![source(&path, "s")], vec![], "metadata", None, 1);
     assert_eq!(page.total, 1);
     assert!(page.results[0].message_id.is_some());
-    let page = search(vec![source(&path, "s")], vec![], "projects/example", None, 0);
+    let page = search(vec![source(&path, "s")], vec![], "projects/example", None, 1);
     assert_eq!(page.total, 1);
     assert!(page.results[0].message_id.is_none());
     fs::write(&path, message("metadata") + "{invalid\n").unwrap();
-    let page = search(vec![source(&path, "s")], vec![], "metadata", None, 0);
+    let page = search(vec![source(&path, "s")], vec![], "metadata", None, 1);
     assert_eq!(page.total, 1);
     assert!(page.results[0].message_id.is_some());
     assert_eq!(page.issues.len(), 1);
@@ -94,14 +103,14 @@ fn pagination_ties_and_app_filter_are_deterministic() {
     let temp = tempdir().unwrap();
     let sources = (0..55).rev().map(|index| source(temp.path(), &format!("s{index:02}")))
         .collect::<Vec<_>>();
-    let page = search(sources.clone(), vec![], "", None, 0);
+    let page = search(sources.clone(), vec![], "", None, 1);
     assert_eq!(page.total, 55);
     assert_eq!(page.results.len(), 50);
     assert_eq!(page.results[0].session.session_id, "s00");
-    let page = search(sources.clone(), vec![], "", None, 50);
+    let page = search(sources.clone(), vec![], "", None, 2);
     assert_eq!(page.results.len(), 5);
     assert_eq!(page.results[0].session.session_id, "s50");
-    assert_eq!(search(sources, vec![], "", Some(AppKind::Claude), 0).total, 0);
+    assert_eq!(search(sources, vec![], "", Some(AppKind::Claude), 1).total, 0);
 }
 
 #[test]
@@ -126,14 +135,15 @@ fn message_pagination_counts_unretained_hits_without_metadata_duplicates() {
     let transcript = (0..123).map(|index| message(&format!("metadata match {index}")))
         .collect::<String>();
     fs::write(&path, transcript).unwrap();
-    let page = search(vec![source(&path, "s")], vec![], "metadata", None, 50);
+    let page = search(vec![source(&path, "s")], vec![], "metadata", None, 2);
     assert_eq!(page.total, 123);
     assert_eq!(page.results.len(), PAGE_SIZE);
     assert_eq!(page.results[0].excerpt, "metadata match 50");
     assert_eq!(page.results[49].excerpt, "metadata match 99");
-    let past = search(vec![source(&path, "s")], vec![], "metadata", None, 123);
+    let past = search(vec![source(&path, "s")], vec![], "metadata", None, 4);
     assert_eq!(past.total, 123);
-    assert!(past.results.is_empty());
+    assert_eq!(past.page, 3);
+    assert_eq!(past.results.len(), 23);
 }
 
 #[test]
@@ -152,7 +162,7 @@ fn searches_codex_tool_outputs_once_without_event_mirror_duplicates() {
     let messages = collect_messages(&path).unwrap();
     assert_eq!(messages.len(), 2);
     assert!(messages.iter().all(|message| message.role == "tool"));
-    let page = search(vec![source(&path, "s")], vec![], "error:", None, 0);
+    let page = search(vec![source(&path, "s")], vec![], "error:", None, 1);
     assert_eq!(page.total, 2);
     assert_eq!(page.results[0].message_id.as_deref(), Some(messages[0].id.as_str()));
 }
@@ -207,7 +217,7 @@ fn local_alias_and_tags_are_searchable_without_overwriting_source_title() {
     source.meta.alias = Some("Local Release".into());
     source.meta.tags = vec!["Ticket-42".into()];
     for query in ["local release", "ticket-42"] {
-        let page = search(vec![source.clone()], vec![], query, None, 0);
+        let page = search(vec![source.clone()], vec![], query, None, 1);
         assert_eq!(page.total, 1);
         assert_eq!(page.results[0].session.title, "metadata title");
     }

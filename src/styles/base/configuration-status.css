@@ -94,11 +94,8 @@
    and a compact source ledger. They remain separate from local configuration. */
 .asb-codex-reset-board {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--asb-space-3);
 }
 
 .asb-codex-reset-summary {
@@ -107,11 +104,11 @@
   justify-content: center;
   gap: var(--asb-space-2);
   min-width: 0;
-  padding: var(--asb-space-5);
-  background: var(--asb-content-muted);
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
 }
 
-.asb-codex-reset-question,
 .asb-codex-reset-summary-title {
   margin: 0;
   color: var(--asb-text);
@@ -124,6 +121,53 @@
   color: var(--asb-text);
   font: var(--asb-text-signal);
   letter-spacing: -0.06em;
+}
+
+.asb-codex-reset-hub {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-codex-reset-source,
+.asb-codex-reset-hub-event-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--asb-space-unit) var(--asb-space-2);
+}
+
+.asb-codex-reset-hub-board .asb-codex-reset-summary {
+  justify-content: flex-start;
+}
+
+.asb-codex-reset-hub-event,
+.asb-codex-reset-hub-evidence {
+  display: grid;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+}
+
+.asb-codex-reset-hub-activity > .asb-fact-row.is-inline > div { flex-wrap: wrap; }
+
+.asb-codex-reset-hub-horizons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
+  gap: var(--asb-space-2);
+  margin: 0;
+}
+
+.asb-codex-reset-hub-horizons .asb-codex-reset-answer {
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-codex-reset-hub-evidence .asb-codex-reset-fact {
+  padding: 0 0 var(--asb-space-unit);
+}
+
+.asb-codex-reset-hub-evidence .asb-codex-reset-fact dd {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
 }
 
 /* Daily rows expand with the page; this module owns spacing only. */
@@ -142,6 +186,7 @@
 
 .asb-codex-reset-answer.is-none {
   color: var(--asb-text-muted);
+  font: var(--asb-text-title);
 }
 
 /* Reset-category chips: global credits and banked reset cards carry their
@@ -181,6 +226,11 @@
   margin: 0;
 }
 
+.asb-codex-reset-board > .asb-codex-reset-facts {
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
 .asb-codex-reset-fact {
   display: grid;
   gap: var(--asb-space-1);
@@ -208,9 +258,7 @@
   overflow-wrap: anywhere;
 }
 
-.asb-codex-reset-detail,
-.asb-codex-reset-source,
-.asb-codex-reset-note {
+.asb-codex-reset-detail {
   margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -246,17 +294,11 @@
 
 /* Warn lines live inside the source tabpanels since the reset panel gained
    its source switcher. */
+.asb-codex-reset > [role="tabpanel"] { display: grid; gap: var(--asb-space-3); min-width: 0; }
+
 .asb-codex-reset [role="tabpanel"] > .asb-warn-text {
-  margin: var(--asb-space-2) 0 0;
+  margin: 0;
   font: var(--asb-text-label);
-}
-
-.asb-codex-reset-source {
-  margin-top: var(--asb-space-2);
-}
-
-.asb-codex-reset-note {
-  margin-top: var(--asb-space-unit);
 }
 
 .asb-codex-reset-source-link {
@@ -271,26 +313,20 @@
 
 /* The official account-reset summary sources from the machine's own Codex
    login; its windows render through the shared QuotaWindowsTable. */
-.asb-official-reset-meta,
-.asb-official-reset-note {
+.asb-official-reset-meta {
   margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
   overflow-wrap: anywhere;
 }
 
+.asb-official-reset .asb-usage-chart-card { background: var(--asb-content); }
+
 /* The public feed's per-day history, drawn as a contribution-style grid in
    UTC day columns; the header line and accessible name carry the totals. */
 .asb-codex-reset-heatmap {
-  margin-top: var(--asb-space-4);
-  padding-top: var(--asb-space-3);
-}
-
-/* The second source's ledger sections (timeline, platform status, banked
-   observations) share the heatmap's head anatomy: one title, one total line. */
-.asb-codex-reset-section {
-  margin-top: var(--asb-space-4);
-  padding-top: var(--asb-space-3);
+  padding-block-start: var(--asb-space-3);
+  border-block-start: 1px solid var(--asb-hairline);
 }
 
 .asb-codex-reset-section-head {
@@ -299,19 +335,6 @@
   justify-content: space-between;
   gap: var(--asb-space-2);
   flex-wrap: wrap;
-}
-
-.asb-codex-reset-section-title,
-.asb-codex-reset-section-total {
-  margin: 0;
-  font: var(--asb-text-label);
-  font-weight: 700;
-  color: var(--asb-text);
-}
-
-.asb-codex-reset-section-total {
-  font-weight: 400;
-  color: var(--asb-text-muted);
 }
 
 /* Platform surfaces read as one status pill per monitored surface; the shared
@@ -326,27 +349,6 @@
 
 .asb-codex-reset-surfaces + .asb-codex-reset-detail {
   margin-top: var(--asb-space-2);
-}
-
-.asb-codex-reset-heatmap-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--asb-space-2);
-  flex-wrap: wrap;
-}
-
-.asb-codex-reset-heatmap-title,
-.asb-codex-reset-heatmap-total {
-  margin: 0;
-  font: var(--asb-text-label);
-  font-weight: 700;
-  color: var(--asb-text);
-}
-
-.asb-codex-reset-heatmap-total {
-  font-weight: 400;
-  color: var(--asb-text-muted);
 }
 
 .asb-codex-reset-heatmap-grid {
@@ -365,7 +367,7 @@
   width: 10px;
   height: 10px;
   border-radius: 2px;
-  background: var(--asb-content-muted);
+  background: var(--asb-hairline);
 }
 
 .asb-codex-reset-heatmap-cell.is-hidden {

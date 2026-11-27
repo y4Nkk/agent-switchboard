@@ -35,7 +35,7 @@ pub(super) async fn usage(app: &AppHandle, request: &InvokeRequest) -> Result<Op
             argument::<UsageHistoryRequest>(&request.args, "request")?,
         )),
         "list_runtime_logs" => command!(commands::runtime_log::list_runtime_logs(app.clone(),
-            optional_argument(&request.args, "level")?)),
+            argument(&request.args, "request")?)),
         "open_runtime_log_dir" => {
             command!(commands::runtime_log::open_runtime_log_dir(app.clone()))
         }

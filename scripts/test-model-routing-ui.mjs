@@ -68,7 +68,7 @@ function purpose(name) {
 }
 
 async function noWrites() {
-  check((await page.evaluate(() => window.routeTest.calls)).length === 0, "The overview must not invoke any backend command");
+  check((await page.evaluate(() => window.routeTest.unexpectedCalls)).length === 0, "The overview must issue only its status and visibility reads");
   check(await page.getByRole("textbox").count() === 0, "The overview must not expose editing fields");
 }
 
@@ -85,8 +85,7 @@ async function codexOverview() {
   check((await purpose("Default subagent").innerText()).includes("Fixed provider"));
   await chooseProvider("Codex B");
   await unchangedActive();
-  check((await page.locator(".asb-route-overview-identity").innerText()).includes("Codex A"));
-  check((await page.locator(".asb-route-overview-saved").innerText()).includes("inactive"));
+  check(await page.getByText("Currently active", { exact: true }).count() === 0, "The saved plan has no identity ribbon");
   await purpose("Main model").getByRole("button").click();
   await purpose("Default subagent").getByRole("button").click();
   let data = await page.evaluate(() => ({ entries: window.routeTest.entries, ids: window.routeTest.ids }));
@@ -150,17 +149,50 @@ async function emptyAndMissingPlans() {
   await noWrites();
 }
 
+async function gatewayFocus() {
+  await openScenario();
+  const table = page.getByRole("table", { name: "Recent requests forwarded through the local gateway" });
+  const totals = page.locator(".asb-gateway-chart.is-outcomes");
+  const claude = table.getByRole("cell", { name: "Claude Code", exact: true });
+  await claude.first().waitFor();
+  const latency = page.locator(".asb-gateway-chart.is-latency");
+  check(await latency.locator(".asb-gateway-donut svg circle").count() === 5, "Latency has a separate arc for each populated range");
+  const allTotals = await totals.innerText();
+  await page.getByRole("radiogroup", { name: "Choose an app to view" }).getByText("Codex", { exact: true }).click();
+  await claude.first().waitFor({ state: "hidden" });
+  check(await table.getByRole("cell", { name: "Codex", exact: true }).first().isVisible(), "Client focus scopes the request table");
+  check((await totals.innerText()) === allTotals, "Statistics retain the gateway totals when a client is selected");
+  await page.getByRole("button", { name: "View all", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "All requests · Codex" });
+  await history.waitFor();
+  check(await history.locator("tbody tr").count() === 20, "The history opens on the first page");
+  await history.getByRole("button", { name: "Next page", exact: true }).click();
+  await history.getByText("Page 2 of 2").waitFor();
+  check(await history.locator("tbody tr").count() === 3, "The remaining filtered records are reachable");
+  await page.keyboard.press("Escape");
+  await history.waitFor({ state: "hidden" });
+  await noWrites();
+}
+
 async function displayEvidence() {
   for (const client of ["codex", "claude"]) {
     await openScenario(client);
     await page.setViewportSize({ width: 1440, height: 1050 });
-    const artwork = page.locator("svg.asb-route-overview-art");
+    await page.getByRole("heading", { name: "Gateway statistics", exact: true }).waitFor();
+    const artwork = page.locator("svg.asb-gateway-art");
     check(await artwork.isVisible() && await artwork.getAttribute("aria-hidden") === "true", "The inline artwork is visible and decorative");
     for (const { language, width } of [{ language: "en-US", width: 1440 }, { language: "zh-CN", width: 640 }]) {
       await page.setViewportSize({ width, height: 1050 });
       await page.evaluate((language) => window.routeTest.setLanguage(language), language);
       await page.waitForFunction((language) => document.documentElement.lang === language, language);
-      await page.getByRole("heading", { name: language === "zh-CN" ? "模型路由与网关" : "Model routing & gateway", exact: true }).waitFor();
+      await page.locator("main > .asb-workspace-header").getByRole("heading", {
+        name: language === "zh-CN" ? "模型路由与网关" : "Model routing & gateway", exact: true,
+      }).waitFor();
+      const panels = page.locator("main > .asb-panel");
+      check(await panels.count() === 3, "The page must have three sibling panels");
+      assert.deepEqual(await panels.locator(":scope > .asb-module-header h3").allTextContents(), language === "zh-CN"
+        ? ["网关运行", "已保存的模型方案", "请求监控"] : ["Gateway runtime", "Saved model plans", "Request monitoring"]);
+      assertions++;
       for (const theme of ["light", "dark"]) {
         await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
         check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${client}/${language}/${theme}/${width} must fit`);
@@ -189,14 +221,16 @@ try {
   await codexOverview();
   await claudeOverview();
   await emptyAndMissingPlans();
+  await gatewayFocus();
   await displayEvidence();
   assert.deepEqual(errors, []); assertions++;
   assert.deepEqual(blockedRequests, []); assertions++;
   const result = { assertions, passed: true, errors, blockedRequests, evidence: output,
-    coverage: ["saved plans never invoke IPC", "inactive selection preserves active identity and records", "purpose navigation uses plan owner UUID and role",
+    coverage: ["gateway uses read-only IPC in the fixture", "inactive selection preserves active identity and records", "purpose navigation uses plan owner UUID and role",
       "provider management receives selected client", "Claude automatic/Primary/fixed-self/fixed-target rules", "Fable inherits Opus destination and 1M",
       "missing targets remain explicit", "deleted selected plan is not silently replaced", "empty plan directs to providers",
-      "decorative inline SVG", "both clients in English-wide and Chinese-narrow light/dark", "360px reflow"] };
+      "three sibling panels in reading order", "request history pagination follows client focus", "decorative inline SVG",
+      "both clients in English-wide and Chinese-narrow light/dark", "360px reflow"] };
   await fs.writeFile(path.join(output, "evidence.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } finally {

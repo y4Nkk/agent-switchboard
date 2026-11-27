@@ -4,6 +4,7 @@ import { useI18n } from "../../i18n";
 import { catalogText } from "../../i18n/errors";
 import { Button } from "../Button";
 import { Input } from "../Input";
+import { SettingsGroup } from "../SettingsLayout";
 import { RadioOption } from "../RadioOption";
 import { modeledPreferences, object, withModelPreference, type Fragment, type ModelPreference } from "./claude-model-preferences";
 
@@ -73,9 +74,8 @@ export function ClaudeModelPreferencesEditor({ fragment, catalog, busy, onChange
   const window = pending.autoCompactWindow;
   const validWindow = window === undefined || window === "auto" || (typeof window === "number"
     && Number.isInteger(window) && window >= catalog.autoCompactMin && window <= catalog.autoCompactMax);
-  return <section className="asb-toggle-group" aria-label={t("clientConfig.models.title")}>
-    <div className="asb-toggle-group-head"><h3 className="asb-section-title">{t("clientConfig.models.title")}</h3></div>
-    <p className="asb-field-help">{t("clientConfig.models.help", { min: catalog.autoCompactMin, max: catalog.autoCompactMax })}</p>
+  return <SettingsGroup title={t("clientConfig.models.title")}
+    description={t("clientConfig.models.help", { min: catalog.autoCompactMin, max: catalog.autoCompactMax })}>
     {entries.map(([name, preferences]) => <div className="asb-model-preferences-row" key={name}>
       <code className="asb-model-effort-name">{name}</code>
       <ModelPreferencesRow scope={`${newScope}-${name}`} model={name} preferences={object(preferences)} catalog={catalog} busy={busy}
@@ -97,5 +97,5 @@ export function ClaudeModelPreferencesEditor({ fragment, catalog, busy, onChange
         onChange(next); setModel(""); setPending({});
       }}>{t("clientConfig.models.add")}</Button>
     </div>
-  </section>;
+  </SettingsGroup>;
 }

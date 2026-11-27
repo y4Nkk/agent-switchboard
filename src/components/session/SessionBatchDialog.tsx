@@ -8,6 +8,7 @@ import { Checkbox } from "../Checkbox";
 import { ClientLogo } from "../ClientLogo";
 import { Pagination } from "../Pagination";
 import { Time } from "../Time";
+import { Tooltip } from "../Tooltip";
 import { ToastMessageList, ToastText } from "../ToastContent";
 import { SessionDeletionConfirm, type SessionDeletionState } from "./SessionDeletion";
 import { SessionOrganizationFilters } from "./SessionOrganizationFilters";
@@ -16,7 +17,7 @@ import { SessionSearchProgress } from "./SessionSearchProgress";
 import { SessionTagInput } from "./SessionTagInput";
 import { sessionKey, sessionTitle } from "./session-content";
 import { SESSION_ORGANIZATION_BATCH_LIMIT, type SessionOrganization } from "./use-session-organization";
-import { SESSION_PAGE_SIZE, type SessionSearch } from "./use-session-search";
+import type { SessionSearch } from "./use-session-search";
 import type { SessionSelection } from "./use-session-selection";
 
 function SessionBatchChoices({ search, selection, disabled }: {
@@ -44,15 +45,19 @@ function SessionBatchChoices({ search, selection, disabled }: {
         const title = sessionTitle(session);
         const checked = selection.chosen.has(key);
         return <li key={key} data-selected={checked || undefined}>
-          <div className="asb-session-batch-choice" title={title}>
-            <Checkbox label={title} ariaLabel={`${title} · ${clientFullName(session.app)}`}
-              checked={checked} disabled={disabled} onChange={(next) => selection.choose([session], next)} />
+          <div className="asb-session-batch-choice">
+            <Tooltip label={title}>
+              <Checkbox label={title} ariaLabel={`${title} · ${clientFullName(session.app)}`}
+                checked={checked} disabled={disabled} onChange={(next) => selection.choose([session], next)} />
+            </Tooltip>
             {search.query && excerpt && <span className="asb-session-batch-excerpt">{excerpt}</span>}
           </div>
-          <span className="asb-session-batch-session-meta" title={session.projectDir ?? t("sessions.projects.none")}>
-            <ClientLogo app={session.app} className="asb-session-logo" />
-            {session.lastActiveAt ? <Time iso={session.lastActiveAt} /> : t("sessions.time.unknown")}
-          </span>
+          <Tooltip asChild label={session.projectDir ?? t("sessions.projects.none")}>
+            <span className="asb-session-batch-session-meta">
+              <ClientLogo app={session.app} className="asb-session-logo" />
+              {session.lastActiveAt ? <Time iso={session.lastActiveAt} /> : t("sessions.time.unknown")}
+            </span>
+          </Tooltip>
         </li>;
       })}
     </ul>}
@@ -90,7 +95,7 @@ function SessionBatchFooter({ search, sessions, deletion, organization, busy, on
   return <div className="asb-session-batch-footer">
     <div className="asb-session-batch-summary">
       <strong role="status">{t("sessions.batch.selectedCount", { count })}</strong>
-      {search.total !== null && <Pagination total={search.total} page={search.page} pageSize={SESSION_PAGE_SIZE}
+      {search.pagination && <Pagination {...search.pagination}
         onPageChange={search.setPage} label={t("sessions.search.pagination")} />}
     </div>
     {overLimit && <p className="asb-warn-text">{t("sessions.organize.batchLimit")}</p>}

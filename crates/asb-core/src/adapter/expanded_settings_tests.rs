@@ -13,7 +13,7 @@ fn granular_approval_round_trips_both_native_table_forms_and_resets() {
         "keep = 7\n[approval_policy.granular]\nsandbox_approval = true\nrules = false\nmcp_elicitations = true\nrequest_permissions = false\nskill_approval = true\n",
     ] {
         let settings = extract_client_settings(AppKind::Codex, original).unwrap();
-        let rendered = render_client_settings_into_file(AppKind::Codex, original, &settings).unwrap();
+        let rendered = project_test_preferences(AppKind::Codex, original, &settings).unwrap();
         assert_eq!(extract_client_settings(AppKind::Codex, &rendered).unwrap(), settings);
         assert!(owned_diff(AppKind::Codex, &rendered, original).unwrap().is_empty());
         let reset = reset_client_settings(AppKind::Codex, original).unwrap();
@@ -32,7 +32,7 @@ fn malformed_granular_approval_is_not_overwritten_or_silently_accepted() {
         "approval_policy = { granular = { rules = 'true', sandbox_approval = true, mcp_elicitations = true } }",
     ] {
         assert!(extract_client_settings(AppKind::Codex, original).is_err());
-        assert!(render_client_settings_into_file(AppKind::Codex, original, &defaults).is_err());
+        assert!(project_test_preferences(AppKind::Codex, original, &defaults).is_err());
     }
 }
 
@@ -42,7 +42,8 @@ fn codex_current_keys_replace_retired_keys_without_duplicate_settings() {
     let mut settings = extract_client_settings(AppKind::Codex, current).unwrap();
     assert_eq!(settings.settings["tui.disable_paste_burst"], explicit(json!(false)));
     settings.settings.insert("features.view_image".into(), explicit(json!(true)));
-    let rendered = render_client_settings_into_file(AppKind::Codex, current, &settings).unwrap();
+    let reset = reset_client_settings(AppKind::Codex, current).unwrap();
+    let rendered = project_test_preferences(AppKind::Codex, &reset, &settings).unwrap();
     let document = rendered.parse::<toml_edit::DocumentMut>().unwrap();
     assert!(document.get("disable_paste_burst").is_none());
     assert!(document["tools"].get("view_image").is_none());
@@ -61,13 +62,13 @@ fn native_permission_profiles_are_visible_preserved_and_cannot_be_mixed() {
     assert_eq!(status.selected.as_deref(), Some("workspace"));
     assert!(status.has_profiles && status.legacy_settings.is_empty());
     let mut settings = ownership::default_client_settings(AppKind::Codex);
-    let rendered = render_client_settings_into_file(AppKind::Codex, current, &settings).unwrap();
+    let rendered = project_test_preferences(AppKind::Codex, current, &settings).unwrap();
     assert!(rendered.contains("[permissions.workspace]"));
     settings.settings.insert("sandbox_mode".into(), explicit(json!("workspace-write")));
-    assert!(render_client_settings_into_file(AppKind::Codex, current, &settings).unwrap_err().message.contains("权限档案"));
+    assert!(project_test_preferences(AppKind::Codex, current, &settings).unwrap_err().message.contains("权限档案"));
     let defaults = ownership::default_client_settings(AppKind::Codex);
     let conflicting = format!("{current}\n[sandbox_workspace_write]\nwritable_roots = ['/custom']\n");
-    assert!(render_client_settings_into_file(AppKind::Codex, &conflicting, &defaults).is_err());
+    assert!(project_test_preferences(AppKind::Codex, &conflicting, &defaults).is_err());
     let pruned = remove_unmanaged_entries(AppKind::Codex, current, "").unwrap();
     let reset = reset_client_settings(AppKind::Codex, &pruned).unwrap();
     assert!(reset.contains("[permissions.workspace]"));
@@ -83,7 +84,7 @@ fn claude_lists_custom_styles_and_empty_attribution_preserve_native_meaning() {
     assert_eq!(parameters.settings["outputStyle"], explicit(json!("My teaching style")));
     assert_eq!(settings.settings["attribution.commit"], explicit(json!("")));
     assert_eq!(settings.settings["attribution.pr"], explicit(json!("")));
-    let rendered = render_client_settings_into_file(AppKind::Claude, &current, &settings).unwrap();
+    let rendered = project_test_preferences(AppKind::Claude, &current, &settings).unwrap();
     let root: Value = serde_json::from_str(&rendered).unwrap();
     assert_eq!(root["attribution"], json!({"commit":"", "pr":""}));
     assert_eq!(root["permissions"]["custom"], "keep");
@@ -91,7 +92,7 @@ fn claude_lists_custom_styles_and_empty_attribution_preserve_native_meaning() {
     assert_eq!(root["effortLevel"], "high");
     assert_eq!(extract_client_settings(AppKind::Claude, &rendered).unwrap(), settings);
     settings.settings.insert("attribution.commit".into(), SettingValue::Automatic);
-    let changed: Value = serde_json::from_str(&render_client_settings_into_file(AppKind::Claude, &rendered, &settings).unwrap()).unwrap();
+    let changed: Value = serde_json::from_str(&project_test_preferences(AppKind::Claude, &rendered, &settings).unwrap()).unwrap();
     assert!(changed["attribution"].get("commit").is_none());
     assert_eq!(changed["attribution"]["pr"], "");
 }
@@ -105,7 +106,7 @@ fn promoted_manifest_claims_never_remove_typed_fields_and_unrelated_claims_survi
     let mut settings = extract_client_settings(AppKind::Claude, &current).unwrap();
     settings.settings.insert("permissions.allow".into(), explicit(json!(["Read", "Write"])));
     settings.claude_extra = json!({"env":{"HOST":"next"}}).as_object().unwrap().clone();
-    let rendered = render_client_settings_into_file(AppKind::Claude, &current, &settings).unwrap();
+    let rendered = project_test_preferences(AppKind::Claude, &current, &settings).unwrap();
     let root: Value = serde_json::from_str(&rendered).unwrap();
     assert_eq!(root["permissions"]["allow"], json!(["Read","Write"]));
     assert_eq!(root["attribution"], json!({"commit":"", "pr":""}));

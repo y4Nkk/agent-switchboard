@@ -12,6 +12,8 @@ Codex 与 Claude 的运行参数和客户端配置读取同类目录字段，但
 
 ## Related decisions
 
+[共享设置正文布局](2026-11-27-client-configuration-grouped-form.md)提供分组与对齐行。供应商参数的分段选项和待保存状态继续服务于档案编辑。
+
 [供应商编辑器一击化](../architecture/2026-11-20-editor-one-click-controls.md)继续拥有常驻控件，运行参数的控件选择由本篇接管。[供应商高级设置完整显示](../simplification/2026-10-13-provider-advanced-settings-always-visible.md)继续拥有分区完整呈现的规则。
 
 ## Alternatives considered

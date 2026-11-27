@@ -9,6 +9,7 @@ import { ClientLogo } from "../ClientLogo";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { Time } from "../Time";
 import { ScrollArea } from "../ScrollArea";
+import { Tooltip } from "../Tooltip";
 import { SessionMessageView } from "./SessionMessageView";
 import type { SessionBookmarks } from "./use-session-bookmarks";
 import { useReadingScroll } from "./use-reading-scroll";
@@ -37,7 +38,8 @@ function BookmarkDetail({ item, scrollTop, busy, onRemove, onOpen }: {
   };
   return <ScrollArea as="section" className="asb-session-detail" aria-label={t("sessions.bookmarks.detail")}>
     <header className="asb-session-detail-head">
-      <div className="asb-session-detail-title"><h3 className="asb-section-title" title={item.sessionTitle}>{item.sessionTitle}</h3>
+      <div className="asb-session-detail-title">
+        <Tooltip asChild label={item.sessionTitle}><h3 className="asb-section-title">{item.sessionTitle}</h3></Tooltip>
         <span className="asb-scope-note">{t("sessions.bookmarks.savedAt")} <Time iso={item.savedAt} /></span>
       </div>
       <div className="asb-session-actions">
@@ -76,14 +78,16 @@ export function SessionBookmarksPane({ bookmarks, onOpen }: {
         {bookmarks.loading && <p role="status">{t("sessions.bookmarks.loading")}</p>}
         {!bookmarks.loading && bookmarks.items !== null && !items.length && <p>{t("sessions.bookmarks.empty")}</p>}
         <ScrollArea className="asb-session-items" aria-label={t("sessions.bookmarks.title")}>{items.map((item) =>
-          <Button variant="unstyled" key={item.id} aria-pressed={reading === item.id}
-            className={`asb-session-item${reading === item.id ? " is-active" : ""}`}
-            onClick={() => { scrollTop.current = 0; setReading(item.id); }}>
-            <span className="asb-session-item-title"><ClientLogo app={item.app} className="asb-session-logo" />
-              <span title={item.sessionTitle}>{item.sessionTitle}</span></span>
-            <span className="asb-session-search-excerpt">{item.excerpt.slice(0, 220)}</span>
-            <span className="asb-session-item-time"><Time iso={item.savedAt} /></span>
-          </Button>)}</ScrollArea>
+          <Tooltip key={item.id} asChild label={item.sessionTitle}>
+            <Button variant="unstyled" aria-pressed={reading === item.id}
+              className={`asb-session-item${reading === item.id ? " is-active" : ""}`}
+              onClick={() => { scrollTop.current = 0; setReading(item.id); }}>
+              <span className="asb-session-item-title"><ClientLogo app={item.app} className="asb-session-logo" />
+                <span>{item.sessionTitle}</span></span>
+              <span className="asb-session-search-excerpt">{item.excerpt.slice(0, 220)}</span>
+              <span className="asb-session-item-time"><Time iso={item.savedAt} /></span>
+            </Button>
+          </Tooltip>)}</ScrollArea>
         {bookmarks.result && <Pagination total={bookmarks.result.total} page={bookmarks.page}
           pageSize={bookmarks.result.pageSize} label={t("sessions.bookmarks.pagination")} onPageChange={bookmarks.setPage} />}
       </section>

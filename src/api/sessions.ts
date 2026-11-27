@@ -96,6 +96,8 @@ export interface SessionSearchHit {
 export interface SessionSearchPage {
   results: SessionSearchHit[];
   total: number;
+  page: number;
+  pageSize: number;
   issues: SessionIssue[];
   projects: SessionProject[];
   tags: string[];
@@ -111,7 +113,6 @@ export interface SessionProject {
 export interface SessionSearchRequest {
   query: string;
   app: AppKind | null;
-  offset: number;
   project: Pick<SessionProject, "app" | "projectDir"> | null;
   tag: string | null;
   pinnedOnly: boolean;

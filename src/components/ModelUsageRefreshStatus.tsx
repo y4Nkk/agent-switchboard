@@ -60,6 +60,6 @@ export function ModelUsageRefreshStatus({ activity, task, hasReport }: {
       <p className="asb-usage-progress-note">{t("usage.progress.sources", {
         done: task.progress.completedSources.toLocaleString(language), total: task.progress.totalSources.toLocaleString(language),
       })}</p>}
-    <p className="asb-usage-progress-note">{t(hasReport ? "usage.status.updatingSaved" : "usage.loading.firstRun")}</p>
+    {!hasReport && <p className="asb-usage-progress-note">{t("usage.loading.firstRun")}</p>}
   </div>;
 }

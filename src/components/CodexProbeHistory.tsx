@@ -217,9 +217,6 @@ function HistoryDetail({ history, onReuseQuestion }: {
         </div>
         {summary && summary.runCount > 0 && <>
           <div role="group" aria-label={t("codex.probe.summaryAria")}><StatCards stats={probeSummaryCards(batch, t)} /></div>
-          {summary.recordedRuns < summary.runCount && <p className="asb-codex-probe-note" role="status">
-            {t("codex.probe.partialUsage", { recorded: summary.recordedRuns, total: summary.runCount })}
-          </p>}
           <ProbeRunsTable batch={batch} />
         </>}
         {summary && summary.runCount === 0 && !history.detailLoading &&
@@ -229,9 +226,6 @@ function HistoryDetail({ history, onReuseQuestion }: {
             {t("codex.history.reuseQuestion")}
           </Button>
         </div>
-        <p className="asb-codex-probe-note">
-          {t("codex.history.reuseNote")}
-        </p>
       </>}
     </div>
   );

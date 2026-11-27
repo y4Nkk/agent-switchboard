@@ -142,6 +142,7 @@
 .asb-session-batch-list > li[data-selected] { background: var(--asb-row-selected); }
 
 .asb-session-batch-choice { flex: 1 1 20ch; min-width: 0; }
+.asb-session-batch-choice > .asb-tooltip-anchor { display: block; }
 .asb-session-batch-choice .asb-checkbox-label,
 .asb-session-batch-excerpt {
   overflow: hidden;
@@ -229,6 +230,8 @@
 .asb-session-tag-values > button { display: inline-flex; gap: var(--asb-space-2); padding: var(--asb-space-1) var(--asb-space-2); border: 0; background: var(--asb-content-muted); border-radius: var(--asb-radius-pill); color: var(--asb-text); font: var(--asb-text-label); overflow-wrap: anywhere; }
 
 .asb-session-project-filter { flex: 0 1 14rem; min-width: 0; }
+.asb-session-project-filter > .asb-tooltip-anchor,
+.asb-session-result-row > .asb-tooltip-anchor { display: block; }
 .asb-session-project-filter .asb-select-trigger {
   width: 100%;
 }
@@ -236,7 +239,6 @@
 .asb-session-project-menu .asb-select-item { width: 100%; min-width: 0; font: var(--asb-text-label); }
 .asb-session-project-menu .asb-select-item > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asb-session-result-row { padding-bottom: var(--asb-space-2); }
-.asb-session-result-row > .asb-session-item { width: 100%; }
 .asb-session-project-heading {
   width: 100%;
   min-height: var(--asb-control-height-compact);

@@ -26,6 +26,7 @@ export interface ModelUsageDay {
   cacheCreationInputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  models: { model: string | null; totalTokens: number }[] | null;
 }
 
 /** Token totals that a local session log did not timestamp. They remain in
@@ -51,6 +52,7 @@ export interface ModelUsageReport {
   groups: ModelUsageGroup[];
   days: ModelUsageDay[];
   unassignedTokens: ModelUsageTokens;
+  longestSessionSpanSeconds: number | null;
   issues: ModelUsageIssue[];
   coverage: { sourceSessions: number; scannedFiles: number; sessionsWithoutUsage: number; undatedEventTokens: number };
 }

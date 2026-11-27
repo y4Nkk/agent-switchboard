@@ -8,7 +8,7 @@ import { ActionMenu, type ActionMenuItem } from "../../components/ActionMenu";
 import { SearchInput } from "../../components/SearchInput";
 import { Tabs } from "../../components/Tabs";
 import { WorkspaceHeader } from "../../components/WorkspaceHeader";
-import { McpKindIcon, SkillKindIcon, UpdateIcon } from "../../components/icons";
+import { McpKindIcon, PlusIcon, SkillKindIcon, UpdateIcon } from "../../components/icons";
 import { MANAGEMENT_CLIENTS } from "../../components/extensions/client-presentation";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
@@ -58,7 +58,6 @@ export function ExtensionSearch({ kind, search, onSearch, actions }: {
 function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
   const { t } = useI18n();
   const { nav, writeBlocked, kindItems, busy } = workspace;
-  const skills = nav.kind === "skill";
   const bulkActions = MANAGEMENT_CLIENTS.map((client): ActionMenuItem => {
     const state = clientDeployState(kindItems, client);
     const action = t(state.all ? "extensions.toolbar.disableAll" : "extensions.toolbar.enableAll", { client: clientName(client) });
@@ -70,8 +69,6 @@ function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
     };
   });
   const items: ActionMenuItem[] = [
-    { id: "new", label: t(skills ? "extensions.toolbar.newSkill" : "extensions.toolbar.addMcp"), disabled: writeBlocked,
-      onAction: () => nav.setDialog(skills ? { type: "newSkill" } : { type: "newMcp" }) },
     { id: "discovery", label: t("extensions.discovery.title"), disabled: busy,
       onAction: () => nav.setDiscoveryOpen(true) },
     { id: "portable", label: t("extensions.toolbar.importPortable"), disabled: writeBlocked,
@@ -113,6 +110,8 @@ function ExtensionLibraryActions({ workspace }: { workspace: ExtensionWorkspace 
   const skills = nav.kind === "skill";
   const onlineIds = kindItems.filter((item) => item.kind === "skill" ? item.source?.resolvedCommit : item.mcpMetadata?.registry)
     .map((item) => item.id);
+  const reports = skills ? updates.reportMap : registryUpdates.reportMap;
+  const allCurrent = onlineIds.length > 0 && onlineIds.every((id) => reports.get(id)?.status === "current");
   return (
     <>
       {onlineIds.length > 0 && (
@@ -122,6 +121,9 @@ function ExtensionLibraryActions({ workspace }: { workspace: ExtensionWorkspace 
           {t("extensions.management.checkUpdates")}
         </Button>
       )}
+      {allCurrent && <span className="asb-scope-note" role="status">
+        {t(skills ? "extensions.updates.allUpToDate" : "extensions.registry.upToDate")}
+      </span>}
       {skills && updates.updatable.length > 0 && (
         <Button
           variant="secondary"
@@ -133,6 +135,10 @@ function ExtensionLibraryActions({ workspace }: { workspace: ExtensionWorkspace 
         </Button>
       )}
       {!skills && <McpUpdateResults workspace={workspace} />}
+      <Button variant="plus" disabled={writeBlocked}
+        onClick={() => nav.setDialog(skills ? { type: "newSkill" } : { type: "newMcp" })}>
+        <PlusIcon />{t(skills ? "extensions.toolbar.newSkill" : "extensions.toolbar.addMcp")}
+      </Button>
       <ExtensionMoreMenu workspace={workspace} />
     </>
   );

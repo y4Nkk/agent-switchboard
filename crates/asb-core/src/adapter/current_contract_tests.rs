@@ -22,12 +22,12 @@ fn profile() -> ProviderProfile {
 fn codex_notifications_round_trip_without_false_diffs_or_list_collisions() {
     let original = "[tui]\nnotifications = ['a, b']\nalternate_screen = 'always'\nresume_cwd = 'session'\n";
     let mut settings = extract_client_settings(AppKind::Codex, original).unwrap();
-    let rendered = render_client_settings_into_file(AppKind::Codex, original, &settings).unwrap();
+    let rendered = project_test_preferences(AppKind::Codex, original, &settings).unwrap();
     assert!(owned_diff(AppKind::Codex, &rendered, original).unwrap().is_empty());
     settings.settings.insert("tui.notifications".into(), SettingValue::Explicit {
         value: ConfigValue::Array(vec![ConfigValue::Str("a".into()), ConfigValue::Str("b".into())]),
     });
-    let changed = render_client_settings_into_file(AppKind::Codex, original, &settings).unwrap();
+    let changed = project_test_preferences(AppKind::Codex, original, &settings).unwrap();
     let diff = owned_diff(AppKind::Codex, &changed, original).unwrap();
     assert_eq!(diff.len(), 1);
     assert_eq!(diff[0].before.as_deref(), Some(r#"["a, b"]"#));
@@ -72,7 +72,7 @@ fn claude_effort_preserves_the_native_top_level_and_rejects_invalid_defaults() {
     }
     let current = r#"{"effortLevel":"high","unmanaged":true}"#;
     let settings = ownership::default_client_settings(AppKind::Claude);
-    let rendered = render_client_settings_into_file(AppKind::Claude, current, &settings).unwrap();
+    let rendered = project_test_preferences(AppKind::Claude, current, &settings).unwrap();
     let root: Value = serde_json::from_str(&rendered).unwrap();
     assert_eq!(root["effortLevel"], "high");
     assert_eq!(root["unmanaged"], true);
@@ -124,6 +124,17 @@ fn gateway_projection_rejects_overlapping_literal_client_preferences() {
 }
 
 #[test]
+fn provider_switch_preserves_automatic_and_unclaimed_host_preferences() {
+    let mut settings = ownership::default_client_settings(AppKind::Claude);
+    settings.settings.remove("permissions.blockReadsOutsideWorkingDirectories");
+    let source = r#"{"permissions":{"deny":["Read(.env)"],"blockReadsOutsideWorkingDirectories":true},"language":"en"}"#;
+    let rendered = render(source, &SwitchPlan::direct(profile(), settings)).unwrap();
+    let after: Value = serde_json::from_str(&rendered).unwrap();
+    assert_eq!(after["permissions"], serde_json::json!({"deny":["Read(.env)"],"blockReadsOutsideWorkingDirectories":true}));
+    assert_eq!(after["language"], "en");
+}
+
+#[test]
 fn memory_directory_accepts_native_absolute_paths_without_guessing_relative_paths() {
     for directory in ["~/memory", "/home/user/memory", "C:\\Users\\test\\memory", "\\\\server\\share\\memory"] {
         let source = json!({"autoMemoryDirectory":directory});
@@ -142,7 +153,7 @@ fn ownership_handoff_removes_the_old_profile_before_applying_shared_preferences(
     let before = render("{}", &SwitchPlan::direct(profile.clone(), shared.clone())).unwrap();
     let mut shared = shared;
     shared.claude_extra = profile.claude_fragment.clone();
-    assert!(render_client_settings_into_file(AppKind::Claude, &before, &shared).is_err());
+    assert!(project_test_preferences(AppKind::Claude, &before, &shared).is_err());
     let profile = ProviderProfile { claude_fragment: Default::default(), ..profile };
     let rendered = render(&before, &SwitchPlan::direct(profile, shared)).unwrap();
     let root: Value = serde_json::from_str(&rendered).unwrap();

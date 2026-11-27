@@ -1,11 +1,4 @@
-//! Deep-reset pruning for Claude `settings.json`.
-//!
-//! Adapter overlays only ever touch keys in the ownership directory; this
-//! module is the single inverse operation: it deletes every leaf no ASB
-//! module claims so the deep client reset can converge the real file onto the
-//! configuration the interface models. Preserved content: directory scalars
-//! (provider and client), native cloud namespaces, and the manifest-claimed
-//! extra-configuration paths, and preserve-only families in the official directory.
+//! Selection of unmanaged fields for a Claude reset.
 
 use std::collections::BTreeSet;
 
@@ -15,20 +8,14 @@ use crate::adapter::AdapterError;
 use crate::contracts::AppKind;
 use crate::ownership::is_owned;
 
-/// Removes every unowned leaf and prunes the objects it empties. Returns the
-/// input unchanged when nothing would be removed, so a no-op reset never
-/// rewrites the live file.
-pub(crate) fn remove_unmanaged(text: &str) -> Result<String, AdapterError> {
-    if text.trim().is_empty() {
-        return Ok(text.to_string());
-    }
+pub(crate) fn select_unmanaged(
+    text: &str, selected: &BTreeSet<String>, candidates: &mut BTreeSet<String>,
+) -> Result<String, AdapterError> {
     let mut root = super::document::parse(text)?;
     let native = super::native::owned_paths(&root)?;
     let common = crate::claude_common::owned_key_paths(&root)
         .map_err(|message| AdapterError { message, line: None })?;
-    let mut removed = false;
-    prune_object(&mut root, &[], &native, &common, &mut removed);
-    if !removed {
+    if !prune_object(root.as_object_mut().expect("validated configuration object"), &[], &native, &common, selected, candidates) {
         return Ok(text.to_string());
     }
     serde_json::to_string_pretty(&root).map_err(|_| AdapterError {
@@ -44,45 +31,49 @@ fn preserved(path: &[String], is_table: bool, native: &BTreeSet<String>, common:
         || crate::ownership::is_claude_credential_path(&key)
         || crate::ownership::preserve_only_path(AppKind::Claude, path, is_table)
         || native.contains(&key)
-        || common.iter().any(|claimed| path.starts_with(claimed))
+        || common.iter().any(|claimed| path.starts_with(claimed) || (!is_table && claimed.starts_with(path)))
 }
 
 fn prune_object(
-    value: &mut Json,
+    map: &mut Map<String, Json>,
     prefix: &[String],
     native: &BTreeSet<String>,
     common: &BTreeSet<Vec<String>>,
-    removed: &mut bool,
-) {
-    let Some(map) = value.as_object_mut() else {
-        return;
-    };
+    selected: &BTreeSet<String>,
+    candidates: &mut BTreeSet<String>,
+) -> bool {
+    let mut changed = false;
     let keys: Vec<String> = map.keys().cloned().collect();
     for key in keys {
         let mut path = prefix.to_vec();
         path.push(key.clone());
         let is_table = map.get(&key).is_some_and(Json::is_object);
         if preserved(&path, is_table, native, common) { continue; }
-        let emptied = if is_table {
-            let child = map.get_mut(&key).expect("key snapshotted above");
-            prune_object(child, &path, native, common, removed);
-            child.as_object().is_some_and(Map::is_empty)
+        let remove = if let Some(child) = map.get_mut(&key).and_then(Json::as_object_mut).filter(|child| !child.is_empty()) {
+            let removed = prune_object(child, &path, native, common, selected, candidates);
+            changed |= removed;
+            removed && child.is_empty()
         } else {
-            map.remove(&key);
-            *removed = true;
-            continue;
+            let id = crate::config_path::from_keys(&path);
+            let remove = selected.contains(&id);
+            candidates.insert(id);
+            remove
         };
-        if emptied {
+        if remove {
             map.remove(&key);
-            *removed = true;
+            changed = true;
         }
     }
+    changed
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::adapter::claude::state;
+    fn remove_unmanaged(text: &str) -> Result<String, AdapterError> {
+        crate::adapter::remove_unmanaged_entries(AppKind::Claude, text, "")
+    }
 
     #[test]
     fn host_keys_are_removed_and_empty_objects_pruned() {
@@ -123,8 +114,8 @@ mod tests {
     }
 
     #[test]
-    fn empty_text_passes_through() {
-        assert_eq!(remove_unmanaged("").expect("prune"), "");
+    fn empty_object_passes_through() {
+        assert_eq!(remove_unmanaged("{}").expect("prune"), "{}");
     }
 
     #[test]

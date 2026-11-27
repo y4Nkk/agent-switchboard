@@ -229,8 +229,8 @@ export const messages = {
   ],
   "ownership.directory.permissionProfiles.title": ["原生权限档案", "Native permission profiles"],
   "ownership.directory.permissionProfiles.detail": [
-    "识别当前文件中的档案选择和定义，保留原文；应用时阻止与旧沙箱配置混写。",
-    "Recognizes profile selection and definitions in this file, preserves their source, and prevents mixing with legacy sandbox settings when applying.",
+    "在客户端配置中选择用户级默认档案。选项按当前安装与组织策略核验。",
+    "Select the user-level default profile in Client configuration. Options are checked against the current installation and managed requirements.",
   ],
   "ownership.directory.codexConfigToml.title": ["项目配置与信任状态", "Project configuration and trust state"],
   "ownership.directory.codexConfigToml.detail": [

@@ -11,6 +11,8 @@ const details = {
   "permissions.ask": "clientConfig.settings.permissionsHelp",
   "permissions.deny": "clientConfig.settings.permissionsHelp",
   "permissions.additionalDirectories": "clientConfig.settings.directoriesHelp",
+  "permissions.blockReadsOutsideWorkingDirectories": "clientConfig.settings.blockReadsHelp",
+  "permissions.blockWritesOutsideWorkingDirectories": "clientConfig.settings.blockWritesHelp",
   "sandbox.allowUnsandboxedCommands": "clientConfig.settings.unsandboxedHelp",
   "sandbox.failIfUnavailable": "clientConfig.settings.failSandboxHelp",
   "defaultShell": "clientConfig.settings.defaultShellHelp",

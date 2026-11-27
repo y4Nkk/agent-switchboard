@@ -1,39 +1,21 @@
 /* The modal frame itself lives in overlays.css as `.asb-dialog*` — one modal
    skeleton for the whole app (DESIGN.md §8). This file owns extension
    management, editor internals, plan targets, history and source browsing. */
-.asb-ext-management {
+.asb-ext-management-delete {
+  display: flex;
+  justify-content: flex-end;
+}
+.asb-ext-details-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--asb-space-3);
-  min-width: 0;
 }
-.asb-ext-management-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-3);
-  min-width: 0;
-}
-.asb-ext-management-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--asb-space-2);
-}
-.asb-ext-management > .asb-ext-management-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-3);
-  padding-bottom: var(--asb-space-2);
-}
-.asb-ext-management-head > .asb-scope-note { margin: 0; }
-.asb-ext-management-actions,
 .asb-ext-binding-actions {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--asb-space-1);
 }
-.asb-ext-management-actions { margin-left: auto; }
 /* Destructive actions always read as danger (S6) and sit one space-2 past
    the safe cluster: space-unit margin plus the cluster's space-1 gap. */
 .asb-ext-danger-action {
@@ -55,14 +37,6 @@
   gap: var(--asb-space-2);
   padding-top: var(--asb-space-4);
 }
-.asb-ext-section-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--asb-space-2);
-}
-.asb-ext-section-heading > .asb-scope-note { margin-left: auto; }
-.asb-ext-section-heading > .asb-ext-actions { margin-left: auto; }
 .asb-ext-binding-list {
   display: flex;
   flex-direction: column;
@@ -102,19 +76,14 @@
   align-items: flex-start;
   gap: var(--asb-space-1);
 }
-/* Optional capability and install-target blocks are complete work surfaces,
-   folded by the shared .asb-collapsible primitive; only their module surface
-   and body column live here. */
-.asb-ext-capabilities,
-.asb-ext-install-targets {
+.asb-ext-capabilities {
   padding: 0 var(--asb-space-3) var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
 }
 
-.asb-ext-capabilities .asb-collapsible-body,
-.asb-ext-install-targets .asb-collapsible-body {
+.asb-ext-capabilities .asb-collapsible-body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -122,17 +91,8 @@
   padding-top: var(--asb-space-3);
   padding-bottom: 0;
 }
-.asb-ext-check-target {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--asb-space-2);
-  justify-content: flex-start;
-  text-align: left;
-}
-.asb-ext-check-target .asb-select-trigger {
-  flex: 1 1 240px;
-  min-width: 0;
+.asb-ext-management .asb-settings-row-controls > .asb-select-trigger {
+  inline-size: 100%;
 }
 .asb-ext-plan-target {
   display: flex;

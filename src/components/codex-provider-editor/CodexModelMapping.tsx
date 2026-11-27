@@ -2,6 +2,7 @@ import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { Input } from "../Input";
 import { Select } from "../Select";
+import { SettingsGroup } from "../SettingsLayout";
 import { Table } from "../Table";
 import type { CodexEditorState } from "./useCodexProviderEditor";
 
@@ -11,12 +12,11 @@ export function CodexModelMapping({ editor, busy }: { editor: CodexEditorState; 
   const update = (index: number, patch: Partial<(typeof draft.modelRoutes)[number]>) => setDraft((current) => ({ ...current,
     modelRoutes: current.modelRoutes.map((route, row) => row === index ? { ...route, ...patch } : route),
   }));
-  return <section className="asb-editor-section" aria-label={t("providerSetup.mapping")}>
-    <div className="asb-provider-advanced-heading"><h3 className="asb-section-title">{t("providerSetup.mapping")}</h3>
+  return <SettingsGroup title={t("providerSetup.mapping")} description={t("codex.model.mappingNote")} surface="plain" actions={
       <Button variant="ghost" size="compact" disabled={busy || !draft.catalog.length} onClick={() => setDraft((current) => ({ ...current,
         modelRoutes: [...current.modelRoutes, { clientModel: current.catalog[0].id, upstreamModel: "" }],
-      }))}>{t("codex.model.mappingAdd")}</Button></div>
-    <p className="asb-field-help">{t("codex.model.mappingNote")}</p>
+      }))}>{t("codex.model.mappingAdd")}</Button>
+    }>
     {draft.modelRoutes.length > 0 && <Table ariaLabel={t("providerSetup.mapping")}
       rows={draft.modelRoutes.map((route, index) => ({ ...route, index }))} rowKey={(_, index) => String(index)} columns={[
         { key: "client", header: t("providerSetup.clientModel"), render: (row) => <Select disabled={busy}
@@ -30,5 +30,5 @@ export function CodexModelMapping({ editor, busy }: { editor: CodexEditorState; 
           onClick={() => setDraft((current) => ({ ...current, modelRoutes: current.modelRoutes.filter((_, index) => index !== row.index) }))}>
           {t("providerSetup.remove")}</Button> },
       ]} />}
-  </section>;
+  </SettingsGroup>;
 }

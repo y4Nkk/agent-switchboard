@@ -7,7 +7,9 @@ import { localizedMessageText } from "../i18n/errors";
 import { clientName } from "../lib/client-name";
 import { currentProviderName, currentProviderProfile, type ActiveProfileRef } from "../lib/current-provider-name";
 import { ClientLogo } from "./ClientLogo";
+import { FactList } from "./FactList";
 import { ProviderEndpoint } from "./ProviderRowControls";
+import { Tooltip } from "./Tooltip";
 import "../styles/base/route-cards.css";
 
 interface RouteCardProps {
@@ -97,12 +99,20 @@ function RouteCard({
           </div>
           <h3 className="asb-route-provider">{route ? currentProviderName(status, profiles) : t("providers.label.notRead")}</h3>
         </div>
-        <dl className="asb-route-values">
-          <div><dt className="asb-route-key">{t("providers.label.model")}</dt><dd className="asb-route-value" title={modelValue}>{modelValue}</dd></div>
-          <div><dt className="asb-route-key">{t("providers.label.serviceAddress")}</dt><dd className="asb-route-value" title={serviceValue}>{serviceValue}</dd></div>
-          <div><dt className="asb-route-key">{t("providers.label.accessMode")}</dt><dd className="asb-route-value">{accessLabel(route, t)}</dd></div>
-          <div><dt className="asb-route-key">{t("providers.label.website")}</dt><dd className="asb-route-value">{websiteValue(route, activeProfile?.websiteUrl ?? null, t)}</dd></div>
-        </dl>
+        <div className="asb-route-values">
+          <FactList inline rows={[
+            { label: t("providers.label.model"), value: <Tooltip asChild label={modelValue}>
+              <span className="asb-route-value">{modelValue}</span>
+            </Tooltip> },
+            { label: t("providers.label.serviceAddress"), value: <Tooltip asChild label={serviceValue}>
+              <span className="asb-route-value">{serviceValue}</span>
+            </Tooltip> },
+            { label: t("providers.label.accessMode"), value: <span className="asb-route-value">{accessLabel(route, t)}</span> },
+            { label: t("providers.label.website"), value: <span className="asb-route-value">
+              {websiteValue(route, activeProfile?.websiteUrl ?? null, t)}
+            </span> },
+          ]} />
+        </div>
         {information && <p className="asb-route-info" role="status">{information}</p>}
         {notes.length > 0 && (
           <ul className="asb-route-notes">

@@ -2,6 +2,7 @@ import type { CodexAutomaticOperation, CodexChatReasoning } from "../../api/clie
 import { useI18n, type MessageKey, type TFunction } from "../../i18n";
 import { Button } from "../Button";
 import { Select } from "../Select";
+import { SettingsGroup, SettingsRow } from "../SettingsLayout";
 import { Switch } from "../Switch";
 import type { CodexEditorState } from "./useCodexProviderEditor";
 import { AUTOMATIC_OPERATIONS, restoreCodexAutomaticOperation, setCodexOperation } from "./operations";
@@ -55,13 +56,8 @@ function ChatReasoning({ editor, busy }: { editor: CodexEditorState; busy: boole
 export function CodexCapabilitiesSection({ editor, busy }: { editor: CodexEditorState; busy: boolean }) {
   const { t } = useI18n();
   const { draft, setDraft } = editor;
-  return <section className="asb-provider-advanced-group" aria-label={t("codex.capabilities.title")}>
-    <h4 className="asb-provider-advanced-heading">{t("codex.capabilities.title")}</h4>
-    <p className="asb-field-help">{t("providerSetup.capabilityHelp")}</p>
-    <div className="asb-provider-switch-rows">
-      {AUTOMATIC_OPERATIONS.map((key) => <div className="asb-provider-switch-row" key={key}>
-        <span>{t(operationLabels[key])}</span>
-        <div className="asb-provider-operation-controls">
+  return <SettingsGroup title={t("codex.capabilities.title")} description={t("providerSetup.capabilityHelp")}>
+      {AUTOMATIC_OPERATIONS.map((key) => <SettingsRow key={key} label={t(operationLabels[key])}>
           {draft.capabilities.automaticOperations.includes(key)
             ? <span className="asb-field-help">{t("codex.capability.automatic")}</span>
             : <Button variant="ghost" size="compact" disabled={busy || editor.connection.modelsBusy}
@@ -71,9 +67,7 @@ export function CodexCapabilitiesSection({ editor, busy }: { editor: CodexEditor
             </Button>}
           <Switch checked={draft.capabilities[key]} disabled={busy} label={t(operationLabels[key])}
             onChange={(on) => setDraft((current) => setCodexOperation(current, key, on))} />
-        </div>
-      </div>)}
-    </div>
+      </SettingsRow>)}
     {draft.upstream === "chatCompletions" && draft.capabilities.reasoning && <ChatReasoning editor={editor} busy={busy} />}
-  </section>;
+  </SettingsGroup>;
 }

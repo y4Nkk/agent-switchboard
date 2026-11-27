@@ -8,8 +8,10 @@ import type { AppKind } from "../api/client";
 import { useClientRouteTransition } from "./useClientRouteTransition";
 
 export function ClientConfigurationWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
-  const route = useClientRouteTransition({ app: model.appFilter, active, onSelectApp: model.providers.selectApp });
-  return <div ref={route.workspaceRef} className="asb-client-route-workspace">
+  const route = useClientRouteTransition({
+    app: model.appFilter, active, onSelectApp: model.providers.selectApp, revealPicker: true,
+  });
+  return <div ref={route.workspaceRef} className="asb-client-route-workspace asb-client-configuration-workspace">
     {(["codex", "claude"] as const).map((app) => {
       const leaving = route.leavingApp === app;
       return <div key={app} className="asb-client-configuration-route" data-client-route={app}
@@ -52,12 +54,25 @@ function ClientConfigurationPanel({ model, app, active, onSelectApp, routeConten
         hasUnsavedConfigurationDraft={settings.states[app].phase === "dirty" ||
           (app === "codex" && codexSubagentSettings.editorState.phase === "dirty")}
         onValueChange={settings.changeValue}
+        onKeepFileValue={settings.keepFileValue}
+        onPermissionProfileChange={settings.changePermissionProfile}
+        onDiscardSettings={() => {
+          settings.reloadFromStored(app);
+          if (app === "codex") codexSubagentSettings.reloadFromFile();
+        }}
         onApplied={() => {
           settings.reloadFromStored(app);
           if (app === "codex") codexSubagentSettings.reloadFromFile();
           model.providerSwitch.invalidateCandidates();
           void snapshot.refresh();
         }} onRetryLoad={settings.retryLoad}
+        onFileApplied={() => {
+          if (settings.states[app].phase !== "dirty") settings.reloadFromStored(app);
+          else settings.reviewConfiguration(app);
+          if (app === "codex" && codexSubagentSettings.editorState.phase !== "dirty") codexSubagentSettings.reloadFromFile();
+          model.providerSwitch.invalidateCandidates();
+          void snapshot.refresh();
+        }}
         onReview={settings.reviewConfiguration}
         onClaudeExtraChange={settings.changeClaudeExtra}
         globalInstructions={
@@ -72,10 +87,11 @@ function ClientConfigurationPanel({ model, app, active, onSelectApp, routeConten
         globalInstructionsDirty={prompts.isPromptDirty(app)}
         onDiscardGlobalInstructions={() => prompts.discardPromptDraft(app)}
         subagentDraft={app === "codex" ? codexSubagentSettings.editorState.draft : undefined}
-        subagentSettings={app === "codex" ? (
+        subagentBaseline={app === "codex" ? codexSubagentSettings.editorState.snapshot : undefined}
+        renderSubagentSettings={app === "codex" ? (settingsBusy) => (
           <CodexSubagentSettingsPanel
             editorState={codexSubagentSettings.editorState}
-            busy={busy}
+            busy={settingsBusy}
             onChange={codexSubagentSettings.changeValue}
             onRetryLoad={codexSubagentSettings.retryLoad}
           />

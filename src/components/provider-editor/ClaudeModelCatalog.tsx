@@ -5,6 +5,7 @@ import { catalogModel, providerPreset } from "../../lib/provider-catalog";
 import { formatCompactTokenCount } from "../../lib/token-format";
 import { Button } from "../Button";
 import { Input } from "../Input";
+import { SettingsGroup } from "../SettingsLayout";
 import { ModelCatalogCard } from "./ModelCatalogCard";
 import { ModelPickerDialog, type PickerCandidate } from "./ModelPickerDialog";
 import type { ProviderEditorState } from "./useProviderEditor";
@@ -41,8 +42,7 @@ export function ClaudeModelCatalog({ editor, busy }: { editor: ProviderEditorSta
     }));
     setPending("");
   };
-  return <section className="asb-editor-section" aria-label={t("providerSetup.catalog")}>
-    <h3 className="asb-section-title">{t("providerSetup.catalog")}</h3>
+  return <SettingsGroup title={t("providerSetup.catalog")} surface="plain">
     <div className="asb-provider-model-toolbar">
       <div className="asb-provider-model-actions">
         <Button variant="secondary" disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
@@ -76,5 +76,5 @@ export function ClaudeModelCatalog({ editor, busy }: { editor: ProviderEditorSta
         model: current.model && ids.has(current.model) ? current.model : ids.size ? [...ids][0] : null,
         modelOptions: claudeOptions(current.modelOptions, { availableModels: [...ids] }),
       }))} onClose={() => setPicking(false)} />}
-  </section>;
+  </SettingsGroup>;
 }

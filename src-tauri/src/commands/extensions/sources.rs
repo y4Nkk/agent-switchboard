@@ -22,6 +22,8 @@ use crate::extensions::discovery::DiscoveredPaths;
 use crate::extensions::sources::{self, SkillCandidate};
 use crate::extensions::store::ExtensionStore;
 
+pub(super) use crate::extensions::sources::{cache_candidates, cached_candidate, candidate_id};
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillCandidateDto {
@@ -51,28 +53,8 @@ pub(super) fn candidate_dto(candidate: &SkillCandidate) -> SkillCandidateDto {
     }
 }
 
-pub(super) fn candidate_id(candidate: &SkillCandidate) -> String {
-    let key = serde_json::to_vec(&(candidate.source_ref(), &candidate.content_digest))
-        .expect("serializable Skill candidate identity");
-    sha_hex(&key)
-}
-
-pub(super) fn cache_candidates(list: Vec<SkillCandidate>) {
-    let mut cache = candidates().lock().expect("candidates");
-    for candidate in list {
-        cache.entry(candidate_id(&candidate)).or_insert(candidate);
-    }
-}
-
-pub(super) fn cached_candidate(id: &str) -> Option<SkillCandidate> {
-    candidates().lock().expect("candidates").get(id).cloned()
-}
-
 pub(super) fn detailed_source_error(error: sources::SourceError) -> CommandError {
-    let code = match &error {
-        sources::SourceError::Unreachable(_) => "source-unreachable",
-        sources::SourceError::Rejected(_) => "source-rejected",
-    };
+    let code = if error.is_rejected() { "source-rejected" } else { "source-unreachable" };
     CommandError::new(code, error.to_string())
 }
 

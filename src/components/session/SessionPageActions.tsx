@@ -3,6 +3,7 @@ import { useI18n } from "../../i18n";
 import { ActionMenu } from "../ActionMenu";
 import { Button } from "../Button";
 import { ClientFilter, type ClientFilterValue } from "../ClientFilter";
+import { Tooltip } from "../Tooltip";
 import type { SessionAction } from "./use-session-workspace";
 
 const CLIENT_SESSION_ACTIONS = {
@@ -17,6 +18,7 @@ export function SessionPageActions({ filter, onFilterChange, refresh, busy, load
 }) {
   const { t } = useI18n();
   const moreLabel = t("sessions.actions.pageMore");
+  const refreshLabel = t(refreshKey);
   const items = [
     { id: "batch", label: t("sessions.batch.title"), onAction: () => onAction("batch") },
     { id: "range", label: t("sessions.range.title"), disabled: loading, onAction: () => onAction("range") },
@@ -30,7 +32,9 @@ export function SessionPageActions({ filter, onFilterChange, refresh, busy, load
     <ClientFilter value={filter} onChange={onFilterChange} label={t("sessions.filter.aria")} showLogos />
     {history && <ActionMenu key={filter} ariaLabel={moreLabel} disabled={busy} items={items}
       label={<><Ellipsis size={16} strokeWidth={1.7} aria-hidden="true" />{moreLabel}</>} />}
-    <Button variant="icon" className="asb-session-toolbar-button" disabled={busy || loading} onClick={refresh}
-      aria-label={t(refreshKey)} title={t(refreshKey)}><RefreshCw aria-hidden="true" /></Button>
+    <Tooltip label={refreshLabel} side="bottom">
+      <Button variant="icon" className="asb-session-toolbar-button" disabled={busy || loading} onClick={refresh}
+        aria-label={refreshLabel}><RefreshCw aria-hidden="true" /></Button>
+    </Tooltip>
   </>;
 }

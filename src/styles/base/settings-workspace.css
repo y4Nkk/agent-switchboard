@@ -29,12 +29,6 @@
   gap: var(--asb-space-2);
 }
 
-/* The retiring panel must not cover the entering content with an opaque surface. */
-.asb-client-configuration-route[data-client-route-leaving] > .asb-panel {
-  background: transparent;
-  border-color: transparent;
-}
-
 /* Loading placeholders reserve the client form's row footprint so the panel
    does not reflow when the real settings arrive. */
 .asb-settings-skeleton {
@@ -53,22 +47,6 @@
 
 .asb-client-preference-save {
   justify-content: flex-end;
-}
-
-.asb-client-configuration-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  grid-template-areas: "notice commit";
-  align-items: center;
-  gap: var(--asb-space-3);
-  margin-top: var(--asb-space-4);
-}
-
-.asb-client-configuration-notice {
-  grid-area: notice;
-  display: grid;
-  min-width: 0;
-  gap: var(--asb-space-1);
 }
 
 /* The reset dialog's preview lists removals directly on the dialog surface,
@@ -118,14 +96,69 @@
   padding-left: 1.25rem;
 }
 
-.asb-client-settings-reset-advanced {
-  display: grid;
-  gap: var(--asb-space-hairline);
-  padding: var(--asb-space-2) 0 0;
+.asb-client-reset-selection summary,
+.asb-client-source-values summary {
+  cursor: pointer;
+  font: var(--asb-text-label);
 }
 
-.asb-client-settings-reset-advanced .asb-field-help {
-  margin: 0 0 0 1.5rem;
+.asb-client-reset-selection ul,
+.asb-client-source-list {
+  display: grid;
+  gap: var(--asb-space-2);
+  margin: var(--asb-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-client-source-values > .asb-fact-row {
+  margin-block-start: var(--asb-space-2);
+}
+
+.asb-client-reset-selection li {
+  display: grid;
+  gap: var(--asb-space-hairline);
+  align-items: start;
+}
+
+.asb-client-reset-selection li > code {
+  margin-inline-start: 1.5rem;
+  color: var(--asb-text-muted);
+  white-space: pre-wrap;
+}
+
+.asb-client-configuration-sources {
+  display: grid;
+  gap: var(--asb-space-3);
+}
+
+.asb-client-configuration-sources p {
+  margin: 0;
+}
+
+.asb-client-source-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-configuration-sources code,
+.asb-client-reset-selection li > code {
+  overflow-wrap: anywhere;
+  font: var(--asb-text-code);
+}
+
+.asb-client-source-list li,
+.asb-client-source-values dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-source-list li > :last-child,
+.asb-client-source-values small {
+  color: var(--asb-text-muted);
 }
 
 .asb-client-settings-reset-back {
@@ -209,8 +242,7 @@
   min-width: 0;
 }
 
-.asb-client-configuration-blocker,
-.asb-client-configuration-commit {
+.asb-client-configuration-blocker {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -220,54 +252,6 @@
 .asb-client-configuration-blocker .asb-field-help {
   flex: 1 1 14rem;
 }
-
-.asb-client-configuration-commit {
-  grid-area: commit;
-  justify-content: flex-end;
-}
-
-.asb-client-configuration-commit .asb-btn {
-  min-width: 8.5rem;
-  justify-content: center;
-}
-
-/* Codex subagent runtime is the [agents] section of the same user-level
-   config.toml. Its module header makes the section boundary explicit, while
-   its rows reuse the shared client-preference row anatomy. */
-.asb-subagent-settings {
-  display: grid;
-  gap: var(--asb-space-3);
-  margin: var(--asb-space-4) 0;
-}
-.asb-subagent-heading {
-  min-width: 0;
-}
-.asb-subagent-setting-list {
-  display: grid;
-  gap: var(--asb-space-2);
-}
-/* Choice-row control rail shared by client preferences, provider parameters
-   and the subagent module: one segments group plus optional inline inputs. */
-.asb-choice-controls {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: var(--asb-space-2);
-}
-.asb-choice-controls > .asb-segments {
-  max-width: 100%;
-  flex-wrap: wrap;
-}
-.asb-subagent-input {
-  flex: 0 1 7rem;
-  min-width: 0;
-}
-.asb-subagent-input .asb-input {
-  width: 100%;
-}
-
 
 .asb-settings-content .asb-settings-actions-main {
   flex-wrap: wrap;
@@ -304,18 +288,6 @@
 }
 
 @media (max-width: 680px) {
-  .asb-client-configuration-actions {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "notice"
-      "commit";
-    align-items: stretch;
-  }
-
-  .asb-client-configuration-commit {
-    justify-content: flex-start;
-  }
-
   .asb-settings-content .asb-settings-actions-main {
     align-items: flex-start;
     flex-direction: column;
@@ -330,7 +302,7 @@
   min-width: 0;
 }
 
-.asb-model-preferences-row {
+.asb-model-preferences-row + .asb-model-preferences-row {
   padding-block: var(--asb-space-3);
-  border-top: 1px solid var(--asb-settings-module-border);
+  border-top: 1px solid var(--asb-hairline);
 }

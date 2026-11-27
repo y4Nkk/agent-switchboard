@@ -172,8 +172,13 @@ fn version_two_moves_only_the_valid_summary_and_retires_the_old_usage_state() {
     let at = "2026-11-04T01:00:00Z";
     let reports: Vec<_> = [ModelUsageRange::Today,ModelUsageRange::Last7Days,ModelUsageRange::Last30Days,ModelUsageRange::All]
         .into_iter().map(|range| ModelUsageReport { range, generated_at: at.into(),
-            groups: vec![], days: vec![], unassigned_tokens: Default::default(), issues: vec![], coverage: Default::default() }).collect();
-    let snapshot = serde_json::json!({"cached_at":at,"reports":reports}).to_string();
+            groups: vec![], days: vec![], unassigned_tokens: Default::default(), longest_session_span_seconds: None,
+            issues: vec![], coverage: Default::default() }).collect();
+    let mut snapshot = serde_json::json!({"cached_at":at,"reports":reports});
+    for report in snapshot["reports"].as_array_mut().unwrap() {
+        report.as_object_mut().unwrap().remove("longestSessionSpanSeconds");
+    }
+    let snapshot = snapshot.to_string();
     connection.execute("INSERT INTO entries VALUES('usage-reports',?1,'old',?2)", params![old_key,snapshot]).unwrap();
     connection.execute("INSERT INTO entries VALUES('usage-reports','invalid','old','{')", []).unwrap();
     connection.execute("INSERT INTO entries VALUES('usage-file','source','old','{}')", []).unwrap();

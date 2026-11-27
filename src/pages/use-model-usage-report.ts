@@ -22,7 +22,10 @@ export function useModelUsageReport(active: boolean, range: ModelUsageRange) {
   const refresh = useCallback(() => { void reader.current?.refresh(); }, []);
   const read = useMemo(() => {
     const report = snapshot?.reports.find((candidate) => candidate.range === range);
-    return snapshot && report ? { report, freshness: snapshot.freshness, refreshAfter: snapshot.refreshAfter } : null;
+    const lifetime = snapshot?.reports.find((candidate) => candidate.range === "all");
+    return snapshot && report && lifetime
+      ? { report, lifetime, freshness: snapshot.freshness, refreshAfter: snapshot.refreshAfter }
+      : null;
   }, [snapshot, range]);
   return { read, task: active ? task : null, activity: active ? activity : null,
     loading: active && activity !== null, error, refresh };

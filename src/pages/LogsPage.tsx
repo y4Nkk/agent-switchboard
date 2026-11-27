@@ -10,7 +10,7 @@ import { ScrollTextIcon } from "../components/icons";
 import { Button } from "../components/Button";
 import { useI18n, type TFunction } from "../i18n";
 import { RUNTIME_LOG_ACTION_LABELS } from "../lib/runtime-log-labels";
-import { RUNTIME_LOG_PAGE_SIZE, levelLabel, useRuntimeLogs } from "./use-runtime-logs";
+import { levelLabel, useRuntimeLogs } from "./use-runtime-logs";
 
 function logColumns(t: TFunction): Array<TableColumn<RuntimeLogEntry>> {
   return [
@@ -53,15 +53,15 @@ function logColumns(t: TFunction): Array<TableColumn<RuntimeLogEntry>> {
  * diagnostics page header; the card renders the current page of entries. */
 export function LogsPage({ logs }: { logs: ReturnType<typeof useRuntimeLogs> }) {
   const { t } = useI18n();
-  const { entries, visibleEntries, pageEntries, page, setPage, filter, loading, error, folderError, total, skipped } = logs;
+  const { read, setPage, filter, loading, error, folderError } = logs;
 
   const columns = logColumns(t);
 
   return (
     <section className="asb-panel asb-runtime-logs" aria-labelledby="runtime-logs-heading">
       <ModuleHeader id="runtime-logs-heading" title={t("backup.logs.title")} />
-      {total > entries.length && <p className="asb-scope-note">{t("backup.logs.coverage", { shown: entries.length, total })}</p>}
-      {skipped > 0 && <p className="asb-warn-text" role="alert">{t("backup.logs.skipped", { count: skipped })}</p>}
+      {read && read.total > read.visible && <p className="asb-scope-note">{t("backup.logs.coverage", { shown: read.visible, total: read.total })}</p>}
+      {read && read.skipped > 0 && <p className="asb-warn-text" role="alert">{t("backup.logs.skipped", { count: read.skipped })}</p>}
       {error && (
         <p className="asb-runtime-log-notice" role="alert">
           {t("backup.logs.readError", { message: commandErrorText(error, t) })}
@@ -72,13 +72,13 @@ export function LogsPage({ logs }: { logs: ReturnType<typeof useRuntimeLogs> }) 
           {t("backup.logs.folderError", { message: commandErrorText(folderError, t) })}
         </p>
       )}
-      {loading && entries.length === 0 ? (
+      {loading && !read?.entries.length ? (
         <div className="asb-runtime-log-skeleton" role="status" aria-label={t("backup.logs.loadingAria")}>
-          {Array.from({ length: RUNTIME_LOG_PAGE_SIZE }, (_, index) => (
+          {Array.from({ length: 20 }, (_, index) => (
             <span key={index} className="asb-skeleton asb-runtime-log-skeleton-row" />
           ))}
         </div>
-      ) : visibleEntries.length === 0 ? (
+      ) : !read?.visible ? (
         <div className="asb-empty-state asb-runtime-log-empty">
           <span className="asb-empty-state-icon" aria-hidden="true">
             <ScrollTextIcon />
@@ -92,15 +92,15 @@ export function LogsPage({ logs }: { logs: ReturnType<typeof useRuntimeLogs> }) 
         <>
           <Table
             columns={columns}
-            rows={pageEntries}
+            rows={read.entries}
             rowKey={(entry, index) => `${entry.at}-${entry.action}-${entry.errorCode ?? ""}-${index}`}
             ariaLabel={t("backup.logs.tableAria")}
             className="asb-runtime-log-table"
           />
           <Pagination
-            total={visibleEntries.length}
-            page={page}
-            pageSize={RUNTIME_LOG_PAGE_SIZE}
+            total={read.visible}
+            page={read.page}
+            pageSize={read.pageSize}
             onPageChange={setPage}
             label={t("backup.logs.paginationAria")}
           />

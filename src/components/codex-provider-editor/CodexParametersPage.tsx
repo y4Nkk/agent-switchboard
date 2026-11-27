@@ -1,7 +1,8 @@
 import type { SettingSpec, SettingValue } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { SettingsFields, SettingsRow } from "../SettingsFields";
+import { ProviderParameterRow, SettingsFields } from "../SettingsFields";
+import { SettingsGroup } from "../SettingsLayout";
 import { ParametersLoadStatus } from "../provider-editor/ProviderParametersPage";
 import type { CodexEditorState } from "./useCodexProviderEditor";
 
@@ -24,17 +25,12 @@ function SubagentSettingsGroup({ specs, baselineValues, editor, busy, onChange }
   if (!editor.draft.parameters) return null;
   const settings = editor.draft.parameters.settings;
   return (
-    <section className="asb-toggle-group">
-      <div className="asb-toggle-group-head">
-        <h3 className="asb-section-title">{t("codex.params.subagent")}</h3>
-      </div>
-      <p className="asb-field-help">{t("codex.params.subagentNote")}</p>
+    <SettingsGroup title={t("codex.params.subagent")} description={t("codex.params.subagentNote")}>
       {specs.map((spec) => (
-        <SettingsRow key={spec.key} spec={spec} value={settings[spec.key] ?? automatic}
-          baselineValue={baselineValues[spec.key] ?? automatic} showActual={false} busy={busy}
-          presentation="provider" onChange={(value) => onChange(spec.key, value)} />
+        <ProviderParameterRow key={spec.key} spec={spec} value={settings[spec.key] ?? automatic}
+          baselineValue={baselineValues[spec.key]} busy={busy} onChange={(value) => onChange(spec.key, value)} />
       ))}
-    </section>
+    </SettingsGroup>
   );
 }
 
@@ -58,7 +54,7 @@ export function CodexParametersPage({ editor, busy, baselineValues }: Props) {
     <div className="asb-provider-parameters" aria-label={t("codex.params.pageAria")}>
       <p className="asb-field-help">{t("codex.params.pageNote")}</p>
       <SettingsFields specs={parameterSpecs} groups={parameterGroups} values={draft.parameters.settings}
-        baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />
+        baselineValues={baseline} busy={busy} onChange={change} />
       <SubagentSettingsGroup specs={subagentSpecs} baselineValues={baseline}
         editor={editor} busy={busy} onChange={change} />
       <div className="asb-settings-actions">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hideTray, onTrayHidden, switchTrayProvider, type TraySnapshot } from "../api/client";
 import { queryCodexOfficialQuota, queryProfileUsage } from "../api/usage";
+import { dismissTooltips } from "../components/Tooltip";
 import { useMessageState } from "../i18n/use-message-state";
 import { ARMED_SWITCH_TTL_MS, switchClickOutcome, type ArmedSwitch } from "./tray-switch";
 
@@ -22,7 +23,10 @@ export function useTrayActions(refresh: () => Promise<void>) {
     mounted.current = true;
     let disposed = false;
     let stop: (() => void) | undefined;
-    void onTrayHidden(disarm).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten; })
+    void onTrayHidden(() => {
+      disarm();
+      dismissTooltips();
+    }).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten; })
       .catch((caught) => { if (!disposed) setError(caught); });
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {

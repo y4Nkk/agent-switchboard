@@ -1,6 +1,6 @@
 import { commandErrorText } from "../i18n/errors";
 import { useEffect, useState, type ReactNode, type RefCallback } from "react";
-import { type AppKind, type CodexSubagentSettings, type SettingValue, type ConfigFileStatus } from "../api/client";
+import type { AppKind, CodexSubagentSettings, CodexSubagentSettingsSnapshot, SettingValue, ConfigFileStatus, ConfigurationSources } from "../api/client";
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
 import { useI18n, type TFunction } from "../i18n";
 import { AppDialog, AppDialogSuspension } from "./AppDialog";
@@ -15,8 +15,11 @@ import {
 } from "./ClientConfigurationApply";
 import { ClaudeExtraConfigurationEditor } from "./ClaudeExtraConfigurationEditor";
 import { OfficialSettingsDirectory } from "./OfficialSettingsDirectory";
+import { ScrollArea } from "./ScrollArea";
 import { SettingsFields } from "./SettingsFields";
-import { CodexPermissionProfileNotice } from "./CodexPermissionProfileNotice";
+import { SettingsLayout } from "./SettingsLayout";
+import { CodexPermissionProfile } from "./CodexPermissionProfile";
+import { ClientConfigurationSourcesDialog, useClientConfigurationSources } from "./ClientConfigurationSources";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { useUnsavedChanges } from "./useUnsavedChanges";
 
@@ -32,7 +35,11 @@ interface ClientSettingsPanelProps {
   configStatus: ConfigFileStatus | undefined;
   hasUnsavedConfigurationDraft: boolean;
   onValueChange: (app: AppKind, key: string, value: SettingValue) => void;
+  onKeepFileValue: (app: AppKind, key: string) => void;
+  onPermissionProfileChange: (value: SettingValue) => void;
   onApplied: () => void;
+  onFileApplied: () => void;
+  onDiscardSettings: () => void;
   onRetryLoad: (app: AppKind) => void;
   onReview: (app: AppKind) => void;
   onClaudeExtraChange: (app: AppKind, extra: Record<string, unknown>) => void;
@@ -42,18 +49,22 @@ interface ClientSettingsPanelProps {
   onDiscardGlobalInstructions: () => void;
   /** Codex's directly-applied subagent resource sits after model behavior,
    * outside the application-owned client-preference store. */
-  subagentSettings?: ReactNode;
+  renderSubagentSettings?: (busy: boolean) => ReactNode;
   subagentDraft?: CodexSubagentSettings;
+  subagentBaseline?: CodexSubagentSettingsSnapshot;
 }
 
 function actionStatus(t: TFunction, props: ClientSettingsPanelProps) {
   if (props.configStatus?.readError) {
-    return { message: t("providers.route.notes.readError", { detail: props.configStatus.readError }), error: true };
+    return t("providers.route.notes.readError", { detail: props.configStatus.readError });
   }
   if (props.configStatus?.exists && !props.configStatus.syntaxOk) {
-    return { message: t("clientConfig.status.syntaxError"), error: true };
+    return t("clientConfig.status.syntaxError");
   }
-  if (props.editorState.phase === "dirty") return { message: t("clientConfig.status.dirty"), error: false };
+  const sourceError = props.configStatus?.clientSettingsError ?? props.editorState.editor?.sourceError;
+  if (sourceError) {
+    return t("clientConfig.status.extractError", { message: sourceError });
+  }
   return null;
 }
 
@@ -66,8 +77,7 @@ function ClientConfigurationReview({
   editorState: state,
   busy,
   app,
-  onApplied,
-  subagentDraft,
+  onFileApplied,
   onClaudeExtraChange,
   onManualEditStateChange,
   onExtraEditStateChange,
@@ -89,10 +99,8 @@ function ClientConfigurationReview({
         <CurrentConfigurationEditor
           app={app}
           busy={busy}
-          editorState={state}
           source={source}
-          subagentDraft={subagentDraft}
-          onApplied={onApplied}
+          onApplied={onFileApplied}
           onEditStateChange={onManualEditStateChange}
         />
       )}
@@ -114,12 +122,16 @@ function ClientConfigurationReview({
     </>
   );
 }
-function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
+function ClientPreferencesEditor(props: ClientSettingsPanelProps & {
+  report: ConfigurationSources | null;
+  onInspectSources: () => void;
+}) {
   const { editorState: state, app, busy } = props;
   const { t } = useI18n();
+  const subagentSettings = props.renderSubagentSettings?.(busy);
   if (state.phase === "idle" || state.phase === "loading")
     return <>
-      {props.subagentSettings}
+      {subagentSettings}
       <div className="asb-settings-skeleton" role="status" aria-label={t("clientConfig.loading")}>
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
@@ -129,7 +141,7 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
   if (state.phase === "loadError" || !state.editor || !state.draft) {
     return (
       <>
-        {props.subagentSettings}
+        {subagentSettings}
         <div className="asb-empty" role="alert">
           <p>
             {t("clientConfig.loadError", { message: state.error ? commandErrorText(state.error, t) : t("clientConfig.loadErrorFallback") })}
@@ -145,7 +157,20 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
       </>
     );
   }
-  const working = busy;
+  const source = state.editor.source;
+  const fieldProps = {
+    specs: state.editor.specs,
+    values: state.draft,
+    baselineValues: source?.values,
+    savedValues: state.editor.settings.settings,
+    keepFileValues: state.keepFileValues,
+    actualValues: props.configStatus ? props.configStatus.clientSettings?.settings : source?.values,
+    supportedSettings: props.report?.supportedSettings,
+    busy: busy || !source,
+    onChange: (key: string, value: SettingValue) => props.onValueChange(app, key, value),
+    onKeepFileValue: (key: string) => props.onKeepFileValue(app, key),
+    clientApp: app,
+  };
   // The backend catalog emits stable group keys; the display name resolves
   // through the catalog at render time.
   const modelBehaviorGroups = state.editor.groups.filter((group) => group === "ownership.group.modelBehavior");
@@ -154,44 +179,26 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
     <>
       {modelBehaviorGroups.length > 0 && (
         <SettingsFields
-          specs={state.editor.specs}
+          {...fieldProps}
           groups={modelBehaviorGroups}
-          values={state.draft}
-          baselineValues={state.editor.settings.settings}
-          actualValues={props.configStatus ? (props.configStatus.clientSettings?.settings ?? {}) : undefined}
-          busy={working}
-          onChange={(key, value) => props.onValueChange(app, key, value)}
-          showGroupReset={false}
-          presentation="client"
-          clientApp={app}
         />
       )}
-      {props.subagentSettings}
+      {subagentSettings}
       {remainingGroups.length > 0 && (
         <>
-        {app === "codex" && <CodexPermissionProfileNotice status={props.configStatus} />}
-        <SettingsFields
-          specs={state.editor.specs}
-          groups={remainingGroups}
-          values={state.draft}
-          baselineValues={state.editor.settings.settings}
-          actualValues={props.configStatus ? (props.configStatus.clientSettings?.settings ?? {}) : undefined}
-          busy={working}
-          onChange={(key, value) => props.onValueChange(app, key, value)}
-          showGroupReset={false}
-          presentation="client"
-          clientApp={app}
-        />
+          {app === "codex" && <CodexPermissionProfile status={props.configStatus} report={props.report}
+            baseline={source?.permissionProfile} draft={state.permissionProfile} busy={busy}
+            inspect={props.onInspectSources} onChange={props.onPermissionProfileChange} />}
+          <SettingsFields {...fieldProps} groups={remainingGroups} />
         </>
       )}
     </>
   );
 }
 
-type ClientSettingsSection = "directory" | "review" | "instructions" | "reset";
+type ClientSettingsSection = "directory" | "review" | "instructions" | "reset" | "sources";
 
-/** The page header: the client picker leads the navigation row, the four
- * dialog entries sit right of it like every workspace's page actions. */
+/** The client picker and configuration tools share the workspace header. */
 function ClientSettingsToolbar({
   panel,
   configuration,
@@ -202,13 +209,14 @@ function ClientSettingsToolbar({
   onOpen: (section: ClientSettingsSection) => void;
 }) {
   const { t } = useI18n();
+  const working = panel.busy || configuration.applying;
   return (
     <WorkspaceHeader
       title={t("clientConfig.title")}
       primary={
         <ClientPicker
           app={panel.app}
-          disabled={panel.busy}
+          disabled={working}
           label={t("clientConfig.pickerLabel")}
           onChange={(target) => panel.onSelectApp(target)}
         />
@@ -217,14 +225,17 @@ function ClientSettingsToolbar({
         <>
           <Button
             variant="secondary"
-            disabled={!panel.editorState.editor}
+            disabled={working || !panel.editorState.editor}
             onClick={() => onOpen("directory")}
           >
             {t("clientConfig.toolbar.directory")}
           </Button>
+          <Button variant="secondary" disabled={working} onClick={() => onOpen("sources")}>
+            {t("clientConfig.sources.title")}
+          </Button>
           <Button
             variant="secondary"
-            disabled={panel.busy}
+            disabled={working}
             onClick={() => {
               onOpen("review");
               panel.onReview(panel.app);
@@ -234,17 +245,17 @@ function ClientSettingsToolbar({
           </Button>
           <Button
             variant="secondary"
-            disabled={panel.busy}
+            disabled={working}
             onClick={() => onOpen("instructions")}
           >
             {t("clientConfig.toolbar.instructions")}
           </Button>
           <Button
-            variant="secondary"
+            variant="danger"
             disabled={!configuration.canNativeReset || panel.busy || configuration.applying}
             onClick={() => {
               onOpen("reset");
-              configuration.prepareNativeReset("nativeDefaults");
+              configuration.prepareNativeReset();
             }}
           >
             {t("clientConfig.reset.nativeTitle")}
@@ -255,36 +266,35 @@ function ClientSettingsToolbar({
   );
 }
 
-function ClientSettingsForm({
-  panel,
-  configuration,
-}: {
+function ClientSettingsActions({ panel, configuration }: {
   panel: ClientSettingsPanelProps;
   configuration: ClientConfigurationActionState;
 }) {
   const { t } = useI18n();
-  const status = configuration.status ?? actionStatus(t, panel);
-  return <>
-    {panel.configStatus?.clientSettingsError && (
-      <p className="asb-field-error" role="alert">
-        {t("clientConfig.status.extractError", { message: panel.configStatus.clientSettingsError })}
-      </p>
-    )}
-    <ClientPreferencesEditor {...panel} />
-    <section className="asb-client-configuration-actions" aria-label={t("clientConfig.form.actionsAria")}>
-      <div className="asb-client-configuration-notice">
-        {status && <span className={status.error ? "asb-field-error" : "asb-field-help"} role={status.error ? "alert" : "status"}>{status.message}</span>}
-        {configuration.recoveryBlocker && <p className="asb-field-help">{configuration.recoveryBlocker}</p>}
-        {configuration.applyError && <p className="asb-field-error" role="alert">{configuration.applyError}</p>}
-      </div>
-      <div className="asb-client-configuration-commit">
+  const issue = actionStatus(t, panel);
+  const { pendingCount } = configuration;
+  const summary = pendingCount
+    ? t("clientConfig.status.pendingCount", { count: pendingCount })
+    : panel.hasUnsavedConfigurationDraft ? t("clientConfig.status.dirty")
+      : configuration.status?.message;
+  const previewError = configuration.pendingApply ? null : configuration.applyError;
+  return (
+    <>
+      {issue && <p className="asb-client-configuration-action-error asb-field-error" role="alert">{issue}</p>}
+      {previewError && <p className="asb-client-configuration-action-error asb-field-error" role="alert">{previewError}</p>}
+      <div className="asb-scroll-action-buttons">
+        {!issue && summary && (
+          <p className="asb-client-configuration-summary" data-pending={pendingCount > 0 || undefined} role="status">{summary}</p>
+        )}
+        {panel.hasUnsavedConfigurationDraft && <Button variant="secondary" disabled={panel.busy || configuration.applying}
+          onClick={panel.onDiscardSettings}>{t("clientConfig.settings.discardDraft")}</Button>}
         <Button variant="primary" disabled={!configuration.canApply || panel.busy || configuration.applying}
           onClick={configuration.prepareApply}>
           {t("clientConfig.apply.saveAndPreview")}
         </Button>
       </div>
-    </section>
-  </>;
+    </>
+  );
 }
 
 interface ClientSettingsDialogProps {
@@ -355,21 +365,32 @@ function NativeResetDialog({
 export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
   const { t } = useI18n();
   const [openSection, setOpenSection] = useState<ClientSettingsSection | null>(null);
+  const sources = useClientConfigurationSources(props.app);
   // A modal left inside a hidden page or client route would keep the rest of
   // the application inert, so it closes with the surface that owns it.
   useEffect(() => {
     if (!props.active) setOpenSection(null);
   }, [props.active]);
-  const configuration = useClientConfigurationApply(props, () => setOpenSection(null));
+  const configuration = useClientConfigurationApply({ ...props, directory: sources.directory }, () => setOpenSection(null));
+  const open = (next: ClientSettingsSection) => {
+    setOpenSection(next);
+    if (next === "sources") sources.check();
+  };
   const onClose = () => setOpenSection(null);
   const dialog = { panel: props, onClose };
   const section = props.active ? openSection : null;
   return <>
     <div className="asb-client-settings-panel" aria-label={t("clientConfig.title")}>
-      <ClientSettingsToolbar panel={props} configuration={configuration} onOpen={setOpenSection} />
-      <div ref={props.routeContentRef}>
-        <ClientSettingsForm panel={props} configuration={configuration} />
-      </div>
+      <ScrollArea tabIndex={0} aria-label={t("clientConfig.form.settingsAria")} floatingActions={{
+        label: t("clientConfig.form.actionsAria"),
+        content: <ClientSettingsActions panel={props} configuration={configuration} />,
+      }}>
+        <ClientSettingsToolbar panel={props} configuration={configuration} onOpen={open} />
+        <SettingsLayout ref={props.routeContentRef}>
+          <ClientPreferencesEditor {...props} busy={props.busy || configuration.applying}
+            report={sources.report} onInspectSources={() => open("sources")} />
+        </SettingsLayout>
+      </ScrollArea>
     </div>
     {section === "directory" && (
       <AppDialog title={t("clientConfig.toolbar.directory")} busy={props.busy} onClose={onClose} wide tall>
@@ -377,6 +398,7 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
       </AppDialog>
     )}
     {section === "review" && <ConfigurationReviewDialog {...dialog} />}
+    {section === "sources" && <ClientConfigurationSourcesDialog app={props.app} sources={sources} onClose={onClose} />}
     {section === "instructions" && <GlobalInstructionsDialog {...dialog} />}
     {section === "reset" && <NativeResetDialog {...dialog} configuration={configuration} />}
     {props.active && <ClientConfigurationConfirmation
@@ -384,6 +406,7 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
       busy={props.busy}
       applying={configuration.applying}
       pending={configuration.pendingApply}
+      error={configuration.applyError}
       onConfirm={configuration.commitApply}
       onCancel={configuration.cancelApply}
     />}

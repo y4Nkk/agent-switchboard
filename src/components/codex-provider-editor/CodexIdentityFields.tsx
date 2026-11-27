@@ -1,6 +1,7 @@
 import { useI18n } from "../../i18n";
 import { ClientLogo } from "../ClientLogo";
 import { Input } from "../Input";
+import { SettingsGroup } from "../SettingsLayout";
 import { Button } from "../Button";
 import type { CodexEditorDraft } from "./draft";
 import type { SetCodexDraft } from "./useCodexProviderEditor";
@@ -32,8 +33,7 @@ export function CodexIdentityFields(props: IdentityProps) {
   const { t } = useI18n();
   const { draft, busy, setDraft } = props;
   return (
-    <section className="asb-editor-section" aria-label={t("codex.identity.title")}>
-      <h3 className="asb-section-title">{t("codex.identity.title")}</h3>
+    <SettingsGroup title={t("codex.identity.title")}>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-field-grid"><ClientField /></div>
         <div className="asb-provider-field-grid">
@@ -47,6 +47,6 @@ export function CodexIdentityFields(props: IdentityProps) {
           </label>
         </div>
       </div>
-    </section>
+    </SettingsGroup>
   );
 }

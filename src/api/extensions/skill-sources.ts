@@ -22,6 +22,7 @@ export interface SkillCatalogCandidate extends SkillCandidateDto {
 export interface SkillCatalogResult {
   candidates: SkillCatalogCandidate[];
   progress: SkillRepositoryScanProgress;
+  updatedRepositories: SkillRepository[] | null;
 }
 
 export type SkillRepositoryRequestStep = "commit" | "tree" | "archive";
@@ -34,17 +35,30 @@ export interface SkillRepositoryRequest {
   totalBytes: number | null;
 }
 
+export type SkillRepositoryRecovery =
+  | { kind: "retry" }
+  | { kind: "updateAddress"; repo: string }
+  | { kind: "narrowScope"; subpath: string };
+
+export interface SkillRepositoryRecoveryRequest {
+  repository: SkillRepository;
+  recovery: SkillRepositoryRecovery;
+}
+
 export type SkillRepositoryScanRow = {
   repository: SkillRepository;
   requests: SkillRepositoryRequest[];
 } & (
   | { state: "queued" | "running" }
   | { state: "complete"; candidateCount: number }
-  | { state: "failed"; message: string }
+  | { state: "failed"; message: string; recovery: SkillRepositoryRecovery | null }
 );
+
+export type SkillRepositoryFailedRow = Extract<SkillRepositoryScanRow, { state: "failed" }>;
 
 export interface SkillRepositoryScanProgress {
   elapsedMs: number;
+  githubRetryAt: number | null;
   repositories: SkillRepositoryScanRow[];
 }
 
@@ -70,10 +84,11 @@ export function removeSkillRepository(id: string): Promise<void> {
   return invoke<void>("remove_skill_repository", { id });
 }
 
-/** Explicit network refresh. Saving or listing repositories never fetches them. */
+/** Explicit refresh with optional recovery for the selected failed records. */
 export async function scanSkillRepositories(
   isCurrent: () => boolean,
   onProgress: (progress: SkillRepositoryScanProgress | null) => void,
+  recoveries: SkillRepositoryRecoveryRequest[],
 ): Promise<SkillCatalogResult> {
   const idBytes = crypto.getRandomValues(new Uint8Array(16));
   const scanId = Array.from(idBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -99,7 +114,7 @@ export async function scanSkillRepositories(
     if (observing()) timer = window.setTimeout(() => void read(), 300);
   };
 
-  const result = invoke<SkillCatalogResult>("scan_skill_repositories", { scanId });
+  const result = invoke<SkillCatalogResult>("scan_skill_repositories", { scanId, recoveries });
   void read();
   try {
     return await result;

@@ -22,7 +22,7 @@ use asb_core::extensions::plan::ExtensionPlan;
 use serde::Serialize;
 
 use crate::commands::error::CommandError;
-use crate::extensions::sources::{self, SkillCandidate};
+use crate::extensions::sources;
 use crate::extensions::store::ExtensionStore;
 use crate::local_state::LocalState;
 
@@ -43,13 +43,6 @@ static PENDING_PLANS: OnceLock<Mutex<BTreeMap<String, PendingPlan>>> = OnceLock:
 
 pub(super) fn pending_plans() -> &'static Mutex<BTreeMap<String, PendingPlan>> {
     PENDING_PLANS.get_or_init(|| Mutex::new(BTreeMap::new()))
-}
-
-/// Reviewed Skill candidates keyed by source and content identity.
-static CANDIDATES: OnceLock<Mutex<BTreeMap<String, SkillCandidate>>> = OnceLock::new();
-
-pub(super) fn candidates() -> &'static Mutex<BTreeMap<String, SkillCandidate>> {
-    CANDIDATES.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
 /// Raw discovery facts stay in this process-only cache. The renderer receives
@@ -150,17 +143,18 @@ pub(super) fn store_error(error: crate::extensions::store::ExtensionStoreError) 
 /// their low-level error text. Renderer-facing errors expose the failure
 /// class only; the full source identity remains inside the source boundary.
 pub(super) fn source_error(error: sources::SourceError) -> CommandError {
-    match error {
-        sources::SourceError::Unreachable(_) => CommandError::keyed(
-            "source-unreachable",
-            "errors.extlib.sourceUnreachable",
-            "来源不可达；请检查网络、地址和访问权限",
-        ),
-        sources::SourceError::Rejected(_) => CommandError::keyed(
+    if error.is_rejected() {
+        CommandError::keyed(
             "source-rejected",
             "errors.extlib.sourceRejected",
             "来源内容未通过完整性或安全校验",
-        ),
+        )
+    } else {
+        CommandError::keyed(
+            "source-unreachable",
+            "errors.extlib.sourceUnreachable",
+            "来源不可达；请检查网络、地址和访问权限",
+        )
     }
 }
 

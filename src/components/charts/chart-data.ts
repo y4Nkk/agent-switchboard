@@ -1,5 +1,3 @@
-import { formatCompactUsageValue, formatUsageValue } from "../../lib/usage-format.ts";
-import { formatCompactTokenCount, formatTokenValue } from "../../lib/token-format.ts";
 import { currentLanguage, tr } from "../../i18n/current.ts";
 
 export interface UsageTrendPoint {
@@ -12,12 +10,6 @@ export interface UsageTrendSeries {
   label: string;
   unit?: string | null;
   points: UsageTrendPoint[];
-}
-
-export interface ModelUsageDistributionItem {
-  id: string;
-  label: string;
-  value: number;
 }
 
 export interface PreparedTrendPoint extends UsageTrendPoint {
@@ -59,21 +51,6 @@ export function trendSeriesShareUnit(series: PreparedTrendSeries[]): boolean {
   return new Set(series.map((entry) => entry.unit ?? "")).size <= 1;
 }
 
-/** Chart cards compact local token values, while all other series retain the
- * generic source-value formatter used by their adjacent ledgers. */
-export function formatChartValue(
-  value: number,
-  unit: string | null | undefined,
-  valueKind: UsageTrendValueKind,
-): string {
-  return valueKind === "local-token" ? formatTokenValue(value) : formatUsageValue(value, unit);
-}
-
-/** A compact tick label; token axes use the app-wide K/M/B token contract. */
-export function formatChartAxisValue(value: number, valueKind: UsageTrendValueKind): string {
-  return valueKind === "local-token" ? formatCompactTokenCount(value) : formatCompactUsageValue(value);
-}
-
 /** Percentages have an explicit 0–100 semantic range. Other quantities retain
  * a zero baseline when possible, while negative source values remain visible
  * instead of being clipped below the chart. */
@@ -103,13 +80,6 @@ export function formatChartAxisTime(timestamp: number): string {
   return `${month}/${day}`;
 }
 
-/** A human day label ("9月15日" / "Sep 15") for hover tooltips; unlike tick
- * labels it keeps no zero padding. */
-export function formatChartTooltipDate(timestamp: number): string {
-  return new Intl.DateTimeFormat(currentLanguage(), { month: "short", day: "numeric" })
-    .format(new Date(timestamp));
-}
-
 export function formatChartTimestamp(timestamp: number): string {
   return new Intl.DateTimeFormat(currentLanguage(), { dateStyle: "medium", timeStyle: "short" })
     .format(new Date(timestamp));
@@ -126,8 +96,18 @@ const SERIES_COLORS = [
   "var(--asb-text-muted)",
 ] as const;
 
-export function chartSeriesColor(index: number): string {
-  return SERIES_COLORS[index % SERIES_COLORS.length];
+const MODEL_SERIES_COLORS = [
+  "var(--asb-action)",
+  "var(--asb-diff-add-text)",
+  "var(--asb-claude)",
+  "var(--asb-danger)",
+  "var(--asb-consumption-series-amber)",
+  "var(--asb-consumption-series-teal)",
+] as const;
+
+export function chartSeriesColor(index: number, valueKind: UsageTrendValueKind): string {
+  const colors = valueKind === "local-token" ? MODEL_SERIES_COLORS : SERIES_COLORS;
+  return colors[index % colors.length];
 }
 
 function normalizedUnit(unit: string | null | undefined): string | null {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import type { SkillDirectoryEntry } from "../../api/extensions/skill-sources";
 import {
@@ -34,6 +34,8 @@ export function useSkillSource(actions: SkillSourceActions & {
   const [filter, setFilter] = useState<SkillSourceFilter>("all");
   const [repository, setRepository] = useState("all");
   const [managerOpen, setManagerOpen] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const repairActive = useRef(false);
   const catalog = useSkillSourceCatalog(actions.busy);
   const directory = useSkillSourceDirectory(actions.busy);
   const files = useSkillSourceFiles(actions);
@@ -44,7 +46,7 @@ export function useSkillSource(actions: SkillSourceActions & {
     catalog.reconcile(next);
     setRepository((current) => next?.some((repo) => repo.id === current) ? current : "all");
   });
-  const locked = () => directory.resolving !== null || imports.isLocked() || (actions.busy && !loading);
+  const locked = () => repairActive.current || directory.resolving !== null || imports.isLocked() || (actions.busy && !loading);
   const changeSource = (next: SkillSourceKind) => {
     if (locked() || next === source || (managerOpen && repositories.loading)) return;
     setSource(next); catalog.cancel(); directory.cancel();
@@ -55,9 +57,27 @@ export function useSkillSource(actions: SkillSourceActions & {
   const search = async () => {
     if (locked()) return;
     if (source === "catalog") {
-      if (repositories.ready && !repositories.loading) await catalog.refresh(repositories.items);
+      if (catalog.retryAt === null && repositories.ready && !repositories.loading) await catalog.refresh(repositories.items);
     } else if (source === "directory") await directory.search();
     else await files.scan(source);
+  };
+  const repair = async () => {
+    if (locked() || loading || repositories.loading || !repositories.ready || catalog.recoveries.length === 0 ||
+      catalog.retryAt !== null) return;
+    repairActive.current = true;
+    setRepairing(true);
+    try {
+      await catalog.refresh(repositories.items, {
+        requests: catalog.recoveries,
+        onSaved: (next) => {
+          repositories.acceptRecovery(next);
+          setRepository((current) => next.some((repo) => repo.id === current) ? current : "all");
+        },
+      });
+    } finally {
+      repairActive.current = false;
+      setRepairing(false);
+    }
   };
   const pick = async () => {
     if (locked() || (source !== "zip" && source !== "local")) return;
@@ -74,7 +94,7 @@ export function useSkillSource(actions: SkillSourceActions & {
     `${row.candidate.name} ${row.candidate.description ?? ""} ${row.label}`.toLowerCase().includes(query.trim().toLowerCase()));
   return {
     source, query, setQuery, filter, setFilter, repository, setRepository, managerOpen, setManagerOpen,
-    catalog, directory, files, repositories, changeSource, search, pick, inspectDirectory,
+    catalog, directory, files, repositories, changeSource, search, repair, repairing, pick, inspectDirectory,
     candidates, visible, installedCount: rows.filter((row) => row.installed).length, loading, imports,
     error: source === "catalog" ? catalog.error : source === "directory" ? directory.error : files.error,
   };

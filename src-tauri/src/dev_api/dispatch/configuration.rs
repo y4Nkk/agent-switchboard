@@ -10,15 +10,23 @@ pub(super) async fn configuration(app: &AppHandle, request: &InvokeRequest) -> R
             command!(commands::client_configuration_apply::preview_client_configuration_apply(
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
-                argument::<SettingsValues>(&request.args, "settings")?,
-                optional_argument::<asb_core::CodexSubagentSettings>(&request.args, "subagentSettings")?,
+                argument::<String>(&request.args, "expectedSourceHash")?,
+                argument::<bool>(&request.args, "expectedSourceExists")?,
+                argument::<String>(&request.args, "expectedSettingsHash")?,
+                argument::<asb_core::adapter::ClientConfigurationChanges>(&request.args, "changes")?,
+                optional_argument::<String>(&request.args, "directory")?,
             ))
         }
+        "inspect_client_configuration_sources" => command!(commands::client_configuration_sources::inspect_client_configuration_sources(
+            app.clone(), argument::<AppKind>(&request.args, "target")?, optional_argument::<String>(&request.args, "directory")?,
+        )),
         "preview_client_configuration_reset" => {
             command!(commands::client_configuration_apply::preview_client_configuration_reset(
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
                 argument::<commands::client_configuration_apply::ClientConfigurationResetKind>(&request.args, "resetKind")?,
+                argument::<std::collections::BTreeSet<String>>(&request.args, "selected")?,
+                optional_argument::<String>(&request.args, "expectedSourceHash")?,
             ))
         }
         "commit_client_configuration_apply" => {
@@ -28,9 +36,10 @@ pub(super) async fn configuration(app: &AppHandle, request: &InvokeRequest) -> R
                 argument::<String>(&request.args, "expectedHash")?,
                 argument::<String>(&request.args, "expectedRenderedHash")?,
                 argument::<String>(&request.args, "expectedSettingsHash")?,
+                argument::<String>(&request.args, "expectedSettingsResultHash")?,
                 argument::<bool>(&request.args, "expectedTargetExisted")?,
-                argument::<SettingsValues>(&request.args, "settings")?,
-                optional_argument::<asb_core::CodexSubagentSettings>(&request.args, "subagentSettings")?,
+                argument::<asb_core::adapter::ClientConfigurationChanges>(&request.args, "changes")?,
+                optional_argument::<String>(&request.args, "directory")?,
                 argument::<bool>(&request.args, "confirmWrite")?,
             ))
         }
@@ -39,6 +48,7 @@ pub(super) async fn configuration(app: &AppHandle, request: &InvokeRequest) -> R
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
                 argument::<commands::client_configuration_apply::ClientConfigurationResetKind>(&request.args, "resetKind")?,
+                argument::<std::collections::BTreeSet<String>>(&request.args, "selected")?,
                 argument::<String>(&request.args, "expectedHash")?,
                 argument::<String>(&request.args, "expectedRenderedHash")?,
                 argument::<String>(&request.args, "expectedSettingsHash")?,
@@ -59,8 +69,6 @@ pub(super) async fn manual(app: &AppHandle, request: &InvokeRequest) -> Result<O
                 argument::<AppKind>(&request.args, "target")?,
                 argument::<String>(&request.args, "expectedSourceHash")?,
                 argument::<String>(&request.args, "displayContent")?,
-                argument::<SettingsValues>(&request.args, "settings")?,
-                optional_argument::<asb_core::CodexSubagentSettings>(&request.args, "subagentSettings")?,
             ))
         }
         "commit_manual_client_configuration" => {
@@ -72,8 +80,6 @@ pub(super) async fn manual(app: &AppHandle, request: &InvokeRequest) -> Result<O
                 argument::<String>(&request.args, "expectedSettingsHash")?,
                 argument::<bool>(&request.args, "expectedTargetExisted")?,
                 argument::<String>(&request.args, "displayContent")?,
-                argument::<SettingsValues>(&request.args, "settings")?,
-                optional_argument::<asb_core::CodexSubagentSettings>(&request.args, "subagentSettings")?,
                 argument::<bool>(&request.args, "confirmWrite")?,
             ))
         }

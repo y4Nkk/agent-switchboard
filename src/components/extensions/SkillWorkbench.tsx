@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { ExtensionListItem, SkillDependency, SkillEditorView, SkillVersion } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
+import { SettingsGroup, SettingsLayout } from "../SettingsLayout";
 import { WorkspaceSubpage } from "../WorkspaceSubpage";
 import { Tabs } from "../Tabs";
 import { useUnsavedChanges } from "../useUnsavedChanges";
@@ -66,20 +67,24 @@ export function SkillWorkbench(props: SkillWorkbenchProps) {
         disabled={busy || !files.dirty || files.document.stale} onClick={() => void perform(files.save)}>{t("extensions.workbench.saveVersion")}</Button>}
       {section === "dependencies" && <Button variant="primary" disabled={busy || !deps.dirty || deps.stale || !files.document}
         onClick={() => void perform(saveDependencies)}>{t("extensions.workbench.saveDeps")}</Button>}</>}>
-    {files.document?.stale && <div className="asb-banner" role="alert">{t("extensions.workbench.sourceChanged")}
-      <Button variant="secondary" disabled={busy} onClick={() => leave.request(() => void perform(files.reload))}>{t("extensions.library.reload")}</Button></div>}
-    <div role="tabpanel" id="skill-workbench-files-panel" aria-labelledby="skill-workbench-files-tab" hidden={section !== "files"}>
-      {!files.document ? files.loading ? <ExtensionLoading /> : <div className="asb-banner" role="alert">
-        {t("extensions.workbench.loadFailed")}<Button variant="secondary" disabled={busy}
-          onClick={() => void perform(files.reload)}>{t("extensions.library.reload")}</Button></div> : !files.document.view.editable ? <section className="asb-editor-section">
-        <p>{t("extensions.workbench.forkNote")}</p><Button variant="primary" disabled={busy}
-          onClick={() => leave.request(() => props.onFork(props.item.id))}>{t("extensions.workbench.fork")}</Button>
-      </section> : <SkillFiles files={files} busy={busy || files.document.stale} />}
-    </div>
-    <div role="tabpanel" id="skill-workbench-versions-panel" aria-labelledby="skill-workbench-versions-tab" hidden={section !== "versions"}>
-      <SkillVersions id={props.item.id} revision={props.item.revision} busy={busy} onLoad={props.onLoadVersions} onRestore={restore} /></div>
-    <div role="tabpanel" id="skill-workbench-dependencies-panel" aria-labelledby="skill-workbench-dependencies-tab" hidden={section !== "dependencies"}>
-      <SkillDependencies deps={deps} options={props.mcpOptions} busy={busy} onReload={() => leave.request(() => deps.reset())} /></div>
+    <SettingsLayout>
+      {files.document?.stale && <div className="asb-banner" role="alert">{t("extensions.workbench.sourceChanged")}
+        <Button variant="secondary" disabled={busy} onClick={() => leave.request(() => void perform(files.reload))}>{t("extensions.library.reload")}</Button></div>}
+      <div role="tabpanel" id="skill-workbench-files-panel" aria-labelledby="skill-workbench-files-tab" hidden={section !== "files"}>
+        {!files.document ? files.loading ? <ExtensionLoading /> : <div className="asb-banner" role="alert">
+          {t("extensions.workbench.loadFailed")}<Button variant="secondary" disabled={busy}
+            onClick={() => void perform(files.reload)}>{t("extensions.library.reload")}</Button></div> : !files.document.view.editable ? (
+          <SettingsGroup title={t("extensions.workbench.files")} description={t("extensions.workbench.forkNote")} actions={
+            <Button variant="primary" disabled={busy}
+              onClick={() => leave.request(() => props.onFork(props.item.id))}>{t("extensions.workbench.fork")}</Button>
+          }>{null}</SettingsGroup>
+        ) : <SkillFiles files={files} busy={busy || files.document.stale} />}
+      </div>
+      <div role="tabpanel" id="skill-workbench-versions-panel" aria-labelledby="skill-workbench-versions-tab" hidden={section !== "versions"}>
+        <SkillVersions id={props.item.id} revision={props.item.revision} busy={busy} onLoad={props.onLoadVersions} onRestore={restore} /></div>
+      <div role="tabpanel" id="skill-workbench-dependencies-panel" aria-labelledby="skill-workbench-dependencies-tab" hidden={section !== "dependencies"}>
+        <SkillDependencies deps={deps} options={props.mcpOptions} busy={busy} onReload={() => leave.request(() => deps.reset())} /></div>
+    </SettingsLayout>
     {leave.confirmation}
   </WorkspaceSubpage>;
 }

@@ -1,6 +1,7 @@
 import type { ResourceIssue, ResourceMetric as Metric } from "../../api/client";
 import { useI18n, type TFunction } from "../../i18n";
 import type { MessageKey } from "../../i18n/messages";
+import { Tooltip } from "../Tooltip";
 
 const ISSUE_KEYS = {
   warmingUp: "resources.issue.warmingUp", accessDenied: "resources.issue.accessDenied",
@@ -37,8 +38,11 @@ export function ResourceMetric({ metric, kind }: { metric: Metric; kind: MetricK
   const note = absent ? null : metric.state === "partial" ? t("resources.metric.partial")
     : metric.state === "unavailable" ? warming ? t("resources.metric.warming")
       : resourceIssueText(metric.issues[0] ?? "collectionFailed", t) : null;
-  return <div className="asb-resource-metric" title={metric.issues.map((issue) => resourceIssueText(issue, t)).join("\n")}>
+  const value = <div className="asb-resource-metric">
     <span>{formatResourceValue(metric.value, kind, language)}</span>
     {note && <span className="asb-resource-note">{note}</span>}
   </div>;
+  return metric.issues.length > 0
+    ? <Tooltip asChild label={metric.issues.map((issue) => resourceIssueText(issue, t)).join("\n")}>{value}</Tooltip>
+    : value;
 }

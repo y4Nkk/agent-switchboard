@@ -7,6 +7,7 @@ import type {
 } from "../../api/client";
 import { usesClaudeManagedAuth } from "../../api/claude-accounts";
 import { useI18n } from "../../i18n";
+import { SettingsGroup } from "../SettingsLayout";
 import { Button } from "../Button";
 import { Collapsible } from "../Collapsible";
 import { ConnectivityIcon } from "../icons";
@@ -49,8 +50,7 @@ export function ProviderConnectionTest({
       },
     } : null,
   [app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, valid]);
-  return <section className="asb-editor-section" aria-label={t("providers.editor.section.connectionTest")}>
-    <h3 className="asb-section-title">{t("providers.editor.section.connectionTest")}</h3>
+  return <SettingsGroup title={t("providers.editor.section.connectionTest")}>
     <div className="asb-editor-section-fields">
       <div className="asb-editor-action-row">
         <Button ref={trigger} variant="secondary" disabled={busy} aria-expanded={open && active}
@@ -64,5 +64,5 @@ export function ProviderConnectionTest({
           onClose={() => { setOpen(false); trigger.current?.focus(); }} />
       </Collapsible>}
     </div>
-  </section>;
+  </SettingsGroup>;
 }

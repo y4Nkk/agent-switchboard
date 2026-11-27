@@ -1,3 +1,4 @@
+import { ArrowUpRight, Plug } from "lucide-react";
 import type { McpRegistryUpdate } from "../../api/extensions/registry";
 import { ConfirmSheet } from "../../components/ConfirmSheet";
 import { FactList } from "../../components/FactList";
@@ -25,10 +26,12 @@ export function McpRegistryUpdateSheet({ workspace: w, report }: { workspace: Ex
       <p>{previous.version === report.source.version
         ? t("extensions.registry.sourceVersion", { name: report.source.name, version: report.source.version })
         : t("extensions.registry.versionChange", { from: previous.version, to: report.source.version })}</p>
-      {associate ? <FactList rows={[{ label: t("extensions.registry.currentEndpoint"), value: report.source.endpoint }]} /> : <FactList rows={[
-        { label: t("extensions.registry.currentEndpoint"), value: previous.endpoint },
-        { label: t("extensions.registry.nextEndpoint"), value: report.source.endpoint },
-      ]} />}
+      <FactList rows={[
+        { label: t("extensions.registry.currentEndpoint"), icon: Plug, format: "code",
+          value: associate ? report.source.endpoint : previous.endpoint },
+        ...(associate ? [] : [{ label: t("extensions.registry.nextEndpoint"), icon: ArrowUpRight,
+          format: "code" as const, value: report.source.endpoint }]),
+      ]} />
       <p>{t(associate ? "extensions.registry.associateEffect" : "extensions.registry.updateEffect")}</p>
     </>}
   </ConfirmSheet>;

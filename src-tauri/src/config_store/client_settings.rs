@@ -1,6 +1,5 @@
-//! Client-settings storage: one complete automatic-or-explicit intent file
-//! per client under `client-settings/{client}.json`. Saving it never reads, previews,
-//! or writes a real Codex or Claude Code configuration file.
+//! Saved client preferences and their revisions under `client-settings/{client}.json`.
+//! The store works on application state independently of the client configuration files.
 
 use super::{
     content_revision, parse_file, read_optional, write_json_atomic, ConfigStore,
@@ -15,10 +14,8 @@ use std::sync::Mutex;
 static CLIENT_SAVE_LOCK: Mutex<()> = Mutex::new(());
 
 impl ConfigStore {
-    /// Reads one client's complete client settings and their storage
-    /// revision. An absent file yields the directory defaults without
-    /// creating anything; every present file must contain the complete,
-    /// current automatic-or-explicit intent set.
+    /// Reads the saved shared settings and their revision. Missing fields
+    /// carry no ASB intent. An absent file is never created by a read.
     pub fn get_client_settings(
         &self,
         app: AppKind,
@@ -40,9 +37,7 @@ impl ConfigStore {
         Ok(snapshot)
     }
 
-    /// Replaces one client's settings after the optimistic revision
-    /// check. The saved shape is the complete intent set; this operation
-    /// never touches the real client configuration.
+    /// Replaces the saved preferences after checking their revision.
     pub fn save_client_settings(
         &self,
         app: AppKind,
@@ -94,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    fn saving_persists_the_complete_value_set_and_rejects_stale_revisions() {
+    fn saving_persists_preferences_and_rejects_stale_revisions() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let store = ConfigStore::new(directory.path().join("state"));
 
@@ -136,23 +131,22 @@ mod tests {
     }
 
     #[test]
-    fn a_hand_edited_file_must_be_complete_and_contain_only_owned_keys() {
+    fn a_saved_file_may_omit_keys_and_may_only_include_owned_keys() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let store = ConfigStore::new(directory.path().join("state"));
         let path = store.client_settings_path(AppKind::Claude);
         std::fs::create_dir_all(path.parent().expect("client settings dir")).unwrap();
         std::fs::write(
             &path,
-            "{\n  \"settings\": {\n    \"outputStyle\": { \"mode\": \"automatic\" }\n  }\n}",
+            r#"{"settings":{"language":{"mode":"explicit","value":"en"}}}"#,
         )
         .unwrap();
 
-        assert!(matches!(
-            store
-                .get_client_settings(AppKind::Claude)
-                .expect_err("partial file must fail"),
-            ProfileStoreError::InvalidFile { .. }
-        ));
+        let loaded = store.get_client_settings(AppKind::Claude).expect("sparse preferences");
+        assert_eq!(loaded.settings.settings.len(), 1);
+        assert_eq!(loaded.settings.value("language"), Some(&SettingValue::Explicit {
+            value: ConfigValue::Str("en".into()),
+        }));
 
         std::fs::write(
             &path,

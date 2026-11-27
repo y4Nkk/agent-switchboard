@@ -4,7 +4,7 @@ import type { TrayReading, TrayUsageContent } from "./tray-usage";
 
 function Reading({ reading }: { reading: TrayReading }) {
   return <span className="tray-usage-reading" data-tone={reading.tone}>
-    {reading.name && <span className="tray-usage-name" title={reading.name}>{reading.name}</span>}
+    {reading.name && <span className="tray-usage-name">{reading.name}</span>}
     <span className="tray-usage-value">{reading.value}</span>
   </span>;
 }
@@ -47,10 +47,8 @@ export function TrayUsage({ content }: { content: TrayUsageContent }) {
   if (readings.length === 0 && !alert) return null;
   return <span ref={host} className="tray-provider-balance">
     {readings.slice(0, visible).map((reading, index) => <Reading key={index} reading={reading} />)}
-    {readings.length > visible && <span className="tray-usage-more" title={readings.slice(visible)
-      .map((reading) => reading.summary).join("\n")}>
-      +{readings.length - visible}</span>}
-    {alert && <span className="tray-usage-alert" role="img" aria-label={alert.title} title={alert.detail}>
+    {total > visible && <span className="tray-usage-more">+{total - visible}</span>}
+    {alert && <span className="tray-usage-alert" role="img" aria-label={alert.title}>
       <TriangleAlert size={14} aria-hidden="true" /></span>}
     <span ref={measure} className="tray-usage-measure" aria-hidden="true">
       {readings.slice(0, 2).map((reading, index) => <span key={index} data-measure="reading"><Reading reading={reading} /></span>)}

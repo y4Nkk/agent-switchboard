@@ -3,13 +3,14 @@ import { useEffect, useRef } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { ScrollArea } from "../ScrollArea";
 import { SearchInput } from "../SearchInput";
 import { Select } from "../Select";
 import { SearchIcon } from "../icons";
 import { ExtensionLoading } from "./ExtensionLoading";
+import { ExtensionMarket } from "./ExtensionMarket";
 import { SkillDirectoryResults } from "./SkillDirectoryResults";
 import { SkillRepositoryManager } from "./SkillRepositoryManager";
+import { SkillRepositoryRecoveryButton, SkillRepositoryRetryNotice } from "./SkillRepositoryRecovery";
 import { SkillRepositoryScanPanel } from "./SkillRepositoryScanPanel";
 import { SkillSourceCandidate } from "./SkillSourceCandidate";
 import { SkillSourceForm } from "./SkillSourceForm";
@@ -18,6 +19,7 @@ import { skillRepositoryLabel } from "./skill-repository-model";
 import { useSkillSource, type SkillSourceActions, type SkillSourceState } from "./useSkillSource";
 
 interface Props extends SkillSourceActions {
+  active: boolean;
   busy: boolean;
   items: ExtensionListItem[];
 }
@@ -74,13 +76,13 @@ function SourceResults({ state, busy }: { state: SkillSourceState; busy: boolean
       </p>
       {state.visible.length === 0 ? (
         <div className="asb-skill-source-empty">
-          <p>{state.candidates.length === 0 ? (state.source === "catalog" && state.catalog.failedRepositoryIds.size > 0 ?
+          <p>{state.candidates.length === 0 ? (state.source === "catalog" && state.catalog.failures.size > 0 ?
             t("extensions.sources.noCandidates") : t("extensions.sources.noSkillMd")) : t("extensions.sources.noFilterMatches")}</p>
           {state.candidates.length > 0 && <Button variant="secondary" onClick={() => {
             state.setQuery(""); state.setFilter("all"); state.setRepository("all");
           }}>{t("extensions.sources.clearFilters")}</Button>}
         </div>
-      ) : <ul className="asb-skill-source-grid">
+      ) : <ul className="asb-ext-market-list">
         {state.visible.map((row) => <SkillSourceCandidate key={row.key} row={row} installed={row.installed}
           imports={state.imports} source={state.source} busy={busy || state.loading} />)}
       </ul>}
@@ -117,24 +119,23 @@ export function SkillSourceBrowser(props: Props) {
     }
   }, [state.managerOpen]);
   return (
-    <div className="asb-ext-market">
-      {!state.managerOpen && <SkillSourceForm state={state} busy={props.busy} />}
-      <ScrollArea className="asb-ext-market-results" role="region" aria-label={t("extensions.registry.marketSkill")}
-        viewportRef={results} tabIndex={0} hidden={state.managerOpen}>
-        <div className="asb-skill-source-browser">
-          <SourceErrors state={state} busy={props.busy} />
-          {state.source === "catalog" && (state.catalog.loading || state.catalog.progress) &&
-            <SkillRepositoryScanPanel progress={state.catalog.progress} running={state.catalog.loading}
-              unavailable={state.catalog.progressUnavailable} hasPrevious={(id) => state.catalog.count(id) !== null} />}
-          {state.source === "directory" ? <SkillDirectoryResults state={state} busy={props.busy} items={props.items} /> :
-            <SourceResults state={state} busy={props.busy} />}
-        </div>
-      </ScrollArea>
+    <>
+      <ExtensionMarket label={t("extensions.registry.marketSkill")} active={props.active && !state.managerOpen}
+        viewportRef={results} hidden={state.managerOpen} controls={!state.managerOpen && <SkillSourceForm state={state} busy={props.busy} />}>
+        <SourceErrors state={state} busy={props.busy} />
+        {state.source === "catalog" && <SkillRepositoryRetryNotice retryAt={state.catalog.retryAt} />}
+        {state.source === "catalog" && (state.catalog.loading || state.catalog.progress) &&
+          <SkillRepositoryScanPanel progress={state.catalog.progress} running={state.catalog.loading}
+            unavailable={state.catalog.progressUnavailable} hasPrevious={(id) => state.catalog.count(id) !== null}
+            recoveryAction={<SkillRepositoryRecoveryButton state={state} compact
+              disabled={props.busy || state.loading || state.repositories.loading || state.imports.busy} />} />}
+        {state.source === "directory" ? <SkillDirectoryResults state={state} busy={props.busy} items={props.items} /> :
+          <SourceResults state={state} busy={props.busy} />}
+      </ExtensionMarket>
       {state.managerOpen &&
-        <ScrollArea className="asb-ext-market-results" role="region" aria-label={t("extensions.repo.title")}
-          viewportRef={manager} tabIndex={0}>
+        <ExtensionMarket label={t("extensions.repo.title")} active={props.active} viewportRef={manager}>
           <SkillRepositoryManager state={state} busy={props.busy} />
-        </ScrollArea>}
-    </div>
+        </ExtensionMarket>}
+    </>
   );
 }

@@ -3,7 +3,6 @@
  * status roles and always travel with their status text. */
 .asb-client-management-page {
   --asb-tool-tone: var(--asb-action);
-  container: client-tools / inline-size;
 }
 
 .asb-client-management-page[data-client="claude"] {
@@ -11,28 +10,10 @@
 }
 
 .asb-client-management-content {
-  display: grid;
-  gap: var(--asb-space-6);
-  min-width: 0;
+  container-name: settings-layout client-tools;
 }
 
-.asb-client-management-module {
-  display: grid;
-  gap: var(--asb-space-4);
-  min-width: 0;
-}
-
-/* Module title row: the section title with its icon refresh action. */
-.asb-client-management-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-2);
-}
-
-.asb-client-management-module > .asb-field-error,
-.asb-client-management-module > .asb-warn-text,
-.asb-client-management-module > .asb-scope-note {
+.asb-client-management-module .asb-settings-group-body > :is(.asb-field-error, .asb-warn-text, .asb-scope-note) {
   margin: 0;
 }
 

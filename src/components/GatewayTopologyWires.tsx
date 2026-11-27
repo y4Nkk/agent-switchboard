@@ -21,10 +21,12 @@ interface Props {
   routes: GatewayRouteStatus[];
   focus: ClientFilterValue;
   failed: boolean;
+  flowByApp: ReadonlyMap<AppKind, number>;
+  flowByRoute: ReadonlyMap<string, number>;
 }
 
 /** Wire endpoints follow the actual SVG jacks through layout and zoom. */
-export function GatewayTopologyWires({ scene, routes, focus, failed }: Props) {
+export function GatewayTopologyWires({ scene, routes, focus, failed, flowByApp, flowByRoute }: Props) {
   const markerId = `gateway-direction-${useId().replace(/:/g, "")}`;
   const geometry = useDeviceGeometry(scene, routes);
   const { input: hubInput, output: hubOutput } = geometry.anchors.hub ?? {};
@@ -42,11 +44,14 @@ export function GatewayTopologyWires({ scene, routes, focus, failed }: Props) {
       </defs>
       {clients.map((app) => {
         const output = geometry.anchors[`client:${app}`]?.output;
-        return output && <Wire key={app} app={app} focus={focus} markerId={markerId} from={output} to={hubInput} />;
+        return output && <Wire key={app} app={app} focus={focus} markerId={markerId}
+          pulseAt={flowByApp.get(app)} from={output} to={hubInput} />;
       })}
       {routes.map((route) => {
-        const input = geometry.anchors[`${route.app}:${route.profileId}`]?.input;
-        return input && <Wire key={`${route.app}:${route.profileId}`} app={route.app} focus={focus} markerId={markerId}
+        const key = `${route.app}:${route.profileId}`;
+        const input = geometry.anchors[key]?.input;
+        return input && <Wire key={key} app={route.app} focus={focus} markerId={markerId}
+          pulseAt={flowByRoute.get(key)}
           translated={isProtocolTranslation(NATIVE_PROTOCOL[route.app], route.upstreamProtocol)}
           from={hubOutput} to={input} />;
       })}
@@ -54,12 +59,13 @@ export function GatewayTopologyWires({ scene, routes, focus, failed }: Props) {
   );
 }
 
-function Wire({ from, to, app, focus, markerId, translated = false }: {
+function Wire({ from, to, app, focus, markerId, pulseAt, translated = false }: {
   from: Point;
   to: Point;
   app: AppKind;
   focus: ClientFilterValue;
   markerId: string;
+  pulseAt: number | undefined;
   translated?: boolean;
 }) {
   const bend = (to.x - from.x) * .53;
@@ -67,6 +73,7 @@ function Wire({ from, to, app, focus, markerId, translated = false }: {
   return <g className={`asb-gateway-wire${translated ? " is-translation" : ""}${focus !== "all" && focus !== app ? " is-muted" : ""}`}>
     <path d={path} className="asb-gateway-wire-halo" />
     <path d={path} className="asb-gateway-wire-stroke" markerEnd={`url(#${markerId})`} />
+    {pulseAt !== undefined && <path key={pulseAt} d={path} pathLength="100" className="asb-gateway-wire-flow" />}
   </g>;
 }
 

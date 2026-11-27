@@ -14,6 +14,10 @@
   pointer-events: none;
 }
 
+[data-radix-popper-content-wrapper]:has(> .asb-tooltip) {
+  pointer-events: none;
+}
+
 .asb-tooltip {
   z-index: 60;
   max-width: min(var(--asb-tooltip-max-width), calc(100vw - 2rem));
@@ -22,6 +26,8 @@
   background: var(--asb-ink);
   color: var(--asb-canvas);
   font: var(--asb-text-label);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   box-shadow: var(--asb-shadow-modal);
 }
 

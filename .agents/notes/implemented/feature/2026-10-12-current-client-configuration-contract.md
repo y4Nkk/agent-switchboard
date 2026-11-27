@@ -20,6 +20,8 @@ Claude 网关模型角色的来源由核心适配器唯一解析，配置投影�
 
 ## Related decisions
 
+[按项写入与来源检查](2026-11-27-client-configuration-writes-and-sources.md)持有用户文件编辑、按项写入和高级恢复范围。供应商切换只投影明确保存的共用设置。
+
 [双客户端当前配置目录与结构化权限](2026-11-04-current-client-settings-expansion.md)部分取代顶层 effortLevel 清理与仅编辑默认强度的决定；该笔记拥有有效顶层值保留、结构化审批和模型窗口/上限的当前边界。
 
 [供应商诊断与修复边界](../bug-fix/2026-10-13-provider-diagnostics-contract.md)部分重叠：沿用目录与片段声明，供应商修复保留实时公共设置与公共片段，片段写入对实时声明执行双向冲突校验。

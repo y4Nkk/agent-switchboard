@@ -4,13 +4,13 @@ use super::{
     ConfigWriteGate,
 };
 use asb_core::{
-    adapter::PreviewDiff,
-    contracts::{AppKind, CodexSubagentSettings, ConfigWriteRecord, SettingsValues, WriteOperation},
+    adapter::{ClientConfigurationChanges, PreviewDiff, RemovableClientField},
+    contracts::{AppKind, ConfigWriteRecord, SettingValue, SettingsValues, WriteOperation},
     ownership,
 };
 use asb_switch::{execute_rendered, preview_rendered, sha256_hex, FsIo, RenderedWriteRequest};
 use serde::{Deserialize, Serialize};
-use std::io::ErrorKind;
+use std::{collections::BTreeSet, io::ErrorKind, path::PathBuf};
 use tauri::{AppHandle, Manager};
 
 #[derive(Serialize)]
@@ -21,13 +21,28 @@ pub struct ClientConfigurationApplyPreview {
     pub target_existed: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientConfigurationResetPreview {
+    #[serde(flatten)]
+    pub candidate: ClientConfigurationApplyPreview,
+    pub removable_fields: Vec<RemovableClientField>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientConfigurationChangesPreview {
+    #[serde(flatten)]
+    pub candidate: ClientConfigurationApplyPreview,
+    pub settings_result_hash: String,
+}
+
 /// The non-draft client-configuration mutations. The backend owns their
 /// exact scopes so a UI action cannot accidentally persist unrelated edits.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientConfigurationResetKind {
     NativeDefaults,
-    NativeDefaultsWithUnmanaged,
     ClearExtraConfiguration,
 }
 
@@ -38,7 +53,7 @@ impl ClientConfigurationResetKind {
         saved: SettingsValues,
     ) -> Result<SettingsValues, CommandError> {
         match self {
-            Self::NativeDefaults | Self::NativeDefaultsWithUnmanaged => {
+            Self::NativeDefaults => {
                 let mut settings = ownership::default_client_settings(target);
                 if target == AppKind::Claude {
                     settings.claude_extra = saved.claude_extra;
@@ -63,72 +78,77 @@ impl ClientConfigurationResetKind {
     fn write_label(self) -> &'static str {
         match self {
             Self::NativeDefaults => "恢复客户端原生默认值",
-            Self::NativeDefaultsWithUnmanaged => "恢复客户端原生默认值并移除界面外字段",
             Self::ClearExtraConfiguration => "清空 ASB 管理的额外通用配置",
         }
     }
 
-    fn backup_reason(self) -> &'static str {
+    fn backup_reason(self, selected: &BTreeSet<String>) -> &'static str {
         match self {
+            Self::NativeDefaults if !selected.is_empty() => "client-configuration-native-defaults-unmanaged",
             Self::NativeDefaults => "client-configuration-native-defaults",
-            Self::NativeDefaultsWithUnmanaged => "client-configuration-native-defaults-unmanaged",
             Self::ClearExtraConfiguration => "client-configuration-clear-extra-configuration",
         }
     }
 
-    /// The deep reset deletes host-owned leaves, so its preview must list
-    /// them; the other scopes only ever remove owned keys.
     fn diff_scope(self) -> PreviewDiff {
         match self {
-            Self::NativeDefaults | Self::ClearExtraConfiguration => PreviewDiff::Owned,
-            Self::NativeDefaultsWithUnmanaged => PreviewDiff::Full,
+            Self::NativeDefaults => PreviewDiff::Full,
+            Self::ClearExtraConfiguration => PreviewDiff::Owned,
         }
     }
 }
 
-pub(super) fn render_client_configuration(
-    target: AppKind,
-    current: &str,
-    settings: &SettingsValues,
-    subagent_settings: Option<&CodexSubagentSettings>,
-) -> Result<String, CommandError> {
-    settings.validate_client_settings(target)
-        .map_err(|error| CommandError::new("client-configuration-rejected", error.to_string()))?;
-    let document = if current.is_empty() && target == AppKind::Claude { "{}" } else { current };
-    let rendered = asb_core::adapter::render_client_settings_into_file(target, document, settings)
-        .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))?;
-    if target == AppKind::Codex {
-        let subagent_settings = subagent_settings.ok_or_else(|| CommandError::keyed(
-            "client-configuration-rejected",
-            "errors.cfg.codexSubagentSettingsMissing",
-            "Codex 客户端配置缺少子 agent 运行设置",
-        ))?;
-        asb_core::adapter::codex::render_subagent_settings(&rendered, subagent_settings)
-            .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))
-    } else if subagent_settings.is_some() {
-        Err(CommandError::keyed("client-configuration-rejected", "errors.cfg.claudeRejectsSubagentSettings", "Claude 不接受子 agent 运行设置"))
-    } else {
-        Ok(rendered)
+pub(super) struct ClientFile {
+    pub path: PathBuf,
+    pub text: String,
+    pub exists: bool,
+}
+
+impl ClientFile {
+    pub(super) fn read(state: &crate::local_state::LocalState, target: AppKind) -> Result<Self, CommandError> {
+        let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
+        let (text, exists) = match std::fs::read_to_string(&path) {
+            Ok(text) => (text, true),
+            Err(error) if error.kind() == ErrorKind::NotFound => (
+                if target == AppKind::Claude { "{}".into() } else { String::new() }, false,
+            ),
+            Err(_) => return Err(CommandError::keyed("client-configuration-unreadable", "errors.cfg.clientConfigUnreadable", "无法读取真实客户端配置文件")),
+        };
+        Ok(Self { path, text, exists })
+    }
+
+    fn verify_source(&self, hash: &str, exists: bool) -> Result<(), CommandError> {
+        if sha256_hex(&self.text) != hash || self.exists != exists {
+            return Err(CommandError::keyed("client-configuration-preview-stale", "errors.cfg.previewStaleTargetChanged", "真实配置或候选已变化，请重新读取"));
+        }
+        Ok(())
     }
 }
 
 fn candidate(
-    state: &crate::local_state::LocalState,
-    target: AppKind,
-    settings: SettingsValues,
-    subagent_settings: Option<CodexSubagentSettings>,
-) -> Result<(String, bool, SettingsValues, String), CommandError> {
-    let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    let current = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == ErrorKind::NotFound => match target {
-            AppKind::Codex => String::new(),
-            AppKind::Claude => "{}".to_string(),
-        },
-        Err(_) => return Err(CommandError::keyed("client-configuration-unreadable", "errors.cfg.clientConfigUnreadable", "无法读取真实客户端配置文件")),
-    };
-    let rendered = render_client_configuration(target, &current, &settings, subagent_settings.as_ref())?;
-    Ok((current, path.exists(), settings, rendered))
+    state: &crate::local_state::LocalState, target: AppKind,
+    file: &ClientFile, mut settings: SettingsValues, changes: &ClientConfigurationChanges,
+    directory: Option<&str>,
+) -> Result<(SettingsValues, String), CommandError> {
+    let rendered = asb_core::adapter::render_client_changes(target, &file.text, changes)
+        .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))?;
+    super::client_configuration_sources::validate_client_changes(state, target, changes, directory)?;
+    for key in &changes.keep_file_values {
+        if !matches!(settings.settings.remove(key), Some(SettingValue::Explicit { .. })) {
+            return Err(CommandError::new("client-configuration-rejected", "该字段没有已保存的 ASB 共用值"));
+        }
+    }
+    for (key, value) in &changes.settings {
+        if matches!(value, SettingValue::Automatic) { settings.settings.remove(key); }
+        else { settings.settings.insert(key.clone(), value.clone()); }
+    }
+    if let Some(extra) = &changes.claude_extra { settings.claude_extra.clone_from(extra); }
+    Ok((settings, rendered))
+}
+
+fn settings_result_hash(settings: &SettingsValues) -> Result<String, CommandError> {
+    let text = serde_json::to_string(settings).map_err(|error| CommandError::new("client-configuration-rejected", error.to_string()))?;
+    Ok(sha256_hex(&text))
 }
 
 pub(super) fn commit_rendered_client_configuration(
@@ -193,27 +213,27 @@ fn render_reset_configuration(
     kind: ClientConfigurationResetKind,
     settings: &SettingsValues,
     codex_fragment: &str,
-) -> Result<String, CommandError> {
+    selected: &BTreeSet<String>,
+) -> Result<(String, Vec<RemovableClientField>), CommandError> {
     match kind {
         ClientConfigurationResetKind::NativeDefaults => {
-            asb_core::adapter::reset_client_settings(target, current)
-                .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))
-        }
-        ClientConfigurationResetKind::NativeDefaultsWithUnmanaged => {
-            let pruned = asb_core::adapter::remove_unmanaged_entries(target, current, codex_fragment)
+            let (pruned, available) = asb_core::adapter::select_unmanaged_entries(target, current, codex_fragment, selected)
                 .map_err(|error| {
                     CommandError::new("client-configuration-preview-failed", error.to_string())
                 })?;
             asb_core::adapter::reset_client_settings(target, &pruned)
+                .map(|rendered| (rendered, available))
                 .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))
         }
         ClientConfigurationResetKind::ClearExtraConfiguration => {
+            if !selected.is_empty() {
+                return Err(CommandError::new("client-configuration-rejected", "清空额外配置不能同时移除界面外字段"));
+            }
             settings.validate_client_settings(target)
                 .map_err(|error| CommandError::new("client-configuration-rejected", error.to_string()))?;
-            let document = if current.is_empty() { "{}" } else { current };
-            asb_core::claude_common::apply(document, &settings.claude_extra).map_err(|error| {
-                CommandError::new("client-configuration-preview-failed", error)
-            })
+            asb_core::claude_common::apply(current, &settings.claude_extra)
+                .map(|rendered| (rendered, Vec::new()))
+                .map_err(|error| CommandError::new("client-configuration-preview-failed", error))
         }
     }
 }
@@ -224,25 +244,17 @@ fn reset_candidate(
     target: AppKind,
     kind: ClientConfigurationResetKind,
     saved: SettingsValues,
-) -> Result<(String, bool, SettingsValues, String), CommandError> {
-    let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    let current = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == ErrorKind::NotFound => match target {
-            AppKind::Codex => String::new(),
-            AppKind::Claude => "{}".to_string(),
-        },
-        Err(_) => return Err(CommandError::keyed("client-configuration-unreadable", "errors.cfg.clientConfigUnreadable", "无法读取真实客户端配置文件")),
-    };
-    let existed = path.exists();
-    super::switching::validate_client_configuration_backup(state, gateway, target, &current, existed)?;
+    selected: &BTreeSet<String>,
+) -> Result<(ClientFile, SettingsValues, String, Vec<RemovableClientField>), CommandError> {
+    let file = ClientFile::read(state, target)?;
+    super::switching::validate_client_configuration_backup(state, gateway, target, &file.text, file.exists)?;
     let settings = kind.settings(target, saved)?;
-    let fragment = if target == AppKind::Codex && matches!(kind, ClientConfigurationResetKind::NativeDefaultsWithUnmanaged) {
+    let fragment = if target == AppKind::Codex && matches!(kind, ClientConfigurationResetKind::NativeDefaults) {
         crate::codex_common::view_fragment(state.root())
             .map_err(|error| CommandError::new("client-configuration-preview-failed", error))?.text
     } else { String::new() };
-    let rendered = render_reset_configuration(target, &current, kind, &settings, &fragment)?;
-    Ok((current, existed, settings, rendered))
+    let (rendered, available) = render_reset_configuration(target, &file.text, kind, &settings, &fragment, selected)?;
+    Ok((file, settings, rendered, available))
 }
 
 fn preview_reset(
@@ -250,44 +262,57 @@ fn preview_reset(
     gateway: &crate::gateway::GatewayController,
     target: AppKind,
     kind: ClientConfigurationResetKind,
-) -> Result<ClientConfigurationApplyPreview, CommandError> {
+    selected: &BTreeSet<String>,
+) -> Result<ClientConfigurationResetPreview, CommandError> {
     let stored = state.configuration().get_client_settings(target).map_err(store_error)?;
-    let (current, existed, _, rendered) = reset_candidate(state, gateway, target, kind, stored.settings.clone())?;
-    let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
+    let (source, _, rendered, removable_fields) = reset_candidate(state, gateway, target, kind, stored.settings, selected)?;
     let file = preview_rendered(
         target,
-        &path,
+        &source.path,
         &state.backup_dir(),
-        &current,
+        &source.text,
         &rendered,
         kind.diff_scope(),
     )
     .map_err(CommandError::from)?;
-    Ok(ClientConfigurationApplyPreview { file, settings_hash: stored.settings_hash, target_existed: existed })
+    Ok(ClientConfigurationResetPreview {
+        candidate: ClientConfigurationApplyPreview { file, settings_hash: stored.settings_hash, target_existed: source.exists },
+        removable_fields,
+    })
 }
 
 #[tauri::command]
 pub async fn preview_client_configuration_apply(
     app: AppHandle,
     target: AppKind,
-    settings: SettingsValues,
-    subagent_settings: Option<CodexSubagentSettings>,
-) -> Result<ClientConfigurationApplyPreview, CommandError> {
+    expected_source_hash: String,
+    expected_source_exists: bool,
+    expected_settings_hash: String,
+    changes: ClientConfigurationChanges,
+    directory: Option<String>,
+) -> Result<ClientConfigurationChangesPreview, CommandError> {
     let state = state(&app)?;
     blocking(move || {
         let stored = state.configuration().get_client_settings(target).map_err(store_error)?;
-        let (current, existed, _, rendered) = candidate(&state, target, settings, subagent_settings)?;
-        let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
+        if stored.settings_hash != expected_settings_hash {
+            return Err(CommandError::keyed("client-configuration-preview-stale", "errors.cfg.previewStaleSettingsChanged", "通用配置意图已变化，请重新读取"));
+        }
+        let source = ClientFile::read(&state, target)?;
+        source.verify_source(&expected_source_hash, expected_source_exists)?;
+        let (settings, rendered) = candidate(&state, target, &source, stored.settings, &changes, directory.as_deref())?;
         let file = preview_rendered(
             target,
-            &path,
+            &source.path,
             &state.backup_dir(),
-            &current,
+            &source.text,
             &rendered,
             PreviewDiff::Owned,
         )
         .map_err(CommandError::from)?;
-        Ok(ClientConfigurationApplyPreview { file, settings_hash: stored.settings_hash, target_existed: existed })
+        Ok(ClientConfigurationChangesPreview {
+            candidate: ClientConfigurationApplyPreview { file, settings_hash: stored.settings_hash, target_existed: source.exists },
+            settings_result_hash: settings_result_hash(&settings)?,
+        })
     }).await
 }
 
@@ -296,10 +321,18 @@ pub async fn preview_client_configuration_reset(
     app: AppHandle,
     target: AppKind,
     reset_kind: ClientConfigurationResetKind,
-) -> Result<ClientConfigurationApplyPreview, CommandError> {
+    selected: BTreeSet<String>,
+    expected_source_hash: Option<String>,
+) -> Result<ClientConfigurationResetPreview, CommandError> {
     let state = state(&app)?;
     let gateway = app.state::<crate::gateway::GatewayController>().inner().clone();
-    blocking(move || preview_reset(&state, &gateway, target, reset_kind)).await
+    blocking(move || {
+        let preview = preview_reset(&state, &gateway, target, reset_kind, &selected)?;
+        if expected_source_hash.as_ref().is_some_and(|hash| hash != &preview.candidate.file.content_hash) {
+            return Err(CommandError::keyed("client-configuration-preview-stale", "errors.cfg.previewStaleTargetChanged", "真实配置已变化，请重新打开恢复预览"));
+        }
+        Ok(preview)
+    }).await
 }
 
 #[tauri::command]
@@ -309,9 +342,10 @@ pub async fn commit_client_configuration_apply(
     expected_hash: String,
     expected_rendered_hash: String,
     expected_settings_hash: String,
+    expected_settings_result_hash: String,
     expected_target_existed: bool,
-    settings: SettingsValues,
-    subagent_settings: Option<CodexSubagentSettings>,
+    changes: ClientConfigurationChanges,
+    directory: Option<String>,
     confirm_write: bool,
 ) -> Result<(), CommandError> {
     require_write_confirmation(confirm_write, "应用客户端配置")?;
@@ -322,13 +356,22 @@ pub async fn commit_client_configuration_apply(
     blocking(move || {
         let _guard = gate.lock().map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
         crate::commands::switching::ensure_profile_save_recovered(&app)?;
-        let (current, existed, settings, rendered) = candidate(&state, target, settings, subagent_settings)?;
+        let source = ClientFile::read(&state, target)?;
+        source.verify_source(&expected_hash, expected_target_existed)?;
+        let before = state.configuration().get_client_settings(target).map_err(store_error)?;
+        if before.settings_hash != expected_settings_hash {
+            return Err(CommandError::keyed("client-configuration-preview-stale", "errors.cfg.previewStaleSettingsChanged", "通用配置意图已变化，请重新读取"));
+        }
+        let (settings, rendered) = candidate(&state, target, &source, before.settings, &changes, directory.as_deref())?;
+        if settings_result_hash(&settings)? != expected_settings_result_hash {
+            return Err(CommandError::keyed("client-configuration-preview-stale", "errors.cfg.previewStaleSettingsChanged", "预览中的 ASB 设置已变化，请重新预览"));
+        }
         commit_rendered_client_configuration(
             &state,
             app.state::<crate::gateway::GatewayController>().inner(),
             target,
-            &current,
-            existed,
+            &source.text,
+            source.exists,
             settings,
             &rendered,
             &expected_hash,
@@ -345,6 +388,7 @@ pub async fn commit_client_configuration_reset(
     app: AppHandle,
     target: AppKind,
     reset_kind: ClientConfigurationResetKind,
+    selected: BTreeSet<String>,
     expected_hash: String,
     expected_rendered_hash: String,
     expected_settings_hash: String,
@@ -360,26 +404,27 @@ pub async fn commit_client_configuration_reset(
         let _guard = gate.lock().map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
         crate::commands::switching::ensure_profile_save_recovered(&app)?;
         let stored = state.configuration().get_client_settings(target).map_err(store_error)?;
-        let (current, existed, settings, rendered) = reset_candidate(
+        let (source, settings, rendered, _) = reset_candidate(
             &state,
             app.state::<crate::gateway::GatewayController>().inner(),
             target,
             reset_kind,
             stored.settings,
+            &selected,
         )?;
         commit_rendered_client_configuration(
             &state,
             app.state::<crate::gateway::GatewayController>().inner(),
             target,
-            &current,
-            existed,
+            &source.text,
+            source.exists,
             settings,
             &rendered,
             &expected_hash,
             &expected_rendered_hash,
             &expected_settings_hash,
             expected_target_existed,
-            reset_kind.backup_reason(),
+            reset_kind.backup_reason(&selected),
         )
     }).await
 }

@@ -306,7 +306,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn missing_automatic_intent_is_repaired_with_original_preserved() {
+    fn missing_client_preferences_are_unclaimed_and_need_no_repair() {
         let directory = tempfile::tempdir().unwrap();
         let store = ConfigStore::new(directory.path().join("state"));
         let path = store.client_settings_path(AppKind::Codex);
@@ -319,11 +319,10 @@ mod tests {
 
         let report = store.repair().unwrap();
 
-        assert_eq!(report.repaired_files, vec![format!("client-settings{}codex.json", std::path::MAIN_SEPARATOR)]);
-        let backup = PathBuf::from(report.backup_path.unwrap());
-        assert_eq!(fs::read_to_string(backup.join("client-settings/codex.json")).unwrap(), original);
-        assert_eq!(store.get_client_settings(AppKind::Codex).unwrap().settings,
-            default_client_settings(AppKind::Codex));
+        assert!(report.repaired_files.is_empty());
+        assert!(report.backup_path.is_none());
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        assert_eq!(store.get_client_settings(AppKind::Codex).unwrap().settings, old);
     }
 
     #[test]

@@ -216,13 +216,21 @@ export function discardGatewayPortChange(confirmWrite: boolean): Promise<Gateway
 }
 
 export interface RuntimeLogRead {
+  snapshotId: string;
   entries: RuntimeLogEntry[];
   total: number;
   skipped: number;
+  visible: number;
+  page: number;
+  pageSize: number;
 }
 
-export function listRuntimeLogs(level: RuntimeLogSeverity | null): Promise<RuntimeLogRead> {
-  return invoke<RuntimeLogRead>("list_runtime_logs", { level });
+export type RuntimeLogQuery =
+  | { kind: "refresh"; level: RuntimeLogSeverity | null; page: number }
+  | { kind: "page"; snapshotId: string; page: number };
+
+export function listRuntimeLogs(request: RuntimeLogQuery): Promise<RuntimeLogRead> {
+  return invoke<RuntimeLogRead>("list_runtime_logs", { request });
 }
 
 /** Opens the app-owned runtime-log directory without exposing its path to the UI. */

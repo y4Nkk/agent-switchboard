@@ -6,8 +6,6 @@ import type { MessageEntry } from "../types";
 export const messages = {
   // commands/client_configuration_apply.rs (also manual/repair/gateway)
   "errors.cfg.clearExtraClaudeOnly": ["仅 Claude 支持清空 ASB 管理的额外通用配置", "Only Claude supports clearing the ASB-managed extra general configuration"],
-  "errors.cfg.codexSubagentSettingsMissing": ["Codex 客户端配置缺少子 agent 运行设置", "The Codex client configuration is missing subagent runtime settings"],
-  "errors.cfg.claudeRejectsSubagentSettings": ["Claude 不接受子 agent 运行设置", "Claude does not accept subagent runtime settings"],
   "errors.cfg.clientConfigUnreadable": ["无法读取真实客户端配置文件", "Could not read the real client configuration file"],
   "errors.cfg.previewStaleTargetChanged": ["真实配置或候选已变化，请重新预览", "The real configuration or the candidate changed; preview again"],
   "errors.cfg.previewStaleSettingsChanged": ["通用配置意图已变化，请重新预览", "The general configuration intent changed; preview again"],

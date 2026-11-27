@@ -9,7 +9,7 @@ export const ModelUsageIssues = memo(function ModelUsageIssues({ issues }: { iss
   const [open, setOpen] = useState(false);
   if (issues.length === 0) return null;
   return <CollapsibleSection open={open} onOpenChange={setOpen} quiet
-    label={t("usage.coverage.issues", { count: issues.length })}>
+    label={t("usage.sourceIssues", { count: issues.length })}>
     <ul className="asb-usage-issues">
       {issues.map((issue) => <li key={JSON.stringify([issue.app, issue.message])}>
         {clientName(issue.app)} · {issue.message}

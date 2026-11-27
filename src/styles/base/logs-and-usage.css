@@ -90,18 +90,6 @@
   color: var(--asb-warning);
 }
 
-/* Model usage grows with its summary and charts in the page scroll surface;
-   the shared Table handles only horizontal overflow of exact token columns. */
-.asb-panel.asb-model-usage {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  gap: var(--asb-space-3);
-}
-
-.asb-model-usage > .asb-module-header { margin-bottom: 0; }
-
 .asb-model-usage-controls {
   display: flex;
   align-items: center;
@@ -110,111 +98,43 @@
   gap: var(--asb-space-2);
 }
 
-.asb-model-usage-controls .asb-segments {
-  margin: 0;
-}
-
-.asb-run-count {
+.asb-probe-setup-row,
+.asb-probe-state-row {
   display: flex;
-  align-items: center;
+  align-items: end;
+  flex-wrap: wrap;
   gap: var(--asb-space-2);
 }
 
-.asb-run-count-label {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
+.asb-probe-state-row { align-items: center; }
+.asb-codex-probe .asb-warn-text { margin: 0; overflow-wrap: anywhere; }
 
-.asb-run-count .asb-input {
-  width: 4.5rem;
-}
-
-.asb-model-usage-notice {
-  margin: 0;
-  padding: var(--asb-space-2);
-  font: var(--asb-text-label);
-}
-
-.asb-model-usage-notice {
-  color: var(--asb-danger);
-}
-
-.asb-model-usage-undated {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-/* Frame modifier: the model-usage panel's empty state keeps its slot through
-   centering alone — same de-boxed empty state as the runtime log. See
-   .asb-runtime-log-empty — .asb-empty-state owns the inside. */
-.asb-model-usage-empty {
-  flex: 1;
-  justify-content: center;
-  min-height: 0;
-}
-
-.asb-model-usage-content,
-.asb-model-usage-summary {
-  display: flex;
-  flex-direction: column;
+.asb-probe-field,
+.asb-probe-custom-fields {
+  display: grid;
+  gap: var(--asb-space-1);
   min-width: 0;
 }
 
-.asb-model-usage-content {
+.asb-probe-field { color: var(--asb-text-muted); font: var(--asb-text-label); }
+.asb-probe-field .asb-input { width: 100%; }
+.asb-probe-question-picker { flex: 1 1 14rem; }
+.asb-probe-run-count { flex: 0 1 8rem; }
+.asb-probe-custom-fields { gap: var(--asb-space-2); }
+.asb-probe-custom-format { width: min(100%, 18rem); }
+
+.asb-probe-question-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--asb-space-4);
 }
 
-.asb-model-usage-summary {
-  gap: var(--asb-space-2);
+.asb-probe-question-layout[data-reference="true"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
 }
 
-.asb-model-usage-analysis {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  /* Never exceeds the parent group gap (.asb-model-usage-content): the
-     analysis band reads as one subgroup, not two loose panels. */
-  gap: var(--asb-space-3);
-  min-width: 0;
-}
-
-.asb-model-usage { container: model-usage / inline-size; }
-
-
-@container model-usage (min-width: 72rem) {
-  .asb-model-usage-analysis { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
-  .asb-model-usage-analysis :is(.asb-usage-donut-card, .asb-usage-chart-card) { flex: 1; }
-  .asb-model-usage-analysis .asb-usage-donut-stage { width: 14rem; height: 14rem; }
-  .asb-model-usage-analysis .asb-usage-donut-layout { gap: var(--asb-space-4); }
-}
-
-.asb-model-usage-trend,
-.asb-model-usage-distribution {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-2);
-  min-width: 0;
-}
-
-.asb-model-usage-table {
-  min-width: max-content;
-}
-
-
-
-/* The degradation radar is an opt-in probe, not a ledger: live progress,
-   the shared stat band and table, plus the custom-question form that only a
-   `custom` selection reveals. */
-.asb-panel.asb-codex-probe {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.asb-panel.asb-codex-probe > .asb-warn-text {
-  margin: var(--asb-space-2) 0 0;
-}
+.asb-probe-reference { display: grid; align-content: start; gap: var(--asb-space-2); min-width: 0; margin: 0; }
+.asb-probe-reference .asb-probe-html { width: 100%; }
 
 .asb-codex-probe-question {
   display: flex;
@@ -223,10 +143,7 @@
   margin: 0 0 var(--asb-space-3);
 }
 
-.asb-codex-probe-question label {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
+.asb-probe-question-layout .asb-codex-probe-question { min-width: 0; margin: 0; }
 
 .asb-codex-probe-content {
   display: flex;
@@ -250,6 +167,9 @@
   border-radius: var(--asb-radius-group);
   background: var(--asb-content-muted);
 }
+
+.asb-probe-progress-surface .asb-probe-task { margin: 0; padding: 0; background: transparent; }
+.asb-codex-probe-content .asb-usage-stat-card { background: var(--asb-content); }
 
 .asb-probe-task-top {
   display: flex;
@@ -303,11 +223,6 @@
   overflow-wrap: anywhere;
 }
 
-.asb-codex-probe-empty {
-  flex: 1;
-  justify-content: center;
-}
-
 .asb-probe-question-text {
   margin: 0;
   white-space: pre-wrap;
@@ -321,12 +236,9 @@
 .asb-probe-answer {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--asb-space-2);
-  width: clamp(18rem, 38vw, 32rem);
-}
-
-.asb-probe-answer--html {
-  width: clamp(22rem, 46vw, 40rem);
+  width: clamp(16rem, 25vw, 22rem);
 }
 
 .asb-probe-svg,

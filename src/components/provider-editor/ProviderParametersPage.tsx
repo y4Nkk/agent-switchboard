@@ -46,9 +46,8 @@ export function ProviderParametersPage({ value, onChange, parameters, busy, base
     onChange({ settings: { ...value.settings, [key]: next } });
   return (
     <div className="asb-provider-parameters" aria-label={t("providers.parameters.aria")}>
-      <p className="asb-field-help">{t("providers.parameters.help")}</p>
       <SettingsFields specs={catalog.specs} groups={catalog.groups} values={value.settings}
-        baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />
+        baselineValues={baseline} busy={busy} onChange={change} />
       {catalog.app === "claude" && catalog.claudeModelPreferences && onFragmentChange && <ClaudeModelPreferencesEditor fragment={claudeFragment ?? {}}
         catalog={catalog.claudeModelPreferences} busy={busy} onChange={onFragmentChange} />}
       <div className="asb-settings-actions">

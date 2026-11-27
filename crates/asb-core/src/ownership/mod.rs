@@ -13,6 +13,7 @@ mod provider;
 mod resources;
 mod spec;
 mod toggles;
+pub use toggles::minimum_client_version;
 
 pub use choices::{CLAUDE_CHOICES, CODEX_CHOICES, CODEX_SUBAGENT_REASONING_EFFORT_KEY};
 pub use lookup::{

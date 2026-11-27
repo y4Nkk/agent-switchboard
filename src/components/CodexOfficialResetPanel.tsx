@@ -1,13 +1,16 @@
+import { useId } from "react";
 import {
   type CodexOfficialQuotaReset,
 } from "../api/client";
 import type { MessageKey } from "../i18n";
 import { useI18n } from "../i18n";
 import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
+import { Button } from "./Button";
+import { FactList } from "./FactList";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
 import { ModuleHeader } from "./WorkspaceHeader";
-import { useCodexOfficialReset } from "./quota-reads";
+import type { useCodexOfficialReset } from "./quota-reads";
 import { UsageIcon } from "./icons";
 
 const RESET_KIND_LABELS: Record<CodexOfficialQuotaReset["kind"], MessageKey> = {
@@ -15,16 +18,17 @@ const RESET_KIND_LABELS: Record<CodexOfficialQuotaReset["kind"], MessageKey> = {
   scheduled: "codex.officialReset.kindRoutine",
 };
 
-/** An explicit, read-only view of the machine's own Codex official quota
- * reset state. It never reads the public reset-signal feed below it; the
- * refresh action and freshness state live in the usage page header. */
 export function CodexOfficialResetPanel({ read }: { read: ReturnType<typeof useCodexOfficialReset> }) {
   const { t } = useI18n();
+  const heading = useId();
   const { quota, freshness, cacheLoading, cacheError, readError, statusNotice, history } = read;
 
   return (
-    <section className="asb-panel asb-official-reset" aria-labelledby="codex-official-reset-heading">
-      <ModuleHeader id="codex-official-reset-heading" title={t("codex.officialReset.title")} />
+    <section className="asb-usage-surface asb-official-reset" aria-labelledby={heading}>
+      <ModuleHeader id={heading} title={t("codex.officialReset.title")} primary={quota?.at &&
+        <span className="asb-header-status">{t(freshness === "cached" ? "codex.reset.cachedAt" : "codex.officialReset.readAt")} <Time iso={quota.at} /></span>}
+        primaryActions={<Button variant="secondary" size="compact" disabled={read.loading} aria-busy={read.loading}
+          onClick={() => void read.readStatus()}>{t(read.loading ? "usage.quota.reading" : "usage.quota.refreshOfficial")}</Button>} />
       {cacheLoading && quota === null && (
         <div className="asb-quota-loading" role="status" aria-label={t("codex.reset.loadingCache")}>
           <span className="asb-skeleton" aria-hidden="true" /><span className="asb-skeleton" aria-hidden="true" />
@@ -48,38 +52,19 @@ export function CodexOfficialResetPanel({ read }: { read: ReturnType<typeof useC
       )}
       {quota !== null && (
         <>
+          <QuotaWindowsTable windows={quota.windows} ariaLabel={t("codex.officialReset.windowsAria")} />
+          {quota.lastReset ? <FactList inline rows={[
+            { label: t("codex.officialReset.detectedReset"), value: <>
+              {t(RESET_KIND_LABELS[quota.lastReset.kind])} · <Time iso={quota.lastReset.observedAt} />
+            </> },
+            ...(quota.lastReset.resetsAt ? [{ label: t("codex.officialReset.updatedResetTime"), value: <Time iso={quota.lastReset.resetsAt} /> }] : []),
+          ]} /> : <p className="asb-official-reset-meta">{t("codex.officialReset.noResetDetected")}</p>}
           <OfficialQuotaTrend
             series={history.series}
             loading={history.loading}
             error={history.error}
             ariaLabel={t("codex.officialReset.trendAria")}
           />
-          <QuotaWindowsTable windows={quota.windows} ariaLabel={t("codex.officialReset.windowsAria")} />
-          <p className="asb-official-reset-meta">
-            {quota.lastReset ? (
-              <>
-                {t("codex.officialReset.lastDetected")}{t(RESET_KIND_LABELS[quota.lastReset.kind])} · {t("codex.officialReset.signalTime")}{" "}
-                <Time iso={quota.lastReset.observedAt} />
-                {quota.lastReset.resetsAt && (
-                  <>
-                    {" · "}
-                    {t("codex.officialReset.newResetTime")}{" "}
-                    <Time iso={quota.lastReset.resetsAt} />
-                  </>
-                )}
-              </>
-            ) : (
-              t("codex.officialReset.noResetDetected")
-            )}
-          </p>
-          {quota.at && (
-            <p className="asb-official-reset-meta">
-              {freshness === "cached" ? t("codex.reset.cachedAt") : t("codex.officialReset.readAt")} <Time iso={quota.at} />
-            </p>
-          )}
-          <p className="asb-official-reset-note">
-            {t("codex.officialReset.note")}
-          </p>
         </>
       )}
     </section>

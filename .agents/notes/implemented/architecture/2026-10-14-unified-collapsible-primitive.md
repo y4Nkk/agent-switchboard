@@ -21,7 +21,7 @@ Status: implemented
 
 会话批量标签由[会话批量操作弹窗](../feature/2026-11-24-session-batch-dialog.md)接管，使用 AppDialog。
 
-资源占用表格的三款软件入口直接消费 `CollapsibleTrigger`，删除 `asb-resource-name` 及页面自行声明的按钮外观、尺寸选择和 aria 接线；主表、进程明细、分页继续复用已有 Table / Pagination / Collapsible。资源选择和两秒读取仍由资源阅读 hook 拥有，不改采样事实或展开状态保存范围。该模块原生边界继续由[资源监控笔记](2026-10-23-native-process-resource-monitor.md)拥有。
+资源占用的三款软件卡使用 `CollapsibleTrigger` 展开卡片组下方的进程明细。明细继续复用 `Table`、`Pagination` 和 `Collapsible`。资源选择与两秒读取由资源阅读 hook 拥有，原生边界由[资源监控笔记](2026-10-23-native-process-resource-monitor.md)拥有。[用量监控的独立工作面板](../feature/2026-11-27-usage-workspace-panels.md)拥有软件卡布局。
 
 扩展扫描警告摘要也直接消费 CollapsibleTrigger，使用可见汇总作为按钮名称，并由 aria-expanded 表达开闭；删除私有 banner-toggle、恒定 aria-controls、重复描述 ID 及其退役文案。控件与菜单的其他接入边界由[扩展共享控件](2026-10-24-extension-shared-controls.md)拥有。
 

@@ -1,3 +1,4 @@
+import { Clock3, FileText, Link2, LockKeyhole, Server, TriangleAlert } from "lucide-react";
 import { openConfigFileLocation, type AppKind, type ConfigFileStatus, type LockStatus, type ProviderProfile } from "../api/client";
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
@@ -5,7 +6,7 @@ import { useI18n, type TFunction } from "../i18n";
 import { localizedMessageText } from "../i18n/errors";
 import { Button } from "./Button";
 import { ClientLogo } from "./ClientLogo";
-import { FactList, type FactListRow } from "./FactList";
+import { FactList, FactStatus, type FactListRow } from "./FactList";
 import { FactPath } from "./FactPath";
 import { Time } from "./Time";
 import { ModuleHeader } from "./WorkspaceHeader";
@@ -51,26 +52,26 @@ function ConfigStatusDetails({ status, profiles, lock }: {
   const { t } = useI18n();
   const readable = !status.readError && status.exists && status.syntaxOk;
   const rows: FactListRow[] = [
-    { label: t("clientConfig.details.configFile"),
+    { label: t("clientConfig.details.configFile"), icon: FileText,
       value: <FactPath path={status.path} open={() => openConfigFileLocation(status.app)} /> },
   ];
-  if (status.recoveryIssue) rows.push({ label: t("clientConfig.details.recoveryBlocked"),
+  if (status.recoveryIssue) rows.push({ label: t("clientConfig.details.recoveryBlocked"), icon: TriangleAlert, tone: "warning",
     value: <><span role="status" className="asb-status-warn">{status.recoveryIssue}</span>
       <span className="asb-status-warn">{t("clientConfig.details.recoveryHelp")}</span></> });
-  if (status.readError) rows.push({ label: t("clientConfig.details.readError"),
+  if (status.readError) rows.push({ label: t("clientConfig.details.readError"), icon: TriangleAlert, tone: "warning",
     value: <span className="asb-warn-text">{status.readError}</span> });
   if (readable) rows.push(
-    { label: t("clientConfig.details.currentProvider"),
+    { label: t("clientConfig.details.currentProvider"), icon: Server,
       value: <>{currentProviderName(status, profiles)} · {status.route?.model ?? t("clientConfig.details.defaultModel")}</> },
   );
   if (readable && status.activeProfileId === null) rows.push({
-    label: t("clientConfig.details.profile"), value: t("providers.route.notes.unlinked"),
+    label: t("clientConfig.details.profile"), icon: Link2, value: t("providers.route.notes.unlinked"),
   });
   if (readable && status.clientSettingsError) rows.push({
-    label: t("clientConfig.details.settingsError"),
+    label: t("clientConfig.details.settingsError"), icon: TriangleAlert, tone: "warning",
     value: <span className="asb-warn-text">{status.clientSettingsError}</span>,
   });
-  if (status.lastSwitch) rows.push({ label: t("clientConfig.details.lastWrite"),
+  if (status.lastSwitch) rows.push({ label: t("clientConfig.details.lastWrite"), icon: Clock3,
     value: <>
       <Time iso={status.lastSwitch.at} />
       {status.lastSwitch.operation === "restore"
@@ -81,9 +82,13 @@ function ConfigStatusDetails({ status, profiles, lock }: {
             ? t("clientConfig.details.lastProjected", { name: status.lastSwitch.profileName })
             : t("clientConfig.details.lastWritten")}
     </> });
-  if ((status.route?.scopeWarnings.length ?? 0) > 0) rows.push({ label: t("clientConfig.details.scopeWarnings"),
+  if ((status.route?.scopeWarnings.length ?? 0) > 0) rows.push({
+    label: t("clientConfig.details.scopeWarnings"), icon: TriangleAlert, tone: "warning",
     value: <>{status.route?.scopeWarnings.map((warning) => <span key={warning.key} className="asb-warn-text asb-status-warn">{localizedMessageText(warning, t)}</span>)}</> });
-  rows.push({ label: t("clientConfig.details.writeLock"), value: lockLabel(t, lock) });
+  const lockTone = lock?.state === "free" ? "success"
+    : lock?.state === "stale" || lock?.state === "indeterminate" ? "warning" : "neutral";
+  rows.push({ label: t("clientConfig.details.writeLock"), icon: LockKeyhole,
+    value: <FactStatus tone={lockTone}>{lockLabel(t, lock)}</FactStatus> });
   return <FactList rows={rows} />;
 }
 

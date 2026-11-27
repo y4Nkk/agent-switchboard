@@ -1,15 +1,24 @@
 import { useId } from "react";
-import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 import type { GatewayMetricsStatus, GatewaySample, UpstreamProtocol } from "../api/client";
 import { useI18n } from "../i18n";
 import { protocolLabel } from "../lib/protocol";
 import { formatCompactUsageValue, formatUsageValue } from "../lib/usage-format";
 import { ChartFrame } from "./charts/ChartFrame";
-import { FactList } from "./FactList";
+import { FactList, type FactListRow } from "./FactList";
+import { CompositionRing } from "./charts/CompositionRing";
+import { Tooltip } from "./Tooltip";
 
 const MINUTE_MS = 60_000;
 const WINDOW_MINUTES = 60;
 const AXIS_TICK = { fontSize: 11, fill: "var(--asb-text-muted)" };
+const LATENCY_RANGES = [
+  { upperMs: 250, label: "<250 ms", color: "color-mix(in srgb, var(--asb-action) 57%, var(--asb-content))" },
+  { upperMs: 500, label: "250–<500 ms", color: "var(--asb-action)" },
+  { upperMs: 1000, label: "0.5–<1 s", color: "color-mix(in srgb, var(--asb-action) 44%, var(--asb-claude))" },
+  { upperMs: 2000, label: "1–<2 s", color: "var(--asb-claude)" },
+  { upperMs: Infinity, label: "≥2 s", color: "color-mix(in srgb, var(--asb-claude) 55%, var(--asb-text))" },
+];
 const PROTOCOL_TONES: Record<UpstreamProtocol, string> = {
   responses: "var(--asb-action)",
   chatCompletions: "var(--asb-claude)",
@@ -21,22 +30,12 @@ export function GatewayCharts({ metrics }: { metrics: GatewayMetricsStatus }) {
   const { t } = useI18n();
   const titleId = useId();
   return <section className="asb-gateway-charts" aria-labelledby={titleId}>
-    <header className="asb-gateway-charts-heading">
-      <h3 className="asb-section-title" id={titleId}>{t("gateway.metricsTitle")}</h3>
-      <div className="asb-gateway-totals">
-        <span>{t("gateway.metricsTotalsScope")}</span>
-        <FactList inline rows={[
-          { label: t("gateway.totalRequests"), value: <strong>{formatUsageValue(metrics.totalRequests)}</strong> },
-          { label: t("gateway.failedRequests"), value: <strong className={metrics.failedRequests > 0 ? "asb-gateway-failed-total" : undefined}>
-            {formatUsageValue(metrics.failedRequests)}
-          </strong> },
-        ]} />
-      </div>
-    </header>
+    <h4 className="asb-group-title" id={titleId}>{t("gateway.metricsTitle")}</h4>
     <div className="asb-gateway-chart-grid">
       <RequestTrend metrics={metrics} />
       <RequestLatency samples={metrics.samples} />
       <ProtocolDistribution samples={metrics.samples} />
+      <RequestOutcomes total={metrics.totalRequests} failed={metrics.failedRequests} />
     </div>
   </section>;
 }
@@ -82,7 +81,7 @@ function RequestTrend({ metrics }: { metrics: GatewayMetricsStatus }) {
     {count === 0 ? <p className="asb-gateway-chart-empty">{t("gateway.trendEmpty")}</p> : (
       <div className="asb-gateway-trend-plot">
         <ChartFrame>
-          <AreaChart data={points} title={name} accessibilityLayer margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
+          <AreaChart data={points} aria-label={name} accessibilityLayer margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
                 <stop stopColor="var(--asb-action)" stopOpacity={0.34} />
@@ -94,7 +93,7 @@ function RequestTrend({ metrics }: { metrics: GatewayMetricsStatus }) {
               axisLine={false} tickMargin={6} tickFormatter={formatCompactUsageValue} />
             <XAxis dataKey="atMs" type="number" domain={[first, last]} ticks={[first, points[30].atMs, last]} tick={AXIS_TICK}
               axisLine={false} tickLine={false} tickMargin={8} tickFormatter={(atMs: number) => time.format(atMs)} />
-            <Tooltip isAnimationActive={false} cursor={{ stroke: "var(--asb-hairline-strong)" }}
+            <ChartTooltip isAnimationActive={false} cursor={{ stroke: "var(--asb-hairline-strong)" }}
               content={({ active, payload }) => {
                 const point = payload[0]?.payload as MinutePoint | undefined;
                 return active && point?.count != null ? <p className="asb-chart-tooltip">
@@ -117,38 +116,27 @@ function RequestLatency({ samples }: { samples: GatewaySample[] }) {
   const durations = samples.filter(({ status }) => status !== null)
     .map(({ durationMs }) => durationMs).sort((a, b) => a - b);
   const percentile = (fraction: number) => durations[Math.ceil(durations.length * fraction) - 1];
-  const p50 = percentile(0.5);
-  const p95 = percentile(0.95);
-  const step = Math.max(1, 10 ** Math.floor(Math.log10(Math.max(1, p95 ?? 0))) / 2);
-  const ceiling = Math.max(2 * step, Math.ceil((p95 ?? 0) / (2 * step)) * 2 * step);
   const values = [
-    { key: "P50", description: t("gateway.latencyMedian"), value: p50 },
-    { key: "P95", description: t("gateway.latencyP95"), value: p95 },
+    { key: "P50", description: t("gateway.latencyMedian"), value: percentile(0.5) },
+    { key: "P95", description: t("gateway.latencyP95"), value: percentile(0.95) },
   ];
+  const ranges = LATENCY_RANGES.map((range) => ({ ...range, count: 0 }));
+  for (const duration of durations) {
+    const index = ranges.findIndex(({ upperMs }) => duration < upperMs);
+    ranges[index].count += 1;
+  }
   return <figure className="asb-gateway-chart is-latency">
     <figcaption className="asb-gateway-chart-title">
       <strong>{t("gateway.latencyTitle")}</strong>
-      {durations.length > 0 && <span>{t("gateway.chartSampleCount", { count: formatUsageValue(durations.length) })}</span>}
     </figcaption>
     {durations.length === 0 ? <p className="asb-gateway-chart-empty">{t("gateway.latencyNoCompleted")}</p> : (
       <div className="asb-gateway-latency-chart">
-        <dl className="asb-gateway-latency-values">
-          {values.map(({ key, description, value }) => (
-            <div key={key}>
-              <dt><abbr title={description}>{key}</abbr></dt>
-              <dd>{formatUsageValue(value, "ms")}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="asb-gateway-latency-plot" aria-hidden="true">
-          <div className="asb-gateway-latency-grid">
-            {values.map(({ key, value }) => <span key={key} className="asb-gateway-latency-point"
-              style={{ insetInlineStart: `${(value / ceiling) * 100}%` }} />)}
-          </div>
-          <div className="asb-gateway-latency-ticks">
-            <span>0</span><span>{formatCompactUsageValue(ceiling / 2)}</span><span>{formatCompactUsageValue(ceiling)} ms</span>
-          </div>
-        </div>
+        <RequestDonut total={durations.length} totalLabel={t("gateway.chartSamples")} parts={ranges} />
+        <FactList inline rows={values.map<FactListRow>(({ key, description, value }) => ({
+          label: <Tooltip asChild label={description}><abbr aria-label={description}>{key}</abbr></Tooltip>,
+          value: formatUsageValue(value, "ms"),
+          format: "number",
+        }))} />
       </div>
     )}
   </figure>;
@@ -162,37 +150,45 @@ function ProtocolDistribution({ samples }: { samples: GatewaySample[] }) {
   }
   const entries = [...counts].sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((sum, [, count]) => sum + count, 0);
-  let offset = 0;
-  const slices = entries.map(([protocol, count]) => {
-    const proportion = count / total * 100;
-    const slice = { protocol, count, proportion, offset };
-    offset += proportion;
-    return slice;
-  });
   return <figure className="asb-gateway-chart is-protocol">
     <figcaption className="asb-gateway-chart-title"><strong>{t("gateway.protocolTitle")}</strong></figcaption>
-    {total === 0 ? <p className="asb-gateway-chart-empty">{t("gateway.protocolEmpty")}</p> : <>
-      <div className="asb-gateway-donut">
-        <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-          <circle className="asb-gateway-donut-track" cx="50" cy="50" r="40" />
-          {slices.map(({ protocol, proportion, offset }) => (
-            <circle key={protocol} cx="50" cy="50" r="40" pathLength="100" transform="rotate(-90 50 50)"
-              stroke={PROTOCOL_TONES[protocol]} strokeDasharray={`${proportion} ${100 - proportion}`} strokeDashoffset={-offset} />
-          ))}
-        </svg>
-        <div className="asb-gateway-donut-center">
-          <strong>{formatUsageValue(total)}</strong><span>{t("gateway.chartSamples")}</span>
-        </div>
-      </div>
-      <ul className="asb-gateway-protocol-key">
-        {slices.map(({ protocol, count, proportion }) => <li key={protocol}>
-          <i style={{ backgroundColor: PROTOCOL_TONES[protocol] }} aria-hidden="true" />
-          <span>{protocolLabel(t, protocol)}</span>
-          <span className="asb-gateway-protocol-share">
-            {formatUsageValue(count)} <span aria-hidden="true">·</span> {formatUsageValue(proportion, "%")}
-          </span>
-        </li>)}
-      </ul>
-    </>}
+    {total === 0 ? <p className="asb-gateway-chart-empty">{t("gateway.protocolEmpty")}</p>
+      : <RequestDonut total={total} totalLabel={t("gateway.chartSamples")}
+        parts={entries.map(([protocol, count]) => ({ label: protocolLabel(t, protocol), count, color: PROTOCOL_TONES[protocol] }))} />}
   </figure>;
+}
+
+function RequestOutcomes({ total, failed }: { total: number; failed: number }) {
+  const { t } = useI18n();
+  return <figure className="asb-gateway-chart is-outcomes">
+    <figcaption className="asb-gateway-chart-title"><strong>{t("gateway.requestOutcomes")}</strong></figcaption>
+    <RequestDonut total={total} totalLabel={t("gateway.totalRequests")} parts={[
+      { label: t("gateway.succeededRequests"), count: total - failed, color: "var(--asb-safe)" },
+      { label: t("gateway.failedRequests"), count: failed, color: "var(--asb-danger)" },
+    ]} />
+  </figure>;
+}
+
+function RequestDonut({ total, totalLabel, parts }: {
+  total: number;
+  totalLabel: string;
+  parts: { label: string; count: number; color: string }[];
+}) {
+  return <div className="asb-gateway-breakdown">
+    <div className="asb-gateway-donut">
+      <CompositionRing parts={parts.map(({ label, color, count }) => ({ id: label, color, value: count }))} />
+      <div className="asb-gateway-donut-center">
+        <strong>{formatUsageValue(total)}</strong><span>{totalLabel}</span>
+      </div>
+    </div>
+    <ul className="asb-gateway-breakdown-key">
+      {parts.map(({ label, count, color }) => <li key={label}>
+        <i style={{ backgroundColor: color }} aria-hidden="true" />
+        <span>{label}</span>
+        <span className="asb-gateway-breakdown-share">
+          {formatUsageValue(count)} <span aria-hidden="true">·</span> {formatUsageValue(total > 0 ? count / total * 100 : 0, "%")}
+        </span>
+      </li>)}
+    </ul>
+  </div>;
 }

@@ -12,6 +12,7 @@ import { Tabs } from "../components/Tabs";
 import { UpdateSection } from "../components/UpdateSection";
 import { ChangelogHistory } from "../components/ChangelogHistory";
 import { PageErrorBoundary } from "../components/PageErrorBoundary";
+import { SettingsLayout, SettingsRow } from "../components/SettingsLayout";
 
 interface SettingsPageProps {
   active: boolean;
@@ -41,37 +42,30 @@ function ApplicationSettings(props: SettingsPageProps) {
   const { settings, busy, onPatch } = props;
   const { t } = useI18n();
   return (
-    <div className="asb-app-settings">
+    <SettingsLayout>
       {settings ? (
         <AppSettingsForm settings={settings} busy={busy} onPatch={onPatch}
           desktopError={props.desktopError} onRestart={props.onRestart} />
       ) : props.loadError ? (
-        <>
-          <div className="asb-app-setting-row" role="alert">
-            <div className="asb-app-setting-copy">
-              <span className="asb-checkbox-label">{t("settings.loadFailed", { detail: props.loadError })}</span>
-              <span className="asb-app-setting-detail">{t("settings.loadFailedDetail")}</span>
-            </div>
-            <div className="asb-app-settings-error-actions">
-              <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>{t("settings.retry")}</Button>
-            </div>
-          </div>
-
-        </>
+        <div role="alert">
+          <SettingsRow label={t("settings.loadFailed", { detail: props.loadError })} description={t("settings.loadFailedDetail")}>
+            <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>{t("settings.retry")}</Button>
+          </SettingsRow>
+        </div>
       ) : <div className="asb-settings-skeleton" role="status" aria-label={t("settings.page.loading")}>
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
       </div>}
       {props.egress}
-    </div>
+    </SettingsLayout>
   );
 }
 
 function AboutSettings(props: SettingsPageProps) {
   const { t } = useI18n();
   return (
-    <div className="asb-app-settings">
+    <SettingsLayout>
       <div className="asb-about-product">
         <AppLogo className="asb-about-logo" />
         <div className="asb-about-copy">
@@ -81,7 +75,7 @@ function AboutSettings(props: SettingsPageProps) {
       </div>
       <UpdateSection update={props.update} busy={props.busy} />
       <ChangelogHistory appVersion={props.update.state.appVersion} />
-    </div>
+    </SettingsLayout>
   );
 }
 

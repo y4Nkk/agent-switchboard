@@ -21,6 +21,8 @@
 @import "./base/provider-request.css";
 @import "./base/diff-inspector.css";
 @import "./base/configuration-status.css";
+@import "./base/settings-layout.css";
+@import "./base/client-configuration.css";
 @import "./base/app-settings.css";
 @import "./base/preference-previews.css";
 @import "./base/settings-preview.css";
@@ -37,6 +39,7 @@
 @import "./base/forms.css";
 @import "./base/tooltip-feedback.css";
 @import "./base/usage-workspace.css";
+@import "./base/consumption.css";
 @import "./base/resource-usage.css";
 @import "./base/tables-backups.css";
 @import "./base/logs-and-usage.css";

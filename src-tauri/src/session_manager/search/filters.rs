@@ -16,7 +16,6 @@ pub struct SessionProjectFilter {
 pub struct SessionSearchRequest {
     pub query: String,
     pub app: Option<AppKind>,
-    pub offset: usize,
     pub project: Option<SessionProjectFilter>,
     pub tag: Option<String>,
     pub pinned_only: bool,

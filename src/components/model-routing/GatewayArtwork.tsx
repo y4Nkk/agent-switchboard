@@ -109,7 +109,7 @@ function GatewayFace({ id }: { id: string }) {
 }
 
 export function GatewayArtwork({ active }: { active: boolean }) {
-  return <svg className="asb-route-overview-art" data-active={active || undefined}
+  return <svg className="asb-gateway-art" data-active={active || undefined}
     viewBox="36 15 648 270" width="648" height="270" aria-hidden="true" focusable="false">
     <GatewayChassis />
   </svg>;

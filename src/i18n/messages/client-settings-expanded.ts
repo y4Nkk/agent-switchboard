@@ -1,6 +1,12 @@
 import type { MessageEntry } from "../types";
 
 export const messages = {
+  "ownership.label.blockReadsOutsideWorkingDirectories": ["限制工作目录外的文件读取", "Block file reads outside working directories"],
+  "ownership.label.blockWritesOutsideWorkingDirectories": ["限制工作目录外的文件写入", "Block file writes outside working directories"],
+  "clientConfig.permissions.defaultProfile": ["默认权限档案", "Default permission profile"],
+  "clientConfig.permissions.noProfiles": ["当前组织策略与安装没有提供可选择的用户级档案。", "No user-level profiles are available under the current managed requirements and installation."],
+  "clientConfig.permissions.fragmentOwnsProfile": ["已保存的 Codex 通用片段管理此字段。", "The saved Codex common fragment manages this setting."],
+  "clientConfig.permissions.legacySet": ["用户文件含旧沙箱设置 {keys}。选择原生档案前请移除这些设置。", "The user file has legacy sandbox settings {keys}. Remove them before selecting a native profile."],
   "ownership.group.sandbox": ["沙箱", "Sandbox"],
   "ownership.label.tuiAutoRecap": ["自动生成对话回顾", "Generate conversation recaps automatically"],
   "ownership.label.tuiTheme": ["终端语法高亮主题", "Terminal syntax highlighting theme"],
@@ -103,9 +109,6 @@ export const messages = {
   "clientConfig.settings.effortCapHelp": ["限制可选的思考强度；“不设上限”不等于把默认强度设为 max。", "Caps selectable effort. No ceiling does not set the default effort to max."],
   "clientConfig.settings.cacheTtlHelp": ["缓存时长需要供应商支持，并可能影响缓存计费。", "Cache duration requires provider support and may affect cache pricing."],
   "clientConfig.permissions.title": ["原生权限档案", "Native permission profiles"],
-  "clientConfig.permissions.selected": ["当前文件选择了权限档案：{name}。", "This file selects permission profile: {name}."],
-  "clientConfig.permissions.defined": ["当前文件包含权限档案定义。", "This file contains permission profile definitions."],
-  "clientConfig.permissions.help": ["这些档案保持原文管理。使用档案时，将旧沙箱选项恢复默认；预览会拒绝同时写入两套配置。", "These profiles remain managed in the source file. Restore legacy sandbox options to default when using profiles; preview rejects a candidate containing both systems."],
   "clientConfig.permissions.conflict": ["文件同时含有 {keys}。应用前需要消除与权限档案的冲突。", "The file also contains {keys}. Resolve the conflict with permission profiles before applying."],
   "clientConfig.models.title": ["按模型配置", "Per-model preferences"],
   "clientConfig.models.help": ["填写精确模型 ID。压缩窗口支持 {min}–{max} token 或客户端自动值；继承与自动是不同设置。模型 ID 会随供应商路由映射。", "Use exact model IDs. Compaction windows accept {min}–{max} tokens or the client's auto value; inherit and auto are distinct. Model IDs follow provider routing."],

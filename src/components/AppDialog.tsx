@@ -6,6 +6,7 @@ import { Button } from "./Button";
 import { CloseIcon } from "./icons";
 import { OverlayMotionContext } from "./overlay-motion";
 import { ScrollArea } from "./ScrollArea";
+import { TooltipPortalContext } from "./Tooltip";
 
 interface Props {
   title: string;
@@ -88,16 +89,18 @@ export function AppDialog({ title, busy, onClose, children, footer, wide = false
       <Modal className={`asb-dialog${width}${tall ? " is-tall" : ""}`}>
         <Dialog ref={surface} aria-label={title} aria-busy={busy} className="asb-dialog-surface">
           <AppDialogFieldContext.Provider value={fieldScope}>
-            <header className="asb-dialog-heading">
-              <Heading slot="title" className="asb-dialog-title">
-                {title}
-              </Heading>
-              <Button variant="icon" disabled={!dismissable} aria-label={t("window.closeDialog")} onClick={onClose}>
-                <CloseIcon />
-              </Button>
-            </header>
-            <ScrollArea className="asb-dialog-body" aria-label={title}>{children}</ScrollArea>
-            {footer && <footer className="asb-dialog-footer">{footer}</footer>}
+            <TooltipPortalContext.Provider value={surface}>
+              <header className="asb-dialog-heading">
+                <Heading slot="title" className="asb-dialog-title">
+                  {title}
+                </Heading>
+                <Button variant="icon" disabled={!dismissable} aria-label={t("window.closeDialog")} onClick={onClose}>
+                  <CloseIcon />
+                </Button>
+              </header>
+              <ScrollArea className="asb-dialog-body" aria-label={title}>{children}</ScrollArea>
+              {footer && <footer className="asb-dialog-footer">{footer}</footer>}
+            </TooltipPortalContext.Provider>
           </AppDialogFieldContext.Provider>
         </Dialog>
       </Modal>

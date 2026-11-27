@@ -9,6 +9,7 @@ function reading(): ModelUsageRead {
     reports: (["today", "last7Days", "last30Days", "all"] as const).map((range) => ({
       range, generatedAt: new Date().toISOString(), groups: [], days: [], issues: [],
       unassignedTokens: { inputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      longestSessionSpanSeconds: null,
       coverage: { sourceSessions: 0, scannedFiles: 0, sessionsWithoutUsage: 0, undatedEventTokens: 0 },
     })) };
 }

@@ -18,7 +18,7 @@ pub(super) async fn dispatch(app: &AppHandle, request: &InvokeRequest) -> Result
         "pick_claude_session_source" => command!(commands::pick_claude_session_source(app.clone())),
         "forget_claude_session_source" => command!(commands::forget_claude_session_source(app.clone(), argument(&request.args, "path")?)),
         "start_session_search" => command!(commands::start_session_search(app.clone(), argument(&request.args, "request")?)),
-        "read_session_search" => command!(commands::read_session_search(app.clone(), argument(&request.args, "id")?)),
+        "read_session_search" => command!(commands::read_session_search(app.clone(), argument(&request.args, "request")?)),
         "cancel_session_search" => command!(commands::cancel_session_search(app.clone(), argument(&request.args, "id")?)),
         "get_session_message_page" => command!(commands::get_session_message_page(app.clone(), argument(&request.args, "request")?)),
         "get_session_first_messages" => command!(commands::get_session_first_messages(app.clone(), argument(&request.args, "app")?, argument(&request.args, "sessionId")?)),

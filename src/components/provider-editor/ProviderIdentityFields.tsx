@@ -4,6 +4,7 @@ import { clientName } from "../../lib/client-name";
 import { ClientLogo } from "../ClientLogo";
 import { Input } from "../Input";
 import { Button } from "../Button";
+import { SettingsGroup } from "../SettingsLayout";
 import { Textarea } from "../Textarea";
 import { defaultConnection } from "./draft";
 import type { ProviderEditorState } from "./useProviderEditor";
@@ -48,8 +49,7 @@ export function ProviderIdentityFields(props: IdentityProps) {
   const { editor, busy } = props;
   const { draft, setDraft } = editor;
   return (
-    <section className="asb-editor-section" aria-label={t("providers.editor.section.identity")}>
-      <h3 className="asb-section-title">{t("providers.editor.section.identity")}</h3>
+    <SettingsGroup title={t("providers.editor.section.identity")}>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-field-grid"><ClientField {...props} /></div>
         <div className="asb-provider-field-grid">
@@ -63,7 +63,7 @@ export function ProviderIdentityFields(props: IdentityProps) {
           </label>
         </div>
       </div>
-    </section>
+    </SettingsGroup>
   );
 }
 

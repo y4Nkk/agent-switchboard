@@ -1,8 +1,8 @@
 use crate::adapter::{AdapterError, OverlayEntry};
-use crate::contracts::{SettingsValues, SwitchPlan};
+use crate::contracts::SwitchPlan;
 
 use crate::adapter::claude::document::{parse, remove, set};
-use crate::adapter::claude::overlay::{client_settings_overlay, overlay};
+use crate::adapter::claude::overlay::overlay;
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
     if !plan.is_gateway()
@@ -46,44 +46,20 @@ pub(crate) fn render_gateway_base_url(
     )
 }
 
-pub(crate) fn render_client_settings_into_file(
-    current: &str,
-    client_settings: &SettingsValues,
-) -> Result<String, AdapterError> {
-    crate::claude_common::validate_shared_write(current, &client_settings.claude_extra).map_err(
-        |message| AdapterError {
-            message,
-            line: None,
-        },
-    )?;
-    let entries = client_settings_overlay(client_settings);
-    let rendered = render_entries(current, entries)?;
-    crate::claude_common::apply(&rendered, &client_settings.claude_extra).map_err(|message| {
-        AdapterError {
-            message,
-            line: None,
-        }
-    })
-}
-
-pub(crate) fn reset_client_settings(current: &str) -> Result<String, AdapterError> {
-    let defaults = crate::ownership::default_client_settings(crate::AppKind::Claude);
-    let entries = client_settings_overlay(&defaults);
-    render_entries(current, entries)
-}
-
 pub(crate) fn render_entries(
     current: &str,
     entries: Vec<(String, OverlayEntry)>,
 ) -> Result<String, AdapterError> {
     let mut root = parse(current)?;
-    let writes_preferences = entries.iter().any(|(key, _)| {
+    let original = root.clone();
+    let writes_preferences = entries.iter().any(|(key, entry)| {
+        if matches!(entry, OverlayEntry::Leave) { return false; }
         crate::ownership::setting_spec(crate::AppKind::Claude, key)
             .is_some_and(|spec| spec.control != crate::ownership::SettingControl::None)
     });
     if entries
         .iter()
-        .any(|(key, _)| key.starts_with("attribution."))
+        .any(|(key, entry)| key.starts_with("attribution.") && !matches!(entry, OverlayEntry::Leave))
     {
         crate::claude_common::normalize_attribution(&mut root);
     }
@@ -103,6 +79,7 @@ pub(crate) fn render_entries(
             line: None,
         })?;
     }
+    if root == original { return Ok(current.to_string()); }
     serde_json::to_string_pretty(&root).map_err(|_| AdapterError {
         message: "配置序列化失败".to_string(),
         line: None,

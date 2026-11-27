@@ -57,7 +57,7 @@ export function ExtensionsPage(props: ExtensionsPageProps) {
             <ExtensionLibraryPanel workspace={workspace} />
           </div>}
           {(showMarket || visitedMarkets[value]) && <div className="asb-ext-pane" hidden={!showMarket}>
-            <ExtensionMarketPanel workspace={workspace} kind={value} />
+            <ExtensionMarketPanel workspace={workspace} kind={value} active={visible && showMarket && !editing && !discovery} />
           </div>}
         </div>;
       })}

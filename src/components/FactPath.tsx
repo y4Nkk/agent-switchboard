@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { CommandError } from "../api/client";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
+import { Tooltip } from "./Tooltip";
 
 /** A fact-row path value the reader can open: the backend resolves the real
  * location, the path text is the affordance. Open failures speak as an
@@ -26,10 +27,11 @@ export function FactPath({ path, open }: { path: string; open: () => Promise<voi
 
   return (
     <>
-      <Button variant="unstyled" className="asb-fact-path" title={t("providers.factPath.openTitle")}
-        disabled={busy} onClick={() => void reveal()}>
-        {path}
-      </Button>
+      <Tooltip label={t("providers.factPath.openTitle")}>
+        <Button variant="unstyled" className="asb-fact-path" disabled={busy} onClick={() => void reveal()}>
+          {path}
+        </Button>
+      </Tooltip>
       {error && (
         <span className="asb-fact-path-error" role="alert">{t("providers.factPath.openFailed", { detail: commandErrorText(error, t) })}</span>
       )}

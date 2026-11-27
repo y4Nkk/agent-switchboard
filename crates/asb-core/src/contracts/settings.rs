@@ -43,11 +43,9 @@ impl ConfigValue {
 
 /// The stored intent for one officially supported setting.
 ///
-/// `Automatic` deliberately means that Agent Switchboard does not emit the
-/// setting into the client configuration. It is not a synthetic host value:
-/// the client and active model choose their own documented default. `Explicit`
-/// writes exactly the value the user selected, including a value that happens
-/// to match a documented default.
+/// `Automatic` in a direct client edit removes the selected user-level key.
+/// A stored automatic client preference has no overlay. Provider parameters
+/// follow their own ownership and absence rules.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "mode", rename_all = "camelCase")]
 pub enum SettingValue {
@@ -72,9 +70,8 @@ impl<'de> Deserialize<'de> for SettingValue {
     }
 }
 
-/// Complete scalar intents for a single ownership scope. Provider parameters
-/// live in their provider profile; client settings live in their client file.
-/// Each scope validates its exact key set against the ownership directory.
+/// Scalar intents for one ownership scope. Provider parameters cover the
+/// full provider catalog. Saved client preferences may omit unclaimed keys.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingsValues {

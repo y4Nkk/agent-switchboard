@@ -85,6 +85,7 @@ impl ArchiveScan {
 pub(super) fn extract_tar_gz_rooted(
     payload: &[u8],
     subpath: &str,
+    commit: &str,
 ) -> Result<Vec<ContentEntry>, SourceError> {
     validate_subpath(subpath)?;
     if payload.len() as u64 > MAX_ARCHIVE_DOWNLOAD {
@@ -96,6 +97,11 @@ pub(super) fn extract_tar_gz_rooted(
     let mut entries = Vec::new();
     for entry in archive.entries().map_err(archive_error)? {
         let mut entry = entry.map_err(archive_error)?;
+        if scan.entries == 0 && entry.header().entry_type().is_pax_global_extensions() {
+            verify_git_archive_comment(&mut entry, commit)?;
+            scan.entries += 1;
+            continue;
+        }
         let Some(path) = scan.inspect(&entry)? else {
             continue;
         };
@@ -114,6 +120,22 @@ pub(super) fn extract_tar_gz_rooted(
         ));
     }
     Ok(entries)
+}
+
+fn verify_git_archive_comment<R: Read>(
+    entry: &mut tar::Entry<'_, R>,
+    commit: &str,
+) -> Result<(), SourceError> {
+    // GitHub's leading global PAX entry records the pinned commit in a single Git comment.
+    let mut comment = [0; 52];
+    if entry.path_bytes().as_ref() == b"pax_global_header" && entry.size() == comment.len() as u64 {
+        entry.read_exact(&mut comment).map_err(archive_error)?;
+        let expected = format!("52 comment={}\n", commit.to_ascii_lowercase());
+        if comment.as_slice() == expected.as_bytes() {
+            return Ok(());
+        }
+    }
+    Err(SourceError::Rejected("压缩包的 Git 提交元数据与请求不一致".into()))
 }
 
 fn read_entry<R: Read>(
@@ -155,4 +177,34 @@ fn read_entry<R: Read>(
 
 fn archive_error(error: std::io::Error) -> SourceError {
     SourceError::Rejected(format!("压缩包无法完整读取：{error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::{write::GzEncoder, Compression};
+
+    #[test]
+    fn reads_git_archive_with_matching_commit_comment() {
+        const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+        let comment = format!("52 comment={COMMIT}\n");
+        let encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        let mut archive = tar::Builder::new(encoder);
+        let mut header = tar::Header::new_ustar();
+        header.set_entry_type(tar::EntryType::XGlobalHeader);
+        header.set_size(comment.len() as u64);
+        archive.append_data(&mut header, "pax_global_header", comment.as_bytes()).unwrap();
+
+        let manifest = b"Skill";
+        let mut header = tar::Header::new_ustar();
+        header.set_mode(0o644);
+        header.set_size(manifest.len() as u64);
+        archive.append_data(&mut header, "repo/SKILL.md", &manifest[..]).unwrap();
+        let bytes = archive.into_inner().unwrap().finish().unwrap();
+
+        let entries = extract_tar_gz_rooted(&bytes, "", COMMIT).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].relative_path, "SKILL.md");
+        assert!(extract_tar_gz_rooted(&bytes, "", &"f".repeat(40)).is_err());
+    }
 }

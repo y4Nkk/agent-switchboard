@@ -229,10 +229,6 @@ impl LocalState {
     }
 
     /// Durable, credential-free request history for Claude gateway traffic.
-    pub(crate) fn claude_request_ledger_path(&self) -> PathBuf {
-        self.root.join("claude-request-ledger.json")
-    }
-
     /// Prompt-document backups stay in their own collection so configuration
     /// restore and undo never offer a document snapshot as a client config.
     pub fn prompt_backup_dir(&self) -> PathBuf {

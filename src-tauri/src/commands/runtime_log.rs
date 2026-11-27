@@ -1,14 +1,14 @@
 //! Typed IPC for the application-owned runtime event log.
 
 use super::error::{blocking, CommandError};
-use crate::runtime_log::{self, RuntimeLogRead, RuntimeLogSeverity};
+use crate::runtime_log::{self, RuntimeLogQuery, RuntimeLogRead};
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
-pub async fn list_runtime_logs(app: AppHandle, level: Option<RuntimeLogSeverity>) -> Result<RuntimeLogRead, CommandError> {
+pub async fn list_runtime_logs(app: AppHandle, request: RuntimeLogQuery) -> Result<RuntimeLogRead, CommandError> {
     blocking(move || {
-        runtime_log::list(&app, level).map_err(|error| CommandError::new("runtime-log-unavailable", error))
+        runtime_log::list(&app, request).map_err(|error| CommandError::new("runtime-log-unavailable", error))
     })
     .await
 }

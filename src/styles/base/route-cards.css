@@ -86,33 +86,28 @@
 }
 
 .asb-route-values {
-  display: grid;
-  /* Model name and host are the long values; access mode and the website
-     host are always short. */
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--asb-space-2);
   width: 100%;
-  margin: 0;
   padding: var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius);
   background: var(--asb-route-inner-bg);
 }
 
-.asb-route-values > div {
-  display: flex;
+.asb-route-values > .asb-fact-row.is-inline {
+  display: grid;
+  /* Keep additional width for the model and service address. */
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--asb-space-2);
+}
+
+.asb-route-values > .asb-fact-row.is-inline > div {
   flex-direction: column;
   gap: var(--asb-space-hairline);
   min-width: 0;
 }
 
-.asb-route-key {
-  font: var(--asb-text-label);
-  color: var(--asb-text-muted);
-}
-
 .asb-route-value {
-  margin: 0;
+  display: block;
   /* One line per value: long model names and hosts elide instead of
      wrapping; the full text stays reachable through the title tooltip. */
   overflow: hidden;
@@ -139,11 +134,11 @@
 .asb-route-info { color: var(--asb-text-muted); }
 
 @media (max-width: 480px) {
-  .asb-route-values {
+  .asb-route-values > .asb-fact-row.is-inline {
     grid-template-columns: 1fr;
   }
 
-  .asb-route-values > div {
+  .asb-route-values > .asb-fact-row.is-inline > div {
     display: grid;
     grid-template-columns: 4.5em minmax(0, 1fr);
     gap: var(--asb-space-2);

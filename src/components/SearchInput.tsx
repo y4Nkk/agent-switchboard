@@ -10,10 +10,11 @@ interface Props {
   onChange: (value: string) => void;
   ariaLabel: string;
   placeholder?: string;
+  maxLength?: number;
   disabled?: boolean;
 }
 
-export function SearchInput({ value, onChange, ariaLabel, placeholder, disabled }: Props) {
+export function SearchInput({ value, onChange, ariaLabel, placeholder, maxLength, disabled }: Props) {
   const { t } = useI18n();
   const input = useRef<HTMLInputElement>(null);
   const clear = () => {
@@ -24,7 +25,7 @@ export function SearchInput({ value, onChange, ariaLabel, placeholder, disabled 
     <div className="asb-search-input" role="search">
       <span className="asb-search-input-icon" aria-hidden="true"><SearchIcon /></span>
       <Input ref={input} type="search" value={value} aria-label={ariaLabel}
-        placeholder={placeholder} disabled={disabled} autoComplete="off"
+        placeholder={placeholder} maxLength={maxLength} disabled={disabled} autoComplete="off"
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape" && value) {

@@ -69,8 +69,8 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
     },
     OfficialSettingEntry {
         title: "ownership.directory.permissions.title",
-        path: "permissions.<name>",
-        related_paths: &["sandbox_workspace_write", "default_permissions"],
+        path: "permissions",
+        related_paths: &["permissions.<name>", "sandbox_workspace_write"],
         disposition: OfficialSettingDisposition::PreserveOnly,
         detail: "ownership.directory.permissions.detail",
     },
@@ -101,9 +101,9 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
     },
     OfficialSettingEntry {
         title: "ownership.directory.permissionProfiles.title",
-        path: "permissions",
-        related_paths: &["default_permissions"],
-        disposition: OfficialSettingDisposition::PreserveOnly,
+        path: crate::adapter::codex::DEFAULT_PERMISSIONS_KEY,
+        related_paths: &[],
+        disposition: OfficialSettingDisposition::SeparateModule,
         detail: "ownership.directory.permissionProfiles.detail",
     },
     OfficialSettingEntry {

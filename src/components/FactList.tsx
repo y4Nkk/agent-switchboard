@@ -1,23 +1,38 @@
+import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 export interface FactListRow {
   label: ReactNode;
   value: ReactNode;
+  icon?: LucideIcon;
+  tone?: "active" | "warning";
+  format?: "code" | "number";
 }
 
-/** The one key/value facts primitive: every pair renders as
- * <div><dt/><dd/></div> inside a single two-column grid, so all labels share
- * the widest label's column and all values start at the same left edge.
- * `inline` keeps pair wrappers visible for horizontal groups.
- * DOM and visual contract are owned by `.asb-fact-row` in
- * styles/base/panels.css; value-internal layout stays in the row value. */
+export function FactStatus({ children, tone = "neutral" }: {
+  children: ReactNode;
+  tone?: "success" | "neutral" | "warning";
+}) {
+  const state = tone === "success" ? " is-ok" : tone === "neutral" ? " is-idle" : "";
+  return <span className={`asb-status-pill${state}`}>
+    <span className="asb-status-pill-dot" aria-hidden="true" />
+    <span className="asb-num">{children}</span>
+  </span>;
+}
+
 export function FactList({ rows, inline = false }: { rows: FactListRow[]; inline?: boolean }) {
   return (
     <dl className={inline ? "asb-fact-row is-inline" : "asb-fact-row"}>
-      {rows.map((row, index) => (
+      {rows.map(({ label, value, icon: Icon, tone, format }, index) => (
         <div key={index}>
-          <dt>{row.label}</dt>
-          <dd>{row.value}</dd>
+          <dt className={Icon ? "asb-fact-label" : undefined}>
+            {Icon ? <>
+              <span className="asb-fact-icon" data-tone={tone} aria-hidden="true"><Icon /></span>
+              <span>{label}</span>
+            </> : label}
+          </dt>
+          <dd>{format === "code" ? <code className="asb-code asb-fact-code">{value}</code>
+            : format === "number" ? <strong className="asb-num">{value}</strong> : value}</dd>
         </div>
       ))}
     </dl>

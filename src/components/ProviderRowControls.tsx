@@ -8,9 +8,10 @@ import { Tooltip } from "./Tooltip";
 export function ProviderEndpoint({ url, link = false }: { url: string; link?: boolean }) {
   let host = url;
   try { host = new URL(url).host; } catch { /* Keep the supplied endpoint readable. */ }
-  if (!link) return <span title={url}>{host}</span>;
-  return <a className="asb-provider-link" href={url} title={url}
-    onClick={(event) => { event.preventDefault(); void openUrl(url); }}>{host}</a>;
+  return <Tooltip asChild label={url}>
+    {link ? <a className="asb-provider-link" href={url}
+      onClick={(event) => { event.preventDefault(); void openUrl(url); }}>{host}</a> : <span>{host}</span>}
+  </Tooltip>;
 }
 
 export function ProviderActivateButton({ name, onActivate }: { name: string; onActivate: () => void }) {

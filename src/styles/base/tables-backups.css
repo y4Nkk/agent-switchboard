@@ -140,7 +140,6 @@
 
 /* Backup & Restore: one archive unit carries the three tabs. Each hero pairs
    the device with the text that owns every fact; the art only decorates. */
-.asb-backup-local,
 .asb-backup-hero-copy,
 .asb-backup-history {
   display: flex;
@@ -228,16 +227,9 @@
 
 .asb-backup-cleanup-result > p { margin: 0; }
 
-.asb-backup-history-heading {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--asb-space-1) var(--asb-space-3);
-}
-
 .asb-backup-history-count {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
+  color: var(--asb-text);
+  font: var(--asb-text-section);
 }
 
 /* Restore points share one vertical line through their client marks. Each
@@ -376,7 +368,7 @@
   padding-block: var(--asb-space-1) var(--asb-space-2);
 }
 
-@container settings-content (max-width: 640px) {
+@container settings-layout (max-width: 40rem) {
   .asb-backup-hero {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -408,35 +400,10 @@
   margin: 0;
 }
 
-.asb-cloud-backup-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--asb-space-3);
-}
-
-.asb-cloud-backup-group {
-  display: grid;
-  gap: var(--asb-space-3);
-  min-width: 0;
-}
-
-.asb-cloud-backup-group {
-  padding: var(--asb-space-4);
-  border-radius: var(--asb-radius-group);
-  background: var(--asb-content-muted);
-}
-
-.asb-cloud-backup-group > .asb-form { max-width: none; }
-
 .asb-cloud-backup-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--asb-space-2);
-}
-
-@container settings-content (max-width: 760px) {
-  .asb-cloud-backup-controls { grid-template-columns: minmax(0, 1fr); }
 }
 
 .asb-cloud-backup-guide-list {

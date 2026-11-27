@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+use super::recovery::{has_coordinate_conflict, RepositoryChange, COMPOSIO_REPO, COMPOSIO_SUBPATH, MYCLAUDE_REPO};
 use super::{CatalogError, SkillRepository, SkillRepositoryInput, MAX_REPOSITORIES};
 use crate::config_store::write_json_atomic;
 use crate::extensions::sources::{
@@ -123,6 +124,23 @@ impl SkillRepositoryCatalog {
         self.write(repositories)
     }
 
+    pub(crate) fn apply_recovery(&self, changes: &[&RepositoryChange]) -> Result<Vec<SkillRepository>, CatalogError> {
+        let _lock = SAVE_LOCK
+            .lock()
+            .map_err(|_| CatalogError::Unreadable("save interrupted".into()))?;
+        let mut repositories = self.list()?;
+        for change in changes {
+            if has_coordinate_conflict(&repositories, &change.replacement) {
+                return Err(CatalogError::Conflict);
+            }
+            let repository = repositories.iter_mut().find(|repo| **repo == change.original)
+                .ok_or(CatalogError::Changed)?;
+            *repository = change.replacement.clone();
+        }
+        self.write(repositories.clone())?;
+        Ok(repositories)
+    }
+
     fn write(&self, repositories: Vec<SkillRepository>) -> Result<(), CatalogError> {
         let document = CatalogDocument {
             schema_version: SCHEMA_VERSION,
@@ -210,16 +228,16 @@ fn validate_stored(repositories: &[SkillRepository]) -> Result<(), CatalogError>
 
 fn seed() -> Vec<SkillRepository> {
     [
-        ("anthropics/skills", "main"),
-        ("composiohq/awesome-claude-skills", "master"),
-        ("cexll/myclaude", "master"),
-        ("jimliu/baoyu-skills", "main"),
+        ("anthropics/skills", "main", ""),
+        (COMPOSIO_REPO, "master", COMPOSIO_SUBPATH),
+        (MYCLAUDE_REPO, "master", ""),
+        ("jimliu/baoyu-skills", "main", ""),
     ]
     .into_iter()
-    .map(|(repo, branch)| SkillRepository {
+    .map(|(repo, branch, subpath)| SkillRepository {
         id: format!("skill-repo-{}", repo.replace('/', "-")),
         repo: repo.into(),
-        subpath: String::new(),
+        subpath: subpath.into(),
         ref_name: Some(branch.into()),
         enabled: true,
     })

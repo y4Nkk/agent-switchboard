@@ -9,171 +9,32 @@ import {
   previewClientConfigurationApply,
   previewClientConfigurationReset,
   type AppKind,
-  type ClientConfigurationApplyPreview,
+  type ClientConfigurationChanges,
+  type ClientConfigurationChangesPreview,
+  type ClientConfigurationResetPreview as ResetPreview,
   type ClientConfigurationResetKind,
   type CodexSubagentSettings,
+  type CodexSubagentSettingsSnapshot,
   type ConfigFileStatus,
-  type NativeConfigurationResetKind,
-  type SettingsValues,
 } from "../api/client";
-import { clientSettingsPayload } from "../app/claude-common-settings";
-import type { ClientSettingsEditorState } from "../app/useClientSettings";
+import { sameClaudeExtra } from "../app/claude-common-settings";
+import { changedSettingValues, type ClientSettingsEditorState } from "../app/useClientSettings";
+import { sameSettingValue } from "../lib/setting-values";
 import { useI18n } from "../i18n";
-import { localizedMessageText } from "../i18n/errors";
 import { Button } from "./Button";
-import { Checkbox } from "./Checkbox";
 import { ConfirmSheet } from "./ConfirmSheet";
-import { DiffView } from "./DiffView";
 import { PreviewInspector } from "./PreviewInspector";
-
-const CLAUDE_EXTRA_MANIFEST_KEYS = new Set([
-  "/env/ASB_CLAUDE_COMMON_KEYS",
-  "env.ASB_CLAUDE_COMMON_KEYS",
-]);
-
-function visibleResetChanges(
-  resetKind: ClientConfigurationResetKind,
-  preview: ClientConfigurationApplyPreview,
-) {
-  const changes = preview.file.preview.changes;
-  return resetKind === "clearExtraConfiguration"
-    ? changes.filter((change) => !CLAUDE_EXTRA_MANIFEST_KEYS.has(change.key))
-    : changes;
-}
-
-function NativeResetScope({ app, advanced }: { app: AppKind; advanced: boolean }) {
-  const { t } = useI18n();
-  return (
-    <div className="asb-client-settings-reset-scope">
-      <span className="asb-client-settings-reset-scope-label">{t("clientConfig.reset.scopeWillRestore")}</span>
-      <ul>
-        <li>{t("clientConfig.reset.scopeStandardSettings")}</li>
-        {app === "codex" && <li>{t("clientConfig.reset.scopeCodexSubagent")}</li>}
-        {advanced && <li>{t("clientConfig.reset.scopeUnmanaged")}</li>}
-      </ul>
-      <p className="asb-field-help">
-        {advanced
-          ? t("clientConfig.reset.advancedHelp")
-          : t("clientConfig.reset.basicHelp")}
-      </p>
-    </div>
-  );
-}
-
-function ExtraResetScope({ extraConfigurationCount }: { extraConfigurationCount: number }) {
-  const { t } = useI18n();
-  return (
-    <div className="asb-client-settings-reset-scope">
-      <span className="asb-client-settings-reset-scope-label">{t("clientConfig.reset.scopeWillClear")}</span>
-      <p>{t("clientConfig.reset.extraScopeLine", { count: extraConfigurationCount })}</p>
-      <p className="asb-field-help">
-        {t("clientConfig.reset.extraScopeHelp")}
-      </p>
-    </div>
-  );
-}
-
-export function ClientConfigurationResetPreview({
-  preview,
-  app,
-  resetKind,
-  extraConfigurationCount,
-  busy,
-  onConfirm,
-  onScopeChange,
-  onBack,
-}: {
-  preview: ClientConfigurationApplyPreview;
-  app: AppKind;
-  resetKind: ClientConfigurationResetKind;
-  extraConfigurationCount: number;
-  busy: boolean;
-  onConfirm: () => void;
-  onScopeChange?: (resetKind: NativeConfigurationResetKind) => void;
-  onBack?: () => void;
-}) {
-  const deep = resetKind === "nativeDefaultsWithUnmanaged";
-  const native = resetKind !== "clearExtraConfiguration";
-  const changes = visibleResetChanges(resetKind, preview);
-  const { t } = useI18n();
-  const changeLabel = native
-    ? deep ? t("clientConfig.reset.changeFields") : t("clientConfig.reset.changeStandard")
-    : t("clientConfig.reset.changeExtra");
-  const confirmLabel = !native
-    ? t("clientConfig.reset.confirmExtra", { count: extraConfigurationCount })
-    : deep ? t("clientConfig.reset.confirmDeep") : t("clientConfig.reset.confirmNative");
-  return (
-    <div className="asb-client-settings-reset-preview">
-      <p className="asb-client-settings-reset-lead">
-        {!native
-          ? t("clientConfig.reset.extraLead")
-          : deep
-            ? t("clientConfig.reset.deepLead")
-            : t("clientConfig.reset.nativeLead")}
-      </p>
-      {native ? (
-        <>
-          {onScopeChange && (
-            <div className="asb-client-settings-reset-advanced">
-              <Checkbox
-                checked={deep}
-                disabled={busy}
-                label={t("clientConfig.reset.advancedCheckbox")}
-                onChange={(checked) =>
-                  onScopeChange(checked ? "nativeDefaultsWithUnmanaged" : "nativeDefaults")}
-              />
-              <p className="asb-field-help">
-                {t("clientConfig.reset.advancedCheckboxHelp")}
-              </p>
-            </div>
-          )}
-          <NativeResetScope app={app} advanced={deep} />
-        </>
-      ) : (
-        <ExtraResetScope extraConfigurationCount={extraConfigurationCount} />
-      )}
-      <p className="asb-client-settings-reset-target">
-        <span>{t("clientConfig.reset.targetFile")}</span>
-        <code>{preview.file.preview.target}</code>
-      </p>
-      {changes.length > 0 ? (
-        <div className="asb-client-settings-reset-changes">
-          <DiffView changes={changes} label={changeLabel} />
-        </div>
-      ) : (
-        <p className="asb-field-help">
-          {t("clientConfig.reset.noChanges")}
-        </p>
-      )}
-      {preview.file.preview.warnings.map((warning) => (
-        <p key={warning.key} className="asb-field-error" role="alert">{localizedMessageText(warning, t)}</p>
-      ))}
-      <p className="asb-field-help">
-        {t("clientConfig.reset.backupHelp")}
-      </p>
-      <div className="asb-client-settings-reset-actions">
-        {onBack && (
-          <Button variant="secondary" className="asb-client-settings-reset-back" disabled={busy} onClick={onBack}>
-            {t("clientConfig.reset.backToSettings")}
-          </Button>
-        )}
-        <Button variant="danger" disabled={busy} onClick={onConfirm}>
-          {confirmLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
+import { ClientConfigurationResetPreview } from "./ClientConfigurationResetPreview";
 
 export interface PendingClientConfiguration {
-  preview: ClientConfigurationApplyPreview;
-  settings: SettingsValues;
-  subagentSettings?: CodexSubagentSettings;
+  preview: ClientConfigurationChangesPreview;
+  changes: ClientConfigurationChanges;
+  directory: string | null;
 }
 
 export interface PendingClientConfigurationReset {
-  preview: ClientConfigurationApplyPreview;
-  resetKind: ClientConfigurationResetKind;
+  preview: ResetPreview;
+  selected: string[];
 }
 
 interface UseClientConfigurationApplyProps {
@@ -181,6 +42,8 @@ interface UseClientConfigurationApplyProps {
   busy: boolean;
   editorState: ClientSettingsEditorState;
   subagentDraft?: CodexSubagentSettings;
+  subagentBaseline?: CodexSubagentSettingsSnapshot;
+  directory: string | null;
   configStatus?: ConfigFileStatus;
   hasUnsavedConfigurationDraft: boolean;
   onApplied: () => void;
@@ -201,7 +64,6 @@ type ResetState<T> = Record<ClientConfigurationResetKind, T>;
 function emptyResetState<T>(value: T): ResetState<T> {
   return {
     nativeDefaults: value,
-    nativeDefaultsWithUnmanaged: value,
     clearExtraConfiguration: value,
   };
 }
@@ -237,45 +99,70 @@ function useClientConfigurationResets({
   const setErrorFor = (kind: ClientConfigurationResetKind, value: unknown) => {
     setErrors((current) => ({ ...current, [kind]: value }));
   };
-  const prepare = (resetKind: ClientConfigurationResetKind) => {
+  const prepare = (resetKind: ClientConfigurationResetKind, selected: string[] = [], sourceHash: string | null = null) => {
     if (!canReset || busy) return;
-    setResetView(resetKind); setPendingFor(resetKind, null); setErrorFor(resetKind, null); onStart();
-    void previewClientConfigurationReset(app, resetKind).then((preview) => {
-      setPendingFor(resetKind, { preview, resetKind });
+    setResetView(resetKind);
+    if (sourceHash === null) setPendingFor(resetKind, null);
+    setErrorFor(resetKind, null); onStart();
+    void previewClientConfigurationReset(app, resetKind, selected, sourceHash).then((preview) => {
+      setPendingFor(resetKind, { preview, selected });
     }).catch((error: { message?: string }) => {
       setErrorFor(resetKind, error);
     }).finally(onFinish);
   };
   const commit = (resetKind: ClientConfigurationResetKind, successMessage: CommandError) => {
     const current = pending[resetKind];
-    if (!current || busy || !canReset) return;
+    if (!current || busy || !canReset || errors[resetKind] != null) return;
     setErrorFor(resetKind, null); onStart();
-    void commitClientConfigurationReset(app, resetKind, current.preview).then(() => {
+    void commitClientConfigurationReset(app, resetKind, current.selected, current.preview).then(() => {
       setPending(emptyResetState(null));
       onSuccess(successMessage);
     }).catch((error: { message?: string }) => {
       setErrorFor(resetKind, error);
     }).finally(onFinish);
   };
-  const inNativeView = resetView !== "clearExtraConfiguration";
+  const native = pending.nativeDefaults;
   const commitNativeReset = () => {
-    if (!inNativeView) return;
-    commit(resetView, resetView === "nativeDefaults"
-      ? uiMessage("clientConfig.status.nativeRestored")
-      : uiMessage("clientConfig.status.nativeRestoredDeep"));
+    commit("nativeDefaults", native?.selected.length ? uiMessage("clientConfig.status.nativeRestoredDeep")
+      : uiMessage("clientConfig.status.nativeRestored"));
   };
   return {
     resetView,
-    pendingNativeReset: inNativeView ? pending[resetView] : null,
+    pendingNativeReset: native,
     pendingExtraClear: pending.clearExtraConfiguration,
-    nativeResetError: inNativeView && errors[resetView] != null ? errorText(errors[resetView], t) : null,
+    nativeResetError: errors.nativeDefaults == null ? null : errorText(errors.nativeDefaults, t),
     extraClearError: errors.clearExtraConfiguration == null ? null : errorText(errors.clearExtraConfiguration, t),
-    prepareNativeReset: (resetKind: NativeConfigurationResetKind) => prepare(resetKind),
+    prepareNativeReset: () => prepare("nativeDefaults"),
+    selectResetField: (key: string, checked: boolean) => {
+      if (!native) return;
+      const selected = checked ? [...native.selected, key] : native.selected.filter((entry) => entry !== key);
+      prepare("nativeDefaults", selected, native.preview.file.contentHash);
+    },
     prepareExtraClear: () => prepare("clearExtraConfiguration"),
     commitNativeReset,
     commitExtraClear: () => commit("clearExtraConfiguration", uiMessage("clientConfig.status.extraCleared", { count: extraConfigurationCount })),
     showNativeReset: () => setResetView("nativeDefaults"),
   };
+}
+
+function prepareChanges(props: UseClientConfigurationApplyProps): ClientConfigurationChanges | null {
+  const { editorState: state, subagentBaseline, subagentDraft } = props;
+  const source = state.editor?.source;
+  if (!source || !state.draft) return null;
+  const settings = changedSettingValues(state.draft, source.values);
+  const changes: ClientConfigurationChanges = { settings };
+  if (state.keepFileValues?.length) changes.keepFileValues = state.keepFileValues;
+  if (state.permissionProfile) changes.permissionProfile = state.permissionProfile;
+  if (!sameClaudeExtra(state.claudeExtra, state.editor?.settings.claudeExtra)) {
+    changes.claudeExtra = state.claudeExtra ?? {};
+  }
+  if (subagentBaseline && subagentDraft) {
+    const before = subagentBaseline.settings;
+    const fields = (Object.keys(before) as (keyof CodexSubagentSettings)[])
+      .filter((key) => !sameSettingValue(before[key], subagentDraft[key]));
+    if (fields.length) changes.subagents = Object.fromEntries(fields.map((key) => [key, subagentDraft[key]]));
+  }
+  return Object.keys(settings).length || changes.keepFileValues || changes.claudeExtra || changes.subagents || changes.permissionProfile ? changes : null;
 }
 
 export function useClientConfigurationApply(
@@ -288,14 +175,18 @@ export function useClientConfigurationApply(
   const [applyError, setApplyError] = useMessageState();
   const [statusMessage, setStatus] = useMessageState();
   const [applying, setApplying] = useState(false);
-  const settings: SettingsValues | null = state.editor && state.draft
-    ? clientSettingsPayload(app, state.draft, state.claudeExtra) : null;
-  const subagentSettings = app === "codex" ? props.subagentDraft : undefined;
-  const fileIsWritable = !props.configStatus?.exists || props.configStatus.syntaxOk;
-  const recoveryBlocker = state.phase === "dirty" || props.hasUnsavedConfigurationDraft
-    ? t("clientConfig.apply.unsavedBlocker")
-    : null;
-  const recoveryReady = fileIsWritable && state.phase === "clean" && !recoveryBlocker;
+  const changes = prepareChanges(props);
+  const pendingCount = changes
+    ? new Set([...Object.keys(changes.settings), ...(changes.keepFileValues ?? [])]).size
+      + Object.keys(changes.subagents ?? {}).length
+      + Number(changes.permissionProfile !== undefined)
+      + Number(changes.claudeExtra !== undefined)
+    : 0;
+  const source = state.editor?.source;
+  const subagentStale = !!changes?.subagents && (props.subagentBaseline?.configHash !== source?.contentHash
+    || props.subagentBaseline?.fileExists !== source?.exists);
+  const fileIsWritable = !props.configStatus?.readError && (!props.configStatus?.exists || props.configStatus.syntaxOk);
+  const recoveryReady = fileIsWritable && state.phase === "clean" && !props.hasUnsavedConfigurationDraft;
   const extraCount = app === "claude" ? extraConfigurationCount(state.editor?.settings.claudeExtra) : 0;
   const start = () => { setStatus(null); setApplying(true); };
   const finish = () => setApplying(false);
@@ -309,10 +200,11 @@ export function useClientConfigurationApply(
     onSuccess: (message) => { setStatus(message); onCommitted(); props.onApplied(); },
   });
   const prepareApply = () => {
-    if (!settings || busy || applying) return;
+    if (!changes || !source || !state.editor || subagentStale || !fileIsWritable || busy || applying) return;
     setPendingApply(null); setApplyError(null); start();
-    void previewClientConfigurationApply(app, settings, subagentSettings).then((preview) => {
-      setPendingApply({ preview, settings, subagentSettings });
+    const directory = changes.permissionProfile ? props.directory : null;
+    void previewClientConfigurationApply(app, source, state.editor.settingsHash, changes, directory).then((preview) => {
+      setPendingApply({ preview, changes, directory });
     }).catch((error: { message?: string }) => {
       setApplyError(error);
     }).finally(finish);
@@ -320,10 +212,11 @@ export function useClientConfigurationApply(
   const commitApply = () => {
     if (!pendingApply || busy || applying) return;
     setApplyError(null); start();
-    void commitClientConfigurationApply(app, pendingApply.settings, pendingApply.preview, pendingApply.subagentSettings)
+    void commitClientConfigurationApply(app, pendingApply.changes, pendingApply.preview, pendingApply.directory)
       .then(() => {
         setPendingApply(null);
-        setStatus(uiMessage("clientConfig.status.applied"));
+        setStatus(uiMessage(pendingApply.preview.file.contentHash === pendingApply.preview.file.renderedHash
+          ? "clientConfig.status.savedIntent" : "clientConfig.status.applied"));
         onCommitted(); props.onApplied();
       })
       .catch((error: { message?: string }) => setApplyError(error))
@@ -331,13 +224,13 @@ export function useClientConfigurationApply(
   };
   return {
     ...reset,
-    applyError,
+    applyError: subagentStale ? t("clientConfig.status.staleDraft") : applyError,
     applying,
     status: statusMessage === null ? null : { message: statusMessage, error: false },
-    recoveryBlocker,
+    pendingCount,
     extraConfigurationCount: extraCount,
     hasExtraConfiguration: extraCount > 0,
-    canApply: fileIsWritable && !!settings && (app !== "codex" || !!subagentSettings),
+    canApply: fileIsWritable && !!changes && !subagentStale,
     canNativeReset: recoveryReady,
     canClearExtra: recoveryReady && extraCount > 0,
     pendingApply,
@@ -409,11 +302,7 @@ export function ClientConfigurationResetPanel({
 }) {
   const { t } = useI18n();
   const working = busy || configuration.applying;
-  const nativeView: NativeConfigurationResetKind | null =
-    configuration.resetView === "clearExtraConfiguration"
-      ? null
-      : configuration.resetView;
-  if (nativeView === null) {
+  if (configuration.resetView === "clearExtraConfiguration") {
     if (configuration.pendingExtraClear) {
       return (
         <ClientConfigurationResetPreview
@@ -432,28 +321,23 @@ export function ClientConfigurationResetPanel({
     }
     return <p className="asb-field-help" role="status">{t("clientConfig.reset.generatingClear")}</p>;
   }
+  if (configuration.nativeResetError) {
+    return <ResetFailure error={configuration.nativeResetError} busy={working} onRetry={configuration.prepareNativeReset} />;
+  }
   if (configuration.pendingNativeReset) {
     return <>
       <ClientConfigurationResetPreview
         preview={configuration.pendingNativeReset.preview}
         app={app}
-        resetKind={nativeView}
+        resetKind="nativeDefaults"
         extraConfigurationCount={configuration.extraConfigurationCount}
         busy={working || !configuration.canNativeReset}
         onConfirm={configuration.commitNativeReset}
-        onScopeChange={configuration.prepareNativeReset}
+        selected={configuration.pendingNativeReset.selected}
+        onSelect={configuration.selectResetField}
       />
       <ExtraConfigurationAction configuration={configuration} busy={busy} />
     </>;
-  }
-  if (configuration.nativeResetError) {
-    return (
-      <ResetFailure
-        error={configuration.nativeResetError}
-        busy={working}
-        onRetry={() => configuration.prepareNativeReset(nativeView)}
-      />
-    );
   }
   return <p className="asb-field-help" role="status">{t("clientConfig.reset.generatingNative")}</p>;
 }
@@ -463,6 +347,7 @@ export function ClientConfigurationConfirmation({
   busy,
   applying,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: {
@@ -470,6 +355,7 @@ export function ClientConfigurationConfirmation({
   busy: boolean;
   applying: boolean;
   pending: PendingClientConfiguration | null;
+  error: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -484,9 +370,16 @@ export function ClientConfigurationConfirmation({
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
+      {error && <p className="asb-field-error" role="alert">{error}</p>}
       <ul className="asb-dialog-details">
-        <li>{t("clientConfig.apply.willWrite", { target: pending.preview.file.preview.target })}</li>
-        <li><PreviewInspector filePreview={pending.preview.file} userConfigModel={null} userConfigWarnings={[]} /></li>
+        {pending.preview.file.contentHash !== pending.preview.file.renderedHash && <>
+          <li>{t("clientConfig.apply.willWrite", { target: pending.preview.file.preview.target })}</li>
+          <li><PreviewInspector filePreview={pending.preview.file} userConfigModel={null} userConfigWarnings={[]} /></li>
+        </>}
+        {pending.changes.keepFileValues?.length ? <li>
+          {t("clientConfig.apply.keepFileValues")}
+          <ul>{pending.changes.keepFileValues.map((key) => <li key={key}><code>{key}</code></li>)}</ul>
+        </li> : null}
         <li>{app === "codex"
           ? t("clientConfig.apply.confirmCodexNote")
           : t("clientConfig.apply.confirmNote")}</li>

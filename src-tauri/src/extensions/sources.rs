@@ -2,6 +2,7 @@
 //! installs files in a client or executes anything found in a repository.
 
 mod archive;
+mod candidate_cache;
 mod github;
 mod local;
 mod transport;
@@ -14,9 +15,12 @@ use asb_core::extensions::skill::{
 };
 use asb_core::extensions::validate::{validate_content_paths, validate_skill_name};
 
+pub(crate) use candidate_cache::{cache_candidates, cache_catalog_repositories, cached_candidate,
+    cached_repository, candidate_id};
 pub use github::{fetch_github_subtree, resolve_github_commit, resolve_github_source};
 pub(crate) use github::{
-    repository as normalize_github_repository, resolve_github_source_with_requests,
+    repository as normalize_github_repository, resolve_pinned_github_source,
+    revalidate_github_commit,
     validate_ref_name as validate_source_ref, validate_subpath as validate_source_subpath,
     GitHubRequest,
 };
@@ -65,8 +69,22 @@ impl SkillCandidate {
 pub enum SourceError {
     #[error("来源不可达：{0}")]
     Unreachable(String),
+    #[error("来源不可达：{0}")]
+    Transport(String),
+    #[error("来源不可达：{message}")]
+    Http { status: u16, message: String },
+    #[error("{0}")]
+    GithubRateLimited(String),
     #[error("来源内容被拒绝：{0}")]
     Rejected(String),
+    #[error("来源内容被拒绝：来源超过 {} 个 Skill；请指定子目录", MAX_SOURCE_CANDIDATES)]
+    TooManySkills,
+}
+
+impl SourceError {
+    pub(crate) fn is_rejected(&self) -> bool {
+        matches!(self, Self::Rejected(_) | Self::TooManySkills)
+    }
 }
 
 /// Tests inject the full HTTP boundary and never request a live repository.

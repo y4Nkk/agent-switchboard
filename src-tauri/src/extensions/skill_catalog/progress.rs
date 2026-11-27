@@ -5,6 +5,7 @@ use std::time::Instant;
 use serde::Serialize;
 use uuid::Uuid;
 
+use super::recovery::RepositoryRecovery;
 use super::SkillRepository;
 use crate::extensions::sources::{GitHubRequest, HttpTransfer};
 
@@ -12,6 +13,7 @@ use crate::extensions::sources::{GitHubRequest, HttpTransfer};
 #[serde(rename_all = "camelCase")]
 pub struct CatalogScanProgress {
     elapsed_ms: u64,
+    github_retry_at: Option<i64>,
     repositories: Vec<RepositoryProgress>,
 }
 
@@ -29,7 +31,7 @@ pub(super) enum RepositoryState {
     Queued,
     Running,
     Complete { candidate_count: usize },
-    Failed { message: String },
+    Failed { message: String, recovery: Option<RepositoryRecovery> },
 }
 
 #[derive(Clone, Serialize)]
@@ -81,6 +83,7 @@ impl CatalogScanMonitor {
         let scan = scans.get(&id)?;
         Some(CatalogScanProgress {
             elapsed_ms: scan.started_at.elapsed().as_millis() as u64,
+            github_retry_at: super::scan::github_retry_at(),
             repositories: scan.repositories.clone(),
         })
     }
@@ -91,6 +94,14 @@ impl CatalogScanMonitor {
 
     pub(super) fn set_state(&self, index: usize, state: RepositoryState) {
         self.update(index, |repo| repo.state = state);
+    }
+
+    pub(crate) fn replace_repository(&self, repository: &SkillRepository) {
+        let mut scans = active_scans();
+        let scan = scans.get_mut(&self.0).expect("live progress owned by this scan");
+        if let Some(row) = scan.repositories.iter_mut().find(|row| row.repository.id == repository.id) {
+            row.repository = repository.clone();
+        }
     }
 
     pub(super) fn update_request(&self, index: usize, step: GitHubRequest, transfer: HttpTransfer) {

@@ -1,7 +1,7 @@
 import type { MessageEntry } from "../types";
 
 export const messages = {
-  "codex.probe.backgroundNote": ["可切换页面或最小化窗口，检测会继续运行；结束后通过标题栏全局信息通知。退出应用会停止检测。", "You can switch pages or minimize the window while the probe runs. Results appear in the titlebar global information. Exiting the app stops the probe."],
+  "codex.probe.backgroundNote": ["检测可在后台继续。退出应用会停止检测。", "The probe can continue in the background. Exiting the app stops it."],
   "codex.probe.notify.completed": ["降智雷达检测完成", "Degradation radar probe finished"],
   "codex.probe.notify.graded": ["{question}：{passed}/{judged} 次通过，共 {total} 次；请到降智雷达查看详情。", "{question}: {passed}/{judged} runs passed, {total} runs in total. Open Degradation radar for details."],
   "codex.probe.notify.visual": ["{question}：回答已保存，请到降智雷达观察结果。", "{question}: answers saved. Open Degradation radar to review the results."],

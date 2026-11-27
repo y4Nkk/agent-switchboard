@@ -175,7 +175,8 @@ interface ProviderRowShellProps {
   confirmationOpen: boolean;
   sortable: boolean;
   /** The configured model, rendered in the row's dedicated model zone. */
-  model?: ReactNode;
+  model?: string | null;
+  modelTooltip?: string;
   /** The provider host or official route, rendered in the connection zone. */
   endpoint?: ReactNode;
   /** Usage or account state, rendered beneath the fixed primary data rail. */
@@ -202,6 +203,7 @@ export function ProviderRowShell({
   confirmationOpen,
   sortable,
   model,
+  modelTooltip,
   endpoint,
   summary,
   primaryAction,
@@ -217,6 +219,8 @@ export function ProviderRowShell({
   const initial = name.trim().charAt(0).toUpperCase() || "?";
   const hasSummary = summary !== undefined && summary !== null;
   const dragLabel = t("providers.row.dragAria", { name });
+  const modelValue = <span className="asb-row-model-value">{model ?? t("providers.label.defaultModel")}</span>;
+  const modelHint = modelTooltip ?? model;
   return (
     <li
       ref={setNodeRef}
@@ -240,12 +244,12 @@ export function ProviderRowShell({
         <div className="asb-row">
           <span className="asb-avatar" aria-hidden="true">{initial}</span>
           <span className="asb-row-identity-copy">
-            <span className="asb-row-name" title={name}>{name}</span>
+            <Tooltip asChild label={name}><span className="asb-row-name">{name}</span></Tooltip>
             {active && <span className="asb-row-applied">{t("providers.label.applied")}</span>}
           </span>
         </div>
         <span className="asb-row-model">
-          <span className="asb-row-model-value" title={typeof model === "string" ? model : undefined}>{model ?? t("providers.label.defaultModel")}</span>
+          {modelHint ? <Tooltip asChild label={modelHint}>{modelValue}</Tooltip> : modelValue}
         </span>
         <span className="asb-row-endpoint">{endpoint}</span>
         <span className="asb-row-controls asb-row-action">

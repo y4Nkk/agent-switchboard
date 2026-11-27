@@ -1,38 +1,21 @@
 import { Cell, Pie, PieChart } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
 import { useI18n } from "../../i18n";
-import { tr } from "../../i18n/current";
-import { TOKEN_UNIT, formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
-import { formatUsageValue } from "../../lib/usage-format";
+import { TOKEN_UNIT } from "../../lib/token-format";
+import { formatCompactUsageValue, formatUsageValue } from "../../lib/usage-format";
+import type { ModelUsageSlice } from "../model-usage-display";
+import { Tooltip } from "../Tooltip";
 import { ChartFrame } from "./ChartFrame";
-import { chartSeriesColor, type ModelUsageDistributionItem } from "./chart-data";
-
-const TOP_MODEL_COUNT = 5;
-
-type DisplayItem = ModelUsageDistributionItem & {
-  otherCount: number | null;
-};
+import { chartSeriesColor } from "./chart-data";
 
 interface Props {
-  items: ModelUsageDistributionItem[];
+  items: ModelUsageSlice[];
   ariaLabel: string;
-  emptyMessage: string;
 }
 
-/** A model ledger rendered as one prominent ring with an adjacent, auditable
- * legend. Only the tail is combined, and its label records that fact. */
-export function ModelUsageDistributionChart({ items, ariaLabel, emptyMessage }: Props) {
-  const visible = resolveDisplayItems(items);
-  if (visible.length === 0) {
-    return <p className="asb-chart-empty" role="status">{emptyMessage}</p>;
-  }
-
-  return <DonutCard visible={visible} ariaLabel={ariaLabel} />;
-}
-
-function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: string }) {
+export function ModelUsageDistributionChart({ items, ariaLabel }: Props) {
   const { t } = useI18n();
-  const total = visible.reduce((sum, item) => sum + item.value, 0);
+  const total = items.reduce((sum, item) => sum + item.value, 0);
   const display = useCountUp(Math.round(total));
   return (
     <figure className="asb-usage-donut-card" aria-label={ariaLabel}>
@@ -42,54 +25,39 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
           <ChartFrame>
             <PieChart>
               <Pie
-                data={visible}
+                data={items}
                 dataKey="value"
                 nameKey="label"
-                innerRadius="61%"
-                outerRadius="90%"
-                paddingAngle={1}
-                // Slice separators stay the card surface so the ring reads as
-                // one shape cut into shares.
-                stroke="var(--asb-content-muted)"
-                strokeWidth={4}
+                innerRadius="64%"
+                outerRadius="98%"
+                stroke="var(--asb-usage-surface)"
+                strokeWidth={2}
                 isAnimationActive={false}
               >
-                {visible.map((item, index) => (
-                  <Cell
-                    key={item.id}
-                    fill={
-                      item.otherCount === null
-                        ? chartSeriesColor(index)
-                        : "var(--asb-hairline-strong)"
-                    }
-                  />
+                {items.map((item, index) => (
+                  <Cell key={item.id} fill={chartSeriesColor(index, "local-token")} />
                 ))}
               </Pie>
             </PieChart>
           </ChartFrame>
           <div className="asb-usage-donut-center">
             <span className="asb-usage-donut-center-value">
-              {formatCompactTokenCount(display)}
+              {formatCompactUsageValue(display)}
             </span>
             <span className="asb-usage-donut-center-unit">{TOKEN_UNIT}</span>
           </div>
         </div>
         <ol className="asb-usage-donut-legend">
-          {visible.map((item, index) => {
+          {items.map((item, index) => {
             const percent = (item.value / total) * 100;
-            const label = item.otherCount === null ? item.label : t("usage.composition.otherCount", { count: item.otherCount });
-            const color =
-              item.otherCount === null ? chartSeriesColor(index) : "var(--asb-hairline-strong)";
             return (
               <li key={item.id} className="asb-usage-donut-row">
                 <div className="asb-usage-donut-row-head">
-                  <span className="asb-usage-donut-swatch" style={{ backgroundColor: color }} aria-hidden />
-                  <span className="asb-usage-donut-name" title={label}>
-                    {label}
-                  </span>
+                  <span className="asb-usage-donut-swatch" style={{ backgroundColor: chartSeriesColor(index, "local-token") }} aria-hidden />
+                  <Tooltip asChild label={item.label}><span className="asb-usage-donut-name">{item.label}</span></Tooltip>
                   <span className="asb-usage-donut-percent">{formatUsageValue(percent, "%")}</span>
                 </div>
-                <p className="asb-usage-donut-value">{formatTokenValue(item.value)}</p>
+                <p className="asb-usage-donut-value">{formatCompactUsageValue(item.value)} {TOKEN_UNIT}</p>
               </li>
             );
           })}
@@ -97,29 +65,4 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
       </div>
     </figure>
   );
-}
-
-function resolveDisplayItems(items: ModelUsageDistributionItem[]): DisplayItem[] {
-  const realItems = items
-    .filter((item) => Number.isFinite(item.value) && item.value > 0)
-    .map((item, index) => ({
-      ...item,
-      id: item.id.trim() || `model-${index}`,
-      label: item.label.trim() || tr("usage.composition.unrecordedModel"),
-      otherCount: null,
-    }))
-    .sort((left, right) => right.value - left.value);
-  const leading = realItems.slice(0, TOP_MODEL_COUNT);
-  const remainder = realItems.slice(TOP_MODEL_COUNT);
-  if (remainder.length === 0) return leading;
-
-  return [
-    ...leading,
-    {
-      id: "model-usage-other",
-      label: tr("usage.composition.otherName"),
-      value: remainder.reduce((sum, item) => sum + item.value, 0),
-      otherCount: remainder.length,
-    },
-  ];
 }

@@ -12,6 +12,8 @@ Status: implemented
 
 DiffView 继续拥有差异文案、值和颜色。备份展开、恢复与撤销确认、Claude 集成预览显式选择按键分组的列表。常规配置预览沿用原表格布局。备份的[工作区滚动归属](../feature/2026-10-14-backup-history-page-scroll.md)、[客户端软件更新契约](../feature/2026-11-04-client-software-version-management.md)及[数据维护边界](2026-10-28-storage-reclamation-expansion.md)仍各自拥有对应事实。云端配置指南及其初始化 SQL 由[配置指南弹窗](../feature/2026-11-25-cloud-backup-setup-guide-dialog.md)承载。
 
+备份和客户端工具的正文尺寸与分组采用[共享设置正文布局](../feature/2026-11-27-client-configuration-grouped-form.md)，各自绘制设备和场景。
+
 ## Alternatives considered
 
 - 保留差异表能让用户纵向比对同一列。设置中的差异出现在展开区和窄弹窗，一项一组更能保留键名与前后值的上下文，也符合三个设置分类移除全局表格的要求。

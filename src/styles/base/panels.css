@@ -205,12 +205,12 @@
  * 组件所有权): one key/value pair per line, rendered as
  * <dl class="asb-fact-row"><div><dt/><dd/></div>…</dl>. The list is a single
  * two-column grid and the pair wrappers are display:contents, so dt/dd stay
- * the grid items: the label column sizes to the widest label and every value
- * starts at the same left edge down the page.
+ * the grid items: the label column sizes to the widest label within its
+ * limit, and every value starts at the same left edge down the page.
  * ------------------------------------------------------------------------- */
 .asb-fact-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
   align-items: baseline;
   gap: var(--asb-space-1) var(--asb-space-2);
   margin: 0;
@@ -219,15 +219,65 @@
 .asb-fact-row > div { display: contents; }
 
 .asb-fact-row dt {
+  min-width: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .asb-fact-row dd {
   min-width: 0;
   margin: 0;
+  color: color-mix(in srgb, var(--asb-text) 75%, var(--asb-text-muted));
   font: var(--asb-text-body);
   overflow-wrap: anywhere;
+}
+
+.asb-fact-row dd > strong.asb-num {
+  color: var(--asb-text);
+  font-weight: 600;
+}
+
+.asb-fact-row dd .asb-status-pill { font-weight: 600; }
+.asb-fact-row dd .asb-fact-path { color: var(--asb-link); }
+
+.asb-fact-row .asb-fact-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--asb-space-1);
+}
+
+.asb-fact-icon {
+  display: grid;
+  flex: none;
+  align-self: center;
+  place-items: center;
+  inline-size: var(--asb-space-4);
+  block-size: var(--asb-space-4);
+  border-radius: var(--asb-radius);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: var(--asb-text-muted);
+}
+
+.asb-fact-icon > svg {
+  inline-size: var(--asb-icon-size-xs);
+  block-size: var(--asb-icon-size-xs);
+}
+
+.asb-fact-icon[data-tone="active"] { color: var(--asb-link); }
+.asb-fact-icon[data-tone="warning"] { color: var(--asb-warning); }
+
+.asb-fact-code {
+  display: inline-block;
+  max-inline-size: 100%;
+  padding: var(--asb-space-hairline) var(--asb-space-1);
+  border-radius: var(--asb-radius);
+  background: color-mix(in srgb, var(--asb-text) 8%, transparent);
+}
+
+.asb-fact-row:not(.is-inline):has(> div > .asb-fact-label) > div > dt:not(.asb-fact-label) {
+  padding-inline-start: calc(var(--asb-space-4) + var(--asb-space-1));
 }
 
 /* Inline variant: pairs share one rail. The shared label

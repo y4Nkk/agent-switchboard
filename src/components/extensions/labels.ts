@@ -5,7 +5,6 @@ import type {
   ExtensionTarget,
   FileState,
   PlanOperation,
-  SkillFileChange,
   TargetOutcome,
 } from "../../api/client";
 import type { MessageKey } from "../../i18n";
@@ -19,12 +18,6 @@ export const FILE_STATE_LABELS: Record<FileState, MessageKey> = {
   externalChange: "extensions.fileState.externalChange",
   missing: "extensions.fileState.missing",
   unreadable: "extensions.fileState.unreadable",
-};
-
-export const SKILL_CHANGE_LABELS: Record<SkillFileChange["action"], MessageKey> = {
-  added: "extensions.skillChange.added",
-  removed: "extensions.skillChange.removed",
-  modified: "extensions.skillChange.modified",
 };
 
 export const OPERATION_LABELS: Record<PlanOperation, MessageKey> = {

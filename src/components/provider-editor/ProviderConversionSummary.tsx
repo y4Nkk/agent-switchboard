@@ -3,6 +3,7 @@ import { selectedConversionUsage } from "../../lib/provider-conversion";
 import { useI18n } from "../../i18n";
 import { localizedMessageText } from "../../i18n/errors";
 import { Checkbox } from "../Checkbox";
+import { SettingsGroup } from "../SettingsLayout";
 
 export function ProviderConversionSummary({ conversion, busy, usageQuery, onUsageChange }: {
   conversion: ProviderConversion; busy: boolean; usageQuery: UsageQuery | null;
@@ -11,8 +12,7 @@ export function ProviderConversionSummary({ conversion, busy, usageQuery, onUsag
   const { t } = useI18n();
   const target = conversion.targetApp === "codex" ? "Codex" : "Claude";
   const source = conversion.source.app === "codex" ? "Codex" : "Claude";
-  return <section className="asb-editor-section" aria-label={t("providers.conversion.summary")}>
-    <h3 className="asb-section-title">{t("providers.conversion.from", { source, name: conversion.source.name, target })}</h3>
+  return <SettingsGroup title={t("providers.conversion.from", { source, name: conversion.source.name, target })}>
     <div className="asb-editor-section-fields">
       <p className="asb-field-help">{t("providers.conversion.snapshot")}</p>
       {conversion.notices.length > 0 && <ul>{conversion.notices.map((notice, index) =>
@@ -20,5 +20,5 @@ export function ProviderConversionSummary({ conversion, busy, usageQuery, onUsag
       {conversion.usageQuery && <Checkbox label={t("providers.conversion.copyUsage")} checked={usageQuery !== null}
         disabled={busy} onChange={(checked) => onUsageChange(selectedConversionUsage(conversion.usageQuery, checked))} />}
     </div>
-  </section>;
+  </SettingsGroup>;
 }

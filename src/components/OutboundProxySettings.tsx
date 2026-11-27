@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { useMessageState } from "../i18n/use-message-state";
 import { Button } from "./Button";
 import { Input } from "./Input";
-import { AppSettingRow } from "./AppPreferenceControls";
+import { SettingsGroup, SettingsRow } from "./SettingsLayout";
 import { RadioOption } from "./RadioOption";
 
 const MODES: readonly OutboundProxyMode[] = ["none", "system", "manual"];
@@ -78,20 +78,18 @@ export function OutboundProxySettings(props: Props) {
   const disabled = props.busy || state.working || state.loading || state.view === null;
   const dirty = state.view !== null && (!state.view.settings || state.view.settings.mode !== state.mode
     || (state.mode === "manual" && state.view.settings.url !== state.url.trim()));
-  return <section className="asb-app-settings-group" aria-labelledby="egress-settings" aria-busy={state.loading || state.working}>
-    <h3 id="egress-settings" className="asb-section-title">{t("settings.egress.title")}</h3>
-    <p className="asb-field-help">{t("settings.egress.description")}</p>
-    <AppSettingRow label={t("settings.egress.mode")}>
+  return <SettingsGroup title={t("settings.egress.title")} description={t("settings.egress.description")} busy={state.loading || state.working}>
+    <SettingsRow label={t("settings.egress.mode")}>
       <div className="asb-segments" role="radiogroup" aria-label={t("settings.egress.mode")}>
         {MODES.map((value) => <RadioOption key={value} name="egress-mode"
           label={t(`settings.egress.mode.${value}`)} checked={state.mode === value} disabled={disabled}
           onChange={() => { state.setMode(value); state.setSaved(false); }} />)}
       </div>
-    </AppSettingRow>
-    {state.mode === "manual" && <AppSettingRow label={t("settings.egress.url")} detail={t("settings.egress.urlHelp")}>
-      <Input type="text" value={state.url} disabled={disabled} spellCheck={false}
+    </SettingsRow>
+    {state.mode === "manual" && <SettingsRow label={t("settings.egress.url")} description={t("settings.egress.urlHelp")}>
+      <Input type="text" aria-label={t("settings.egress.url")} value={state.url} disabled={disabled} spellCheck={false}
         onChange={(event) => { state.setUrl(event.target.value); state.setSaved(false); }} />
-    </AppSettingRow>}
+    </SettingsRow>}
     {state.mode === "system" && <p className="asb-field-help">{t("settings.egress.systemNote")}</p>}
     {state.error && <p className="asb-field-error" role="alert">{state.error}</p>}
     <div className="asb-session-actions">
@@ -101,5 +99,5 @@ export function OutboundProxySettings(props: Props) {
         onClick={() => void state.save()}>{t("settings.egress.save")}</Button>
       {state.saved && <span className="asb-ok-text">{t("settings.egress.saved")}</span>}
     </div>
-  </section>;
+  </SettingsGroup>;
 }

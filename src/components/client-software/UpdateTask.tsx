@@ -1,3 +1,4 @@
+import { ArrowDownToLine, Tag, Terminal } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import type { ClientUpdatePhase, ClientUpdateTask } from "../../api/client-software";
 import { useI18n, type MessageKey, type TFunction } from "../../i18n";
@@ -66,9 +67,11 @@ export function UpdateTask({ task, busy, onCancel }: {
   const outputOpen = output ?? failed;
   const hasOutput = task.log.length > 0;
   const rows: FactListRow[] = [
-    { label: t("software.target"), value: <code>{task.plan.fromVersion} → {task.plan.targetVersion}</code> },
-    { label: t("software.launcher"), value: <code>{task.plan.launcher}</code> },
-    ...(task.actualVersion ? [{ label: t("software.actual"), value: <code>{task.actualVersion}</code> }] : []),
+    { label: t("software.target"), icon: ArrowDownToLine, format: "code",
+      value: `${task.plan.fromVersion} → ${task.plan.targetVersion}` },
+    { label: t("software.launcher"), icon: Terminal, format: "code", value: task.plan.launcher },
+    ...(task.actualVersion ? [{ label: t("software.actual"), icon: Tag,
+      format: "code" as const, value: task.actualVersion }] : []),
   ];
   return <section className={finished ? "asb-software-task" : "asb-tool-stage asb-software-task"}
     data-finished={finished || undefined} data-tone={TONES[phase]} aria-label={t("software.task")}>

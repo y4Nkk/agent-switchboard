@@ -9,7 +9,7 @@
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{atomic::{AtomicU8, Ordering}, LazyLock, Mutex};
 use tauri::AppHandle;
 
 mod configuration;
@@ -18,13 +18,26 @@ pub(crate) use configuration::location as configuration_location;
 const LOG_FILE_STEM: &str = "agent-switchboard";
 const LOG_TARGET: &str = "agent-switchboard.runtime";
 const MAX_VISIBLE_ENTRIES: usize = 500;
+const PAGE_SIZE: usize = 20;
+static LOG_READER: LazyLock<Mutex<reader::LogReader>> = LazyLock::new(Default::default);
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase", deny_unknown_fields)]
+pub enum RuntimeLogQuery {
+    Refresh { level: Option<RuntimeLogSeverity>, page: usize },
+    Page { snapshot_id: uuid::Uuid, page: usize },
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeLogRead {
+    pub snapshot_id: uuid::Uuid,
     pub entries: Vec<RuntimeLogEntry>,
     pub total: usize,
     pub skipped: usize,
+    pub visible: usize,
+    pub page: usize,
+    pub page_size: usize,
 }
 
 /// Persisted threshold for application runtime-event recording.
@@ -230,9 +243,9 @@ fn record(level: RuntimeLogSeverity, action: RuntimeLogAction, error_code: Optio
 
 /// Reads only this application's current and rotated runtime-event files.
 /// An empty log directory is a normal first-run state.
-pub fn list(app: &AppHandle, level: Option<RuntimeLogSeverity>) -> Result<RuntimeLogRead, String> {
+pub fn list(app: &AppHandle, query: RuntimeLogQuery) -> Result<RuntimeLogRead, String> {
     let directory = log_directory(app)?;
-    list_from_dir(&directory, level)
+    LOG_READER.lock().map_err(|_| "应用日志读取状态不可用")?.read(&directory, query)
 }
 
 /// Resolves the only directory that contains this application's runtime logs.
@@ -243,7 +256,6 @@ pub fn log_directory(app: &AppHandle) -> Result<PathBuf, String> {
 
 #[path = "runtime_log/reader.rs"]
 mod reader;
-use reader::list_from_dir;
 
 fn is_runtime_log_file(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {

@@ -31,7 +31,7 @@ export function ProbeAnswer({ answer, gradingVersion, seq }: {
   if (gradingVersion === "1") return <>{answer}</>;
   const html = gradingVersion === "html-visual-v1";
   return (
-    <div className={`asb-probe-answer${html ? " asb-probe-answer--html" : ""}`}>
+    <div className="asb-probe-answer">
       <CopyButton content={answer} />
       {source && (html || failedSource !== source) ? (
         <VisualAnswer source={source} html={html} seq={seq} onError={() => setFailedSource(source)} />

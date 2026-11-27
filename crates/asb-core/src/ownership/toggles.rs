@@ -201,6 +201,14 @@ pub const CODEX_TOGGLES: &[ToggleSpec] = &[
 
 pub const CLAUDE_TOGGLES: &[ToggleSpec] = &[
     ToggleSpec {
+        key: CLAUDE_BLOCK_READS, owner: SettingOwner::Client,
+        label: "ownership.label.blockReadsOutsideWorkingDirectories", group: "ownership.group.safetyAndApprovals",
+    },
+    ToggleSpec {
+        key: CLAUDE_BLOCK_WRITES, owner: SettingOwner::Client,
+        label: "ownership.label.blockWritesOutsideWorkingDirectories", group: "ownership.group.safetyAndApprovals",
+    },
+    ToggleSpec {
         key: "prefersReducedMotion", owner: SettingOwner::Client,
         label: "ownership.label.prefersReducedMotion", group: "ownership.group.interfaceAndInteraction",
     },
@@ -323,3 +331,14 @@ pub const CLAUDE_TOGGLES: &[ToggleSpec] = &[
         group: "ownership.group.modelBehavior",
     },
 ];
+
+const CLAUDE_BLOCK_READS: &str = "permissions.blockReadsOutsideWorkingDirectories";
+const CLAUDE_BLOCK_WRITES: &str = "permissions.blockWritesOutsideWorkingDirectories";
+
+pub fn minimum_client_version(app: crate::AppKind, key: &str) -> Option<&'static str> {
+    match (app, key) {
+        (crate::AppKind::Claude, CLAUDE_BLOCK_READS) => Some("2.1.257"),
+        (crate::AppKind::Claude, CLAUDE_BLOCK_WRITES) => Some("2.1.314"),
+        _ => None,
+    }
+}

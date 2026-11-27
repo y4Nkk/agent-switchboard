@@ -29,14 +29,14 @@ export function UpdateDownloadPanel({ download, onCancel }: { download: UpdateDo
       <span style={percent === null ? undefined : { width: `${percent}%` }} />
     </div>}
     <div className="asb-update-download-footer">
-      <span className="asb-app-setting-detail asb-num">{active ? size : t("backup.update.retryHint")}</span>
+      <span className="asb-field-help asb-num">{active ? size : t("backup.update.retryHint")}</span>
       {view.canCancel && <Button variant="secondary" size="compact" autoFocus={starting}
         disabled={phase === "cancelling"} aria-busy={phase === "cancelling"} onClick={onCancel}>
         {t(phase === "cancelling" ? "backup.update.cancelling"
           : view.cancelError != null ? "backup.update.retryCancel" : "backup.update.cancelDownload")}
       </Button>}
     </div>
-    {phase === "installing" && <p className="asb-app-setting-detail">{t("backup.update.installHint")}</p>}
+    {phase === "installing" && <p className="asb-field-help">{t("backup.update.installHint")}</p>}
     {view.error != null && <div className="asb-fail-text" role="alert"><CommandErrorLines error={view.error} /></div>}
     {view.cancelError != null && <div className="asb-warn-text" role="alert">
       <div>{t("update.cancelFailed")}</div><CommandErrorLines error={view.cancelError} />

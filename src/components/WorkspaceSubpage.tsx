@@ -6,6 +6,7 @@ import { ScrollArea } from "./ScrollArea";
 type Props = {
   title: string;
   titleRef?: Ref<HTMLHeadingElement>;
+  returnFocusTarget?: Element | null;
   returnFocusRef?: RefObject<HTMLElement | null>;
   viewportRef?: Ref<HTMLDivElement>;
   backLabel: string;
@@ -16,13 +17,14 @@ type Props = {
   children: ReactNode;
 } & (
   | { layout: "page"; footer?: never }
-  | { layout: "fixed-actions"; footer: ReactElement }
+  | { layout: "fixed-actions" | "floating-actions"; footer: ReactElement }
 );
 
 export function WorkspaceSubpage({
   layout,
   title,
   titleRef,
+  returnFocusTarget,
   returnFocusRef,
   viewportRef,
   backLabel,
@@ -36,7 +38,7 @@ export function WorkspaceSubpage({
   const subpage = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useImperativeHandle(titleRef, () => heading.current!, []);
-  const [returnTarget] = useState(() => document.activeElement);
+  const [returnTarget] = useState(() => returnFocusTarget ?? document.activeElement);
   useEffect(() => {
     const target = heading.current;
     const frame = subpage.current;
@@ -60,14 +62,16 @@ export function WorkspaceSubpage({
       </Button>
     } />
   );
+  const fixedHeader = layout === "fixed-actions";
   return (
     <div ref={subpage} className={["asb-workspace-subpage", className].filter(Boolean).join(" ")}>
-      {layout === "fixed-actions" && header}
-      <ScrollArea className="asb-subpage-scroll" aria-label={title} viewportRef={viewportRef}>
-        {layout === "page" && header}
+      {fixedHeader && header}
+      <ScrollArea className="asb-subpage-scroll" aria-label={title} viewportRef={viewportRef}
+        floatingActions={layout === "floating-actions" ? { content: footer } : undefined}>
+        {!fixedHeader && header}
         {children}
       </ScrollArea>
-      {layout === "fixed-actions" && <footer className="asb-subpage-footer">{footer}</footer>}
+      {fixedHeader && <footer className="asb-subpage-footer">{footer}</footer>}
     </div>
   );
 }

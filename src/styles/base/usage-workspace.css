@@ -63,6 +63,27 @@
   font: var(--asb-text-label);
 }
 
+.asb-usage-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-usage-surface {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding: var(--asb-space-4);
+  border-radius: var(--asb-radius-medium);
+  background: var(--asb-usage-surface);
+}
+
+.asb-usage-surface > .asb-module-header {
+  gap: var(--asb-space-2);
+  margin: 0;
+}
+
 /* Scope-of-effect notes on overview and backups */
 .asb-scope-note {
   margin: 0 0 var(--asb-space-2);
@@ -71,11 +92,8 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Usage charts and the summary stat band. Shared by the model-usage page and
- * the official-quota trend. The surface recipe mirrors the app's chart
- * material (.asb-chart-empty / .asb-chart-tooltip): hairline frame on the
- * muted content surface. Series hues resolve straight to --asb-* tokens; no
- * bridged chart palette.
+ * Usage charts and shared stat band. Chart cards use the app's chart
+ * material: a hairline frame on the muted surface.
  * ------------------------------------------------------------------------- */
 .asb-usage-stat-band {
   display: grid;
@@ -187,19 +205,14 @@
   animation: asb-number-fade var(--asb-motion-node) var(--asb-easing);
 }
 
-.asb-usage-chart-caption {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-  font-variant-numeric: var(--asb-num-font-variant);
-}
-
 .asb-usage-chart-legend {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--asb-space-1) var(--asb-space-3);
   margin: 0;
+  padding: 0;
+  list-style: none;
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
 }
@@ -280,117 +293,6 @@
   white-space: nowrap;
 }
 
-/* Donut card — the model-composition ledger. */
-.asb-usage-donut-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-4);
-  min-width: 0;
-  margin: 0;
-  padding: var(--asb-space-4);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
-}
-
-.asb-usage-donut-title {
-  margin: 0;
-  color: var(--asb-text);
-  font: var(--asb-text-section);
-}
-
-.asb-usage-donut-layout {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--asb-space-6);
-  min-width: 0;
-}
-
-.asb-usage-donut-stage {
-  position: relative;
-  flex: none;
-  width: 18rem;
-  height: 18rem;
-}
-
-.asb-usage-donut-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.asb-usage-donut-center-value {
-  color: var(--asb-text);
-  font: var(--asb-text-title);
-  font-variant-numeric: var(--asb-num-font-variant);
-  animation: asb-number-fade var(--asb-motion-node) var(--asb-easing);
-}
-
-.asb-usage-donut-center-unit {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-}
-
-.asb-usage-donut-legend {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.asb-usage-donut-row {
-  min-width: 0;
-  padding: var(--asb-space-2) 0;
-}
-
-.asb-usage-donut-row:first-child {
-  padding-top: 0;
-}
-
-.asb-usage-donut-row:last-child {
-  padding-bottom: 0;
-}
-
-.asb-usage-donut-row-head {
-  display: flex;
-  align-items: center;
-  gap: var(--asb-space-1);
-  min-width: 0;
-}
-
-.asb-usage-donut-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--asb-text);
-  font: var(--asb-text-label);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asb-usage-donut-percent {
-  flex: none;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-  font-variant-numeric: var(--asb-num-font-variant);
-}
-
-.asb-usage-donut-value {
-  margin: var(--asb-space-unit) 0 0;
-  padding-left: var(--asb-space-3);
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-  font-variant-numeric: var(--asb-num-font-variant);
-}
-
 /* The count-up figure fade. Remounting the element replays it (the key on
    the value node changes whenever its target changes). */
 @keyframes asb-number-fade {
@@ -425,11 +327,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .asb-usage-donut-layout {
-    flex-direction: column;
-    align-items: center;
-    gap: var(--asb-space-5);
-  }
 }
 
 .asb-quota-loading { display: grid; gap: var(--asb-space-3); }

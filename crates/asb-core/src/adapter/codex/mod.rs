@@ -6,7 +6,8 @@
 
 mod common;
 mod permissions;
-pub use permissions::{permission_profile_status, PermissionProfileStatus};
+pub use permissions::{permission_profile_status, validate_permission_configuration, PermissionProfileStatus, DEFAULT_PERMISSIONS_KEY, BUILTIN_PERMISSION_PROFILES};
+pub(super) use permissions::validate_permission_selection;
 mod common_fragment;
 mod document;
 pub use common::extract_client_settings;
@@ -23,11 +24,12 @@ mod unmanaged;
 pub(crate) use document::{check_syntax, parse};
 pub use restore::validate_restore_configuration;
 pub(crate) use preview::preview;
-pub(crate) use render::{render, render_client_settings_into_file, render_gateway_base_url};
+pub(crate) use render::{render, render_entries, render_gateway_base_url};
 pub(crate) use state::{full_diff, matches_provider_settings, owned_diff};
 pub use state::{route_state, OFFICIAL_PROVIDER};
-pub use subagents::{read_subagent_settings, render_subagent_settings};
-pub(crate) use unmanaged::remove_unmanaged;
+pub use subagents::read_subagent_settings;
+pub(super) use subagents::RETIRED_MAX_THREADS_KEY;
+pub(crate) use unmanaged::select_unmanaged;
 
 fn validate_projection(
     plan: &crate::contracts::SwitchPlan,

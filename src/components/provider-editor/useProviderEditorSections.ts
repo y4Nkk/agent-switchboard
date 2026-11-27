@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { AppKind } from "../../api/client";
 import type { ProviderEditorContext, ProviderEditorSection, ProviderEditorNavigation as RequestNavigation } from "../../app/provider-editor-session";
 import type { RouteRole } from "../model-routing/model";
@@ -25,9 +25,12 @@ export function useProviderEditorSections(props: ProviderEditorNavigation & {
   const originalHash = useRef(current?.fileHash ?? null);
   const stale = originalHash.current !== null && current?.fileHash !== originalHash.current;
   const leave = useUnsavedChanges(props.dirty, props.busy, { guardPageRoot: props.active });
-  const selectSection = (next: ProviderEditorSection) => {
+  const selectSection = (next: ProviderEditorSection, source?: "tab") => {
+    const target = props.official && next === "models" ? "connection" : next;
+    if (target === section) return;
     positions.current[section] = props.viewportRef.current?.scrollTop ?? 0;
-    updateSection(props.official && next === "models" ? "connection" : next);
+    if (source === "tab") positions.current[target] = 0;
+    updateSection(target);
   };
   // The main model is edited from the catalog; the other purposes have their own controls.
   const focusRole = (requestedRole: RouteRole = role) => requestAnimationFrame(() => {
@@ -38,7 +41,7 @@ export function useProviderEditorSections(props: ProviderEditorNavigation & {
     const control = target?.matches(enabled) ? target : target?.querySelector<HTMLElement>(enabled);
     (control ?? target)?.focus({ preventScroll: true });
   });
-  useEffect(() => {
+  useLayoutEffect(() => {
     props.viewportRef.current?.scrollTo({ top: positions.current[section] ?? 0 });
   }, [section, props.viewportRef]);
   useEffect(() => {

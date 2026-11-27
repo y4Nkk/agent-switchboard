@@ -42,7 +42,11 @@ type SearchResult =
 type SearchTaskState =
   | { state: "running"; progress: SessionSearchProgress }
   | { state: "completed"; result: SearchResult }
-  | { state: "failed"; message: string };
+  | { state: "failed"; message: string }
+  | { state: "expired" };
+
+type SearchReadRequest = { scope: "library"; id: string; page: number } | { scope: "transcript"; id: string };
+type ReportProgress = (progress: SessionSearchProgress) => void;
 
 function pause(signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -53,54 +57,73 @@ function pause(signal: AbortSignal): Promise<void> {
   });
 }
 
-/** Both native and browser development consume the same backend task lifecycle. */
-async function runSearch(scope: "library", request: SessionSearchRequest, signal: AbortSignal,
-  onProgress: (progress: SessionSearchProgress) => void): Promise<SessionSearchPage>;
-async function runSearch(scope: "transcript", request: TranscriptSearchRequest, signal: AbortSignal,
-  onProgress: (progress: SessionSearchProgress) => void): Promise<TranscriptSearchPage>;
-async function runSearch(scope: SearchResult["scope"], request: SessionSearchRequest | TranscriptSearchRequest,
-  signal: AbortSignal, onProgress: (progress: SessionSearchProgress) => void) {
-  signal.throwIfAborted();
-  const id = await invoke<string>("start_session_search", { request: { scope, value: request } });
-  let consumed = false;
-  let cancellationSent = false;
-  const cancel = () => {
-    if (cancellationSent) return;
-    cancellationSent = true;
-    void invoke("cancel_session_search", { id }).catch((error) => console.warn("Session search cancellation failed", error));
-  };
-  signal.addEventListener("abort", cancel, { once: true });
-  try {
-    for (;;) {
-      signal.throwIfAborted();
-      const status = await invoke<SearchTaskState>("read_session_search", { id });
-      signal.throwIfAborted();
-      if (status.state === "completed") {
-        consumed = true;
-        if (status.result.scope !== scope) throw new Error("Session search result scope mismatch");
-        return status.result.value;
-      }
-      if (status.state === "failed") {
-        consumed = true;
-        throw { code: "session-search-failed", message: status.message,
-          messageKey: "errors.sessions.searchFailed", params: { detail: status.message } } satisfies CommandError;
-      }
-      onProgress(status.progress);
-      await pause(signal);
+function searchFailed(message: string): CommandError {
+  return { code: "session-search-failed", message,
+    messageKey: "errors.sessions.searchFailed", params: { detail: message } };
+}
+
+function cancelSearch(id: string) {
+  void invoke("cancel_session_search", { id }).catch((error) => console.warn("Session search cancellation failed", error));
+}
+
+async function readSearch(request: SearchReadRequest, signal: AbortSignal, onProgress: ReportProgress) {
+  for (;;) {
+    signal.throwIfAborted();
+    const status = await invoke<SearchTaskState>("read_session_search", { request });
+    signal.throwIfAborted();
+    if (status.state === "expired") return null;
+    if (status.state === "failed") throw searchFailed(status.message);
+    if (status.state === "completed") {
+      if (status.result.scope !== request.scope) throw new Error("Session search result scope mismatch");
+      return status.result;
     }
-  } finally {
-    signal.removeEventListener("abort", cancel);
-    // Aborting before start returned still owns the newly allocated task.
-    if (!consumed) cancel();
+    onProgress(status.progress);
+    await pause(signal);
   }
 }
 
-export function searchSessions(request: SessionSearchRequest, signal: AbortSignal,
-  onProgress: (progress: SessionSearchProgress) => void) {
-  return runSearch("library", request, signal, onProgress);
+/** The workspace owns one search across page changes. Closing it releases the backend snapshot. */
+export function createSessionSearch(request: SessionSearchRequest) {
+  let task: Promise<string> | undefined;
+  const release = (owned: Promise<string>) => {
+    task = undefined;
+    void owned.then(cancelSearch, () => undefined);
+  };
+  return {
+    async page(page: number, signal: AbortSignal, onProgress: ReportProgress): Promise<SessionSearchPage> {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        signal.throwIfAborted();
+        const owned = task ??= invoke<string>("start_session_search", { request: { scope: "library", value: request } });
+        try {
+          const id = await owned;
+          const result = await readSearch({ scope: "library", id, page }, signal, onProgress);
+          if (result?.scope === "library") return result.value;
+          if (task === owned) task = undefined;
+        } catch (error) {
+          if (!signal.aborted && task === owned) release(owned);
+          throw error;
+        }
+      }
+      throw searchFailed("会话搜索已结束或停止，请重新搜索");
+    },
+    close() { if (task) release(task); },
+  };
 }
 
-export function searchTranscript(request: TranscriptSearchRequest, signal: AbortSignal,
-  onProgress: (progress: SessionSearchProgress) => void) {
-  return runSearch("transcript", request, signal, onProgress);
+export async function searchTranscript(request: TranscriptSearchRequest, signal: AbortSignal,
+  onProgress: ReportProgress): Promise<TranscriptSearchPage> {
+  signal.throwIfAborted();
+  const id = await invoke<string>("start_session_search", { request: { scope: "transcript", value: request } });
+  let needsCancel = true;
+  const cancel = () => { if (needsCancel) { needsCancel = false; cancelSearch(id); } };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    const result = await readSearch({ scope: "transcript", id }, signal, onProgress);
+    needsCancel = false;
+    if (result?.scope !== "transcript") throw searchFailed("会话搜索已结束或停止，请重新搜索");
+    return result.value;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    cancel();
+  }
 }

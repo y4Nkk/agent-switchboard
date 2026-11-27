@@ -75,14 +75,14 @@ function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
     [profile.id, profile.baseUrl, profile.apiKey, profile.upstreamProtocol, profile.model, profile.responsesOptions?.requestMode]);
   const official = profile.routeMode === "official";
   const modelText = (active ? userConfigModel : profile.model) ?? t("providers.label.defaultModel");
-  const modelTitle = active ? t("providers.row.modelFromConfig", { model: modelText }) : t("providers.row.modelFromProfile", { model: modelText });
+  const modelTooltip = active ? t("providers.row.modelFromConfig", { model: modelText }) : t("providers.row.modelFromProfile", { model: modelText });
   const hasUsageQuery = Boolean(profile.usageQuery);
   const testId = `provider-test-${profile.id}`;
   const usageId = `provider-usage-${profile.id}`;
   const hasActions = Boolean(props.onRoutes || props.onEdit || props.onDelete || (!official && (profile.baseUrl || hasUsageQuery || props.onConfigureUsage)));
   return <ProviderRowShell id={profile.id} name={profile.name} active={active}
     confirmationOpen={confirmation !== undefined} sortable={sortable}
-    model={<span title={modelTitle}>{modelText}</span>}
+    model={modelText} modelTooltip={modelTooltip}
     endpoint={profile.websiteUrl ? <ProviderEndpoint url={profile.websiteUrl} link /> : official ? <span>{t("providers.label.officialLogin")}</span> : undefined}
     summary={usage ? <ProviderUsageSummary name={profile.name} usage={usage} /> : undefined}
     primaryAction={!active && props.onActivate ? <ProviderActivateButton name={profile.name} onActivate={() => props.onActivate?.(profile)} /> : undefined}

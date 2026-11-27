@@ -1,34 +1,19 @@
-import { useMemo } from "react";
-import { CUSTOM_PROBE_QUESTION_ID, type CodexProbeBatch, type CodexProbeGradingVersion } from "../api/client";
-import type { TFunction } from "../i18n";
-import { useI18n } from "../i18n";
-import { Button } from "./Button";
+import { useId, useMemo } from "react";
+import type { CodexProbeBatch } from "../api/client";
+import type { useCodexProbe } from "../app/useCodexProbe";
+import { useI18n, type TFunction } from "../i18n";
 import { createProbeHtmlPreview } from "../lib/probe-html";
-import { Input } from "./Input";
-import { Select } from "./Select";
+import { Button } from "./Button";
+import { CodexProbeSetup, type CodexProbeSetupProps } from "./CodexProbeSetup";
 import { ProbeTaskProgress, probeTime } from "./ProbeTaskProgress";
-import {
-  ProbeRunsTable, configSummary, probeSummaryCards, summarizeRuns,
-} from "./probe-shared";
-import { Textarea } from "./Textarea";
+import { ProbeRunsTable, configSummary, probeSummaryCards, summarizeRuns } from "./probe-shared";
 import { Time } from "./Time";
 import { ModuleHeader } from "./WorkspaceHeader";
-import { UsageIcon } from "./icons";
 import { StatCards } from "./charts/stat-cards";
-import type { useCodexProbe } from "../app/useCodexProbe";
 import { useCodexProbeDetail } from "./use-codex-probe-detail";
 
-/** The custom-question form lives with the panel because only a `custom`
- * selection needs it; the header keeps the action and the pickers. */
-export interface CodexProbeFormState {
-  questionId: string | null;
-  customQuestion: string;
-  customAnswer: string;
-  customGradingVersion: CodexProbeGradingVersion;
-  onCustomQuestionChange: (value: string) => void;
-  onCustomAnswerChange: (value: string) => void;
-  onCustomGradingChange: (value: CodexProbeGradingVersion) => void;
-}
+type Probe = ReturnType<typeof useCodexProbe>;
+type ProbeQuestion = NonNullable<Probe["questions"]>[number];
 
 function resultLine(batch: CodexProbeBatch, t: TFunction): string | null {
   const summary = summarizeRuns(batch.runs);
@@ -49,64 +34,64 @@ function resultLine(batch: CodexProbeBatch, t: TFunction): string | null {
   }
 }
 
-function CustomQuestionForm({ form, disabled, timeoutSeconds }: {
-  form: CodexProbeFormState; disabled: boolean; timeoutSeconds: number | undefined;
-}) {
-  const { t } = useI18n();
-  if (form.questionId !== CUSTOM_PROBE_QUESTION_ID) return null;
-  return (
-    <div className="asb-codex-probe-question">
-      <span>{t("codex.probe.visual.answerFormat")}</span>
-      <Select value={form.customGradingVersion} disabled={disabled}
-        ariaLabel={t("codex.probe.visual.answerFormat")} options={[
-          { value: "1", label: t("codex.probe.visual.integerFormat") },
-          { value: "svg-visual-v1", label: t("codex.probe.visual.svgFormat") },
-          { value: "html-visual-v1", label: t("codex.probe.visual.htmlFormat") },
-        ]} onChange={(value) => form.onCustomGradingChange(value as CodexProbeGradingVersion)} />
-      {timeoutSeconds !== undefined && <p className="asb-codex-probe-meta">
-        {t("codex.probe.timeLimit", { time: probeTime(timeoutSeconds) })}
-      </p>}
-      <label htmlFor="codex-probe-custom-question">{t("codex.probe.customQuestion")}</label>
-      <Textarea id="codex-probe-custom-question" rows={3} value={form.customQuestion}
-        placeholder={t(form.customGradingVersion !== "1"
-          ? "codex.probe.visual.questionPlaceholder" : "codex.probe.customQuestionPlaceholder")}
-        disabled={disabled} onChange={(event) => form.onCustomQuestionChange(event.target.value)} />
-      {form.customGradingVersion === "1" ? <>
-        <label htmlFor="codex-probe-custom-answer">{t("codex.probe.expectedAnswer")}</label>
-        <Input id="codex-probe-custom-answer" placeholder={t("codex.probe.exampleAnswer")} value={form.customAnswer}
-          disabled={disabled} onChange={(event) => form.onCustomAnswerChange(event.target.value)} />
-      </> : <p className="asb-codex-probe-note">{t("codex.probe.visual.note")}</p>}
-    </div>
-  );
-}
-
-/** The catalog's hand-made reference rendering through the same preview
- * pipeline as real answers, always in view; one possible output only. */
 function ReferenceVisual({ answer }: { answer: string }) {
   const { t } = useI18n();
   const source = useMemo(() => createProbeHtmlPreview(answer), [answer]);
   if (!source) return null;
-  return (
-    <>
-      <p className="asb-codex-probe-meta">{t("codex.probe.visual.referenceTitle")}</p>
-      <iframe className="asb-probe-html" srcDoc={source} sandbox="allow-scripts"
-        referrerPolicy="no-referrer" loading="lazy"
-        title={t("codex.probe.visual.referenceTitle")} />
-    </>
-  );
+  const title = t("codex.probe.visual.referenceTitle");
+  return <figure className="asb-probe-reference">
+    <figcaption className="asb-codex-probe-meta">{title}</figcaption>
+    <iframe className="asb-probe-html" srcDoc={source} sandbox="allow-scripts"
+      referrerPolicy="no-referrer" loading="lazy" title={title} />
+  </figure>;
+}
+
+function ProbeQuestionPanel({ question, active }: { question: ProbeQuestion; active: boolean }) {
+  const { t } = useI18n();
+  const heading = useId();
+  const visual = active ? question.referenceVisual : null;
+  return <section className="asb-usage-surface" aria-labelledby={heading}>
+    <ModuleHeader id={heading} title={question.label} />
+    <div className="asb-probe-question-layout" data-reference={Boolean(visual)}>
+      <div className="asb-codex-probe-question">
+        <p className="asb-codex-probe-meta">{t("codex.probe.timeLimit", { time: probeTime(question.timeoutSeconds) })}</p>
+        <p className="asb-probe-question-text">{question.text}</p>
+        {question.gradingVersion !== "1" && <p className="asb-codex-probe-note">{t("codex.probe.visual.note")}</p>}
+      </div>
+      {visual && <ReferenceVisual answer={visual} />}
+    </div>
+  </section>;
+}
+
+function ProbeProgressPanel({ probe }: { probe: Probe }) {
+  const { t } = useI18n();
+  const heading = useId();
+  const batch = probe.status?.status === "running" && !probe.status.persistPending ? probe.status : null;
+  if (!probe.starting && probe.synchronized && !batch && !probe.readError && !probe.cancelError) return null;
+  return <section className="asb-usage-surface asb-probe-progress-surface" aria-labelledby={heading}>
+    <ModuleHeader id={heading} title={t("codex.probe.taskProgress")} />
+    {probe.readError && <div className="asb-probe-state-row" role="alert">
+      <p className="asb-warn-text">{t("codex.probe.readError", { error: probe.readError })}</p>
+      <Button variant="secondary" size="compact" onClick={probe.refresh}>{t("codex.probe.retryRead")}</Button>
+    </div>}
+    {probe.cancelError && <p className="asb-warn-text" role="alert">{t("codex.probe.cancelError", { error: probe.cancelError })}</p>}
+    {probe.starting ? <p className="asb-codex-probe-progress" role="status">{t("codex.probe.preparing")}</p>
+      : batch ? <ProbeTaskProgress batch={batch} stale={Boolean(probe.readError)} />
+        : !probe.synchronized && !probe.readError && <p className="asb-codex-probe-progress" role="status">{t("codex.probe.readingProgress")}</p>}
+    {batch && <p className="asb-codex-probe-note">{t("codex.probe.backgroundNote")}</p>}
+  </section>;
 }
 
 function ProbeResults({ status, probe }: {
   status: CodexProbeBatch;
-  probe: ReturnType<typeof useCodexProbe>;
+  probe: Probe;
 }) {
   const { t } = useI18n();
   const summary = summarizeRuns(status.runs);
-  const heading = status.status === "running" ? t("codex.probe.currentHeading") : t("codex.probe.lastHeading");
   return (
     <div className="asb-codex-probe-content">
       <p className="asb-codex-probe-meta">
-        {heading} · {t("codex.probe.metaQuestion")}{status.question.label || "—"} · {t("codex.probe.startedAt")} <Time iso={status.startedAt} />
+        {t("codex.probe.metaQuestion")}{status.question.label || "—"} · {t("codex.probe.startedAt")} <Time iso={status.startedAt} />
         {status.finishedAt && <> · {t("codex.probe.finishedAt")} <Time iso={status.finishedAt} /></>}
       </p>
       <p className="asb-codex-probe-meta">
@@ -128,9 +113,6 @@ function ProbeResults({ status, probe }: {
       </p>}
       {summary.runCount > 0 && <>
         <div role="group" aria-label={t("codex.probe.summaryAria")}><StatCards stats={probeSummaryCards(status, t)} /></div>
-        {summary.recordedRuns < summary.runCount && <p className="asb-codex-probe-note" role="status">
-          {t("codex.probe.partialUsage", { recorded: summary.recordedRuns, total: summary.runCount })}
-        </p>}
         <ProbeRunsTable batch={status} />
       </>}
       {(status.status === "cancelled" || status.status === "interrupted") && <p className="asb-codex-probe-note">
@@ -140,63 +122,37 @@ function ProbeResults({ status, probe }: {
   );
 }
 
-export function CodexProbePanel({ probe, form, active }: {
-  probe: ReturnType<typeof useCodexProbe>;
-  form: CodexProbeFormState;
-  active: boolean;
-}) {
+function ProbeResultPanel({ probe, detail }: { probe: Probe; detail: ReturnType<typeof useCodexProbeDetail> }) {
   const { t } = useI18n();
+  const heading = useId();
+  const batch = detail.detail;
+  const awaiting = probe.status !== null && !detail.detailError && batch === null;
+  const empty = !probe.status && !probe.starting && probe.synchronized;
+  if (!batch && !awaiting && !empty && !detail.detailError && !probe.retryError) return null;
+  const title = batch ? t(batch.status === "running" ? "codex.probe.currentHeading" : "codex.probe.lastHeading")
+    : t("usage.radar.results");
+  return <section className="asb-usage-surface" aria-labelledby={heading}>
+    <ModuleHeader id={heading} title={title} />
+    {detail.detailError && <div className="asb-probe-state-row" role="alert">
+      <p className="asb-warn-text">{detail.detailError}</p>
+      <Button variant="secondary" size="compact" onClick={detail.refreshDetail}>{t("codex.probe.retryRead")}</Button>
+    </div>}
+    {probe.retryError && <p className="asb-warn-text" role="alert">{t("codex.probe.retryError", { error: probe.retryError })}</p>}
+    {awaiting && <p className="asb-codex-probe-meta" role="status">{t("codex.history.detailLoading")}</p>}
+    {batch ? <ProbeResults status={batch} probe={probe} /> : empty &&
+      <p className="asb-codex-probe-meta" role="status">{t("codex.probe.notStarted")}</p>}
+  </section>;
+}
+
+export function CodexProbePanel(props: CodexProbeSetupProps) {
+  const { t } = useI18n();
+  const { probe, form, active } = props;
   const selected = probe.questions?.find((question) => question.id === form.questionId);
   const detail = useCodexProbeDetail(active, probe.status?.batchId ?? null, probe.detailRevision, false);
-  return (
-    <section className="asb-panel asb-codex-probe" aria-label={t("codex.probe.title")}>
-      <ModuleHeader title={t("codex.probe.title")} />
-      <p className="asb-codex-probe-note">{t("codex.probe.backgroundNote")}</p>
-      {probe.catalogError && <p className="asb-warn-text" role="alert">
-        {t("codex.probe.catalogError", { error: probe.catalogError })}{" "}
-        <Button variant="secondary" onClick={probe.refresh}>{t("codex.probe.retryRead")}</Button>
-      </p>}
-      {probe.startError && <p className="asb-warn-text" role="alert">{t("codex.probe.startError", { error: probe.startError })}</p>}
-      {probe.readError && <p className="asb-warn-text" role="alert">
-        {t("codex.probe.readError", { error: probe.readError })}{" "}
-        <Button variant="secondary" onClick={probe.refresh}>
-          {t("codex.probe.retryRead")}
-        </Button>
-      </p>}
-      {probe.cancelError && <p className="asb-warn-text" role="alert">{t("codex.probe.cancelError", { error: probe.cancelError })}</p>}
-      {probe.retryError && <p className="asb-warn-text" role="alert">{t("codex.probe.retryError", { error: probe.retryError })}</p>}
-      {probe.starting ? <p className="asb-codex-probe-progress" role="status">{t("codex.probe.preparing")}</p>
-        : !probe.synchronized && !probe.readError
-          ? <p className="asb-codex-probe-progress" role="status">{t("codex.probe.readingProgress")}</p>
-          : probe.status && <ProbeTaskProgress batch={probe.status} stale={Boolean(probe.readError)} />}
-      <CustomQuestionForm form={form} disabled={probe.running || probe.starting}
-        timeoutSeconds={probe.customTimeoutSeconds?.[form.customGradingVersion]} />
-      {selected && <div className="asb-codex-probe-question">
-        <p className="asb-codex-probe-meta">
-          {t("codex.probe.metaQuestion")}{selected.label} · {t("codex.probe.timeLimit", { time: probeTime(selected.timeoutSeconds) })}
-        </p>
-        <p className="asb-probe-question-text">{selected.text}</p>
-        {active && selected.referenceVisual && <ReferenceVisual answer={selected.referenceVisual} />}
-        {selected.gradingVersion !== "1" &&
-          <p className="asb-codex-probe-note">{t("codex.probe.visual.note")}</p>}
-      </div>}
-      {detail.detailError && <p className="asb-warn-text" role="alert">
-        {detail.detailError}{" "}<Button variant="secondary" onClick={detail.refreshDetail}>{t("codex.probe.retryRead")}</Button>
-      </p>}
-      {active && detail.detailLoading && !detail.detail && <p className="asb-codex-probe-meta" role="status">
-        {t("codex.history.detailLoading")}</p>}
-      {active && detail.detail ? <ProbeResults status={detail.detail} probe={probe} /> : !probe.status && (
-        <div className="asb-empty-state asb-codex-probe-empty">
-          <span className="asb-empty-state-icon" aria-hidden="true"><UsageIcon /></span>
-          <h3 className="asb-section-title" role="status">
-            {probe.starting ? t("codex.probe.starting") : !probe.synchronized ? t("codex.probe.readingProgress")
-              : t("codex.probe.notStarted")}
-          </h3>
-        </div>
-      )}
-      <p className="asb-codex-probe-note">
-        {t("codex.probe.note")}
-      </p>
-    </section>
-  );
+  return <section className="asb-usage-stack asb-codex-probe" aria-label={t("codex.probe.title")}>
+    <CodexProbeSetup {...props} />
+    {active && <ProbeProgressPanel probe={probe} />}
+    {selected && <ProbeQuestionPanel question={selected} active={active} />}
+    {active && <ProbeResultPanel probe={probe} detail={detail} />}
+  </section>;
 }

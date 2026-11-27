@@ -50,6 +50,8 @@ Low/Normal 允许脚本继续运行，不混用 TrySuspend/Resume。浏览器开
 
 ## Related decisions
 
+- [桌面工作区加载与诊断读取](2026-11-25-desktop-load-and-diagnostic-reads.md)拥有首次加载边界。已访问工作区继续按本篇管理隐藏时的载荷。
+
 - [工作区状态所有权](2026-10-13-desktop-workspace-uiux.md)、[有界本地资源](2026-10-14-bounded-local-resources.md)和[托盘闲置销毁](2026-10-28-tray-idle-teardown.md)均部分重叠并互链；原草稿、会话、队列、磁盘维护与浮层生命周期继续成立，没有完全被替代或需要归档的旧篇。
 - [进程资源监控](2026-10-23-native-process-resource-monitor.md)继续拥有进程归属和指标口径；其隐藏停采样的资源页不能作为后台回收实验采集器。
 - 真实测试同时确认 PDH 格式化数组省略同名实例的 #N 序号，按名称建表会覆盖 WebView2 进程。采集器修订由上述进程资源监控笔记拥有；没有将少算进程的旧读数当作回收收益。

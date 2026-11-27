@@ -1,5 +1,5 @@
-@import "./gateway-overview.css";
-
+.asb-saved-model-plans,
+.asb-route-overview-panel,
 .asb-model-route-panel {
   display: flex;
   flex-direction: column;
@@ -7,7 +7,8 @@
   gap: var(--asb-space-4);
 }
 
-.asb-model-routing .asb-tab { display: inline-flex; align-items: center; gap: var(--asb-space-2); }
+.asb-saved-model-plans > .asb-module-header { margin-block-end: 0; }
+.asb-saved-model-plans .asb-tab { display: inline-flex; align-items: center; gap: var(--asb-space-2); }
 .asb-model-route-logo { width: var(--asb-icon-size-md); height: var(--asb-icon-size-md); flex: none; }
 .asb-model-route-empty { display: grid; gap: var(--asb-space-3); max-width: 28rem; }
 
@@ -19,6 +20,30 @@
   gap: var(--asb-space-2) var(--asb-space-4);
 }
 .asb-model-route-actions > p { flex: 1 1 20rem; margin: 0; }
+
+.asb-route-overview-selection {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-3);
+}
+
+.asb-route-overview-selection > .asb-field {
+  flex: 1 1 16rem;
+  max-width: var(--asb-measure-form);
+  min-width: 0;
+}
+
+.asb-route-overview-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--asb-space-3);
+  padding-block: var(--asb-space-4);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-route-overview-empty > p { margin: 0; }
 
 .asb-purpose-cards {
   --asb-route-client: var(--asb-action);

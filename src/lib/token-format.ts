@@ -30,12 +30,6 @@ export function formatCompactTokenCount(value: number): string {
   return `${compactTokenFormatter().format(value / magnitude.divisor)}${magnitude.suffix}`;
 }
 
-/** Compact token value with its explicit unit for values outside a table header. */
-export function formatTokenValue(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  return `${formatCompactTokenCount(value)} ${TOKEN_UNIT}`;
-}
-
 function tokenMagnitude(value: number): (typeof TOKEN_MAGNITUDES)[number] | null {
   const absolute = Math.abs(value);
   for (const [index, magnitude] of TOKEN_MAGNITUDES.entries()) {

@@ -16,17 +16,6 @@
   gap: var(--asb-space-2);
 }
 
-.asb-gateway-map-heading-copy {
-  display: grid;
-  gap: var(--asb-space-1);
-}
-
-.asb-gateway-section-count {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-caption);
-  font-variant-numeric: tabular-nums;
-}
-
 .asb-gateway-map-canvas {
   position: relative;
   isolation: isolate;
@@ -75,6 +64,27 @@
 .asb-gateway-wires.is-failure .asb-gateway-wire-halo { display: none; }
 .asb-gateway-wires.is-failure .asb-gateway-wire-stroke { stroke-dasharray: 5 6; }
 .asb-gateway-wire.is-muted { opacity: .24; }
+
+.asb-gateway-wire-flow {
+  display: none;
+  stroke: var(--asb-link);
+  stroke-width: 3.4;
+  stroke-dasharray: 8 112;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .asb-gateway-wires:not(.is-failure) .asb-gateway-wire:not(.is-muted) .asb-gateway-wire-flow {
+    display: inline;
+    animation: asb-gateway-flow 1.3s linear 2;
+  }
+}
+
+@keyframes asb-gateway-flow {
+  from { opacity: 0; stroke-dashoffset: 8; }
+  16%, 84% { opacity: .95; }
+  to { opacity: 0; stroke-dashoffset: -100; }
+}
 
 .asb-gateway-node {
   display: grid;

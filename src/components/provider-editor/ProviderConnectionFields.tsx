@@ -1,6 +1,7 @@
 import { usesClaudeManagedAuth } from "../../api/claude-accounts";
 import type { UpstreamProtocol } from "../../api/client";
 import { useI18n } from "../../i18n";
+import { SettingsGroup } from "../SettingsLayout";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
 import { Input } from "../Input";
@@ -57,8 +58,7 @@ export function ProviderConnectionFields({ editor, busy, autoFill }: Props) {
   const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
   return (
-    <section className="asb-editor-section" aria-label={t("providers.editor.section.connection")}>
-      <h3 className="asb-section-title">{t("providers.editor.section.connection")}</h3>
+    <SettingsGroup title={t("providers.editor.section.connection")}>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-connection-choice">
           <ProtocolField editor={editor} busy={busy || !!draft.connection?.claudeNative} />
@@ -87,6 +87,6 @@ export function ProviderConnectionFields({ editor, busy, autoFill }: Props) {
         </label>}
         <RouteNotice editor={editor} />
       </div>
-    </section>
+    </SettingsGroup>
   );
 }

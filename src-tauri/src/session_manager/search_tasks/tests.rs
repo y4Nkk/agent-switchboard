@@ -1,13 +1,17 @@
 use super::*;
 
-fn register(root: &Path, result: Option<Result<SearchResult, String>>) -> (String, Arc<SearchControl>) {
+fn register(root: &Path, result: Option<Result<SearchOutput, String>>) -> (String, Arc<SearchControl>) {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed).to_string();
     let control = Arc::new(SearchControl::default());
     *control.touched.lock().unwrap() = Some(Instant::now());
     TASKS.lock().unwrap().insert(id.clone(), Task {
-        root: root.into(), control: control.clone(), result: Arc::new(Mutex::new(result)),
+        root: root.into(), library: true, control: control.clone(), result: Arc::new(Mutex::new(result)),
     });
     (id, control)
+}
+
+fn read_library(root: &Path, id: &str, page: usize) -> Result<SearchTaskState, String> {
+    read(root, SearchReadRequest::Library { id: id.into(), page })
 }
 
 #[test]
@@ -39,30 +43,50 @@ fn cancellation_and_expired_read_lease_abort_processing() {
 }
 
 #[test]
-fn terminal_result_is_consumed_once_and_failures_are_terminal_too() {
+fn completed_library_snapshot_supports_multiple_pages_and_expires_after_idle_lease() {
     let root = tempfile::tempdir().unwrap();
-    let page = SessionSearchPage { results: vec![], total: 0, issues: vec![], projects: vec![], tags: vec![] };
-    let (id, _) = register(root.path(), Some(Ok(SearchResult::Library(page))));
-    let completed = serde_json::to_value(read(root.path(), &id).unwrap()).unwrap();
+    let snapshot = SearchSnapshot::build(vec![], vec![], |_| Ok(vec![])).unwrap();
+    let (id, control) = register(root.path(), Some(Ok(SearchOutput::Library(Arc::new(Mutex::new(snapshot))))));
+    assert!(read_library(root.path(), &id, 0).is_err());
+    let completed = serde_json::to_value(read_library(root.path(), &id, 1).unwrap()).unwrap();
     assert_eq!(completed["state"], "completed");
     assert_eq!(completed["result"]["scope"], "library");
     assert_eq!(completed["result"]["value"]["total"], 0);
-    assert!(read(root.path(), &id).is_err());
+    assert!(read(root.path(), SearchReadRequest::Transcript { id: id.clone() }).is_err());
+    *control.touched.lock().unwrap() = Some(Instant::now() - LEASE - Duration::from_secs(1));
+    assert!(matches!(read_library(root.path(), &id, 2).unwrap(), SearchTaskState::Completed { .. }));
+    *control.touched.lock().unwrap() = Some(Instant::now() - SNAPSHOT_LEASE - Duration::from_secs(1));
+    assert!(matches!(read_library(root.path(), &id, 1).unwrap(), SearchTaskState::Expired));
+}
+
+#[test]
+fn terminal_failure_is_consumed_once() {
+    let root = tempfile::tempdir().unwrap();
     let (id, _) = register(root.path(), Some(Err("unreadable".into())));
-    assert!(matches!(read(root.path(), &id).unwrap(), SearchTaskState::Failed { .. }));
-    assert!(read(root.path(), &id).is_err());
+    assert!(matches!(read_library(root.path(), &id, 1).unwrap(), SearchTaskState::Failed { .. }));
+    assert!(matches!(read_library(root.path(), &id, 1).unwrap(), SearchTaskState::Expired));
 }
 
 #[test]
 fn only_accepts_explicit_search_scopes() {
-    let library = serde_json::json!({ "query":"test", "offset":0, "pinnedOnly":false, "archived":false });
+    let library = serde_json::json!({ "query":"test", "pinnedOnly":false, "archived":false });
     assert!(serde_json::from_value::<SearchRequest>(library.clone()).is_err());
+    assert!(serde_json::from_value::<SearchRequest>(serde_json::json!({
+        "scope": "library", "value": { "query": "test", "offset": 0, "pinnedOnly": false, "archived": false }
+    })).is_err());
     assert!(matches!(serde_json::from_value::<SearchRequest>(serde_json::json!({
         "scope": "library", "value": library
     })).unwrap(), SearchRequest::Library(_)));
     assert!(matches!(serde_json::from_value::<SearchRequest>(serde_json::json!({
         "scope": "transcript", "value": { "app":"codex", "sessionId":"one", "query":"test", "offset":0, "revision":null }
     })).unwrap(), SearchRequest::Transcript(_)));
+    assert!(serde_json::from_value::<SearchReadRequest>(serde_json::json!({ "id": "1" })).is_err());
+    assert!(serde_json::from_value::<SearchReadRequest>(serde_json::json!({
+        "scope": "library", "id": "1", "offset": 50
+    })).is_err());
+    assert!(matches!(serde_json::from_value::<SearchReadRequest>(serde_json::json!({
+        "scope": "library", "id": "1", "page": 2
+    })).unwrap(), SearchReadRequest::Library { page: 2, .. }));
 }
 
 #[test]
@@ -75,8 +99,8 @@ fn cancellation_is_scoped_to_exact_task_and_root() {
     assert!(!control.cancelled.load(Ordering::Relaxed));
     cancel(root.path(), &old).unwrap();
     assert!(control.checkpoint().is_err());
-    assert!(read(root.path(), &old).is_err());
-    assert!(matches!(read(root.path(), &current).unwrap(), SearchTaskState::Running { .. }));
+    assert!(matches!(read_library(root.path(), &old, 1).unwrap(), SearchTaskState::Expired));
+    assert!(matches!(read_library(root.path(), &current, 1).unwrap(), SearchTaskState::Running { .. }));
     assert!(TASKS.lock().unwrap().contains_key(&old));
     cancel(root.path(), &current).unwrap();
     TASKS.lock().unwrap().remove(&old);

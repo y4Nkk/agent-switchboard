@@ -18,6 +18,8 @@ Claude 提供权限模式、规则、额外目录、基础沙箱及文件/网络
 
 ## Related decisions
 
+[按项写入与来源检查](2026-11-27-client-configuration-writes-and-sources.md)持有 Codex 用户级默认权限档案选择、Claude 文件工具边界和共享控制的按项投影。
+
 [当前配置契约](2026-10-12-current-client-configuration-contract.md)部分重叠：沿用单一目录、通知和模型片段契约；本篇替代其顶层 effortLevel 一律删除及仅编辑模型默认强度的决定。旧决定的最强理由是统一新模型持久化入口；现行官方作用域说明表明删除宿主有效值超出了这一目的。[存储修复](2026-09-23-provider-store-repair.md)部分重叠：沿用暂存、副本校验和保留原目录，补充当前键与片段所有权的显式转换。会话保留库和其他界面笔记不拥有原生配置，不改变它们。
 
 ## Alternatives considered

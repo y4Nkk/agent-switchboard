@@ -1,12 +1,4 @@
-//! Deep-reset pruning for Codex `config.toml`.
-//!
-//! Adapter overlays only ever touch keys in the ownership directory; this
-//! module is the single inverse operation: it deletes every leaf no ASB
-//! module claims so the deep client reset can converge the real file onto the
-//! configuration the interface models. Preserved content: directory scalars
-//! (provider and client), the sub-agent runtime keys the typed render removes
-//! itself, and the whole-table families owned by the provider projection and
-//! the extensions workspace, plus preserve-only families in the official directory.
+//! Selection of unmanaged fields for a Codex reset.
 
 use toml_edit::{Item, TableLike};
 use std::collections::BTreeSet;
@@ -15,18 +7,15 @@ use crate::adapter::AdapterError;
 use crate::contracts::{AppKind, CodexSubagentKey};
 use crate::ownership::{is_owned, is_codex_extension_path};
 
-/// Removes every unowned leaf and prunes the tables it empties. Returns the
-/// input unchanged when nothing would be removed, so a no-op reset never
-/// rewrites the live file.
-pub(crate) fn remove_unmanaged(text: &str, fragment: &str) -> Result<String, AdapterError> {
+pub(crate) fn select_unmanaged(
+    text: &str, fragment: &str, selected: &BTreeSet<String>, candidates: &mut BTreeSet<String>,
+) -> Result<String, AdapterError> {
     let common = super::common_fragment::declared_paths(fragment)?;
     if text.trim().is_empty() {
         return Ok(text.to_string());
     }
     let mut document = super::document::parse(text)?;
-    let mut removed = false;
-    prune_table(document.as_table_mut(), &[], &common, &mut removed);
-    if !removed {
+    if !prune_table(document.as_table_mut(), &[], &common, selected, candidates) {
         return Ok(text.to_string());
     }
     Ok(document.to_string())
@@ -35,6 +24,7 @@ pub(crate) fn remove_unmanaged(text: &str, fragment: &str) -> Result<String, Ada
 fn preserved(path: &[String], is_table: bool, common: &BTreeSet<Vec<String>>) -> bool {
     let key = crate::config_path::from_keys(path);
     is_owned(AppKind::Codex, &key)
+        || key == super::DEFAULT_PERMISSIONS_KEY
         || is_codex_extension_path(&key)
         || path.first().is_some_and(|part| part == "model_providers")
         || key == "agents.max_threads"
@@ -43,31 +33,41 @@ fn preserved(path: &[String], is_table: bool, common: &BTreeSet<Vec<String>>) ->
         || common.iter().any(|claimed| path.starts_with(claimed))
 }
 
-fn prune_table(table: &mut dyn TableLike, prefix: &[String], common: &BTreeSet<Vec<String>>, removed: &mut bool) {
+fn prune_table(
+    table: &mut dyn TableLike, prefix: &[String], common: &BTreeSet<Vec<String>>,
+    selected: &BTreeSet<String>, candidates: &mut BTreeSet<String>,
+) -> bool {
+    let mut changed = false;
     let keys: Vec<String> = table.iter().map(|(key, _)| key.to_string()).collect();
     for key in keys {
         let mut path = prefix.to_vec();
         path.push(key.clone());
         let is_table = table.get(&key).is_some_and(|item| item.as_table_like().is_some());
         if preserved(&path, is_table, common) { continue; }
-        let emptied = if let Some(sub) = table.get_mut(&key).and_then(Item::as_table_like_mut) {
-            prune_table(sub, &path, common, removed);
-            sub.is_empty()
+        let remove = if let Some(sub) = table.get_mut(&key).and_then(Item::as_table_like_mut).filter(|sub| !sub.is_empty()) {
+            let removed = prune_table(sub, &path, common, selected, candidates);
+            changed |= removed;
+            removed && sub.is_empty()
         } else {
-            table.remove(&key);
-            *removed = true;
-            continue;
+            let id = crate::config_path::from_keys(&path);
+            let remove = selected.contains(&id);
+            candidates.insert(id);
+            remove
         };
-        if emptied {
+        if remove {
             table.remove(&key);
-            *removed = true;
+            changed = true;
         }
     }
+    changed
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn remove_unmanaged(text: &str, fragment: &str) -> Result<String, AdapterError> {
+        crate::adapter::remove_unmanaged_entries(AppKind::Codex, text, fragment)
+    }
 
     #[test]
     fn host_leaves_are_removed_and_empty_tables_pruned() {

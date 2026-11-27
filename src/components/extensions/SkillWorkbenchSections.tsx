@@ -5,6 +5,7 @@ import { Button } from "../Button";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { Input } from "../Input";
 import { Select } from "../Select";
+import { SettingsGroup } from "../SettingsLayout";
 import { Textarea } from "../Textarea";
 import type { useSkillDependencies, useSkillFiles } from "./useSkillWorkbench";
 
@@ -18,7 +19,7 @@ export function SkillFiles({ files, busy }: { files: ReturnType<typeof useSkillF
   const document = files.document;
   if (!document) return null;
   const validPath = path.trim() !== "" && !files.paths.includes(path.trim());
-  return <section className="asb-editor-section">
+  return <SettingsGroup title={t("extensions.workbench.files")}>
     <p className="asb-scope-note">{t("extensions.workbench.revisionLead", { revision: document.view.revision })}
       <code>{document.view.contentDigest.slice(0, 12)}</code>{t("extensions.workbench.revisionTail")}</p>
     <ul className="asb-ext-binding-list">{files.paths.map((name) => {
@@ -40,7 +41,7 @@ export function SkillFiles({ files, busy }: { files: ReturnType<typeof useSkillF
     {files.selected && document.drafts[files.selected] !== undefined && <Textarea code rows={18} disabled={busy}
       aria-label={t("extensions.workbench.editFileAria", { file: files.selected })} value={document.drafts[files.selected]}
       onChange={(event) => { if (files.selected) files.change(files.selected, event.target.value); }} />}
-  </section>;
+  </SettingsGroup>;
 }
 
 export function SkillVersions({ id, revision, busy, onLoad, onRestore }: { id: string; revision: number; busy: boolean;
@@ -59,8 +60,9 @@ export function SkillVersions({ id, revision, busy, onLoad, onRestore }: { id: s
     try { const next = await onLoad(id); if (request === generation.current) setVersions(next); }
     finally { if (request === generation.current) setLoading(false); }
   };
-  return <section className="asb-editor-section" aria-busy={loading}>
+  return <SettingsGroup title={t("extensions.workbench.versions")} busy={loading} actions={
     <Button variant="secondary" disabled={busy || loading} onClick={() => void load()}>{t("extensions.workbench.loadVersions")}</Button>
+  }>
     {versions && <ul className="asb-ext-binding-list">{versions.map((version) => <li key={version.digest} className="asb-ext-binding">
       <code>{version.digest.slice(0, 12)}</code><span>{t("extensions.workbench.versionMeta", {
         count: version.fileCount, size: formatBytes(version.totalBytes),
@@ -72,7 +74,7 @@ export function SkillVersions({ id, revision, busy, onLoad, onRestore }: { id: s
       onConfirm={() => { const digest = pending; setPending(null); onRestore(digest); }}>
       <p>{t("extensions.workbench.restoreNote")}</p><code>{pending}</code>
     </ConfirmSheet>}
-  </section>;
+  </SettingsGroup>;
 }
 
 export function SkillDependencies({ deps, options, busy, onReload }: { deps: ReturnType<typeof useSkillDependencies>;
@@ -82,7 +84,10 @@ export function SkillDependencies({ deps, options, busy, onReload }: { deps: Ret
     ...options.map((option) => ({ value: option.id, label: option.name }))];
   const patch = (index: number, value: Partial<(typeof deps.draft)[number]>) =>
     deps.change(deps.draft.map((row, position) => position === index ? { ...row, ...value } : row));
-  return <section className="asb-editor-section"><p className="asb-scope-note">{t("extensions.workbench.depsNote")}</p>
+  return <SettingsGroup title={t("extensions.workbench.dependencies")} description={t("extensions.workbench.depsNote")} actions={
+    <Button variant="secondary" disabled={busy}
+      onClick={() => deps.change([...deps.draft, { name: "", resourceId: null }])}>{t("extensions.workbench.addDep")}</Button>
+  }>
     {deps.stale && <div className="asb-banner" role="alert">{t("extensions.workbench.sourceChanged")}
       <Button variant="secondary" disabled={busy} onClick={onReload}>{t("extensions.library.reload")}</Button></div>}
     <ul className="asb-ext-binding-list">{deps.draft.map((row, index) => <li key={index} className="asb-ext-binding asb-skill-dependency">
@@ -92,7 +97,6 @@ export function SkillDependencies({ deps, options, busy, onReload }: { deps: Ret
         ariaLabel={t("extensions.workbench.depSelectAria", { row: index + 1 })}
         onChange={(value) => patch(index, { resourceId: value || null })} />
       <Button variant="secondary" disabled={busy} onClick={() => deps.change(deps.draft.filter((_, position) => position !== index))}>{t("extensions.workbench.removeDep")}</Button>
-    </li>)}</ul><Button variant="secondary" disabled={busy}
-      onClick={() => deps.change([...deps.draft, { name: "", resourceId: null }])}>{t("extensions.workbench.addDep")}</Button>
-  </section>;
+    </li>)}</ul>
+  </SettingsGroup>;
 }

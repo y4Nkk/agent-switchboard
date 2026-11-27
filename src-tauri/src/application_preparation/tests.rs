@@ -130,10 +130,9 @@ fn externally_changed_input_is_not_accepted_as_a_verified_revision() {
 
 fn broken_configuration(local: &LocalState) -> std::path::PathBuf {
     local.configuration().initialize_current_layout().unwrap();
-    let mut settings = default_client_settings(AppKind::Codex);
-    settings.settings.remove(settings.settings.keys().next().cloned().as_ref().unwrap());
+    let settings = default_client_settings(AppKind::Codex);
     let path = local.configuration().client_settings_path(AppKind::Codex);
-    fs::write(&path, serde_json::to_vec(&settings).unwrap()).unwrap();
+    fs::write(&path, format!("\u{feff}{}", serde_json::to_string(&settings).unwrap())).unwrap();
     path
 }
 

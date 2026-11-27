@@ -1,6 +1,8 @@
-import { useId, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "../Button";
+import { SettingsGroup } from "../SettingsLayout";
+import { Tooltip } from "../Tooltip";
 
 interface ClientManagementModuleProps {
   title: string;
@@ -23,15 +25,14 @@ export function ClientManagementModule({
   onRefresh,
   children,
 }: ClientManagementModuleProps) {
-  const titleId = useId();
   return (
-    <section className="asb-client-management-module" aria-labelledby={titleId} aria-busy={busy || undefined}>
-      <header className="asb-client-management-bar">
-        <h3 id={titleId} className="asb-section-title">{title}</h3>
-        <Button variant="icon" aria-label={refreshLabel} title={refreshLabel}
-          disabled={refreshDisabled ?? busy} onClick={onRefresh}><RefreshCw /></Button>
-      </header>
+    <SettingsGroup className="asb-client-management-module" title={title} busy={busy} surface="plain" actions={
+        <Tooltip label={refreshLabel}>
+          <Button variant="icon" aria-label={refreshLabel}
+            disabled={refreshDisabled ?? busy} onClick={onRefresh}><RefreshCw aria-hidden="true" /></Button>
+        </Tooltip>
+    }>
       {children}
-    </section>
+    </SettingsGroup>
   );
 }

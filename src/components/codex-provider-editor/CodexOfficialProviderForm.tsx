@@ -1,4 +1,5 @@
 import { Input } from "../Input";
+import { SettingsGroup } from "../SettingsLayout";
 import { OfficialLoginPanel } from "../OfficialLoginPanel";
 import { useI18n } from "../../i18n";
 import { ProviderAdvancedSettings } from "../provider-editor/ProviderAdvancedSettings";
@@ -21,8 +22,7 @@ interface Props {
 function BasicDetails({ busy, editing, editor, onSwitchAccessMode }: Pick<Props, "busy" | "editing" | "editor" | "onSwitchAccessMode">) {
   const { t } = useI18n();
   const { draft, setDraft } = editor;
-  return <section className="asb-editor-section" aria-label={t("codex.identity.title")}>
-    <h3 className="asb-section-title">{t("codex.identity.title")}</h3>
+  return <SettingsGroup title={t("codex.identity.title")}>
     <div className="asb-editor-section-fields">
       <div className="asb-provider-field-grid">
         <div className="asb-field"><span>{t("codex.identity.accessMode")}</span>
@@ -38,7 +38,7 @@ function BasicDetails({ busy, editing, editor, onSwitchAccessMode }: Pick<Props,
           onChange={(event) => setDraft((current) => ({ ...current, websiteUrl: event.target.value }))} />
       </label>
     </div>
-  </section>;
+  </SettingsGroup>;
 }
 
 function SubscriptionSettings({ busy, editor }: Pick<Props, "busy" | "editor">) {
@@ -65,10 +65,9 @@ export function CodexOfficialProviderForm(props: Props) {
     <div className="asb-provider-form asb-provider-editor-section" role="tabpanel" id={`${formId}-connection-panel`}
       aria-labelledby={`${formId}-connection-tab`} data-editor-section="connection" hidden={section !== "connection"}>
       <BasicDetails {...props} />
-      <section className="asb-editor-section" aria-label={t("codex.official.title")}>
-        <h3 className="asb-section-title">{t("codex.official.title")}</h3>
-        <div className="asb-editor-section-fields"><OfficialLoginPanel app="codex" /></div>
-      </section>
+      <SettingsGroup title={t("codex.official.title")}>
+        <OfficialLoginPanel app="codex" />
+      </SettingsGroup>
       <ProviderAdvancedSettings>
         <SubscriptionSettings busy={busy} editor={editor} />
         <ProviderNotesField busy={busy} value={draft.notes ?? ""} onChange={(notes) => setDraft((current) => ({ ...current, notes }))} />

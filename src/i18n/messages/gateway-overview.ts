@@ -1,17 +1,12 @@
 export const messages = {
-  "gatewayOverview.runtime": ["本机网关运行情况", "Local gateway runtime"],
   "gatewayOverview.savedPlan": ["已保存的模型方案", "Saved model plans"],
   "gatewayOverview.viewing": ["查看供应商方案", "Provider plan to view"],
   "gatewayOverview.viewCurrent": ["查看当前方案", "View active plan"],
-  "gatewayOverview.active": ["当前使用", "Currently active"],
-  "gatewayOverview.activePlan": ["当前档案 · 已保存方案", "Active profile · saved plan"],
-  "gatewayOverview.inactivePlan": ["此档案尚未启用", "This profile is inactive"],
   "gatewayOverview.destinations": ["已保存方案的用途和模型去向", "Saved plan purposes and model destinations"],
   "gatewayOverview.editPurpose": ["编辑{role}，当前目标为{provider}，模型为{model}", "Edit {role}, currently using {provider}, model {model}"],
   "gatewayOverview.mainConnection": ["主连接", "Main connection"],
   "gatewayOverview.primaryConnection": ["跟随主连接", "Follow main connection"],
   "gatewayOverview.fixedProvider": ["固定供应商", "Fixed provider"],
-  "gatewayOverview.savedOnly": ["查看方案不会切换供应商。", "Viewing a plan does not switch providers."],
   "gatewayOverview.empty": ["还没有选定方案。选择已保存的供应商，或先添加供应商。", "No plan is selected. Choose a saved provider or add one first."],
   "gatewayOverview.missingPlan": ["原先查看的档案已不存在，请重新选择供应商。", "The previously viewed profile no longer exists. Select another provider."],
 } as const;

@@ -6,7 +6,6 @@ use asb_core::contracts::{AppKind, UpstreamProtocol};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -63,54 +62,52 @@ pub(crate) struct GatewayMetricsSnapshot {
     pub(crate) samples: Vec<GatewaySample>,
 }
 
+#[derive(Default)]
+struct CompletedRequests {
+    total: u64,
+    failed: u64,
+    samples: VecDeque<GatewaySample>,
+}
+
 pub(crate) struct GatewayMetrics {
     started_at_ms: u64,
-    total_requests: AtomicU64,
-    failed_requests: AtomicU64,
-    samples: Mutex<VecDeque<GatewaySample>>,
+    completed: Mutex<CompletedRequests>,
 }
 
 impl GatewayMetrics {
     pub(crate) fn new() -> Self {
         Self {
             started_at_ms: unix_now_ms(),
-            total_requests: AtomicU64::new(0),
-            failed_requests: AtomicU64::new(0),
-            samples: Mutex::new(VecDeque::new()),
+            completed: Mutex::new(CompletedRequests::default()),
         }
     }
 
     pub(crate) fn record(&self, sample: GatewaySample) {
-        self.total_requests.fetch_add(1, Ordering::Relaxed);
-        if sample.failed() {
-            self.failed_requests.fetch_add(1, Ordering::Relaxed);
-        }
-        // A poisoned lock means a panic elsewhere already failed the process;
-        // the deque append itself keeps no invariant that poisoning breaks,
-        // so recovery never drops telemetry.
-        let mut samples = self
-            .samples
+        // The counters and bounded sample deque belong to one complete snapshot.
+        let mut completed = self
+            .completed
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if samples.len() >= SAMPLE_CAPACITY {
-            samples.pop_front();
+        completed.total += 1;
+        if sample.failed() {
+            completed.failed += 1;
         }
-        samples.push_back(sample);
+        if completed.samples.len() >= SAMPLE_CAPACITY {
+            completed.samples.pop_front();
+        }
+        completed.samples.push_back(sample);
     }
 
     pub(crate) fn snapshot(&self) -> GatewayMetricsSnapshot {
-        let samples = self
-            .samples
+        let completed = self
+            .completed
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .iter()
-            .cloned()
-            .collect();
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         GatewayMetricsSnapshot {
             started_at_ms: self.started_at_ms,
-            total_requests: self.total_requests.load(Ordering::Relaxed),
-            failed_requests: self.failed_requests.load(Ordering::Relaxed),
-            samples,
+            total_requests: completed.total,
+            failed_requests: completed.failed,
+            samples: completed.samples.iter().cloned().collect(),
         }
     }
 }

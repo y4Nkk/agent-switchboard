@@ -8,7 +8,8 @@ import { useProviderQuotaRefresh } from "../pages/use-provider-quota-refresh";
 import { useProviderQuotaRead } from "../pages/use-provider-quota-read";
 import { CodexOfficialResetPanel } from "../components/CodexOfficialResetPanel";
 import { CodexProbeHistory } from "../components/CodexProbeHistory";
-import { CodexProbePanel, type CodexProbeFormState } from "../components/CodexProbePanel";
+import { CodexProbePanel } from "../components/CodexProbePanel";
+import type { CodexProbeFormState } from "../components/CodexProbeSetup";
 import { CodexResetPanel } from "../components/CodexResetPanel";
 import { useCodexOfficialReset, useCodexResetSignal } from "../components/quota-reads";
 import type { useCodexProbe } from "./useCodexProbe";
@@ -103,31 +104,27 @@ export function UsageWorkspace({ active, section, onSectionChange, probe, claude
     <section className="asb-page-stack" aria-label={t("usage.workspace.aria")}>
       <div hidden={showHistory}>
         <UsageWorkspaceHeader id={id} section={section} onSectionChange={onSectionChange}
-          consumption={{ active: consumptionActive, range, onRangeChange: setRange, usage }}
-          performance={performance}
-          resources={{ ...resources, active: resourcesActive }}
-          officialReset={officialReset} resetSignal={resetSignal} providerQuota={providerQuota}
-          radar={{ active: radarActive, probe, form, onQuestionChange: setQuestionId,
-            runCount, onRunCountChange: setRunCount,
-            onOpenHistory: () => { setHistoryOpened(true); setHistoryOpen(true); } }} />
+          usage={usage} consumptionActive={consumptionActive}
+          onOpenHistory={() => { setHistoryOpened(true); setHistoryOpen(true); }} />
         <UsagePanel id={id} section="consumption" selected={section} active={active}>
-          {consumptionActive && <UsagePage usage={usage} />}
+          {consumptionActive && <UsagePage usage={usage} range={range} onRangeChange={setRange} />}
         </UsagePanel>
         <UsagePanel id={id} section="requestPerformance" selected={section} active={active}>
           {performance.active && <RequestUsagePanel performance={performance} />}
         </UsagePanel>
         <UsagePanel id={id} section="quota" selected={section} active={active}>
-          {quotaActive && <div className="asb-page-stack">
-            <ProviderQuotaOverview profiles={quotaProfiles} quota={quotaRead} />
-            <CodexOfficialResetPanel read={officialReset} />
+          {quotaActive && <div className="asb-usage-stack">
             <CodexResetPanel read={resetSignal} />
+            <ProviderQuotaOverview profiles={quotaProfiles} quota={quotaRead} refresh={providerQuota} />
+            <CodexOfficialResetPanel read={officialReset} />
           </div>}
         </UsagePanel>
         <UsagePanel id={id} section="radar" selected={section} active={active && !showHistory}>
-          {(section === "radar" || radarOpened) && <CodexProbePanel probe={probe} form={form} active={radarActive && !showHistory} />}
+          {(section === "radar" || radarOpened) && <CodexProbePanel probe={probe} form={form}
+            active={radarActive && !showHistory} runCount={runCount} onRunCountChange={setRunCount} onQuestionChange={setQuestionId} />}
         </UsagePanel>
         <UsagePanel id={id} section="resources" selected={section} active={active}>
-          {showResources && <ResourceUsagePage resources={resources} />}
+          {showResources && <ResourceUsagePage resources={resources} active={resourcesActive} />}
         </UsagePanel>
       </div>
       {historyOpened && (

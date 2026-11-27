@@ -5,7 +5,7 @@ use asb_core::extensions::validate::{validate_content_paths, ContentEntryKind};
 use serde::Deserialize;
 
 use super::archive::extract_tar_gz_rooted;
-use super::transport::{fetch_bytes, MAX_API_DOWNLOAD, MAX_ARCHIVE_DOWNLOAD};
+use super::transport::{checked_bytes, fetch_bytes, MAX_API_DOWNLOAD, MAX_ARCHIVE_DOWNLOAD};
 use super::{check_candidate_totals, finish_candidate, HttpFetch, SkillCandidate, SourceError};
 use super::{MAX_SOURCE_BYTES, MAX_SOURCE_CANDIDATES, MAX_SOURCE_ENTRIES};
 
@@ -83,14 +83,7 @@ pub fn resolve_github_commit(
     ref_name: &str,
     fetch: HttpFetch,
 ) -> Result<String, SourceError> {
-    let repo = repository(repo)?;
-    validate_ref_name(ref_name)?;
-    let mut url = reqwest::Url::parse(&format!("https://api.github.com/repos/{repo}/commits/"))
-        .expect("validated GitHub repository");
-    url.path_segments_mut()
-        .expect("hierarchical URL")
-        .pop_if_empty()
-        .push(ref_name);
+    let url = commit_url(repo, ref_name)?;
     let bytes = fetch_bytes(url.as_str(), MAX_API_DOWNLOAD, fetch)?;
     #[derive(Deserialize)]
     struct Commit {
@@ -100,6 +93,39 @@ pub fn resolve_github_commit(
         .map_err(|error| SourceError::Unreachable(format!("GitHub 提交响应无法解析：{error}")))?;
     validate_commit(&response.sha)?;
     Ok(response.sha.to_lowercase())
+}
+
+pub(crate) fn revalidate_github_commit(
+    repo: &str,
+    ref_name: &str,
+    previous: Option<&str>,
+    fetch: HttpFetch,
+) -> Result<String, SourceError> {
+    let url = commit_url(repo, ref_name)?;
+    let response = fetch(url.as_str()).map_err(SourceError::Transport)?;
+    if response.0 == 304 {
+        return previous.map(str::to_owned).ok_or_else(|| {
+            SourceError::Unreachable("GitHub 未返回提交，且本地没有已校验的结果".into())
+        });
+    }
+    let bytes = checked_bytes(url.as_str(), MAX_API_DOWNLOAD, response)?;
+    let sha = std::str::from_utf8(&bytes)
+        .map_err(|error| SourceError::Unreachable(format!("GitHub 提交响应无法解析：{error}")))?
+        .trim();
+    validate_commit(sha)?;
+    Ok(sha.to_ascii_lowercase())
+}
+
+fn commit_url(repo: &str, ref_name: &str) -> Result<reqwest::Url, SourceError> {
+    let repo = repository(repo)?;
+    validate_ref_name(ref_name)?;
+    let mut url = reqwest::Url::parse(&format!("https://api.github.com/repos/{repo}/commits/"))
+        .expect("validated GitHub repository");
+    url.path_segments_mut()
+        .expect("hierarchical URL")
+        .pop_if_empty()
+        .push(ref_name);
+    Ok(url)
 }
 
 #[derive(Deserialize)]
@@ -194,7 +220,7 @@ fn download_entries(
 ) -> Result<Vec<ContentEntry>, SourceError> {
     let url = format!("https://codeload.github.com/{repo}/tar.gz/{commit}");
     let bytes = fetch_bytes(&url, MAX_ARCHIVE_DOWNLOAD, fetch)?;
-    extract_tar_gz_rooted(&bytes, subpath)
+    extract_tar_gz_rooted(&bytes, subpath, commit)
 }
 
 pub fn resolve_github_source(
@@ -203,7 +229,10 @@ pub fn resolve_github_source(
     ref_name: Option<&str>,
     fetch: HttpFetch,
 ) -> Result<Vec<SkillCandidate>, SourceError> {
-    resolve_github_source_with_requests(repo, subpath, ref_name, |_, url| fetch(url))
+    let ref_name = normalized_ref(ref_name);
+    validate_subpath(subpath.trim())?;
+    let commit = resolve_github_commit(repo, ref_name.unwrap_or("HEAD"), fetch)?;
+    resolve_pinned_github_source(repo, subpath, ref_name, &commit, |_, url| fetch(url))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -214,20 +243,18 @@ pub(crate) enum GitHubRequest {
     Archive,
 }
 
-pub(crate) fn resolve_github_source_with_requests(
+pub(crate) fn resolve_pinned_github_source(
     repo: &str,
     subpath: &str,
     ref_name: Option<&str>,
+    commit: &str,
     fetch: impl Fn(GitHubRequest, &str) -> Result<(u16, Vec<u8>), String>,
 ) -> Result<Vec<SkillCandidate>, SourceError> {
     let repo = repository(repo)?;
     let subpath = subpath.trim();
     validate_subpath(subpath)?;
-    let ref_name = ref_name.map(str::trim).filter(|name| !name.is_empty());
-    let commit = resolve_github_commit(&repo, ref_name.unwrap_or("HEAD"), &|url| {
-        fetch(GitHubRequest::Commit, url)
-    })?;
-    let files = tree_files(&repo, &commit, subpath, &|url| fetch(GitHubRequest::Tree, url))?;
+    validate_commit(commit)?;
+    let files = tree_files(&repo, commit, subpath, &|url| fetch(GitHubRequest::Tree, url))?;
     let roots: Vec<_> = files
         .keys()
         .filter_map(|path| {
@@ -239,9 +266,7 @@ pub(crate) fn resolve_github_source_with_requests(
         })
         .collect();
     if roots.len() > MAX_SOURCE_CANDIDATES {
-        return Err(SourceError::Rejected(format!(
-            "来源超过 {MAX_SOURCE_CANDIDATES} 个 Skill；请指定子目录"
-        )));
+        return Err(SourceError::TooManySkills);
     }
     if roots.is_empty() {
         if !subpath.is_empty() && files.is_empty() {
@@ -251,8 +276,19 @@ pub(crate) fn resolve_github_source_with_requests(
         }
         return Ok(Vec::new());
     }
-    let entries = download_entries(&repo, &commit, subpath, &|url| fetch(GitHubRequest::Archive, url))?;
+    let entries = download_entries(&repo, commit, subpath, &|url| fetch(GitHubRequest::Archive, url))?;
     verify_tree_content(&files, &entries)?;
+    collect_candidates(&repo, subpath, normalized_ref(ref_name), commit, &entries, roots)
+}
+
+fn normalized_ref(ref_name: Option<&str>) -> Option<&str> {
+    ref_name.map(str::trim).filter(|name| !name.is_empty())
+}
+
+fn collect_candidates(
+    repo: &str, subpath: &str, ref_name: Option<&str>, commit: &str,
+    entries: &[ContentEntry], roots: Vec<&str>,
+) -> Result<Vec<SkillCandidate>, SourceError> {
     let mut candidates = Vec::new();
     for root in roots {
         let content = entries
@@ -271,7 +307,7 @@ pub(crate) fn resolve_github_source_with_requests(
             .collect::<Vec<_>>()
             .join("/");
         let mut candidate =
-            finish_candidate(repo.clone(), path.clone(), Some(commit.clone()), content)
+            finish_candidate(repo.to_owned(), path.clone(), Some(commit.to_owned()), content)
                 .map_err(|error| SourceError::Rejected(format!("{path}: {error}")))?;
         candidate.ref_name = ref_name.map(str::to_owned);
         candidates.push(candidate);

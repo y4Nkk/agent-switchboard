@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { countdownLabel, dateLabel, relativeLabel, timeLabel } from "../lib/time";
+import { Tooltip } from "./Tooltip";
 
 /** Absolute precision follows the supplied timestamp; it never creates a clock.
  * "date" shows a UTC calendar date verbatim. Relative views tick while visible. */
@@ -25,5 +26,6 @@ export function Time({ iso, mode = "absolute", precision = "minute" }: {
   const label = mode === "relative" ? relativeLabel(iso, now)
     : mode === "reset" ? countdownLabel(iso, now)
     : mode === "date" ? dateLabel(iso) : timeLabel(iso, precision);
-  return <time dateTime={iso} title={mode === "relative" || mode === "reset" ? timeLabel(iso) : undefined}>{label}</time>;
+  const value = <time dateTime={iso}>{label}</time>;
+  return mode === "relative" || mode === "reset" ? <Tooltip asChild label={timeLabel(iso)}>{value}</Tooltip> : value;
 }

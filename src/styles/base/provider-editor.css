@@ -9,10 +9,15 @@
 
 .asb-provider-form .asb-field { min-width: 0; }
 
-/* Frame structure (route pinning, header/body/footer rows, back control),
-   the section card, and the shared editor prose (labels, controls, notes)
-   are owned by forms.css; this file keeps only the provider-specific
-   visuals scoped under the root modifier class. */
+.asb-provider-editor > .asb-subpage-scroll[data-floating-actions] > .asb-scroll-viewport {
+  row-gap: var(--asb-space-1);
+  padding-block-start: 0;
+}
+
+.asb-provider-editor > .asb-subpage-scroll > .asb-scroll-viewport > .asb-workspace-header {
+  gap: var(--asb-space-1);
+}
+
 .asb-provider-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--asb-space-3); }
 .asb-provider-field-grid > .asb-field { align-self: start; }
 .asb-provider-field-grid > .asb-field:has(textarea) { grid-column: 1 / -1; }
@@ -52,6 +57,10 @@
   .asb-provider-model-actions { align-self: start; }
   .asb-provider-advanced-action { align-items: stretch; flex-direction: column; }
   .asb-provider-advanced-action > .asb-btn { width: 100%; }
+}
+
+@container settings-layout (max-width: 36rem) {
+  .asb-provider-field-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Apple-like typography here is deliberately local: the user-selected app font

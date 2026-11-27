@@ -9,11 +9,8 @@ import {
   type AppKind,
   type ClientConfigurationApplyPreview,
   type ClientConfigurationRepairPreview,
-  type CodexSubagentSettings,
   type CurrentClientConfiguration,
 } from "../api/client";
-import { clientSettingsPayload } from "../app/claude-common-settings";
-import type { ClientSettingsEditorState } from "../app/useClientSettings";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { CodePreview } from "./CodePreview";
@@ -25,18 +22,11 @@ export interface ConfigurationEditState { dirty: boolean; working: boolean }
 interface Props {
   app: AppKind;
   busy: boolean;
-  editorState: ClientSettingsEditorState;
   source: CurrentClientConfiguration;
-  subagentDraft?: CodexSubagentSettings;
   onApplied: () => void;
   /** Reports whether an unapplied edit would be lost or a write is running,
    * so the owning dialog can guard its close and lock while writing. */
   onEditStateChange: (state: ConfigurationEditState) => void;
-}
-
-function currentSettings({ app, editorState }: Pick<Props, "app" | "editorState">) {
-  if (!editorState.editor || !editorState.draft) return null;
-  return clientSettingsPayload(app, editorState.draft, editorState.claudeExtra);
 }
 
 function CurrentConfigurationRepair({ app, busy, source, onApplied, onEditStateChange }: Pick<Props,
@@ -79,16 +69,15 @@ function CurrentConfigurationRepair({ app, busy, source, onApplied, onEditStateC
   </>;
 }
 
-function useCurrentConfigurationEdit({ app, busy, editorState, source, subagentDraft, onApplied }: Props) {
+function useCurrentConfigurationEdit({ app, busy, source, onApplied }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(source.content);
   const baseline = useRef(source);
   const [preview, setPreview] = useState<ClientConfigurationApplyPreview | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useMessageState();
-  const settings = currentSettings({ app, editorState });
-  const stale = editing && baseline.current.contentHash !== source.contentHash;
-  const canWrite = !stale && !!settings && (app !== "codex" || !!subagentDraft);
+  const stale = editing && (baseline.current.contentHash !== source.contentHash || baseline.current.exists !== source.exists);
+  const canWrite = !stale;
   useEffect(() => {
     setPreview(null);
     if (editing) return;
@@ -98,17 +87,17 @@ function useCurrentConfigurationEdit({ app, busy, editorState, source, subagentD
   const startEditing = () => { baseline.current = source; setEditing(true); };
   const changeDraft = (content: string) => { setDraft(content); setPreview(null); setError(null); };
   const prepare = () => {
-    if (!settings || !canWrite || busy || working) return;
+    if (!canWrite || busy || working) return;
     setWorking(true); setError(null); setPreview(null);
-    void previewManualClientConfiguration(app, source.contentHash, draft, settings, subagentDraft).then(setPreview)
+    void previewManualClientConfiguration(app, source.contentHash, draft).then(setPreview)
       .catch((caught: { message?: string }) => setError(caught))
       .finally(() => setWorking(false));
   };
   const commit = () => {
-    if (!settings || !canWrite || !preview || busy || working) return;
+    if (!canWrite || !preview || busy || working) return;
     setWorking(true); setError(null);
     void commitManualClientConfiguration(app, source.contentHash, preview.file.renderedHash, preview.settingsHash,
-      preview.targetExisted, draft, settings, subagentDraft).then(() => { setEditing(false); setPreview(null); onApplied(); })
+      preview.targetExisted, draft).then(() => { setEditing(false); setPreview(null); onApplied(); })
       .catch((caught: { message?: string }) => setError(caught))
       .finally(() => setWorking(false));
   };

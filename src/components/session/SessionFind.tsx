@@ -6,6 +6,7 @@ import { useI18n } from "../../i18n";
 import { useMessageState } from "../../i18n/use-message-state";
 import { Button } from "../Button";
 import { Input } from "../Input";
+import { Tooltip } from "../Tooltip";
 
 const START = { index: 0, offset: 0, revision: null as string | null };
 
@@ -86,6 +87,9 @@ export function SessionFind({ id, session, input, onMatch, onClear, onClose, ref
       ? t("sessions.find.progress", { completed: progress.messagesCompleted, total: progress.messagesTotal })
       : t("sessions.find.working");
   const moveDisabled = !result?.page.total;
+  const previousLabel = t("sessions.find.previous");
+  const nextLabel = t("sessions.find.next");
+  const closeLabel = t("sessions.find.close");
   return <div id={id} role="search" aria-label={t("sessions.find.label")} className="asb-session-find"
     onKeyDown={(event) => {
       if (event.key === "Escape" && !event.nativeEvent.isComposing && !composing) {
@@ -108,17 +112,17 @@ export function SessionFind({ id, session, input, onMatch, onClear, onClose, ref
         }} /></div>
       <span className="asb-session-find-status" role="status">{status}</span>
       <div className="asb-session-find-actions">
-        <Button variant="icon" className="asb-session-toolbar-button" disabled={moveDisabled}
-          title={t("sessions.find.previous")} aria-label={t("sessions.find.previous")} onClick={() => find.move(-1)}>
-          <ChevronUp aria-hidden="true" />
-        </Button>
-        <Button variant="icon" className="asb-session-toolbar-button" disabled={moveDisabled}
-          title={t("sessions.find.next")} aria-label={t("sessions.find.next")} onClick={() => find.move(1)}>
-          <ChevronDown aria-hidden="true" />
-        </Button>
-        <Button variant="icon" title={t("sessions.find.close")} aria-label={t("sessions.find.close")} onClick={onClose}>
-          <X aria-hidden="true" />
-        </Button>
+        <Tooltip label={previousLabel}>
+          <Button variant="icon" className="asb-session-toolbar-button" disabled={moveDisabled}
+            aria-label={previousLabel} onClick={() => find.move(-1)}><ChevronUp aria-hidden="true" /></Button>
+        </Tooltip>
+        <Tooltip label={nextLabel}>
+          <Button variant="icon" className="asb-session-toolbar-button" disabled={moveDisabled}
+            aria-label={nextLabel} onClick={() => find.move(1)}><ChevronDown aria-hidden="true" /></Button>
+        </Tooltip>
+        <Tooltip asChild label={closeLabel}>
+          <Button variant="icon" aria-label={closeLabel} onClick={onClose}><X aria-hidden="true" /></Button>
+        </Tooltip>
       </div>
     </div>
     {(error || (navigationFailed && result && result.page.total > 0)) && <div className="asb-session-find-error">

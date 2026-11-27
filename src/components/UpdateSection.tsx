@@ -2,6 +2,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { applicationUpdateView, UPDATE_PHASE_LABELS, type ApplicationUpdateControl } from "../app/update-state";
 import { ReleaseNotes } from "./ReleaseNotes";
 import { Button } from "./Button";
+import { SettingsGroup, SettingsRow } from "./SettingsLayout";
 import { Time } from "./Time";
 import { UpdateDownloadPanel } from "./UpdateDownloadPanel";
 import { useI18n } from "../i18n";
@@ -46,28 +47,25 @@ export function UpdateSection({ update, busy }: { update: ApplicationUpdateContr
   const advisory = view.phase === "available" && result ? result.advisory : null;
   const reason = advisory && advisory.severity !== "routine"
     ? (language === "zh-CN" ? advisory.reasonZh : advisory.reasonEn) : null;
-  return <section className="asb-app-settings-group" aria-labelledby="software-update">
-    <h3 id="software-update" className="asb-section-title">{t("backup.update.title")}</h3>
-    <div className="asb-app-setting-row asb-update-summary">
-      <div className="asb-app-setting-copy">
-        <span className="asb-checkbox-label">
-          {label}
-          {advisory && <span className={`asb-update-advisory is-${advisory.severity}`}
-            data-advisory={advisory.severity}>{t(`backup.update.advisory.${advisory.severity}`)}</span>}
-        </span>
-        {reason != null && <span className={`asb-update-advisory-reason is-${advisory?.severity}`}>{reason}</span>}
-        {(appVersion || lastCheckedAt || store) && <span className="asb-app-setting-detail">
-          {appVersion ? t("backup.update.currentVersion", { version: appVersion }) : null}
-          {appVersion && (lastCheckedAt || store) ? " · " : null}
-          {store ? t("backup.update.storeAuto") : lastCheckedAt && <>{t("backup.update.checkedAt")} <Time iso={lastCheckedAt} /></>}
-        </span>}
-      </div>
+  return <SettingsGroup title={t("backup.update.title")}>
+    <SettingsRow wide={store} label={<>
+      {label}
+      {advisory && <span className={"asb-update-advisory is-" + advisory.severity}
+        data-advisory={advisory.severity}>{t(`backup.update.advisory.${advisory.severity}`)}</span>}
+    </>} description={(reason != null || appVersion || lastCheckedAt || store) && <>
+      {reason != null && <span className={"asb-update-advisory-reason is-" + advisory?.severity}>{reason}</span>}
+      {(appVersion || lastCheckedAt || store) && <span>
+        {appVersion ? t("backup.update.currentVersion", { version: appVersion }) : null}
+        {appVersion && (lastCheckedAt || store) ? " · " : null}
+        {store ? t("backup.update.storeAuto") : lastCheckedAt && <>{t("backup.update.checkedAt")} <Time iso={lastCheckedAt} /></>}
+      </span>}
+    </>}>
       {!store && <UpdateActions update={update} busy={busy} />}
-    </div>
+    </SettingsRow>
     {view.error != null && view.phase !== "failed" && <div className="asb-fail-text" role="alert">
       <CommandErrorLines error={view.error} />
     </div>}
     {!store && <UpdateDownloadPanel download={state} onCancel={update.onCancel} />}
     {!store && result?.releaseNotes && <ReleaseNotes notes={result.releaseNotes} version={result.latestVersion} />}
-  </section>;
+  </SettingsGroup>;
 }

@@ -13,24 +13,24 @@ export function levelLabel(level: RuntimeLogSeverity): string {
   return tr(RUNTIME_LOG_LEVEL_LABELS[level]);
 }
 
-/** The log table's page size, matching the codebase's page-size convention. */
-export const RUNTIME_LOG_PAGE_SIZE = 20;
-
-
 function useLogSnapshot(enabled: boolean, filter: RuntimeLogFilter, leaving: boolean) {
   const [snapshot, setSnapshot] = useState<{ filter: RuntimeLogFilter; read: RuntimeLogRead } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ filter: RuntimeLogFilter; problem: CommandError } | null>(null);
   const generation = useRef(0);
+  const page = useRef(1);
   const visible = useRef(enabled);
   visible.current = enabled;
-  const refresh = useCallback(async () => {
+  const readPage = useCallback(async (requestedPage: number, snapshotId?: string) => {
     if (!visible.current) return;
     const current = ++generation.current;
     setLoading(true); setError(null);
     try {
-      const result = await listRuntimeLogs(filter === "all" ? null : filter);
+      const result = await listRuntimeLogs(snapshotId === undefined
+        ? { kind: "refresh", level: filter === "all" ? null : filter, page: requestedPage }
+        : { kind: "page", snapshotId, page: requestedPage });
       if (current === generation.current) {
+        page.current = result.page;
         setSnapshot({ filter, read: result });
       }
     } catch (caught) { if (current === generation.current) setError({ filter, problem: caught as CommandError }); }
@@ -39,19 +39,22 @@ function useLogSnapshot(enabled: boolean, filter: RuntimeLogFilter, leaving: boo
   useEffect(() => {
     if (enabled || !leaving) {
       setSnapshot(null);
-      if (enabled) void refresh();
+      if (enabled) void readPage(page.current);
       else setLoading(false);
     }
     return () => { generation.current += 1; };
-  }, [enabled, leaving, refresh]);
+  }, [enabled, leaving, readPage]);
   const read = snapshot?.filter === filter ? snapshot.read : null;
-  return { entries: read?.entries ?? [], total: read?.total ?? 0, skipped: read?.skipped ?? 0,
-    loading, error: error?.filter === filter ? error.problem : null, refresh };
+  const resetPage = () => { generation.current += 1; page.current = 1; };
+  return {
+    read, loading, error: error?.filter === filter ? error.problem : null,
+    goToPage: (next: number) => { if (read) void readPage(next, read.snapshotId); },
+    resetPage, refresh: () => readPage(page.current),
+  };
 }
 
 export function useRuntimeLogs(enabled: boolean, leaving: boolean) {
   const [filter, setFilter] = useState<RuntimeLogFilter>("all");
-  const [page, setPage] = useState(1);
   const [openingFolder, setOpeningFolder] = useState(false);
   const [folderError, setFolderError] = useState<CommandError | null>(null);
   const snapshot = useLogSnapshot(enabled, filter, leaving);
@@ -61,10 +64,15 @@ export function useRuntimeLogs(enabled: boolean, leaving: boolean) {
     catch (caught) { setFolderError(caught as CommandError); }
     finally { setOpeningFolder(false); }
   }, []);
-  const applyFilter = useCallback((next: RuntimeLogFilter) => { setFilter(next); setPage(1); }, []);
-  const pageCount = Math.max(1, Math.ceil(snapshot.entries.length / RUNTIME_LOG_PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageEntries = snapshot.entries.slice((currentPage - 1) * RUNTIME_LOG_PAGE_SIZE, currentPage * RUNTIME_LOG_PAGE_SIZE);
-  return { ...snapshot, visibleEntries: snapshot.entries, pageEntries, page: currentPage, setPage,
+  const applyFilter = (next: RuntimeLogFilter) => {
+    if (next === filter) {
+      if ((snapshot.read?.page ?? 1) !== 1) snapshot.goToPage(1);
+    } else {
+      snapshot.resetPage();
+      setFilter(next);
+    }
+  };
+  return { read: snapshot.read, loading: snapshot.loading, error: snapshot.error, refresh: snapshot.refresh,
+    setPage: snapshot.goToPage,
     filter, setFilter: applyFilter, openingFolder, folderError, openLogDirectory };
 }

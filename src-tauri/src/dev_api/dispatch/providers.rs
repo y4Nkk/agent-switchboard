@@ -88,12 +88,6 @@ pub(super) async fn client_settings(app: &AppHandle, request: &InvokeRequest) ->
                 argument::<AppKind>(&request.args, "target")?,
             ))
         }
-        "save_client_settings" => command!(commands::client_settings::save_client_settings(
-            app.clone(),
-            argument::<AppKind>(&request.args, "target")?,
-            argument::<SettingsValues>(&request.args, "settings")?,
-            argument::<String>(&request.args, "expectedSettingsHash")?,
-        )),
         "get_current_client_configuration" => {
             command!(commands::client_settings::get_current_client_configuration(
                 app.clone(),

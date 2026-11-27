@@ -1,3 +1,4 @@
+import { Link2 } from "lucide-react";
 import { useId } from "react";
 import type { ProviderEndpoints, UpstreamProtocol } from "../../api/client";
 import { useI18n } from "../../i18n";
@@ -37,7 +38,7 @@ export function ProviderEndpointField({
         {resolvingEndpoint && <p className="asb-scope-note">{t("providers.editor.resolvingEndpoint")}</p>}
         {endpointError && <p className="asb-scope-note asb-warn-text" role="alert">{endpointError}</p>}
         {endpoints && <FactList rows={[
-          { label: t("providers.label.requestUrl"), value: <span className="asb-code">{endpoints.requestUrl}</span> },
+          { label: t("providers.label.requestUrl"), icon: Link2, format: "code", value: endpoints.requestUrl },
         ]} />}
       </div>
     </div>

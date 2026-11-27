@@ -33,13 +33,13 @@ export function SessionProjects({ search, disabled }: { search: SessionSearch; d
       const name = (repeated.get(`${project.app}:${names[index]}`) ?? 0) > 1 && parts.length > 1
         ? `${parts.at(-2)}\\${names[index]}` : names[index];
       return { value: projectKey(project), label: `${name} · ${clientFullName(project.app)} · ${project.count}`,
-        title: `${clientFullName(project.app)} · ${project.projectDir ?? fallback} · ${project.count}` };
+        tooltip: `${clientFullName(project.app)} · ${project.projectDir ?? fallback} · ${project.count}` };
     })];
-  const title = selected ? `${clientFullName(selected.app)} · ${selected.projectDir ?? t("sessions.projects.none")}`
+  const tooltip = selected ? `${clientFullName(selected.app)} · ${selected.projectDir ?? fallback}`
     : t("sessions.projects.all");
-  return <div className="asb-session-project-filter" title={title} aria-busy={search.busy}>
+  return <div className="asb-session-project-filter" aria-busy={search.busy}>
     <Select value={selected ? projectKey(selected) : "all"} options={options}
-      ariaLabel={t("sessions.projects.heading")} disabled={disabled}
+      ariaLabel={t("sessions.projects.heading")} disabled={disabled} triggerTooltip={tooltip}
       contentClassName="asb-session-project-menu" onChange={(value) => {
         if (value === "all") { search.changeProject(null); return; }
         const project = projects.find((item) => projectKey(item) === value);

@@ -43,15 +43,14 @@ function stateFor(snapshot: CodexSubagentSettingsSnapshot, draft: CodexSubagentS
 export function useCodexSubagentSettings({ active, busy, onError }: CodexSubagentSettingsDeps) {
   const [state, setState] = useState<CodexSubagentSettingsEditorState>({ phase: "idle" });
   const request = useRef<Promise<void> | null>(null);
-  const draft = useRef<CodexSubagentSettings | undefined>(undefined);
+  const phase = useRef<CodexSubagentSettingsPhase>("idle");
   const wasActive = useRef(false);
-  draft.current = state.draft;
-  const load = useCallback((preserveDraft = false) => {
+  phase.current = state.phase;
+  const load = useCallback(() => {
     if (request.current) return request.current;
     setState((current) => ({ ...current, phase: "loading", error: undefined }));
-    const pending = getCodexSubagentSettings().then((snapshot) => setState((current) =>
-      stateFor(snapshot, preserveDraft && current.draft ? current.draft : snapshot.settings),
-    )).catch((caught) => setState((current) => ({ ...current, phase: "loadError", error: caught as CommandError })))
+    const pending = getCodexSubagentSettings().then((snapshot) => setState(stateFor(snapshot, snapshot.settings)))
+      .catch((caught) => setState((current) => ({ ...current, phase: "loadError", error: caught as CommandError })))
       .finally(() => { if (request.current === pending) request.current = null; });
     request.current = pending;
     return pending;
@@ -59,21 +58,21 @@ export function useCodexSubagentSettings({ active, busy, onError }: CodexSubagen
   useEffect(() => {
     const entering = active && !wasActive.current;
     wasActive.current = active;
-    if (entering) void load(draft.current !== undefined);
+    if (entering && phase.current !== "dirty") void load();
   }, [active, load]);
   useEffect(() => {
     let disposed = false; let unlisten: (() => void) | undefined;
-    void onClientConfigChanged(() => { if (active && !busy) void load(true); }).then((stop) => {
+    void onClientConfigChanged(() => { if (!disposed && active && !busy && phase.current !== "dirty") void load(); }).then((stop) => {
       if (disposed) stop(); else unlisten = stop;
     }).catch((caught) => { if (!disposed) onError(caught as CommandError); });
     return () => { disposed = true; unlisten?.(); };
   }, [active, busy, load, onError]);
   const changeValue = useCallback((field: SubagentField, value: SettingValue) => {
     if (busy) return;
-    setState((current) => current.snapshot && current.draft
+    setState((current) => current.snapshot && current.draft && (current.phase === "clean" || current.phase === "dirty")
       ? stateFor(current.snapshot, { ...current.draft, [field]: value }) : current);
   }, [busy]);
-  const retryLoad = useCallback(() => { if (!busy) void load(state.draft !== undefined); }, [busy, load, state.draft]);
+  const retryLoad = useCallback(() => { if (!busy) void load(); }, [busy, load]);
   const reloadFromFile = useCallback(() => { if (!busy) void load(); }, [busy, load]);
   return { editorState: state, changeValue, retryLoad, reloadFromFile };
 }

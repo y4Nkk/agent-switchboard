@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Copy, Search } from "lucide-react";
+import { Archive, Clock3, Copy, FolderOpen, Hash, Search, Terminal } from "lucide-react";
 import { ActionMenu } from "../ActionMenu";
 import { exportSessionMarkdown, resumeSession, type SessionMeta } from "../../api/client";
 import { useI18n, type MessageKey } from "../../i18n";
@@ -12,6 +12,7 @@ import { CollapsibleSection } from "../Collapsible";
 import { FactList } from "../FactList";
 import { Time } from "../Time";
 import { ScrollArea } from "../ScrollArea";
+import { Tooltip } from "../Tooltip";
 import { copyText, sessionTitle } from "./session-content";
 import { SessionOrganizationEditor } from "./SessionOrganizationEditor";
 import type { SessionOrganization } from "./use-session-organization";
@@ -50,21 +51,26 @@ function useDetailActions(session: SessionMeta) {
 function SessionFacts({ session, copy }: { session: SessionMeta; copy: (text: string, labelKey: MessageKey) => Promise<void> }) {
   const { t } = useI18n();
   const resumeCommand = session.app === "codex" ? session.resumeCommand : null;
+  const { projectDir } = session;
+  const copyCommandLabel = t("sessions.action.copy", { label: t("sessions.label.resumeCommand") });
   return <FactList rows={[
-    { label: t("sessions.fact.sessionId"), value: <code>{session.sessionId}</code> },
-    { label: t("sessions.fact.lastActive"), value: session.lastActiveAt
+    { label: t("sessions.fact.sessionId"), icon: Hash, format: "code", value: session.sessionId },
+    { label: t("sessions.fact.lastActive"), icon: Clock3, value: session.lastActiveAt
       ? <Time iso={session.lastActiveAt} /> : t("sessions.time.unknown") },
-    ...(session.projectDir ? [{ label: t("sessions.label.projectDir"), value:
-      <Button variant="unstyled" className="asb-fact-path"
-        title={t("sessions.projectDir.copyHint", { dir: session.projectDir })}
-        onClick={() => void copy(session.projectDir!, "sessions.label.projectDir")}>{session.projectDir}</Button> }] : []),
-    ...(resumeCommand ? [{ label: t("sessions.label.resumeCommand"), value: <span className="asb-session-resume-fact">
-      <code className="asb-code" title={resumeCommand}>{resumeCommand}</code>
-      <Button variant="icon" aria-label={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
-        title={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
-        onClick={() => void copy(resumeCommand, "sessions.label.resumeCommand")}><Copy aria-hidden="true" /></Button>
+    ...(projectDir ? [{ label: t("sessions.label.projectDir"), icon: FolderOpen, value:
+      <Tooltip asChild label={t("sessions.projectDir.copyHint", { dir: projectDir })}>
+        <Button variant="unstyled" className="asb-fact-path"
+          onClick={() => void copy(projectDir, "sessions.label.projectDir")}>{projectDir}</Button>
+      </Tooltip> }] : []),
+    ...(resumeCommand ? [{ label: t("sessions.label.resumeCommand"), icon: Terminal, value: <span className="asb-session-resume-fact">
+      <Tooltip asChild label={resumeCommand}><code className="asb-code">{resumeCommand}</code></Tooltip>
+      <Tooltip asChild label={copyCommandLabel}>
+        <Button variant="icon" aria-label={copyCommandLabel}
+          onClick={() => void copy(resumeCommand, "sessions.label.resumeCommand")}><Copy aria-hidden="true" /></Button>
+      </Tooltip>
     </span> }] : []),
-    ...(session.preservation ? [{ label: t("sessions.preservation.saved"), value: <Time iso={session.preservation.savedAt} /> }] : []),
+    ...(session.preservation ? [{ label: t("sessions.preservation.saved"), icon: Archive,
+      value: <Time iso={session.preservation.savedAt} /> }] : []),
   ]} />;
 }
 
@@ -91,6 +97,7 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
 }) {
   const { t } = useI18n();
   const actions = useDetailActions(session);
+  const title = sessionTitle(session);
   const [organizing, setOrganizing] = useState(false);
   const [informationOpen, setInformationOpen] = useState(false);
   const [findSelection, setFindSelection] = useState<number | null>(null);
@@ -124,7 +131,8 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
     <header className="asb-session-detail-head asb-session-conversation-head">
       <div className="asb-session-detail-title">
         <span className="asb-session-client"><ClientLogo app={session.app} className="asb-session-logo" />
-          {clientFullName(session.app)}</span><h3 className="asb-section-title" title={sessionTitle(session)}>{sessionTitle(session)}</h3>
+          {clientFullName(session.app)}</span>
+        <Tooltip asChild label={title}><h3 className="asb-section-title">{title}</h3></Tooltip>
       </div>
       <div className="asb-session-actions">
         <Button ref={findButton} variant="secondary" disabled={!canFind}

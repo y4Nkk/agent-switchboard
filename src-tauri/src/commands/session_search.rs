@@ -1,4 +1,4 @@
-use super::error::{state, CommandError};
+use super::error::{blocking, state, CommandError};
 use crate::session_manager::search_tasks;
 use tauri::AppHandle;
 
@@ -14,9 +14,11 @@ pub async fn start_session_search(app: AppHandle, request: search_tasks::SearchR
 }
 
 #[tauri::command]
-pub async fn read_session_search(app: AppHandle, id: String) -> Result<search_tasks::SearchTaskState, CommandError> {
-    let local = state(&app)?;
-    search_tasks::read(local.root(), &id).map_err(search_error)
+pub async fn read_session_search(app: AppHandle, request: search_tasks::SearchReadRequest) -> Result<search_tasks::SearchTaskState, CommandError> {
+    blocking(move || {
+        let local = state(&app)?;
+        search_tasks::read(local.root(), request).map_err(search_error)
+    }).await
 }
 
 #[tauri::command]

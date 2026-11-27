@@ -4,6 +4,7 @@ import type { CodexEditorSource } from "../../app/useProviders";
 import { useI18n } from "../../i18n";
 import { ProviderConversionSummary } from "../provider-editor/ProviderConversionSummary";
 import { Button } from "../Button";
+import { SettingsGroup } from "../SettingsLayout";
 import { ProviderPresetField } from "../provider-editor/ProviderPresetField";
 import { applyCodexPreset } from "./draft";
 import { ProviderConnectionTest } from "../provider-editor/ProviderConnectionTest";
@@ -70,14 +71,14 @@ function ConnectionSection({ editor, props }: { editor: CodexEditorState; props:
 function ConversionReview({ editor, busy }: { editor: CodexEditorState; busy: boolean }) {
   const { t } = useI18n();
   if (!editor.conversion) return null;
-  return <section className="asb-editor-section" aria-label={t("providers.conversion.summary")}>
+  return <SettingsGroup title={t("providers.conversion.summary")}>
     <div className="asb-editor-section-fields">
       {!editor.limitsComplete && <p className="asb-field-error" role="status">{t("providers.conversion.limitsRequired")}</p>}
       <p className="asb-field-help">{t("providers.conversion.capabilitiesRequired")}</p>
       <Button variant="secondary" disabled={busy || editor.capabilitiesReviewed}
         onClick={() => editor.setCapabilitiesReviewed(true)}>{t(editor.capabilitiesReviewed ? "providerSetup.reviewed" : "providerSetup.review")}</Button>
     </div>
-  </section>;
+  </SettingsGroup>;
 }
 
 function CodexForm({ editor, props, formId, navigation, route, onChange, showProblems, onSubmit }: {

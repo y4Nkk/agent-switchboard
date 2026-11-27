@@ -1,6 +1,6 @@
 import { CommandErrorLines } from "../app/notifications";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { type MouseEvent, useEffect, useId, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import {
   getCloudBackupSetupSql,
   type CloudBackupSettings,
@@ -8,6 +8,7 @@ import {
 } from "../api/client";
 import { Button } from "./Button";
 import { BackupArchiveArt } from "./BackupArchiveArt";
+import { SettingsGroup, SettingsRow } from "./SettingsLayout";
 import { AppDialog } from "./AppDialog";
 import { CodePreview } from "./CodePreview";
 import { ConfirmSheet } from "./ConfirmSheet";
@@ -182,8 +183,7 @@ function CloudBackupConnection({ busy, onSave, onTestConnection, draft, onDraftC
     if (form.current?.reportValidity()) void onTestConnection(draft, password);
   }
 
-  return <div className="asb-cloud-backup-group">
-    <h4 className="asb-section-title">{t("backup.cloud.connection")}</h4>
+  return <SettingsGroup title={t("backup.cloud.connection")}>
     <form ref={form} className="asb-form" aria-label={t("backup.cloud.formAria")} onSubmit={(event) => {
       event.preventDefault();
       void onSave(draft);
@@ -215,7 +215,7 @@ function CloudBackupConnection({ busy, onSave, onTestConnection, draft, onDraftC
         <Button type="submit" variant="primary" disabled={busy}>{t("backup.cloud.saveConnection")}</Button>
       </div>
     </form>
-  </div>;
+  </SettingsGroup>;
 }
 
 function CloudBackupReview({ pending, busy, onConfirm, onClose }: {
@@ -245,15 +245,12 @@ function CloudBackupTransfer({ busy, saved, password, onPasswordChange, onReview
   onReview: (pending: PendingOperation) => void;
 }) {
   const { t } = useI18n();
-  const headingId = useId();
-  return <section className="asb-cloud-backup-group" aria-labelledby={headingId}>
-    <h4 className="asb-section-title" id={headingId}>{t("backup.cloud.backupOrRestore")}</h4>
-    <label className="asb-field">
-      <span>{t("backup.cloud.backupPassword")}</span>
-      <Input type="password" autoComplete="new-password" minLength={8} value={password} disabled={busy}
+  return <SettingsGroup title={t("backup.cloud.backupOrRestore")}>
+    <SettingsRow label={t("backup.cloud.backupPassword")}
+      details={!saved && <p className="asb-field-help">{t("backup.cloud.saveBeforeTransfer")}</p>}>
+      <Input type="password" aria-label={t("backup.cloud.backupPassword")} autoComplete="new-password" minLength={8} value={password} disabled={busy}
         onChange={(event) => onPasswordChange(event.target.value)} />
-    </label>
-    {!saved && <p className="asb-field-help">{t("backup.cloud.saveBeforeTransfer")}</p>}
+    </SettingsRow>
     <div className="asb-cloud-backup-actions">
       <Button variant="primary" disabled={busy || !saved} onClick={() => onReview("upload")}>
         <ExportIcon />{t("backup.cloud.upload")}
@@ -262,7 +259,7 @@ function CloudBackupTransfer({ busy, saved, password, onPasswordChange, onReview
         <UpdateIcon />{t("backup.cloud.restore")}
       </Button>
     </div>
-  </section>;
+  </SettingsGroup>;
 }
 
 export function CloudBackupPanel({ settings, loaded, active, visible, busy, onSave, onTestConnection, onUpload, onRestore }: Props) {
@@ -318,7 +315,7 @@ export function CloudBackupPanel({ settings, loaded, active, visible, busy, onSa
         <div className="asb-skeleton" />
       </div>
     ) : (
-      <div className="asb-cloud-backup-controls">
+      <div className="asb-settings-groups">
         <CloudBackupConnection busy={busy} draft={draft} onDraftChange={setDraft}
           password={accountPassword} onPasswordChange={setAccountPassword} onSave={onSave} onTestConnection={onTestConnection} />
         <CloudBackupTransfer busy={busy} saved={settings !== null} password={backupPassword}

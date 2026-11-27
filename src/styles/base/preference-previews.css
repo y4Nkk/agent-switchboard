@@ -1,7 +1,3 @@
-.asb-app-setting-row-preview {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .asb-preview-cards {
   display: grid;
   grid-template-columns: repeat(var(--asb-preview-columns), minmax(0, 1fr));
@@ -103,13 +99,13 @@
   visibility: visible;
 }
 
-@container settings-content (max-width: 760px) {
+@container settings-layout (max-width: 760px) {
   .asb-preview-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@container settings-content (max-width: 560px) {
+@container settings-layout (max-width: 560px) {
   .asb-preview-cards {
     grid-template-columns: minmax(0, 1fr);
     width: min(100%, 360px);

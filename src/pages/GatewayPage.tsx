@@ -1,11 +1,14 @@
 import { useMessageState } from "../i18n/use-message-state";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentProps } from "react";
 import { Button } from "../components/Button";
 import type { ClientFilterValue } from "../components/ClientFilter";
 import { GatewayGuidance, GatewayTopology } from "../components/GatewayTopology";
 import { GatewayHub } from "../components/GatewayHub";
 import { GatewayPortChangeSheet, type PortSheetState } from "../components/GatewayPortChangeSheet";
 import { GatewayTelemetry } from "../components/GatewayTelemetry";
+import { ModuleHeader, WorkspaceHeader } from "../components/WorkspaceHeader";
+import { GatewayArtwork } from "../components/model-routing/GatewayArtwork";
+import { SavedModelPlans } from "../components/model-routing/SavedModelPlans";
 import { useI18n } from "../i18n";
 import { useWorkspaceVisible } from "../hooks/use-workspace-visible";
 import {
@@ -30,12 +33,13 @@ interface Props {
   /** False while another page is shown; polling runs only when visible. */
   active: boolean;
   profiles: readonly Pick<ProviderProfile, "id" | "name">[];
+  savedPlans: Omit<ComponentProps<typeof SavedModelPlans>, "busy">;
 }
 
 /** Runtime snapshots and transient focus share one page owner. */
-export function GatewayPage({ active, busy, profiles, routing }: Props & {
-  routing: (runtime: { summary: ReactNode; observation: ReactNode; mutating: boolean; visible: boolean }) => ReactNode;
-}) {
+export function GatewayPage({ active, busy, profiles, savedPlans }: Props) {
+  const { t } = useI18n();
+  const runtimeTitleId = useId();
   const [focus, setFocus] = useState<ClientFilterValue>("all");
   const [portSheet, setPortSheet] = useState<PortSheetState | null>(null);
   const visible = useWorkspaceVisible(active);
@@ -53,22 +57,32 @@ export function GatewayPage({ active, busy, profiles, routing }: Props & {
   }, [profiles]);
 
   const failed = status ? FAILURE_STATES.has(status.status) : false;
+  const actionsBusy = retrying || busy;
   const summary = status ? <>
     {error && <p className="asb-fail-text" role="alert">{error}</p>}
-    <GatewayHub status={status} failed={failed} refreshedAt={refreshedAt} retrying={retrying || busy} active={visible}
+    <GatewayHub status={status} failed={failed} refreshedAt={refreshedAt} retrying={actionsBusy} active={visible}
       onRetry={retryBind} onChangePort={() => setPortSheet({ stage: "input" })} />
-    <GatewayGuidance status={status} busy={retrying || busy} onDiscardRecovery={discardRecovery} />
+    <GatewayGuidance status={status} busy={actionsBusy} onDiscardRecovery={discardRecovery} />
   </> : error ? <GatewayUnavailable error={error} onRetry={refresh} /> : <GatewayLoading />;
-  const observation = visible && status ? (
-    <div className="asb-gateway-observation">
-      <GatewayTopology status={status} failed={failed} profileNames={profileNames}
-        focus={focus} onFocusChange={setFocus} />
-      <GatewayTelemetry metrics={status.metrics} profileNames={profileNames} focus={focus} />
-    </div>
-  ) : null;
   return (
     <>
-      {routing({ summary, observation, mutating: retrying, visible })}
+      <WorkspaceHeader title={t("nav.page.gateway")} />
+      <section className="asb-panel asb-gateway-runtime" aria-labelledby={runtimeTitleId}>
+        <ModuleHeader id={runtimeTitleId} title={t("gateway.runtimeTitle")} />
+        <div className="asb-gateway-listener">
+          <div className="asb-gateway-artwork">
+            <GatewayArtwork active={visible} />
+          </div>
+          {summary}
+        </div>
+        {visible && status && (
+          <GatewayTopology status={status} failed={failed} snapshotCurrent={!error} profileNames={profileNames}
+            focus={focus} onFocusChange={setFocus} />
+        )}
+      </section>
+      <SavedModelPlans {...savedPlans} busy={actionsBusy} />
+      <GatewayTelemetry metrics={visible ? status?.metrics : undefined} unavailable={Boolean(error)}
+        profileNames={profileNames} focus={focus} />
       {portSheet && status && (
         <GatewayPortChangeSheet
           state={portSheet}

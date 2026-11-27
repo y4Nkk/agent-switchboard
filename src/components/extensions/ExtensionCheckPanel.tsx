@@ -5,6 +5,7 @@ import { useI18n } from "../../i18n";
 import { tr } from "../../i18n/current";
 import { Button } from "../Button";
 import { Select } from "../Select";
+import { SettingsGroup, SettingsRow } from "../SettingsLayout";
 import { Time } from "../Time";
 import { Table } from "../Table";
 import { extensionTargetOptions } from "./targets";
@@ -76,27 +77,21 @@ export function ExtensionCheckPanel(props: ExtensionManagementProps) {
   const ownRun = check.subject?.definitionId === item.id
     && targetValue(check.subject.target) === value;
   return (
-    <section className="asb-ext-section" aria-label={t("extensions.check.title")}>
-      <div className="asb-ext-section-heading">
-        <h3 className="asb-section-title">{t("extensions.check.title")}</h3>
-        <div className="asb-ext-actions">
-          <Button variant="secondary" disabled={busy || !target || check.phase !== null}
-            onClick={() => { if (target) void check.start({ definitionId: item.id, definitionRevision: item.revision, target }); }}>
-            {t("extensions.check.run")}
-          </Button>
-          {ownRun && check.phase !== null && (
-            <Button variant="secondary" onClick={() => void check.cancel()}>
-              {t("confirm.cancel")}
-            </Button>
-          )}
-        </div>
+    <SettingsGroup title={t("extensions.check.title")} actions={
+      <div className="asb-ext-actions">
+        <Button variant="secondary" disabled={busy || !target || check.phase !== null}
+          onClick={() => { if (target) void check.start({ definitionId: item.id, definitionRevision: item.revision, target }); }}>
+          {t("extensions.check.run")}
+        </Button>
+        {ownRun && check.phase !== null && (
+          <Button variant="secondary" onClick={() => void check.cancel()}>{t("confirm.cancel")}</Button>
+        )}
       </div>
-      <div className="asb-ext-check-target">
-        <span className="asb-scope-note">{t("extensions.check.target")}</span>
+    }>
+      <SettingsRow label={t("extensions.check.target")} description={t("extensions.check.contextHint")}>
         <Select value={value} options={options} onChange={setChosen}
           ariaLabel={t("extensions.check.target")} disabled={busy || check.phase !== null} />
-      </div>
-      <p className="asb-scope-note">{t("extensions.check.contextHint")}</p>
+      </SettingsRow>
       {ownRun && check.phase !== null && (
         <p className="asb-scope-note" role="status" aria-live="polite">
           {t(check.phase === "cancelling" ? "extensions.check.cancelling" : check.phase === "starting" ? "extensions.check.starting" : "extensions.check.running")}
@@ -104,6 +99,6 @@ export function ExtensionCheckPanel(props: ExtensionManagementProps) {
       )}
       {ownRun && check.failure && <p className="asb-warn-text" role="alert">{check.failure}</p>}
       <CheckResults {...props} />
-    </section>
+    </SettingsGroup>
   );
 }

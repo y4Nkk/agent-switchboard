@@ -1,8 +1,10 @@
 import { useId } from "react";
 import type { RequestUsageReport } from "../../api/client";
 import { useI18n } from "../../i18n";
+import { Button } from "../Button";
 import { Tabs } from "../Tabs";
 import { Select } from "../Select";
+import { ModuleHeader } from "../WorkspaceHeader";
 import { chartMetricOptions, GROUP_METRICS, RECORD_METRICS, TREND_METRICS,
   type RequestUsageGroupMetric, type RequestUsageRecordMetric, type RequestUsageTrend } from "./chart-metrics";
 import { RequestUsageGroups } from "./RequestUsageGroups";
@@ -36,8 +38,14 @@ export function RequestUsageAnalysis({ report, selection, onChange, onGroupPage,
     models: chartMetricOptions(GROUP_METRICS, report.scope, t),
     requests: chartMetricOptions(RECORD_METRICS, report.scope, t),
   }[selection.view];
-  return <div className="asb-request-usage-analysis">
-    <h3 className="asb-section-title">{t("usagePerformance.analysis")}</h3>
+  return <section className="asb-request-usage-analysis asb-usage-surface" aria-labelledby={`${id}-heading`}>
+    <ModuleHeader id={`${id}-heading`} title={t("usagePerformance.analysis")} />
+    {report.summary.mixedMeasurements && selection.view !== "models" && <div className="asb-request-usage-notice">
+      <span>{t("usagePerformance.mixedMeasurements")}</span>
+      <Button variant="ghost" size="compact" onClick={() => onChange({ ...selection, view: "models" })}>
+        {t("usagePerformance.view.models")}
+      </Button>
+    </div>}
     <div className="asb-request-usage-analysis-controls">
       <Tabs value={selection.view} scope={id} label={t("usagePerformance.analysis")}
         onChange={(view) => onChange({ ...selection, view })} tabs={views.map((view) => ({
@@ -49,9 +57,6 @@ export function RequestUsageAnalysis({ report, selection, onChange, onGroupPage,
           else if (selection.view === "models") onChange({ ...selection, models: value as RequestUsageGroupMetric });
           else onChange({ ...selection, requests: value as RequestUsageRecordMetric });
         }} />
-      {selection.view === "trend" && <span className="asb-request-usage-caption">
-        {t("usagePerformance.bucket", { minutes: report.bucketMs / 60_000 })}
-      </span>}
     </div>
     {views.map((view) => <div key={view} id={`${id}-${view}-panel`} role="tabpanel"
       aria-labelledby={`${id}-${view}-tab`} hidden={selection.view !== view}>
@@ -60,5 +65,5 @@ export function RequestUsageAnalysis({ report, selection, onChange, onGroupPage,
         : view === "models" ? <RequestUsageGroups report={report} metric={models} onPage={onGroupPage} />
           : <RequestUsageRows report={report} metric={requests} onPage={onPage} />)}
     </div>)}
-  </div>;
+  </section>;
 }

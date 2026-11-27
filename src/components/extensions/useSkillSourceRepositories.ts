@@ -31,6 +31,7 @@ export function useSkillSourceRepositories(busy: boolean, onChanged: (repos: Ski
   return {
     items: requests.result ?? [], loading: requests.loading, saving, error: requests.error,
     ready: requests.result !== null, reload,
+    acceptRecovery: (repositories: SkillRepository[]) => requests.update(() => repositories),
     save: (input: SkillRepositoryInput) => mutate(async (previous) => {
       const saved = await saveSkillRepository(input);
       return previous.some((repo) => repo.id === saved.id) ?

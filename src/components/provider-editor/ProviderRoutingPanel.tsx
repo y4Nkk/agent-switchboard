@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { Select } from "../Select";
+import { SettingsGroup } from "../SettingsLayout";
 import { Switch } from "../Switch";
 import { ToggleChip } from "../ToggleChip";
 import { RouteCard } from "../model-routing/RouteCard";
@@ -73,9 +74,7 @@ export function ProviderRoutingPanel({ document, inventory, onChange, busy }: Pr
     const route = roleRoute(document, role);
     return route !== null && (!("mode" in route) || route.mode === "provider");
   });
-  return <section className="asb-editor-section asb-provider-routing" aria-label={t("providerEditor.section.models")}>
-    <h3 className="asb-section-title">{t("providerEditor.routingTitle")}</h3>
-    <p className="asb-field-help">{t("providerEditor.routingHelp")}</p>
+  return <SettingsGroup title={t("providerEditor.routingTitle")} surface="plain">
     <ul className="asb-purpose-cards" data-app={document.kind === "codex" ? "codex" : "claude"}
       aria-label={t("providerEditor.routingTitle")}>
       {roles.map((role) => <EditorPurpose key={role} document={document} inventory={inventory} role={role}
@@ -85,5 +84,5 @@ export function ProviderRoutingPanel({ document, inventory, onChange, busy }: Pr
       {relayed && <p className="asb-field-help">{t("modelRoutes.subagentHelp")}</p>}
       <Button variant="secondary" disabled={busy}
         onClick={() => onChange(resetRouting(document))}>{t("providerEditor.resetPurposes")}</Button></div>
-  </section>;
+  </SettingsGroup>;
 }

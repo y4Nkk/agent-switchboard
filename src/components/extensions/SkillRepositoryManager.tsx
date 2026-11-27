@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
-import type { SkillRepository } from "../../api/extensions/skill-sources";
+import type { SkillRepository, SkillRepositoryFailedRow } from "../../api/extensions/skill-sources";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
@@ -8,12 +8,13 @@ import { Tooltip } from "../Tooltip";
 import { ModuleHeader } from "../WorkspaceHeader";
 import { useUnsavedChanges } from "../useUnsavedChanges";
 import { SkillRepositoryForm } from "./SkillRepositoryForm";
+import { SkillRepositoryFailure, SkillRepositoryRecoveryButton, SkillRepositoryRetryNotice } from "./SkillRepositoryRecovery";
 import { SkillSourceLink } from "./SkillSourceCandidate";
 import { skillRepositoryName, skillSourceUrl } from "./skill-repository-model";
 import type { SkillSourceState } from "./useSkillSource";
 
-function RepositoryRow({ repo, count, failed, busy, removing, onEdit, onSave, onRemove, onConfirm, onCancel }: {
-  repo: SkillRepository; count: number | null; failed: boolean; busy: boolean; removing: boolean;
+function RepositoryRow({ repo, count, failure, busy, removing, onEdit, onSave, onRemove, onConfirm, onCancel }: {
+  repo: SkillRepository; count: number | null; failure: SkillRepositoryFailedRow | undefined; busy: boolean; removing: boolean;
   onEdit: () => void; onSave: (enabled: boolean) => void; onRemove: () => void;
   onConfirm: () => void; onCancel: () => void;
 }) {
@@ -26,8 +27,9 @@ function RepositoryRow({ repo, count, failed, busy, removing, onEdit, onSave, on
         <p className="asb-skill-source-origin">
           <span>{repo.refName || t("extensions.repo.defaultRef")} · {repo.subpath || t("extensions.repo.wholeRepo")}</span>
           <span className="asb-num">{count === null ? t("extensions.repo.notScanned") : t("extensions.repo.skillCount", { count })}</span>
-          {failed && <span className="asb-warn-text">{t("extensions.repo.refreshFailed")}</span>}
+          {failure && <span className="asb-warn-text">{t("extensions.repo.refreshFailed")}</span>}
         </p>
+        {failure && <SkillRepositoryFailure row={failure} previous={count !== null} className="asb-skill-repository-error" />}
       </div>
       <div className="asb-skill-repository-actions">
         <Checkbox label={t("extensions.repo.enableShort")} ariaLabel={t("extensions.repo.enableAria", { name })} checked={repo.enabled} disabled={busy} onChange={onSave} />
@@ -55,7 +57,8 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
   const [removing, setRemoving] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const { repositories, catalog } = state;
-  const disabled = busy || !repositories.ready || repositories.loading || state.loading || state.imports.busy;
+  const disabled = busy || !repositories.ready || repositories.loading || state.loading || state.repairing || state.imports.busy;
+  const error = repositories.error ?? catalog.error;
   const leave = useUnsavedChanges(formOpen && dirty, repositories.saving);
   return (
     <section className="asb-skill-repository-manager" aria-label={t("extensions.repo.title")}>
@@ -68,6 +71,7 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
         }
         primaryActions={
           <>
+            <SkillRepositoryRecoveryButton state={state} disabled={disabled || formOpen || removing !== null} />
             <Button variant="secondary" disabled={disabled || formOpen} onClick={() => { setEditing(null); setFormOpen(true); }}>
               <Plus size={16} />{t("extensions.repo.add")}
             </Button>
@@ -77,9 +81,10 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
           </>
         }
       />
-      {repositories.error && <div className="asb-skill-source-error" role="alert">
-        <span>{repositories.error}</span>
-        <Button variant="secondary" disabled={busy || repositories.loading || state.imports.busy}
+      <SkillRepositoryRetryNotice retryAt={catalog.retryAt} />
+      {error && <div className="asb-skill-source-error" role="alert">
+        <span>{error}</span>
+        <Button variant="secondary" disabled={busy || repositories.loading || state.loading || state.repairing || state.imports.busy}
           onClick={() => void repositories.reload()}>
           <RefreshCw size={16} />{t("extensions.repo.retryLoad")}
         </Button>
@@ -92,7 +97,7 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
         <div className="asb-skill-source-empty"><p>{t("extensions.repo.none")}</p></div>}
       <ul className="asb-skill-repository-list" aria-label={t("extensions.repo.listAria")}>
         {repositories.items.map((repo) => <RepositoryRow key={repo.id} repo={repo} count={catalog.count(repo.id)}
-          failed={catalog.failedRepositoryIds.has(repo.id)}
+          failure={catalog.failures.get(repo.id)}
           busy={disabled} removing={removing === repo.id}
           onEdit={() => { if (formOpen && editing?.id === repo.id) return;
             leave.request(() => { setEditing(repo); setFormOpen(true); setRemoving(null); }); }}

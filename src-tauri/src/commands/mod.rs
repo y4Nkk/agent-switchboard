@@ -49,6 +49,7 @@ pub(crate) mod gateway;
 pub(crate) mod client_configuration_apply;
 pub(crate) mod client_configuration_manual;
 pub(crate) mod client_configuration_repair;
+pub(crate) mod client_configuration_sources;
 pub(crate) mod model_usage;
 pub(crate) mod native_telemetry;
 pub(crate) mod request_usage;

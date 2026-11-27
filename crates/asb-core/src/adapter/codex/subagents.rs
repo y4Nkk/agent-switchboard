@@ -8,9 +8,7 @@
 
 use toml_edit::Item;
 
-use crate::adapter::codex::document::{
-    item_at, parse, remove_empty_table_path, remove_path, set_path,
-};
+use crate::adapter::codex::document::{item_at, parse};
 use crate::adapter::AdapterError;
 use crate::contracts::{
     CodexSubagentKey, CodexSubagentSettings, ConfigValue, SettingValue, MAX_EXACT_CONFIG_INTEGER,
@@ -96,44 +94,18 @@ pub fn read_subagent_settings(text: &str) -> Result<CodexSubagentSettings, Adapt
     })
 }
 
-pub(super) const RETIRED_MAX_THREADS_KEY: &str = "agents.max_threads";
-
-/// Client-setting writes remove retired keys without accepting their old
-/// contract. Provider-only repairs leave client-owned settings untouched.
-pub(crate) fn remove_retired_keys(doc: &mut toml_edit::DocumentMut) -> Result<(), AdapterError> {
-    remove_path(doc, RETIRED_MAX_THREADS_KEY)
-}
-
-/// Renders the complete candidate document. Automatic removes the canonical
-/// key; explicit writes exactly the validated value. Role sub-tables, unknown
-/// `agents` members, comments, and unrelated top-level configuration are left
-/// byte-for-byte intact because the document is edited through `toml_edit`
-/// rather than re-serialized.
-pub fn render_subagent_settings(
-    current: &str,
-    settings: &CodexSubagentSettings,
-) -> Result<String, AdapterError> {
-    settings
-        .validate()
-        .map_err(|error| conflict(crate::adapter::scrub_message(error.to_string())))?;
-    let mut doc = parse(current)?;
-    remove_retired_keys(&mut doc)?;
-    for key in CodexSubagentKey::ALL {
-        let path = key.path();
-        match settings.get(key) {
-            SettingValue::Automatic => remove_path(&mut doc, &path)?,
-            SettingValue::Explicit { value } => set_path(&mut doc, &path, value.clone())?,
-        }
-    }
-    // The table itself is host-owned: it is dropped only once this module has
-    // removed every canonical scalar and nothing else remains under `[agents]`.
-    remove_empty_table_path(&mut doc, "agents")?;
-    Ok(doc.to_string())
-}
+pub(crate) const RETIRED_MAX_THREADS_KEY: &str = "agents.max_threads";
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn render_subagent_settings(current: &str, settings: &CodexSubagentSettings) -> Result<String, AdapterError> {
+        crate::adapter::render_client_changes(crate::AppKind::Codex, current, &crate::adapter::ClientConfigurationChanges {
+            subagents: CodexSubagentKey::ALL.into_iter().map(|key| (key, settings.get(key).clone())).collect(),
+            ..Default::default()
+        })
+    }
 
     fn render(current: &str, settings: &CodexSubagentSettings) -> String {
         render_subagent_settings(current, settings).expect("render")

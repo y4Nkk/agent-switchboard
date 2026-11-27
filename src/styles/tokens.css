@@ -36,6 +36,9 @@
   --asb-hairline-strong: rgba(20, 22, 27, 0.2);
   --asb-content: hsl(0 0% 98%);
   --asb-content-muted: hsl(240 16% 96%);
+  --asb-usage-surface: color-mix(in srgb, var(--asb-text) 2%, var(--asb-content-muted));
+  --asb-consumption-series-amber: #d67b08;
+  --asb-consumption-series-teal: #079ea2;
   --asb-surface-rail: var(--asb-content-muted);
   /* Fixed variants also supply the settings previews, independently of the
      current theme. Theme selectors only choose these values. */

@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { getChangelogHistory, type ChangelogEntry } from "../api/client";
 import { useI18n } from "../i18n";
 import { errorText } from "../i18n/errors";
 import { Button } from "./Button";
-import { CollapsibleSection } from "./Collapsible";
+import { Collapsible, CollapsibleTrigger } from "./Collapsible";
 import { ReleaseNotes } from "./ReleaseNotes";
 import { Select } from "./Select";
+import { SettingsGroup } from "./SettingsLayout";
 import { Time } from "./Time";
 
 type HistoryState = { status: "loading" }
@@ -35,11 +36,9 @@ function HistoryContents({ appVersion }: { appVersion: string | null }) {
     <p className="asb-fail-text" role="alert">
       {t("backup.update.historyFailed", { detail: errorText(state.error, t) })}
     </p>
-    <div className="asb-app-settings-error-actions">
-      <Button variant="secondary" size="compact" onClick={() => setAttempt((value) => value + 1)}>
-        {t("backup.update.historyRetry")}
-      </Button>
-    </div>
+    <Button variant="secondary" size="compact" onClick={() => setAttempt((value) => value + 1)}>
+      {t("backup.update.historyRetry")}
+    </Button>
   </>;
   const selected = state.entries.find((entry) => entry.version === version)
     ?? state.entries.find((entry) => entry.version === appVersion) ?? state.entries[0];
@@ -61,8 +60,13 @@ function HistoryContents({ appVersion }: { appVersion: string | null }) {
 export function ChangelogHistory({ appVersion }: { appVersion: string | null }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  return <CollapsibleSection className="asb-app-settings-group" open={open} onOpenChange={setOpen}
-    label={<span className="asb-section-title">{t("backup.update.historyTitle")}</span>}>
-    <HistoryContents appVersion={appVersion} />
-  </CollapsibleSection>;
+  const contentId = useId();
+  return <SettingsGroup title={t("backup.update.historyTitle")} actions={
+    <CollapsibleTrigger open={open} onOpenChange={setOpen} contentId={contentId}
+      label={t(open ? "common.collapsePreview" : "common.expandPreview")} />
+  }>
+    <Collapsible open={open} id={contentId}>
+      <HistoryContents appVersion={appVersion} />
+    </Collapsible>
+  </SettingsGroup>;
 }

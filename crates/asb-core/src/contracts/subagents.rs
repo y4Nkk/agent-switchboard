@@ -13,7 +13,8 @@ use crate::contracts::{AppKind, SettingValue};
 /// The one canonical key inside `[agents]` managed by this module, in the
 /// order the settings panel presents them. `AsRef<str>` yields the exact
 /// TOML key; nothing else in the binary may redefine these names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum CodexSubagentKey {
     Enabled,
     MaxConcurrentThreadsPerSession,
@@ -77,6 +78,14 @@ impl CodexSubagentSettings {
                 &self.max_concurrent_threads_per_session
             }
             CodexSubagentKey::InterruptMessage => &self.interrupt_message,
+        }
+    }
+
+    pub(crate) fn set(&mut self, key: CodexSubagentKey, value: SettingValue) {
+        match key {
+            CodexSubagentKey::Enabled => self.enabled = value,
+            CodexSubagentKey::MaxConcurrentThreadsPerSession => self.max_concurrent_threads_per_session = value,
+            CodexSubagentKey::InterruptMessage => self.interrupt_message = value,
         }
     }
 }

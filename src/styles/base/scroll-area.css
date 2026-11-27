@@ -1,4 +1,5 @@
 .asb-scroll-area {
+  --asb-scroll-action-inset: calc(var(--asb-space-3) + var(--asb-scrollbar-gutter));
   position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
@@ -17,12 +18,62 @@
   outline-offset: -2px;
 }
 
+.asb-scroll-area[data-floating-actions] {
+  --asb-scroll-back-to-top-lane: calc(var(--asb-scroll-action-inset) + var(--asb-touch-target) + var(--asb-space-2));
+}
+
+.asb-scroll-area[data-floating-actions] > .asb-scroll-viewport {
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  padding: var(--asb-space-unit) var(--asb-space-unit) var(--asb-scroll-action-inset);
+  scroll-padding-block-end: calc(var(--asb-scroll-action-inset) + var(--asb-touch-target) + var(--asb-space-5));
+  scrollbar-gutter: stable both-edges;
+}
+
+.asb-scroll-area[data-floating-actions] > .asb-scroll-viewport > * {
+  flex: none;
+}
+
+.asb-scroll-action-hub {
+  position: sticky;
+  z-index: 2;
+  /* Stay in flow so the last field can scroll past the full, possibly wrapped hub. */
+  inset-block-end: 0;
+  display: grid;
+  align-self: flex-end;
+  justify-items: end;
+  gap: var(--asb-space-1);
+  max-inline-size: calc(100% - var(--asb-scroll-back-to-top-lane));
+  margin-block-start: auto;
+  margin-inline-end: var(--asb-scroll-back-to-top-lane);
+  padding-block-start: var(--asb-space-2);
+  pointer-events: none;
+}
+
+.asb-scroll-action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.asb-scroll-action-buttons > .asb-btn {
+  max-inline-size: 100%;
+  border-radius: var(--asb-radius-pill);
+  box-shadow: var(--asb-shadow-raised);
+  pointer-events: auto;
+}
+
 .asb-back-to-top {
   position: absolute;
   display: flex;
   z-index: 2;
-  inset-inline-end: calc(var(--asb-space-3) + var(--asb-scrollbar-gutter));
-  inset-block-end: calc(var(--asb-space-3) + var(--asb-scrollbar-gutter));
+  inset-inline-end: var(--asb-scroll-action-inset);
+  inset-block-end: var(--asb-scroll-action-inset);
 }
 
 .asb-back-to-top .asb-btn {

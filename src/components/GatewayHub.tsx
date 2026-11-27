@@ -1,3 +1,4 @@
+import { Link2, Plug, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { GatewayStatus, GatewayStatusKind } from "../api/client";
 import { useI18n, type MessageKey } from "../i18n";
@@ -44,18 +45,19 @@ export function GatewayHub({ status, failed, refreshedAt, retrying, onRetry, onC
         </div>
       )}
       <FactList inline rows={[
-        { label: t("gateway.loopbackKicker"), value: <div className="asb-gateway-fact-value is-address">
+        { label: t("gateway.loopbackKicker"), icon: Link2, value: <div className="asb-gateway-fact-value is-address">
           {status.baseUrl ? <>
             <code>{status.baseUrl}</code>
             <CopyGatewayAddressButton value={status.baseUrl} />
           </> : <span className="asb-field-help">{t("gateway.addressNotListening")}</span>}
         </div> },
-        { label: t("gateway.configuredPort"), value: <div className="asb-gateway-fact-value is-port">
+        { label: t("gateway.configuredPort"), icon: Wrench, value: <div className="asb-gateway-fact-value is-port">
           <span className="asb-gateway-port-value asb-num">{status.configuredPort}</span>
           <Button variant="secondary" size="compact" disabled={retrying || status.status === "recoveryBlocked"}
             onClick={onChangePort}>{t("gateway.changePort")}</Button>
         </div> },
-        { label: t("gateway.actualPort"), value: <div className="asb-gateway-fact-value is-port">
+        { label: t("gateway.actualPort"), icon: Plug, tone: status.failure ? "warning" : undefined,
+          value: <div className="asb-gateway-fact-value is-port">
           {status.listeningPort === null
             ? <span className="asb-field-help">{t("gateway.portNotListening")}</span>
             : <span className="asb-gateway-port-value asb-num">{status.listeningPort}</span>}

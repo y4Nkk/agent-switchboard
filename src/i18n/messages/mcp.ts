@@ -8,6 +8,9 @@ export const messages = {
   // Form fields
   "mcp.field.name": ["服务名称", "Server name"],
   "mcp.field.nameHint": ["1–64 位字母、数字、下划线或连字符", "1–64 letters, digits, underscores, or hyphens"],
+  "mcp.group.identity": ["基本信息", "Basic information"],
+  "mcp.group.connection": ["连接配置", "Connection configuration"],
+  "mcp.field.registrySource": ["目录来源", "Registry source"],
   "mcp.field.transport": ["传输方式", "Transport"],
   "mcp.field.command": ["启动命令", "Command"],
   "mcp.field.args": ["启动参数", "Arguments"],
@@ -48,7 +51,7 @@ export const messages = {
 
   // Client toggles
   "mcp.clients.aria": ["启用到客户端", "Enable for clients"],
-  "mcp.clients.label": ["启用到", "Enable for"],
+  "mcp.clients.label": ["启用客户端", "Enable in clients"],
   "mcp.client.tooltip": ["{client}：{state}", "{client}: {state}"],
   "mcp.client.stateOn": ["保存后启用", "enabled after save"],
   "mcp.client.stateOff": ["不启用", "not enabled"],
@@ -162,7 +165,6 @@ export const messages = {
   "mcp.error.jsonUnparseable": ["JSON 配置无法解析", "The JSON configuration could not be parsed"],
   "mcp.error.saveFailed": ["保存失败，配置已保留，请重试", "The save failed; the configuration is kept — try again"],
   "mcp.edit.aria": ["编辑 MCP 服务", "Edit MCP server"],
-  "mcp.edit.name": ["服务名称", "Server name"],
   "mcp.edit.saving": ["保存中", "Saving"],
   "mcp.edit.save": ["保存修改", "Save changes"],
 } as const satisfies Record<string, MessageEntry>;

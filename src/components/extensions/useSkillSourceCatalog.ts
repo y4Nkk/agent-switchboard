@@ -1,13 +1,19 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   scanSkillRepositories, type SkillCatalogResult, type SkillRepository, type SkillRepositoryScanProgress,
+  type SkillRepositoryFailedRow, type SkillRepositoryRecoveryRequest,
 } from "../../api/extensions/skill-sources";
 import { sameSkillRepository } from "./skill-repository-model";
 import { useSkillSourceRequests } from "./useSkillSourceRequests";
 
-interface CatalogSnapshot extends SkillCatalogResult { scanned: SkillRepository[] }
+type CatalogContents = Pick<SkillCatalogResult, "candidates" | "progress">;
+interface CatalogSnapshot extends CatalogContents { scanned: SkillRepository[] }
+interface CatalogRecovery {
+  requests: SkillRepositoryRecoveryRequest[];
+  onSaved: (repositories: SkillRepository[]) => void;
+}
 
-function filterCatalog(snapshot: SkillCatalogResult, repositories: SkillRepository[]): SkillCatalogResult {
+function filterCatalog(snapshot: CatalogContents, repositories: SkillRepository[]): CatalogContents {
   const rows = snapshot.progress.repositories.filter(({ repository }) =>
     repositories.some((current) => sameSkillRepository(current, repository)));
   const allowed = new Set(rows.map(({ repository }) => repository.id));
@@ -17,7 +23,7 @@ function filterCatalog(snapshot: SkillCatalogResult, repositories: SkillReposito
   };
 }
 
-function mergeCatalog(next: SkillCatalogResult, previous: CatalogSnapshot | null, repositories: SkillRepository[]) {
+function mergeCatalog(next: CatalogContents, previous: CatalogSnapshot | null, repositories: SkillRepository[]) {
   const fresh = filterCatalog(next, repositories);
   const failed = fresh.progress.repositories.filter((row) => row.state === "failed");
   const retained = previous?.scanned.filter((repo) =>
@@ -33,6 +39,18 @@ function mergeCatalog(next: SkillCatalogResult, previous: CatalogSnapshot | null
 
 const INITIAL_PROGRESS = { snapshot: null, unavailable: false };
 
+function useActiveRetryTime(retryAt: number | null) {
+  const [now, setNow] = useState(Date.now);
+  const pending = retryAt !== null && retryAt * 1000 > now;
+  useEffect(() => {
+    if (retryAt === null || !pending) return;
+    const remaining = Math.max(0, retryAt * 1000 - Date.now());
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(remaining, 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [retryAt, pending, now]);
+  return pending ? retryAt : null;
+}
+
 export function useSkillSourceCatalog(busy: boolean) {
   const requests = useSkillSourceRequests<CatalogSnapshot>(busy);
   const [live, setLive] = useState<{ snapshot: SkillRepositoryScanProgress | null; unavailable: boolean }>(INITIAL_PROGRESS);
@@ -40,18 +58,18 @@ export function useSkillSourceCatalog(busy: boolean) {
     requests.cancel();
     setLive(INITIAL_PROGRESS);
   }, [requests.cancel]);
-  const refresh = async (repositories: SkillRepository[]) => {
-    await requests.run(async (isCurrent) => {
+  const refresh = (repositories: SkillRepository[], recovery?: CatalogRecovery) =>
+    requests.run(async (isCurrent) => {
       setLive(INITIAL_PROGRESS);
       try {
         const next = await scanSkillRepositories(isCurrent, (snapshot) => setLive((previous) =>
-          snapshot ? { snapshot, unavailable: false } : { ...previous, unavailable: true }));
-        return mergeCatalog(next, requests.result, repositories);
+          snapshot ? { snapshot, unavailable: false } : { ...previous, unavailable: true }), recovery?.requests ?? []);
+        if (isCurrent() && next.updatedRepositories) recovery?.onSaved(next.updatedRepositories);
+        return mergeCatalog(next, requests.result, next.updatedRepositories ?? repositories);
       } finally {
         if (isCurrent()) setLive(INITIAL_PROGRESS);
       }
     });
-  };
   const reconcile = (repositories: SkillRepository[] | null) => {
     cancel();
     requests.update((previous) => {
@@ -66,11 +84,17 @@ export function useSkillSourceCatalog(busy: boolean) {
   };
   const count = (id: string) => requests.result?.scanned.some((repo) => repo.id === id) ?
     requests.result.candidates.filter((candidate) => candidate.repositoryId === id).length : null;
-  const failedRepositoryIds = new Set(requests.result?.progress.repositories
-    .filter((row) => row.state === "failed").map((row) => row.repository.id));
+  const failures = new Map<string, SkillRepositoryFailedRow>();
+  const recoveries: SkillRepositoryRecoveryRequest[] = [];
+  for (const row of requests.result?.progress.repositories ?? []) {
+    if (row.state !== "failed") continue;
+    failures.set(row.repository.id, row);
+    if (row.recovery) recoveries.push({ repository: row.repository, recovery: row.recovery });
+  }
+  const progress = requests.loading ? live.snapshot : requests.result?.progress ?? null;
+  const retryAt = useActiveRetryTime(progress?.githubRetryAt ?? null);
   return {
-    ...requests, cancel, refresh, reconcile, count, failedRepositoryIds,
-    progress: requests.loading ? live.snapshot : requests.result?.progress ?? null,
+    ...requests, cancel, refresh, reconcile, count, failures, recoveries, retryAt, progress,
     progressUnavailable: requests.loading && live.unavailable,
   };
 }

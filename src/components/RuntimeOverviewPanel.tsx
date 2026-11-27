@@ -1,3 +1,4 @@
+import { FolderOpen, Monitor, Network, Plug, Tag, Wrench } from "lucide-react";
 import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useState } from "react";
 import { getRuntimeOverview, openAppDataDir, type RuntimeOverview } from "../api/client";
@@ -88,14 +89,14 @@ export function RuntimeOverviewPanel() {
       )}
       {runtime !== null && (
         <FactList rows={[
-          { label: t("providers.runtime.appVersion"), value: `v${runtime.appVersion}` },
-          { label: t("providers.runtime.buildMode"), value: buildModeLabel(runtime.buildMode, t) },
-          { label: t("providers.runtime.platform"),
+          { label: t("providers.runtime.appVersion"), icon: Tag, format: "code", value: `v${runtime.appVersion}` },
+          { label: t("providers.runtime.buildMode"), icon: Wrench, value: buildModeLabel(runtime.buildMode, t) },
+          { label: t("providers.runtime.platform"), icon: Monitor,
             value: `${platformLabel(runtime.platform)} · ${architectureLabel(runtime.architecture)}` },
-          { label: t("providers.runtime.listener"),
-            value: <span className="asb-code">{listenerLabel(runtime.transport, t)}</span> },
-          { label: t("providers.runtime.response"), value: responseLabel(runtime.transport, t) },
-          { label: t("providers.runtime.appData"), value: <FactPath path={runtime.appDataPath} open={openAppDataDir} /> },
+          { label: t("providers.runtime.listener"), icon: Plug, format: "code", value: listenerLabel(runtime.transport, t) },
+          { label: t("providers.runtime.response"), icon: Network, value: responseLabel(runtime.transport, t) },
+          { label: t("providers.runtime.appData"), icon: FolderOpen,
+            value: <FactPath path={runtime.appDataPath} open={openAppDataDir} /> },
         ]} />
       )}
     </section>

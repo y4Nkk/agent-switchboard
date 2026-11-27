@@ -3,6 +3,7 @@ import type { AppKind } from "../api/client";
 import { useI18n } from "../i18n";
 import { ClientLogo } from "../components/ClientLogo";
 import { ModuleHeader } from "../components/WorkspaceHeader";
+import { SettingsLayout } from "../components/SettingsLayout";
 import { Tabs } from "../components/Tabs";
 import { IntegrationPane } from "../components/claude-management/IntegrationPane";
 import { useClaudeOperations } from "../components/claude-management/operations";
@@ -46,13 +47,13 @@ export function ClientManagementPage({ onChanged, active }: ClientManagementPage
             ]} />
         }
       />
-      <div className="asb-client-management-content" id={contentId} role="tabpanel" aria-labelledby={`client-management-client-${client}-tab`}>
+      <SettingsLayout className="asb-client-management-content" id={contentId} role="tabpanel" aria-labelledby={`client-management-client-${client}-tab`}>
         <ClientSoftwarePanel client={client} active={active} />
         {operations.error && <p role="alert" className="asb-field-error">{operations.error}</p>}
         {operations.notice && <p role="status" className="asb-scope-note">{operations.notice}</p>}
         <div hidden={client !== "codex"}><ProjectPlansPane operations={codex} active={active && client === "codex"} /></div>
         <div hidden={client !== "claude"}><IntegrationPane operations={claude} active={active && client === "claude"} /></div>
-      </div>
+      </SettingsLayout>
     </section>
   );
 }

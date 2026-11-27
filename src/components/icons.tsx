@@ -13,6 +13,7 @@ import {
   ChevronUp,
   ChevronsLeft,
   Cloud,
+  CodeXml,
   Copy,
   Download,
   Eye,
@@ -60,6 +61,7 @@ function icon(Lucide: LucideIcon, size: number, strokeWidth = 1.7) {
 }
 
 export const PreviewIcon = icon(Eye, 18);
+export const CodeIcon = icon(CodeXml, 16);
 export const BackToTopIcon = icon(ArrowUp, 20);
 export const EyeOffIcon = icon(EyeOff, 18);
 export const EditIcon = icon(Pencil, 18);

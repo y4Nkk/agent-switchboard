@@ -1,5 +1,6 @@
 use super::*;
-use std::collections::{BTreeMap, HashSet};
+use asb_core::contracts::ModelUsageDayModel;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use chrono::{Duration, NaiveDate};
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct GroupKey { app: AppKind, model: Option<String> }
@@ -24,11 +25,17 @@ impl CalendarRange {
     }
 }
 
+#[derive(Default)]
+struct DayTotals {
+    tokens: TokenTotals,
+    models: BTreeMap<Option<String>, u64>,
+}
+
 struct Accumulator {
     calendar: CalendarRange,
     groups: BTreeMap<GroupKey, TokenTotals>,
     sessions: BTreeMap<GroupKey, HashSet<String>>,
-    days: BTreeMap<NaiveDate, TokenTotals>,
+    days: BTreeMap<NaiveDate, DayTotals>,
     undated: TokenTotals,
 }
 impl Accumulator {
@@ -42,7 +49,11 @@ impl Accumulator {
         let totals = self.groups.entry(key.clone()).or_default();
         *totals = totals.checked_add(event.tokens)?;
         match assignment {
-            Some(date) => { let destination = self.days.entry(date).or_default(); *destination = destination.checked_add(event.tokens)?; }
+            Some(date) => {
+                let day = self.days.entry(date).or_default();
+                day.tokens = day.tokens.checked_add(event.tokens)?;
+                *day.models.entry(event.model.clone()).or_default() += event.tokens.total;
+            }
             None => self.undated = self.undated.checked_add(event.tokens)?,
         }
         self.sessions.entry(key).or_default().insert(event.session.clone());
@@ -52,7 +63,7 @@ impl Accumulator {
 
 fn finish(
     range: ModelUsageRange, now: DateTime<Local>, aggregate: Accumulator,
-    coverage: ModelUsageCoverage, issues: Vec<ModelUsageIssue>,
+    coverage: ModelUsageCoverage, issues: Vec<ModelUsageIssue>, longest_session_span_seconds: Option<u64>,
 ) -> ModelUsageReport {
     let mut seen_issues = HashSet::new();
     ModelUsageReport { range, generated_at: now.with_timezone(&Utc).to_rfc3339(),
@@ -60,13 +71,41 @@ fn finish(
             session_count: aggregate.sessions.get(&key).map_or(0, |sessions| sessions.len()) as u64,
             app: key.app, model: key.model, input_tokens: totals.input, cache_read_input_tokens: totals.cache_read,
             cache_creation_input_tokens: totals.cache_creation, output_tokens: totals.output, total_tokens: totals.total }).collect(),
-        days: aggregate.days.into_iter().map(|(date, totals)| ModelUsageDay { date: date.to_string(),
-            input_tokens: totals.input, cache_read_input_tokens: totals.cache_read,
-            cache_creation_input_tokens: totals.cache_creation, output_tokens: totals.output, total_tokens: totals.total }).collect(),
+        days: aggregate.days.into_iter().map(|(date, day)| ModelUsageDay { date: date.to_string(),
+            input_tokens: day.tokens.input, cache_read_input_tokens: day.tokens.cache_read,
+            cache_creation_input_tokens: day.tokens.cache_creation, output_tokens: day.tokens.output,
+            total_tokens: day.tokens.total,
+            models: Some(day.models.into_iter().map(|(model, total_tokens)| ModelUsageDayModel { model, total_tokens }).collect()),
+        }).collect(),
         unassigned_tokens: aggregate.undated.into_contract(), coverage,
+        longest_session_span_seconds: if range == ModelUsageRange::All { longest_session_span_seconds } else { None },
         issues: issues.into_iter().filter(|issue| seen_issues.insert((issue.app, issue.message.clone()))).collect() }
 }
 
+fn longest_session_span(connection: &rusqlite::Connection, scope: &str, now: DateTime<Local>) -> Result<Option<u64>, String> {
+    let mut statement = connection.prepare("SELECT data FROM usage_calls WHERE scope=?1").map_err(store::error)?;
+    let mut rows = statement.query([scope]).map_err(store::error)?;
+    let mut sessions = HashMap::new();
+    let mut longest = None;
+    while let Some(row) = rows.next().map_err(store::error)? {
+        let raw: String = row.get(0).map_err(store::error)?;
+        let call: UsageEvent = serde_json::from_str(&raw).map_err(store::error)?;
+        if call.tokens.total == 0 { continue; }
+        let Some(at) = call.at.as_deref().and_then(|at| DateTime::parse_from_rfc3339(at).ok()) else { continue; };
+        if at > now { continue; }
+        match sessions.entry((call.app, call.session)) {
+            std::collections::hash_map::Entry::Vacant(entry) => { entry.insert((at, at)); }
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                let (first, last) = entry.get_mut();
+                *first = (*first).min(at);
+                *last = (*last).max(at);
+                let span = last.signed_duration_since(*first).num_seconds() as u64;
+                longest = longest.max(Some(span));
+            }
+        }
+    }
+    Ok(longest)
+}
 
 pub(super) fn build(connection: &rusqlite::Connection, scope: &str,
     sources: &[crate::session_manager::SessionSource], scanned_files: u64,
@@ -89,6 +128,7 @@ pub(super) fn build(connection: &rusqlite::Connection, scope: &str,
         sessions_without_usage: sources.iter().filter(|source|
             !measured.contains(&(source.meta.app, source.meta.session_id.clone()))).count() as u64,
         undated_event_tokens };
+    let span = longest_session_span(connection, scope, now)?;
     Ok(ranges.into_iter().map(|(range, aggregate)|
-        finish(range, now, aggregate, coverage.clone(), issues.clone())).collect())
+        finish(range, now, aggregate, coverage.clone(), issues.clone(), span)).collect())
 }

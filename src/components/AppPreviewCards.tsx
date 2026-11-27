@@ -1,6 +1,7 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
 import type { CloseBehavior, MotionPreference, RuntimeLogLevel, RuntimeLogSeverity, StartupPage } from "../api/client";
 import { AppMark, DetailPanel, LIGHT, PreviewCanvas, WindowFrame } from "./preference-preview/WindowScene";
+import { SettingsRow } from "./SettingsLayout";
 
 export function AppPreviewSetting<T extends string | number>({ label, detail, value, options, renderPreview, busy, onChange }: {
   label: string;
@@ -13,11 +14,7 @@ export function AppPreviewSetting<T extends string | number>({ label, detail, va
 }) {
   const id = useId();
   return (
-    <div className="asb-app-setting-row asb-app-setting-row-preview">
-      <div className="asb-app-setting-copy">
-        <span id={`${id}-label`} className="asb-checkbox-label">{label}</span>
-        {detail && <span id={`${id}-detail`} className="asb-app-setting-detail">{detail}</span>}
-      </div>
+    <SettingsRow label={label} description={detail} labelId={`${id}-label`} descriptionId={`${id}-detail`} wide>
       <div className="asb-preview-cards" role="radiogroup" aria-labelledby={`${id}-label`}
         style={{ "--asb-preview-columns": options.length === 4 ? 2 : Math.min(options.length, 3) } as CSSProperties}
         aria-describedby={detail ? `${id}-detail` : undefined}>
@@ -39,7 +36,7 @@ export function AppPreviewSetting<T extends string | number>({ label, detail, va
           </label>
         ))}
       </div>
-    </div>
+    </SettingsRow>
   );
 }
 

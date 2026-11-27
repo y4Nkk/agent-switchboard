@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { Input } from "../Input";
+import { Tooltip } from "../Tooltip";
 import { PlusIcon } from "../icons";
 
 export function SessionTagInput({ tags, onChange, disabled }: {
@@ -9,6 +10,7 @@ export function SessionTagInput({ tags, onChange, disabled }: {
 }) {
   const { t } = useI18n();
   const id = useId();
+  const addLabel = t("sessions.organize.addTag");
   const [draft, setDraft] = useState("");
   const add = () => {
     const value = draft.trim();
@@ -23,8 +25,9 @@ export function SessionTagInput({ tags, onChange, disabled }: {
         onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); add(); }
         }} />
-      <Button variant="icon" disabled={disabled || !draft.trim()} onClick={add}
-        aria-label={t("sessions.organize.addTag")} title={t("sessions.organize.addTag")}><PlusIcon /></Button>
+      <Tooltip label={addLabel}>
+        <Button variant="icon" disabled={disabled || !draft.trim()} onClick={add} aria-label={addLabel}><PlusIcon /></Button>
+      </Tooltip>
     </div>
     {tags.length > 0 && <div className="asb-session-tag-values">{tags.map((tag) =>
       <Button variant="unstyled" key={tag} disabled={disabled} aria-label={t("sessions.organize.removeTag", { tag })}

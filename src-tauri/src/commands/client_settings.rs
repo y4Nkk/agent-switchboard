@@ -1,7 +1,8 @@
 //! Typed catalogs for provider parameters and independently stored client
 //! preferences. Provider parameters are saved only with their provider draft.
 
-use super::error::{blocking, operation_error, state, store_error, CommandError};
+use super::client_configuration_apply::ClientFile;
+use super::error::{blocking, state, store_error, CommandError};
 pub(crate) mod software_policy;
 use asb_core::contracts::{AppKind, ClientSettingsSnapshot, SettingsValues};
 use asb_core::ownership::{
@@ -54,6 +55,8 @@ pub struct SettingSpec {
     pub min: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minimum_version: Option<&'static str>,
 }
 
 /// One official configuration family and its actual ownership boundary. This
@@ -81,6 +84,17 @@ pub struct ClientSettingsEditor {
     pub groups: Vec<String>,
     pub specs: Vec<SettingSpec>,
     pub directory: Vec<OfficialSettingDirectoryEntry>,
+    pub source: Option<ClientSettingsSource>,
+    pub source_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientSettingsSource {
+    pub values: std::collections::BTreeMap<String, asb_core::contracts::SettingValue>,
+    pub content_hash: String,
+    pub exists: bool,
+    pub permission_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -174,6 +188,7 @@ fn editor_catalog(target: AppKind, owner: SettingOwner) -> Vec<SettingSpec> {
                     SettingControl::Integer { max, .. } | SettingControl::StringInteger { max, .. } => Some(max),
                     _ => None,
                 },
+                minimum_version: ownership::minimum_client_version(target, spec.key),
             }
         })
         .collect()
@@ -203,6 +218,8 @@ fn editor_from_snapshot(target: AppKind, snapshot: ClientSettingsSnapshot) -> Cl
         groups: editor_groups(target, &specs),
         specs,
         directory: directory_catalog(target),
+        source: None,
+        source_error: None,
     }
 }
 
@@ -234,9 +251,7 @@ fn model_preferences_catalog() -> ClaudeModelPreferencesCatalog {
     }
 }
 
-/// Reads the application-owned parameter values and the catalog that can edit
-/// them. This command deliberately does not access the real client
-/// configuration.
+/// Reads the edit baseline and catalog under the same gate as local writes.
 #[tauri::command]
 pub async fn get_client_settings_editor(
     app: AppHandle,
@@ -245,37 +260,25 @@ pub async fn get_client_settings_editor(
     let state = state(&app)?;
     let gate = app.state::<super::ConfigWriteGate>().inner().clone();
     gate.run(move || {
-        state
-            .configuration()
-            .get_client_settings(target)
-            .map(|snapshot| editor_from_snapshot(target, snapshot))
-            .map_err(store_error)
+        let saved = state.configuration().get_client_settings(target).map_err(store_error)?;
+        let mut editor = editor_from_snapshot(target, saved);
+        match preference_source(&state, target) {
+            Ok(source) => editor.source = Some(source),
+            Err(error) => editor.source_error = Some(error),
+        }
+        Ok(editor)
     })
     .await
 }
 
-/// Replaces client settings after an optimistic revision check.
-/// Saving here does not itself modify either real client config file; the
-/// supplier switch path remains the only projection writer. A previously
-/// confirmed interrupted profile save is recovered before this write.
-#[tauri::command]
-pub async fn save_client_settings(
-    app: AppHandle,
-    target: AppKind,
-    settings: SettingsValues,
-    expected_settings_hash: String,
-) -> Result<ClientSettingsSnapshot, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let gate = app.state::<super::ConfigWriteGate>();
-        let _guard = gate.lock().map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
-        super::switching::ensure_profile_save_recovered(&app)?;
-        state
-            .configuration()
-            .save_client_settings(target, settings, &expected_settings_hash)
-            .map_err(|error| operation_error("client-settings-save-failed", error))
-    })
-    .await
+fn preference_source(state: &crate::local_state::LocalState, target: AppKind) -> Result<ClientSettingsSource, String> {
+    let file = ClientFile::read(state, target).map_err(|error| error.message)?;
+    let values = asb_core::adapter::extract_client_settings(target, &file.text)
+        .map_err(|error| error.to_string())?.settings;
+    let permission_profile = if target == AppKind::Codex {
+        asb_core::adapter::codex::permission_profile_status(&file.text).map_err(|error| error.to_string())?.selected
+    } else { None };
+    Ok(ClientSettingsSource { values, content_hash: asb_switch::sha256_hex(&file.text), exists: file.exists, permission_profile })
 }
 
 /// Reads the actual client configuration and returns only a redacted display
@@ -288,27 +291,17 @@ pub async fn get_current_client_configuration(
     let state = state(&app)?;
     let gate = app.state::<super::ConfigWriteGate>().inner().clone();
     gate.run(move || {
-        let path = state
-            .target(target)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let (exists, raw) = match std::fs::read_to_string(&path) {
-            Ok(content) => (true, content),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (
-                false,
-                match target { AppKind::Codex => String::new(), AppKind::Claude => "{}".to_string() },
-            ),
-            Err(_) => return Err(CommandError::keyed("client-configuration-unreadable", "errors.cfg.clientConfigUnreadable", "无法读取真实客户端配置文件")),
-        };
-        let source = if raw.is_empty() && target == AppKind::Claude { "{}" } else { &raw };
+        let file = ClientFile::read(&state, target)?;
+        let source = &file.text;
         let syntax = asb_core::adapter::validate_syntax(target, source);
         let syntax_ok = syntax.is_ok();
         let syntax_error = syntax.err().map(|error| error.message);
         Ok(CurrentClientConfiguration {
             app: target,
-            target: path.to_string_lossy().into_owned(),
-            exists,
+            target: file.path.to_string_lossy().into_owned(),
+            exists: file.exists,
             content: syntax_ok.then(|| asb_switch::display_content(target, source)).unwrap_or_default(),
-            content_hash: asb_switch::sha256_hex(&raw),
+            content_hash: asb_switch::sha256_hex(source),
             syntax_ok,
             syntax_error,
         })

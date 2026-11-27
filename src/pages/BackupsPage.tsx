@@ -6,6 +6,7 @@ import { BackupCleanup } from "../components/BackupCleanup";
 import { BackupHistory } from "../components/BackupHistory";
 import { Button } from "../components/Button";
 import { CloudBackupPanel } from "../components/CloudBackupPanel";
+import { SettingsGroup, SettingsLayout } from "../components/SettingsLayout";
 import { Tabs } from "../components/Tabs";
 import { Time } from "../components/Time";
 import { ModuleHeader } from "../components/WorkspaceHeader";
@@ -68,12 +69,9 @@ function LocalArchive({ records, lastSwitch, busy, configurationReady, active, o
   return <div className="asb-backup-hero">
     <div className="asb-backup-hero-art"><BackupArchiveArt kind="local" active={active} /></div>
     <div className="asb-backup-hero-copy">
-      <div className="asb-backup-history-heading">
-        <h4 className="asb-section-title">{t("backup.history.title")}</h4>
-        <span className="asb-backup-history-count asb-num">
-          {records.length ? t("backup.history.count", { count: records.length }) : t("backup.history.empty")}
-        </span>
-      </div>
+      <span className="asb-backup-history-count asb-num">
+        {records.length ? t("backup.history.count", { count: records.length }) : t("backup.history.empty")}
+      </span>
       {lastSwitch && <LastWrite lastSwitch={lastSwitch} busy={busy} configurationReady={configurationReady} onUndo={onUndo} />}
     </div>
   </div>;
@@ -117,19 +115,20 @@ export function BackupsPage({
         )}
       />
       {/* Keep the backup tabs mounted so switching retains their state. */}
-      <div
+      <SettingsLayout
         id="backup-local-panel"
-        className="asb-backup-local"
         role="tabpanel"
         aria-labelledby="backup-local-tab"
         hidden={activeTab !== "local"}
       >
-        <LocalArchive records={records} lastSwitch={lastSwitch} busy={busy} configurationReady={configurationReady}
-          active={visible && activeTab === "local"} onUndo={onUndo} />
-        <BackupHistory records={records} busy={busy} onRestore={onRestore}
-          configurationReady={configurationReady} recoveryBackupId={recoveryBackupId} />
-      </div>
-      <div
+        <SettingsGroup title={t("backup.history.title")} surface="plain">
+          <LocalArchive records={records} lastSwitch={lastSwitch} busy={busy} configurationReady={configurationReady}
+            active={visible && activeTab === "local"} onUndo={onUndo} />
+          <BackupHistory records={records} busy={busy} onRestore={onRestore}
+            configurationReady={configurationReady} recoveryBackupId={recoveryBackupId} />
+        </SettingsGroup>
+      </SettingsLayout>
+      <SettingsLayout
         id="backup-cloud-panel"
         role="tabpanel"
         aria-labelledby="backup-cloud-tab"
@@ -146,15 +145,15 @@ export function BackupsPage({
           onUpload={cloudBackup.upload}
           onRestore={cloudBackup.restore}
         />
-      </div>
-      <div
+      </SettingsLayout>
+      <SettingsLayout
         id="backup-cleanup-panel"
         role="tabpanel"
         aria-labelledby="backup-cleanup-tab"
         hidden={activeTab !== "cleanup"}
       >
         <BackupCleanup active={active && activeTab === "cleanup"} busy={busy} onCleaned={onCleaned} />
-      </div>
+      </SettingsLayout>
     </section>
   );
 }

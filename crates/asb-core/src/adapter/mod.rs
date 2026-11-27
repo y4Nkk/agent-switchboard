@@ -8,6 +8,8 @@
 
 pub mod claude;
 pub mod codex;
+mod client_changes;
+pub use client_changes::{ClientConfigurationChanges, render_client_changes};
 mod parameters;
 #[cfg(test)]
 mod current_contract_tests;
@@ -135,34 +137,31 @@ pub fn render_gateway_base_url(
     }
 }
 
-/// Applies only client-owned visual settings to an existing real client
-/// document. Automatic values remove their owned key; all other content is
-/// preserved by the app-specific document editor.
-pub fn render_client_settings_into_file(
-    app: AppKind,
-    current: &str,
-    client_settings: &SettingsValues,
-) -> Result<String, AdapterError> {
-    client_settings
-        .validate_client_settings(app)
-        .map_err(|error| AdapterError { message: scrub_message(error.to_string()), line: None })?;
-    match app {
-        AppKind::Codex => codex::render_client_settings_into_file(current, client_settings),
-        AppKind::Claude => claude::render_client_settings_into_file(current, client_settings),
-    }
-}
-
 /// Resets only the standard client scalars and Codex global subagent settings.
 /// Extra configuration is preserved from the live document, never reprojected.
 pub fn reset_client_settings(app: AppKind, current: &str) -> Result<String, AdapterError> {
-    match app {
-        AppKind::Claude => claude::reset_client_settings(current),
-        AppKind::Codex => {
-            let defaults = crate::ownership::default_client_settings(app);
-            let rendered = codex::render_client_settings_into_file(current, &defaults)?;
-            codex::render_subagent_settings(&rendered, &crate::contracts::CodexSubagentSettings::automatic())
-        }
+    use crate::contracts::{CodexSubagentKey, SettingValue};
+    let mut changes = ClientConfigurationChanges {
+        settings: crate::ownership::default_client_settings(app).settings,
+        ..Default::default()
+    };
+    if app == AppKind::Codex {
+        changes.subagents = CodexSubagentKey::ALL.into_iter().map(|key| (key, SettingValue::Automatic)).collect();
     }
+    let rendered = render_client_changes(app, current, &changes)?;
+    if app == AppKind::Claude { return Ok(rendered); }
+    let retired = crate::ownership::RETIRED_CODEX_CLIENT_KEYS.iter()
+        .map(|key| ((*key).to_string(), OverlayEntry::RemoveIfPresent)).collect();
+    codex::render_entries(&rendered, retired)
+}
+
+#[cfg(test)]
+fn project_test_preferences(app: AppKind, current: &str, settings: &SettingsValues) -> Result<String, AdapterError> {
+    render_client_changes(app, current, &ClientConfigurationChanges {
+        settings: settings.settings.clone(),
+        claude_extra: (app == AppKind::Claude).then(|| settings.claude_extra.clone()),
+        ..Default::default()
+    })
 }
 
 /// Checks that `text` is syntactically valid for `app` without planning
@@ -236,16 +235,49 @@ pub fn full_diff(
     }
 }
 
-/// Deletes every leaf no ASB module owns and prunes the containers it
-/// empties, so the deep client reset can converge a real file onto the
-/// configuration the interface models. Preserved: directory scalars, Claude
-/// native and manifest-claimed paths, Codex provider and extension table
-/// families, and the sub-agent keys the typed render removes itself.
-pub fn remove_unmanaged_entries(app: AppKind, text: &str, codex_fragment: &str) -> Result<String, AdapterError> {
-    match app {
-        AppKind::Codex => codex::remove_unmanaged(text, codex_fragment),
-        AppKind::Claude => claude::remove_unmanaged(text),
+/// A single eligible field with redacted original values. An array is selected as one field.
+#[derive(Debug, Serialize)]
+pub struct RemovableClientField {
+    pub key: String,
+    pub before: Option<String>,
+}
+
+/// Enumerates eligible fields while applying only identities selected from
+/// that same document. Paths are encoded from key segments and never parsed
+/// or interpreted as user-provided expressions.
+pub fn select_unmanaged_entries(
+    app: AppKind,
+    text: &str,
+    codex_fragment: &str,
+    selected: &std::collections::BTreeSet<String>,
+) -> Result<(String, Vec<RemovableClientField>), AdapterError> {
+    let mut keys = std::collections::BTreeSet::new();
+    let rendered = match app {
+        AppKind::Codex => codex::select_unmanaged(text, codex_fragment, selected, &mut keys)?,
+        AppKind::Claude => claude::select_unmanaged(text, selected, &mut keys)?,
+    };
+    if !selected.is_subset(&keys) {
+        return Err(AdapterError { message: "所选字段已变化或不允许移除，请重新读取恢复预览".into(), line: None });
     }
+    let empty = if app == AppKind::Claude { "{}" } else { "" };
+    let original: std::collections::BTreeMap<_, _> = full_diff(app, empty, text)?
+        .into_iter().filter_map(|change| Some((change.key, change.before?))).collect();
+    let candidates = keys.into_iter().map(|key| {
+        let prefix = format!("{key}[");
+        let values: Vec<_> = original.get(&key).cloned().into_iter()
+            .chain(original.range(prefix.clone()..).take_while(|(path, _)| path.starts_with(&prefix))
+                .map(|(path, value)| format!("{path} = {value}")))
+            .collect();
+        RemovableClientField { key, before: (!values.is_empty()).then(|| values.join("\n")) }
+    }).collect();
+    Ok((rendered, candidates))
+}
+
+#[cfg(test)]
+fn remove_unmanaged_entries(app: AppKind, text: &str, codex_fragment: &str) -> Result<String, AdapterError> {
+    let (_, candidates) = select_unmanaged_entries(app, text, codex_fragment, &Default::default())?;
+    let selected = candidates.into_iter().map(|entry| entry.key).collect();
+    select_unmanaged_entries(app, text, codex_fragment, &selected).map(|(rendered, _)| rendered)
 }
 
 /// Shared keyed-value diff for the per-app collectors. Keys are compared in

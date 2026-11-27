@@ -6,6 +6,7 @@ import { Input } from "../Input";
 import { SearchInput } from "../SearchInput";
 import { Select } from "../Select";
 import { FolderOpenIcon, SearchIcon } from "../icons";
+import { ExtensionMarketSearch } from "./ExtensionMarket";
 import type { SkillSourceKind } from "./skill-source-model";
 import type { SkillSourceState } from "./useSkillSource";
 
@@ -27,10 +28,8 @@ function SourceInput({ state, disabled, busy }: { state: SkillSourceState; disab
     </span>
   );
   if (state.source === "directory") return (
-    <div className="asb-ext-market-query">
-      <SearchInput ariaLabel={t("extensions.sources.searchSkillsSh")} placeholder={t("extensions.sources.searchSkillsSh")}
-        value={state.directory.input} disabled={disabled} onChange={state.directory.changeInput} />
-    </div>
+    <SearchInput ariaLabel={t("extensions.sources.searchSkillsSh")} placeholder={t("extensions.sources.searchSkillsSh")}
+      value={state.directory.input} disabled={disabled} onChange={state.directory.changeInput} />
   );
   const kind = state.source;
   return <>
@@ -48,33 +47,32 @@ function SourceInput({ state, disabled, busy }: { state: SkillSourceState; disab
 
 export function SkillSourceForm({ state, busy }: { state: SkillSourceState; busy: boolean }) {
   const { t } = useI18n();
-  const disabled = state.imports.busy || (busy && !state.loading);
+  const disabled = state.repairing || state.imports.busy || (busy && !state.loading);
   const { source, repositories } = state;
   const scanning = source === "directory" ? state.directory.searching : state.loading;
   const scanDisabled = busy || state.loading || state.imports.busy || (source === "catalog" &&
-    (!repositories.ready || repositories.loading || !repositories.items.some((repo) => repo.enabled)));
-  const retryCatalog = state.catalog.error !== null || state.catalog.failedRepositoryIds.size > 0;
+    (state.catalog.retryAt !== null || !repositories.ready || repositories.loading || !repositories.items.some((repo) => repo.enabled)));
+  const retryCatalog = state.catalog.error !== null || state.catalog.failures.size > 0;
   const scanLabel = scanning ? t(source === "directory" ? "extensions.sources.searching" : "extensions.sources.scanning")
     : t(source === "catalog" ? (retryCatalog ? "extensions.sources.retryRefresh" : "extensions.sources.refreshRepos") : source === "directory" ? "extensions.sources.search"
       : source === "zip" ? "extensions.sources.scanZip" : "extensions.sources.scanSource");
   return (
-    <form className="asb-ext-market-form" aria-label={t("extensions.sources.formAria")} onSubmit={(event) => {
-      event.preventDefault();
-      if (!scanDisabled) void state.search();
-    }}>
+    <ExtensionMarketSearch label={t("extensions.sources.formAria")} onSubmit={() => { if (!scanDisabled) void state.search(); }}
+      actions={<>
+        <Button type="submit" variant="primary" disabled={scanDisabled}>
+          {scanning ? <LoaderCircle size={16} className="asb-skill-source-spinner" />
+            : source === "catalog" ? <RefreshCw size={16} /> : <SearchIcon />}
+          {scanLabel}
+        </Button>
+        {source === "catalog" && <Button variant="secondary" disabled={disabled}
+          onClick={() => state.setManagerOpen(true)}>
+          <Settings2 size={16} />{t("extensions.sources.manageRepos")}
+        </Button>}
+      </>}>
       <Select value={source} ariaLabel={t("extensions.sources.kindAria")} disabled={disabled || state.directory.resolving !== null}
         options={SOURCES.map(({ value, labelKey }) => ({ value, label: t(labelKey) }))}
         onChange={(value) => state.changeSource(value as SkillSourceKind)} />
       <SourceInput state={state} disabled={disabled} busy={busy} />
-      <Button type="submit" variant="primary" disabled={scanDisabled}>
-        {scanning ? <LoaderCircle size={16} className="asb-skill-source-spinner" />
-          : source === "catalog" ? <RefreshCw size={16} /> : <SearchIcon />}
-        {scanLabel}
-      </Button>
-      {source === "catalog" && <Button variant="secondary" disabled={disabled}
-        onClick={() => state.setManagerOpen(true)}>
-        <Settings2 size={16} />{t("extensions.sources.manageRepos")}
-      </Button>}
-    </form>
+    </ExtensionMarketSearch>
   );
 }

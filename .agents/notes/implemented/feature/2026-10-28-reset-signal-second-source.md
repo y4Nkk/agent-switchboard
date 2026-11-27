@@ -13,8 +13,8 @@ Status: implemented
 codex-reset.com 整体作为**一个来源（源2）**，四个端点是同一监测站的四个切面，在 Rust 侧一次检查内全部读取、全部成功才产出快照；面板内新增共享 `Tabs` 源页签（「源1 · Codex Runway」「源2 · Codex Reset」），页头「刷新重置信号」一个动作并行刷新两个来源，错误与新鲜度按来源独立报告。
 
 - **后端契约**：源2 聚合读取由 `codex_reset/hub.rs` 拥有，外部字段由 `hub/payload.rs` 拥有，归一化状态及缓存校验由 `hub_status.rs` 拥有。四个端点固定 URL，经 `probe::http_get` 读取，归一化为 `CodexResetHubStatus`（deny_unknown_fields + `validate_cached`，与源1 同等严格）；两源使用同一个 `CodexResetRead<S>` 信封，`CodexResetHubRead` 是其源2 实例。缓存独立成对（`load/save_codex_reset_hub_cache`，文件 `codex-reset-hub-cache.json`），命令成对（`get_cached_codex_reset_hub_status` / `check_codex_reset_hub_status`）。
-- **源2 展示**（复用源1 的 board/facts/badge/post/warn/source-note 词汇）：预报板（24/48 小时概率与区间、信心、常见到账窗口、节奏、等待对比、监测站自述中文说明、Tibo 最新信号帖）；重置时间线表（最新 40 条 reset/credits 事件，含原帖链接）；OpenAI 平台状态（五个面 normal/degraded 状态胶囊 + 近 90 天故障统计 + 可折叠故障记录表，最新 12 条）；重置卡到账记录表（如有）。
-- **前端状态**：`useCodexResetSignal` 返回 `{ runway, hub, loading, readStatus }`，两源由参数化的 `useResetSourceRead` 驱动，行为与原单源 hook 逐字段一致；头部状态行按源显示缓存/实时。
+- 源2 顶部标明上游最近更新时间、抓取时间、缓存状态及公开数据出处，并展示读取失败与上游时效提醒。概览引用时间线最新一条事件的类别、时间、摘要及原帖，单列预报接口确认的上次全局重置时间，有信号时显示 Tibo 原帖。预报并排显示 24/48 小时概率及各自区间，置信度与历史常见重置时段常显，等待对比、重置节奏及监测站说明收进预报依据。时间线和重置卡到账记录默认折叠，到账记录的入口保留最近观测时间。OpenAI 平台状态保留检查时间、各平台状态与近 90 天故障统计，故障记录可展开。
+- **前端状态**：`useCodexResetSignal` 返回 `{ runway, hub, loading, readStatus }`，两源由参数化的 `useResetSourceRead` 驱动。公开信号面板内的刷新动作同时读取两源，当前来源的出处和时间位于其页签内。参见[用量监控的独立工作面板](2026-11-27-usage-workspace-panels.md)。
 - **裁剪**（只存 UI 展示的事实）：forecast 的 model/backtest/evidence/range_aria/tease 系字段、timeline 的 rhythm HTML 图表与 milestones、feed 的原始推文流（29 条）与 profile 均不入契约；endpoint `stale` 标记折叠为一条 `source_warning`。
 
 ## Alternatives considered
@@ -22,8 +22,11 @@ codex-reset.com 整体作为**一个来源（源2）**，四个端点是同一�
 - **四个端点各自作为独立来源（源2–源5）**：最强理由是单端点故障不拖垮其他数据，且与用户「加入新源：A、B、C、D」的列举字面一致。否决：四端点同站同源、`updated_at` 同步刷新，forecast 的证据 id 直接引用 timeline 事件，拆开是人为割裂；还会把页签撑到五个、每个都要独立的空/错/新鲜度状态，复杂度翻倍而信息不变。
 - **部分成功部分展示（per-endpoint 警告）**：最强理由是单端点失败时其余数据仍可见。否决：四个 Optional 区块组 × 错误态的组合爆炸，且同站端点同时失联是常态场景，全成全败 + 指名端点的错误串与源1 的严格风格一致。
 - **在 UI 里平铺两源数据（无页签，叠加展示）**：最强理由是少一次点击。否决：两源对同一问题给出不同口径的答案（Runway 给公告型 yes/no + 置信度，codex-reset 给概率区间），叠加会诱导用户把两者相加或二选一误读，违背 DESIGN.md「不将不同来源的数据相加或推断」。
+- **默认展开时间线**可直接逐行浏览历史。大量较早的条目占据首屏，用户得滚动到底部才能核对数据时效。概览需要优先回答最近活动和上次全局重置各发生于何时。
 
 ## Consequences
+
+新近事件和全局重置时间直接可比。重置卡记录沿用上游事件的类别与确认状态，到账以独立的监测记录为依据。查阅历史明细和预报依据各需展开一次。
 
 回归用例覆盖四个端点的下划线载荷、归一化后的 camelCase 序列化、缓存完整往返与校验，以及错误的驼峰外部字段被明确拒绝。外部载荷、聚合读取、内部状态分别归属 `hub/payload.rs`、`hub.rs` 和 `hub_status.rs`，没有旧格式读取分支。用例尚未运行，笔记结构和代码引用另行静态校验。
 

@@ -3,14 +3,14 @@ import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { Pagination } from "../Pagination";
 import { GROUP_METRICS, type RequestUsageGroupMetric } from "./chart-metrics";
-import { RequestUsageBar, RequestUsageBarScale } from "./RequestUsageBar";
+import { RequestUsagePointAxis, RequestUsagePoints } from "./RequestUsagePoints";
 
 export function RequestUsageGroups({ report, metric, onPage }: {
   report: RequestUsageReport; metric: RequestUsageGroupMetric; onPage: (page: number) => void;
 }) {
   const { t, language } = useI18n();
   const definition = GROUP_METRICS[metric];
-  const bars = report.groups.map((group) => {
+  const series = report.groups.map((group) => {
     const raw = group.metrics[metric];
     return {
       group,
@@ -19,19 +19,19 @@ export function RequestUsageGroups({ report, metric, onPage }: {
       samples: definition.samples?.(group.metrics) ?? null,
     };
   });
-  const maximum = definition.maximum ?? Math.max(0, ...bars.flatMap((bar) => [bar.value ?? 0, bar.marker ?? 0]));
+  const maximum = definition.maximum ?? Math.max(0, ...series.flatMap(({ value, marker }) => [value ?? 0, marker ?? 0]));
   return <div className="asb-request-usage-section">
     <figure className="asb-request-usage-plot" aria-label={`${t("usagePerformance.groups")} · ${t(definition.labelKey)}`}>
-      <RequestUsageBarScale end={maximum > 0 ? definition.format(maximum, language) : null} />
-      <ul className="asb-request-usage-bars">
-        {bars.map(({ group, value, marker, samples }) => <li className="asb-request-usage-bar-line"
+      <RequestUsagePointAxis end={maximum > 0 ? definition.format(maximum, language) : null} />
+      <ul className="asb-request-usage-observations">
+        {series.map(({ group, value, marker, samples }) => <li className="asb-request-usage-observation"
           key={JSON.stringify([group.app, group.model, group.eventName])} data-client={group.app}>
-          <span className="asb-request-usage-bar-label">
+          <span className="asb-request-usage-observation-label">
             <span className="asb-code">{group.model ?? t("usage.model.unrecorded")}</span>
             <span className="asb-request-usage-caption">{clientName(group.app)} · {group.eventName}</span>
           </span>
-          <RequestUsageBar value={value} maximum={maximum} marker={marker} />
-          <span className="asb-request-usage-bar-value">
+          <RequestUsagePoints value={value} maximum={maximum} marker={marker} />
+          <span className="asb-request-usage-observation-value">
             <strong>{definition.format(value, language)}</strong>
             {definition.companion && marker !== null && <span className="asb-request-usage-caption">
               {t(definition.companion.labelKey)} {definition.format(marker, language)}

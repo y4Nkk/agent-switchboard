@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
+import { SettingsLayout } from "../SettingsLayout";
 import { WorkspaceSubpage } from "../WorkspaceSubpage";
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
   primary?: ReactNode;
 }
 
-/** Composes the provider write bar (取消 + 保存供应商) onto the shared
+/** Composes the provider actions (取消 + 保存供应商) onto the shared
  * editor frame; the save action may live in an external form via `formId`. */
 export function ProviderEditorFrame({
   title,
@@ -38,7 +39,7 @@ export function ProviderEditorFrame({
   const canSubmit = Boolean(formId) && canSave && !busy;
   return (
     <WorkspaceSubpage
-      layout="fixed-actions"
+      layout="floating-actions"
       title={title}
       titleRef={titleRef}
       viewportRef={viewportRef}
@@ -48,15 +49,15 @@ export function ProviderEditorFrame({
       onBack={onBack}
       className="asb-provider-editor"
       footer={
-        <>
+        <div className="asb-scroll-action-buttons">
           <Button variant="secondary" disabled={busy} onClick={onCancel}>{t("confirm.cancel")}</Button>
           <Button type={formId ? "submit" : "button"} form={formId} variant="primary" className="asb-editor-submit" disabled={!canSubmit}>
             {saveLabel ?? t("providers.editor.save")}
           </Button>
-        </>
+        </div>
       }
     >
-      {children}
+      <SettingsLayout>{children}</SettingsLayout>
     </WorkspaceSubpage>
   );
 }

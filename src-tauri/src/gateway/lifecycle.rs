@@ -47,7 +47,7 @@ impl GatewayController {
             log::warn!("{warning}");
         }
         let claude_request_ledger = Arc::new(request_ledger::ClaudeRequestLedger::new(
-            local.claude_request_ledger_path(),
+            local.root().to_path_buf(),
         ));
         let controller = Self {
             inner: Arc::new(GatewayInner {

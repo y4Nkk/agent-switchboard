@@ -4,10 +4,10 @@ import { SkillSourceBrowser } from "../../components/extensions/SkillSourceBrows
 import { McpRegistryBrowser } from "./McpRegistryBrowser";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
-export function ExtensionMarketPanel({ workspace: w, kind }: {
-  workspace: ExtensionWorkspace; kind: ExtensionSection;
+export function ExtensionMarketPanel({ workspace: w, kind, active }: {
+  workspace: ExtensionWorkspace; kind: ExtensionSection; active: boolean;
 }) {
-  if (kind === "mcp") return <McpRegistryBrowser workspace={w} />;
-  return <SkillSourceBrowser busy={w.writeBlocked} items={w.items} onScanLocal={w.ext.scanLocal}
+  if (kind === "mcp") return <McpRegistryBrowser workspace={w} active={active} />;
+  return <SkillSourceBrowser active={active} busy={w.writeBlocked} items={w.items} onScanLocal={w.ext.scanLocal}
     onImport={w.importCandidate} onPickDirectory={pickDirectory} onPickZip={() => pickFile("ZIP archives", ["zip"])} />;
 }

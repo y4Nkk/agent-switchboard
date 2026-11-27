@@ -184,6 +184,8 @@ export function probeSummaryCards(batch: CodexProbeBatch, t: TFunction) {
         ? t("codex.probe.cardMeasuredUsage") : t("codex.probe.cardRecordedUsage"),
       value: summary.totalTokens === null ? "—" : formatCompactTokenCount(summary.totalTokens),
       unit: TOKEN_UNIT,
+      detail: summary.recordedRuns < summary.runCount
+        ? t("codex.probe.usageCoverage", { recorded: summary.recordedRuns, total: summary.runCount }) : undefined,
     },
     {
       label: t("codex.probe.cardAvgReasoning"),

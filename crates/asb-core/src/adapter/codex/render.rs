@@ -1,9 +1,9 @@
 use crate::adapter::{AdapterError, OverlayEntry};
-use crate::contracts::{SettingsValues, SwitchPlan};
+use crate::contracts::SwitchPlan;
 
 use crate::adapter::codex::common_fragment::{merge_fragment, remove_applied_fragment, validate_fragment};
 use crate::adapter::codex::document::{parse, remove_empty_table_path, remove_path, set_path};
-use crate::adapter::codex::overlay::{client_settings_overlay, overlay};
+use crate::adapter::codex::overlay::overlay;
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
     super::validate_projection(plan)?;
@@ -44,13 +44,6 @@ pub(crate) fn render_gateway_base_url(
             OverlayEntry::Set(crate::contracts::ConfigValue::Str(base_url.to_string())),
         )],
     )
-}
-
-pub(crate) fn render_client_settings_into_file(
-    current: &str,
-    client_settings: &SettingsValues,
-) -> Result<String, AdapterError> {
-    render_entries(current, client_settings_overlay(client_settings))
 }
 
 #[cfg(test)]
@@ -120,6 +113,15 @@ mod subagent_route_render_tests {
         .expect("render");
         assert!(!rendered.contains("default_subagent_model"));
     }
+
+    #[test]
+    fn a_switch_preserves_native_settings_with_no_asb_intent() {
+        let source = "allow_login_shell = false\n[agents]\nenabled = false\n[tui]\nanimations = false\n";
+        let rendered = render(source, &plan(None)).unwrap();
+        assert!(rendered.contains("allow_login_shell = false"));
+        assert!(rendered.contains("enabled = false"));
+        assert!(rendered.contains("animations = false"));
+    }
 }
 
 
@@ -128,7 +130,9 @@ pub(crate) fn render_entries(
     entries: Vec<(String, OverlayEntry)>,
 ) -> Result<String, AdapterError> {
     let mut doc = parse(current)?;
-    let writes_permissions = entries.iter().any(|(key, _)| key == "sandbox_mode" || key.starts_with("sandbox_workspace_write."));
+    let writes_legacy_sandbox = entries.iter().any(|(key, entry)| !matches!(entry, OverlayEntry::Leave)
+        && (key == "sandbox_mode" || key.starts_with("sandbox_workspace_write.")));
+    let writes_permissions = writes_legacy_sandbox || entries.iter().any(|(key, _)| key == super::DEFAULT_PERMISSIONS_KEY);
     for (key, entry) in entries {
         match entry {
             OverlayEntry::Set(value) => set_path(&mut doc, &key, value)?,
@@ -141,8 +145,10 @@ pub(crate) fn render_entries(
             }
         }
     }
-    if writes_permissions {
+    if writes_legacy_sandbox {
         remove_empty_table_path(&mut doc, "sandbox_workspace_write")?;
+    }
+    if writes_permissions {
         super::permissions::validate_candidate(&doc)?;
     }
     Ok(doc.to_string())

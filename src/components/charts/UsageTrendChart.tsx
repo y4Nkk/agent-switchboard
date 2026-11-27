@@ -1,15 +1,13 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { Area, ComposedChart, Line, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
-import { useI18n, type TFunction } from "../../i18n";
+import { useI18n } from "../../i18n";
+import { formatCompactUsageValue, formatUsageValue } from "../../lib/usage-format";
 import { ChartFrame } from "./ChartFrame";
 import {
   chartSeriesColor,
   formatChartAxisTime,
-  formatChartAxisValue,
   formatChartTimestamp,
-  formatChartTooltipDate,
-  formatChartValue,
   prepareTrendSeries,
   trendYAxisDomain,
   trendSeriesShareUnit,
@@ -52,6 +50,10 @@ export function UsageTrendChart({
   const prepared = useMemo(() => prepareTrendSeries(series), [series, t]);
 
   if (prepared.length === 0) {
+    if (valueKind === "local-token") return <figure className="asb-usage-chart-card is-empty" aria-label={ariaLabel}>
+      <figcaption className="asb-usage-chart-title">{title}</figcaption>
+      <p className="asb-consumption-empty" role="status">{emptyMessage}</p>
+    </figure>;
     return <p className="asb-chart-empty" role="status">{emptyMessage}</p>;
   }
 
@@ -74,86 +76,108 @@ function TrendCard({ prepared, valueKind, ariaLabel, title, size }: {
   prepared: PreparedTrendSeries[]; valueKind: UsageTrendValueKind; ariaLabel: string;
   title?: string; size: "default" | "compact";
 }) {
-  const { t } = useI18n();
+  const local = valueKind === "local-token";
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   useEffect(() => setActiveIndex(null), [prepared]);
-  const rows = mergeSeriesRows(prepared);
-  const unit = prepared[0].unit;
-  const pointCount = prepared.reduce((total, entry) => total + entry.points.filter((point) => point.value !== null).length, 0);
+  const rows = useMemo(() => mergeSeriesRows(prepared), [prepared]);
   const activeRow = activeIndex !== null && activeIndex < rows.length ? rows[activeIndex] : null;
-  const figure = resolveTrendFigure(rows, prepared, activeRow, valueKind === "local-token", t);
-  const display = useCountUp(figure.value);
-  const label = activeRow ? formatChartAxisTime(figure.timestamp) : figure.label;
-  const caption = activeRow
-    ? t("usage.chart.pointAtTime", { label: figure.label, time: formatChartTimestamp(figure.timestamp) })
-    : unit ? t("usage.chart.unitCaption", { unit }) : t("usage.chart.pointCount", { count: pointCount });
   return <figure className={size === "compact" ? "asb-usage-chart-card is-compact" : "asb-usage-chart-card"}
     aria-label={ariaLabel}>
     {title && <figcaption className="asb-usage-chart-title">{title}</figcaption>}
-    <TrendHeading label={label} display={display} unit={unit} valueKind={valueKind}
-      caption={caption} prepared={prepared} activeIndex={activeIndex} />
+    {local ? <TrendLegend prepared={prepared} valueKind={valueKind} />
+      : <TrendHeading prepared={prepared} activeRow={activeRow} activeIndex={activeIndex} valueKind={valueKind} />}
     <div className="asb-usage-chart-body">
-      <TrendPlot rows={rows} prepared={prepared} valueKind={valueKind} onActiveIndex={setActiveIndex} />
+      <TrendPlot rows={rows} prepared={prepared} valueKind={valueKind} onActiveIndex={local ? undefined : setActiveIndex} />
     </div>
   </figure>;
 }
 
-function TrendHeading({ label, display, unit, valueKind, caption, prepared, activeIndex }: {
-  label: string; display: number; unit: string | null; valueKind: UsageTrendValueKind;
-  caption: string; prepared: PreparedTrendSeries[]; activeIndex: number | null;
+function TrendHeading({ activeRow, valueKind, prepared, activeIndex }: {
+  activeRow: TrendRow | null; valueKind: UsageTrendValueKind; prepared: PreparedTrendSeries[]; activeIndex: number | null;
 }) {
+  const figure = resolveTrendFigure(prepared, activeRow);
+  const display = useCountUp(figure.value);
+  const unit = prepared[0].unit;
   return <div className="asb-usage-chart-head">
     <div className="asb-usage-chart-readout">
-      <p className="asb-usage-chart-label">{label}</p>
-      <p key={activeIndex ?? "rest"} className="asb-usage-chart-value">{formatChartValue(display, unit, valueKind)}</p>
-      <p className="asb-usage-chart-caption">{caption}</p>
+      <p className="asb-usage-chart-label">{figure.label}</p>
+      <p key={activeIndex ?? "rest"} className="asb-usage-chart-value">{formatUsageValue(display, unit)}</p>
     </div>
-    <dl className="asb-usage-chart-legend">
-      {prepared.map((entry, index) => <div key={entry.id} className="asb-usage-chart-legend-item">
-        <span className="asb-usage-chart-swatch" style={{ backgroundColor: chartSeriesColor(index) }} aria-hidden />
-        <dt className="asb-usage-chart-legend-label">{entry.label}</dt>
-      </div>)}
-    </dl>
+    {prepared.length > 1 && <TrendLegend prepared={prepared} valueKind={valueKind} />}
   </div>;
+}
+
+function TrendLegend({ prepared, valueKind }: { prepared: PreparedTrendSeries[]; valueKind: UsageTrendValueKind }) {
+  return <ul className="asb-usage-chart-legend">
+    {prepared.map((entry, index) => <li key={entry.id} className="asb-usage-chart-legend-item">
+      <span className="asb-usage-chart-swatch" style={{ backgroundColor: chartSeriesColor(index, valueKind) }} aria-hidden />
+      <span className="asb-usage-chart-legend-label">{entry.label}</span>
+    </li>)}
+  </ul>;
 }
 
 function TrendPlot({ rows, prepared, valueKind, onActiveIndex }: {
   rows: TrendRow[]; prepared: PreparedTrendSeries[]; valueKind: UsageTrendValueKind;
-  onActiveIndex: (index: number | null) => void;
+  onActiveIndex?: (index: number | null) => void;
 }) {
+  const { language } = useI18n();
+  const local = valueKind === "local-token";
   const gradientId = useId();
+  const date = useMemo(() => new Intl.DateTimeFormat(language, { month: "short", day: "numeric", timeZone: "UTC" }), [language]);
+  const shortRange = rows[rows.length - 1].timestamp - rows[0].timestamp <= 36 * 60 * 60 * 1000;
+  const clock = useMemo(() => new Intl.DateTimeFormat(language, { hour: "2-digit", minute: "2-digit" }), [language]);
+  const formatTick = (timestamp: number) => local ? date.format(timestamp)
+    : shortRange ? `${formatChartAxisTime(timestamp)} ${clock.format(timestamp)}` : formatChartAxisTime(timestamp);
+  const ticks = local ? (rows.length <= 8 ? rows.map((row) => row.timestamp) : undefined) : trendTimeTicks(rows, formatTick);
   return <ChartFrame>
-    <ComposedChart data={rows} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}
+    <ComposedChart data={rows} margin={{ top: 4, right: local ? 22 : shortRange ? 36 : 18, bottom: 0, left: local ? 22 : 0 }}
       onMouseMove={(state) => {
+        if (!onActiveIndex) return;
         const index = Number(state.activeTooltipIndex);
         const row = rows[index];
         onActiveIndex(state.isTooltipActive && row && prepared.some((entry) => typeof row[entry.id] === "number") ? index : null);
-      }} onMouseLeave={() => onActiveIndex(null)}>
-      <defs>
+      }} onMouseLeave={() => onActiveIndex?.(null)}>
+      {!local && <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={chartSeriesColor(0)} stopOpacity={0.35} />
-          <stop offset="100%" stopColor={chartSeriesColor(0)} stopOpacity={0} />
+          <stop offset="0%" stopColor={chartSeriesColor(0, valueKind)} stopOpacity={0.35} />
+          <stop offset="100%" stopColor={chartSeriesColor(0, valueKind)} stopOpacity={0} />
         </linearGradient>
-      </defs>
-      <YAxis width={44} domain={trendYAxisDomain(prepared, valueKind)} tickCount={4}
-        tickFormatter={(value: number) => formatChartAxisValue(value, valueKind)}
+      </defs>}
+      <YAxis hide={local} width={44} domain={trendYAxisDomain(prepared, valueKind)} tickCount={4}
+        tickFormatter={(value: number) => formatCompactUsageValue(value)}
         tickLine={false} axisLine={false} tick={AXIS_TICK} />
-      <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]}
-        tickFormatter={(value: number) => formatChartAxisTime(Number(value))}
+      <XAxis dataKey="timestamp" type="number" scale={local ? "utc" : "time"} domain={["dataMin", "dataMax"]}
+        ticks={ticks} interval="preserveStartEnd"
+        tickFormatter={(value: number) => formatTick(Number(value))}
         tickLine={false} axisLine={false} tickMargin={12} tick={AXIS_TICK} />
+      {local && <CartesianGrid vertical={false} stroke="var(--asb-hairline)" strokeDasharray="3 4" />}
       <Tooltip isAnimationActive={false} content={({ active, payload }) => {
         const row = payload[0]?.payload as TrendRow | undefined;
         return active && row ? <TrendTooltipCard row={row} prepared={prepared}
           unit={prepared[0].unit} valueKind={valueKind} /> : null;
       }} cursor={{ stroke: "var(--asb-hairline-strong)", strokeWidth: 1, strokeDasharray: "4 4" }} />
-      {prepared.length === 1 && <Area type="monotone" dataKey={prepared[0].id}
+      {!local && prepared.length === 1 && <Area type="monotone" dataKey={prepared[0].id}
         stroke="none" fill={`url(#${gradientId})`} dot={false} connectNulls={false} isAnimationActive={false} />}
       {prepared.map((entry, index) => <Line key={entry.id} type="monotone" dataKey={entry.id}
-        name={entry.label} stroke={chartSeriesColor(index)} strokeWidth={2.5}
-        dot={<IsolatedDot color={chartSeriesColor(index)} timestamps={isolatedTimestamps(rows, entry.id)} />}
-        activeDot={<ActiveDot color={chartSeriesColor(index)} />} connectNulls={false} isAnimationActive={false} />)}
+        name={entry.label} stroke={chartSeriesColor(index, valueKind)} strokeWidth={local ? 2 : 2.5}
+        dot={local && rows.length > 1 ? false
+          : <IsolatedDot color={chartSeriesColor(index, valueKind)} timestamps={isolatedTimestamps(rows, entry.id)} />}
+        activeDot={<ActiveDot color={chartSeriesColor(index, valueKind)} />} connectNulls={false} isAnimationActive={false} />)}
     </ComposedChart>
   </ChartFrame>;
+}
+
+function trendTimeTicks(rows: TrendRow[], format: (timestamp: number) => string): number[] {
+  const labels = new Set<string>();
+  const uniqueTicks = rows.flatMap(({ timestamp }) => {
+    const label = format(timestamp);
+    if (labels.has(label)) return [];
+    labels.add(label);
+    return [timestamp];
+  });
+  const maxTicks = 7;
+  if (uniqueTicks.length <= maxTicks) return uniqueTicks;
+  return Array.from({ length: maxTicks }, (_, index) => uniqueTicks[Math.round(index * (uniqueTicks.length - 1) / (maxTicks - 1))]);
 }
 
 function isolatedTimestamps(rows: TrendRow[], id: string): Set<number> {
@@ -188,10 +212,7 @@ function ActiveDot({ color, cx, cy }: { color: string; cx?: number; cy?: number 
   );
 }
 
-/** The hover tooltip: a floating card restating the hovered column as one row
- * per series that actually recorded a point there. Series without a real
- * value are omitted, mirroring the chart's no-invented-values rule; a sum is
- * shown only for local-token trends, matching the card header. */
+/** Provider series preserve gaps. Model series share a calendar and can be added. */
 function TrendTooltipCard({
   row,
   prepared,
@@ -203,19 +224,22 @@ function TrendTooltipCard({
   unit: string | null;
   valueKind: UsageTrendValueKind;
 }) {
+  const { language } = useI18n();
   const entries = prepared
     .map((entry, index) => ({ entry, index, value: row[entry.id] }))
     .filter((item) => typeof item.value === "number");
   if (entries.length === 0) return null;
 
-  const total =
-    valueKind === "local-token" ? entries.reduce((sum, item) => sum + item.value!, 0) : null;
+  const local = valueKind === "local-token";
+  const total = local ? entries.reduce((sum, item) => sum + item.value!, 0) : null;
+  const date = local ? new Intl.DateTimeFormat(language, { dateStyle: "medium", timeZone: "UTC" }).format(row.timestamp)
+    : formatChartTimestamp(row.timestamp);
 
   return (
     <div className="asb-usage-chart-tooltip">
       <p className="asb-usage-chart-tooltip-title">
-        {formatChartTooltipDate(row.timestamp)}
-        {total !== null ? ` · ${formatChartValue(total, unit, valueKind)}` : null}
+        {date}
+        {total !== null && (entries.length > 1 ? ` · ${formatUsageValue(total, unit)}` : null)}
       </p>
       <div className="asb-usage-chart-tooltip-rows">
         {entries.map(({ entry, index, value }) => (
@@ -223,13 +247,13 @@ function TrendTooltipCard({
             <span className="asb-usage-chart-tooltip-series">
               <span
                 className="asb-usage-chart-swatch"
-                style={{ backgroundColor: chartSeriesColor(index) }}
+                style={{ backgroundColor: chartSeriesColor(index, valueKind) }}
                 aria-hidden
               />
               {entry.label}
             </span>
             <span className="asb-usage-chart-tooltip-value">
-              {formatChartValue(value!, unit, valueKind)}
+              {formatUsageValue(value, unit)}
             </span>
           </div>
         ))}
@@ -250,46 +274,16 @@ interface TrendFigure {
 }
 
 function resolveTrendFigure(
-  rows: TrendRow[],
   series: PreparedTrendSeries[],
   activeRow: TrendRow | null,
-  aggregateSeries: boolean,
-  t: TFunction,
 ): TrendFigure {
-  if (activeRow) return figureForRow(activeRow, series, aggregateSeries, t);
-
-  if (aggregateSeries) {
-    const latestCompleteRow = [...rows].reverse().find((row) => rowHasEverySeries(row, series));
-    if (latestCompleteRow) return aggregateFigure(latestCompleteRow, series, t);
+  if (activeRow) {
+    for (const entry of series) {
+      const value = activeRow[entry.id];
+      if (typeof value === "number") return { label: entry.label, value, timestamp: activeRow.timestamp };
+    }
   }
-
   return latestObservedFigure(series);
-}
-
-function figureForRow(
-  row: TrendRow,
-  series: PreparedTrendSeries[],
-  aggregateSeries: boolean,
-  t: TFunction,
-): TrendFigure {
-  if (aggregateSeries && rowHasEverySeries(row, series)) return aggregateFigure(row, series, t);
-
-  const observedSeries = series.find((entry) => typeof row[entry.id] === "number");
-  if (!observedSeries) return latestObservedFigure(series);
-
-  return {
-    label: observedSeries.label,
-    value: row[observedSeries.id]!,
-    timestamp: row.timestamp,
-  };
-}
-
-function aggregateFigure(row: TrendRow, series: PreparedTrendSeries[], t: TFunction): TrendFigure {
-  return {
-    label: t("usage.chart.total"),
-    value: series.reduce((sum, entry) => sum + row[entry.id]!, 0),
-    timestamp: row.timestamp,
-  };
 }
 
 function latestObservedFigure(series: PreparedTrendSeries[]): TrendFigure {
@@ -297,10 +291,6 @@ function latestObservedFigure(series: PreparedTrendSeries[]): TrendFigure {
     .flatMap((entry) => entry.points.flatMap((point) => point.value === null ? []
       : [{ label: entry.label, value: point.value, timestamp: point.timestamp }]))
     .reduce((latest, point) => (point.timestamp > latest.timestamp ? point : latest));
-}
-
-function rowHasEverySeries(row: TrendRow, series: PreparedTrendSeries[]): boolean {
-  return series.every((entry) => typeof row[entry.id] === "number");
 }
 
 /** Union of every real timestamp; each series contributes only the points it

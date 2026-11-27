@@ -1,6 +1,8 @@
 use std::io::{self, Read};
 use std::time::{Duration, Instant};
 
+use reqwest::header::{HeaderMap, RETRY_AFTER};
+
 use super::{HttpFetch, SourceError};
 
 pub(super) const MAX_ARCHIVE_DOWNLOAD: u64 = 64 * 1024 * 1024;
@@ -11,17 +13,20 @@ pub(crate) const MAX_DIRECTORY_DOWNLOAD: u64 = 1024 * 1024;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct HttpTransfer {
     pub http_status: Option<u16>,
+    #[serde(skip)]
+    pub github_retry_at: Option<i64>,
     received_bytes: u64,
     total_bytes: Option<u64>,
 }
 
 pub fn http_fetch(url: &str) -> Result<(u16, Vec<u8>), String> {
-    http_fetch_with_progress(url, None, &|_| {})
+    http_fetch_with_progress(url, None, HeaderMap::new(), &|_| {})
 }
 
 pub(crate) fn http_fetch_with_progress(
     url: &str,
     deadline: Option<Instant>,
+    headers: HeaderMap,
     report: &dyn Fn(HttpTransfer),
 ) -> Result<(u16, Vec<u8>), String> {
     let parsed = reqwest::Url::parse(url).map_err(|error| error.to_string())?;
@@ -39,6 +44,7 @@ pub(crate) fn http_fetch_with_progress(
     if !parsed.username().is_empty() || parsed.password().is_some() || parsed.port().is_some() {
         return Err("来源地址不能包含凭据或自定义端口".into());
     }
+    let github_api = parsed.host_str() == Some("api.github.com");
     let client = crate::outbound_proxy::cached_blocking_client("extension-sources", |builder| {
         builder
             .user_agent("Agent Switchboard")
@@ -58,6 +64,7 @@ pub(crate) fn http_fetch_with_progress(
     report(HttpTransfer::default());
     let response = client
         .get(parsed)
+        .headers(headers)
         .timeout(timeout)
         .send()
         .map_err(|error| {
@@ -67,18 +74,22 @@ pub(crate) fn http_fetch_with_progress(
                 format!("{service} 请求失败：{error}")
             }
         })?;
-    read_response(response, limit, service, report)
+    read_response(response, limit, service, github_api, report)
 }
 
 fn read_response(
     response: reqwest::blocking::Response,
     limit: u64,
     service: &str,
+    github_api: bool,
     report: &dyn Fn(HttpTransfer),
 ) -> Result<(u16, Vec<u8>), String> {
     let status = response.status().as_u16();
     let mut progress = HttpTransfer {
         http_status: Some(status),
+        github_retry_at: (github_api && matches!(status, 403 | 429))
+            .then(|| github_retry_at(response.headers(), chrono::Utc::now().timestamp()))
+            .flatten(),
         received_bytes: 0,
         total_bytes: response.content_length(),
     };
@@ -116,6 +127,20 @@ fn read_response(
     Ok((status, bytes))
 }
 
+fn github_retry_at(headers: &HeaderMap, now: i64) -> Option<i64> {
+    let retry_after = headers.get(RETRY_AFTER).and_then(|value| value.to_str().ok()).and_then(|value| {
+        value.parse::<u32>().ok().map(|seconds| now + i64::from(seconds)).or_else(|| {
+            chrono::DateTime::parse_from_rfc2822(value).ok().map(|date| date.timestamp())
+        })
+    });
+    let reset = if headers.get("x-ratelimit-remaining").is_some_and(|value| value == "0") {
+        headers.get("x-ratelimit-reset").and_then(|value| value.to_str().ok()).and_then(|value| value.parse::<i64>().ok())
+    } else {
+        None
+    };
+    retry_after.into_iter().chain(reset).max().filter(|time| *time > now)
+}
+
 fn response_read_error(service: &str, error: io::Error) -> String {
     let timed_out = error.kind() == io::ErrorKind::TimedOut
         || error.get_ref().and_then(|source| source.downcast_ref::<reqwest::Error>())
@@ -128,7 +153,10 @@ fn response_read_error(service: &str, error: io::Error) -> String {
 }
 
 pub(crate) fn fetch_bytes(url: &str, limit: u64, fetch: HttpFetch) -> Result<Vec<u8>, SourceError> {
-    let (status, body) = fetch(url).map_err(SourceError::Unreachable)?;
+    checked_bytes(url, limit, fetch(url).map_err(SourceError::Transport)?)
+}
+
+pub(super) fn checked_bytes(url: &str, limit: u64, (status, body): (u16, Vec<u8>)) -> Result<Vec<u8>, SourceError> {
     if body.len() as u64 > limit {
         return Err(SourceError::Rejected(format!(
             "来源响应超过上限 {limit} 字节"
@@ -149,6 +177,11 @@ pub(crate) fn fetch_bytes(url: &str, limit: u64, fetch: HttpFetch) -> Result<Vec
         } else {
             "GitHub"
         };
+        if url.starts_with("https://api.github.com/")
+            && (status == 429 || (status == 403 && message.to_ascii_lowercase().contains("rate limit")))
+        {
+            return Err(SourceError::GithubRateLimited(format!("GitHub 返回 HTTP {status} {message}").trim().into()));
+        }
         let hint = match (service, status) {
             ("skills.sh", 403 | 429) => "；请稍后重试目录搜索",
             ("skills.sh", _) => "；请稍后重试或使用 GitHub 仓库来源",
@@ -158,11 +191,31 @@ pub(crate) fn fetch_bytes(url: &str, limit: u64, fetch: HttpFetch) -> Result<Vec
             (_, 301 | 302 | 307 | 308) => "；仓库地址已迁移，请使用新的仓库地址",
             _ => "",
         };
-        return Err(SourceError::Unreachable(
-            format!("{service} 返回 HTTP {status}{hint} {message}")
+        return Err(SourceError::Http {
+            status,
+            message: format!("{service} 返回 HTTP {status}{hint} {message}")
                 .trim()
                 .into(),
-        ));
+        });
     }
     Ok(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reqwest::header::HeaderValue;
+
+    #[test]
+    fn github_retry_obeys_both_retry_after_and_exhausted_quota_reset() {
+        let now = 1_800_000_000;
+        let mut headers = HeaderMap::new();
+        headers.insert(RETRY_AFTER, HeaderValue::from_static("4"));
+        headers.insert("x-ratelimit-reset", HeaderValue::from_static("1800000014"));
+        headers.insert("x-ratelimit-remaining", HeaderValue::from_static("0"));
+        assert_eq!(github_retry_at(&headers, now), Some(now + 14));
+
+        headers.insert("x-ratelimit-remaining", HeaderValue::from_static("2"));
+        assert_eq!(github_retry_at(&headers, now), Some(now + 4));
+    }
 }

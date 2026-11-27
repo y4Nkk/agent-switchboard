@@ -9,7 +9,6 @@ export const messages = {
   "providerSetup.catalog": ["模型目录", "Model catalog"],
   "providerSetup.catalogSource": ["与内置目录一致", "Matches built-in catalog"],
   "providerSetup.savedSource": ["当前配置", "Current configuration"],
-  "providerSetup.catalogHelp": ["选择主模型即可加入目录。已知参数自动填入；未知服务请填写实际限制，能力按当前声明显示。", "Selecting the primary model adds it to the catalog. Known values are filled in; enter actual limits for unknown services. Capabilities reflect configuration declarations."],
   "providerSetup.addModel": ["搜索或填写模型 ID", "Search or enter a model ID"],
   "providerSetup.add": ["加入模型", "Add model"],
   "providerSetup.usePrimary": ["用作主模型", "Use as primary"],

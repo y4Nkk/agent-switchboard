@@ -22,8 +22,11 @@ pub(super) fn fill_automatic(node: &mut Value, app: AppKind, provider: bool) -> 
         let promoted = asb_core::claude_common::take_controlled(&mut values.claude_extra, SettingOwner::Client)?;
         merge_promoted(&mut values, promoted)?;
     }
-    let defaults = if provider { ownership::default_provider_parameters(app) } else { ownership::default_client_settings(app) };
-    for key in defaults.settings.into_keys() { values.settings.entry(key).or_insert(SettingValue::Automatic); }
+    if provider {
+        for key in ownership::default_provider_parameters(app).settings.into_keys() {
+            values.settings.entry(key).or_insert(SettingValue::Automatic);
+        }
+    }
     let repaired = serde_json::to_value(values).map_err(|error| error.to_string())?;
     let changed = &repaired != node;
     if changed { *node = repaired; }

@@ -1,0 +1,91 @@
+.asb-main > .asb-scroll-viewport:has(.asb-client-configuration-workspace:not([hidden], [hidden] *)) {
+  overflow: hidden;
+}
+
+.asb-page-stack:has(.asb-client-configuration-workspace:not([hidden], [hidden] *)) {
+  flex: 1;
+  min-height: 0;
+}
+
+.asb-client-configuration-route,
+.asb-client-configuration-route > .asb-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.asb-client-configuration-route[data-client-route-leaving] {
+  inset-block-end: 0;
+}
+
+.asb-client-configuration-route[data-client-route-leaving] > .asb-panel {
+  background: transparent;
+  border-color: transparent;
+}
+
+.asb-client-configuration-route[data-client-route-leaving] :is(.asb-scroll-action-hub, .asb-back-to-top) {
+  visibility: hidden;
+}
+
+.asb-client-settings-panel {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.asb-client-settings-panel .asb-settings-row:not([data-wide]) .asb-settings-row-controls >
+  :is(.asb-select-trigger, .asb-setting-input:not(:has(> .asb-segments))) {
+  inline-size: min(100%, 12rem);
+}
+
+.asb-client-settings-panel .asb-settings-row-controls .asb-seg-opt.is-active {
+  color: var(--asb-link);
+}
+
+.asb-client-setting-code-toggle {
+  flex: none;
+  color: var(--asb-text-muted);
+}
+
+.asb-client-setting-code-body {
+  max-height: 12rem;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.asb-client-setting-code-body > .asb-scroll-viewport { padding: var(--asb-space-2); }
+.asb-client-setting-code-body code { display: block; font: inherit; }
+
+.asb-subagent-input { flex: 0 1 6rem; min-width: 0; }
+.asb-subagent-input .asb-input { width: 100%; text-align: end; }
+
+.asb-client-configuration-summary,
+.asb-client-configuration-action-error {
+  margin: 0;
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  background: var(--asb-content);
+  overflow-wrap: anywhere;
+}
+
+.asb-client-configuration-summary {
+  border-radius: var(--asb-radius-pill);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-client-configuration-summary[data-pending] { color: var(--asb-link); }
+
+.asb-client-configuration-action-error {
+  max-inline-size: var(--asb-measure-prose);
+  border-radius: var(--asb-radius);
+}

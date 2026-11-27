@@ -4,6 +4,7 @@ import type { DiscoverScan as ScanState } from "../../app/extensions/useDiscover
 import { discoveryImportMode } from "../../app/extensions/useDiscoveryImport";
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
+import { Tooltip } from "../Tooltip";
 import { Download, RefreshCw } from "lucide-react";
 import { DiscoveryWarnings } from "./DiscoveryWarnings";
 import { DiscoveryImportList } from "./DiscoveryImportList";
@@ -46,12 +47,15 @@ export type DiscoveryRows = ReturnType<typeof useDiscoveryRows>;
 
 function ScanToolbar({ discovery, busy }: { discovery: DiscoverScan; busy: boolean }) {
   const { t } = useI18n();
+  const rescanLabel = t("importDiscovery.scan.rescan");
   return <div className="asb-ext-import-scan">
     <span role="status" className="asb-scope-note">{discovery.scanning ? t("importDiscovery.scan.scanning") : discovery.stale
       ? t("importDiscovery.scan.stale") : discovery.snapshot ? t("importDiscovery.scan.scannedAt", { time: new Date(discovery.snapshot.scannedAt)
         .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }) : t("importDiscovery.scan.idle")}</span>
-    <Button variant="icon" aria-label={t("importDiscovery.scan.rescan")} title={t("importDiscovery.scan.rescan")} disabled={busy || discovery.scanning}
-      onClick={() => void discovery.scan()}><RefreshCw /></Button>
+    <Tooltip label={rescanLabel}>
+      <Button variant="icon" aria-label={rescanLabel} disabled={busy || discovery.scanning}
+        onClick={() => void discovery.scan()}><RefreshCw aria-hidden="true" /></Button>
+    </Tooltip>
   </div>;
 }
 

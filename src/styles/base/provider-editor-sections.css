@@ -2,11 +2,8 @@
 .asb-provider-editor-section[hidden] { display: none; }
 .asb-provider-editor-section > .asb-provider-form,
 .asb-provider-editor-section.asb-provider-form { gap: var(--asb-space-4); }
-.asb-provider-routing { gap: var(--asb-space-3); }
-.asb-provider-switch-rows { display: grid; gap: var(--asb-space-2); min-width: 0; }
 .asb-provider-switch-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--asb-space-3); min-width: 0; }
 .asb-provider-switch-row > span:first-child { flex: 1 1 auto; min-width: 0; }
-.asb-provider-operation-controls { display: flex; align-items: center; gap: var(--asb-space-3); }
 .asb-provider-switch-row .asb-switch,
 .asb-provider-switch-row .asb-select-trigger { flex: none; width: auto; min-width: 10ch; }
 /* Membership chips: the pressed state is the value — one click flips it and

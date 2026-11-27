@@ -12,36 +12,34 @@ import { ConfirmGatewayRecoveryDiscard } from "./GatewayPagePrimitives";
 
 const APP_ORDER: AppKind[] = ["codex", "claude"];
 const TRAFFIC_WINDOW_MS = 3_600_000;
+const FLOW_WINDOW_MS = 10_000;
 
 interface Props {
   status: GatewayStatus;
   failed: boolean;
+  snapshotCurrent: boolean;
   profileNames: Map<string, string>;
   focus: ClientFilterValue;
   onFocusChange: (value: ClientFilterValue) => void;
 }
 
-export function GatewayTopology({ status, failed, profileNames, focus, onFocusChange }: Props) {
+export function GatewayTopology({ status, failed, snapshotCurrent, profileNames, focus, onFocusChange }: Props) {
   const { t } = useI18n();
   const [scene, setScene] = useState<HTMLDivElement | null>(null);
   const { routes } = status;
   const rows = Math.max(APP_ORDER.length, routes.length);
-  const traffic = useTrafficCounts(status.metrics.samples, routes);
-  const translated = routes.filter((route) => isProtocolTranslation(NATIVE_PROTOCOL[route.app], route.upstreamProtocol)).length;
+  const canShowFlow = snapshotCurrent && status.status === "running" && status.listeningPort !== null;
+  const traffic = useTrafficCounts(status.metrics.samples, routes, canShowFlow);
   const toggleFocus = (app: AppKind) => onFocusChange(focus === app ? "all" : app);
   return (
     <section className={`asb-gateway-map${failed ? " is-failure" : ""}`} aria-label={t("gateway.mapAriaLabel")}>
       <header className="asb-gateway-map-heading">
-        <div className="asb-gateway-map-heading-copy">
-          <h3 className="asb-section-title">{t("gateway.topologyTitle")}</h3>
-          <span className="asb-gateway-section-count">
-            {t("gateway.topologySummary", { translated, direct: routes.length - translated })}
-          </span>
-        </div>
+        <h4 className="asb-group-title">{t("gateway.topologyTitle")}</h4>
         <ClientFilter value={focus} onChange={onFocusChange} label={t("gateway.focusAriaLabel")} showLogos />
       </header>
       <div ref={setScene} className="asb-gateway-map-canvas" style={{ gridTemplateRows: `repeat(${rows}, auto)` }}>
-        <GatewayTopologyWires scene={scene} routes={routes} focus={focus} failed={failed} />
+        <GatewayTopologyWires scene={scene} routes={routes} focus={focus} failed={failed}
+          flowByApp={traffic.flowByApp} flowByRoute={traffic.flowByRoute} />
         <GatewayClientNodes rows={[1, rows]} routes={routes} counts={traffic.byApp} focus={focus} onFocus={toggleFocus} />
         <div data-gateway-node="hub" className="asb-gateway-node is-hub" style={{ gridRow: `1 / span ${rows}` }}>
           <GatewayDeviceArt kind="hub" connected={routes.length > 0} /><strong>{t("gateway.title")}</strong>
@@ -71,21 +69,30 @@ function routeKey(route: Pick<GatewayRouteStatus, "app" | "profileId">): string 
   return `${route.app}:${route.profileId}`;
 }
 
-function useTrafficCounts(samples: GatewaySample[], routes: GatewayRouteStatus[]) {
+function useTrafficCounts(samples: GatewaySample[], routes: GatewayRouteStatus[], canShowFlow: boolean) {
   return useMemo(() => {
-    const sinceMs = Date.now() - TRAFFIC_WINDOW_MS;
-    const activeRoutes = new Set(routes.map(routeKey));
+    const now = Date.now();
+    const sinceMs = now - TRAFFIC_WINDOW_MS;
+    const currentRoutes = new Map(routes.map((route) => [routeKey(route), route.upstreamProtocol]));
     const byRoute = new Map<string, number>();
     const byApp = new Map<AppKind, number>();
+    const flowByRoute = new Map<string, number>();
+    const flowByApp = new Map<AppKind, number>();
     for (const sample of samples) {
       if (sample.atMs < sinceMs || sample.profileId === null) continue;
       const key = routeKey({ app: sample.app, profileId: sample.profileId });
-      if (!activeRoutes.has(key)) continue;
+      const protocol = currentRoutes.get(key);
+      if (protocol === undefined) continue;
       byRoute.set(key, (byRoute.get(key) ?? 0) + 1);
       byApp.set(sample.app, (byApp.get(sample.app) ?? 0) + 1);
+      if (canShowFlow && sample.upstreamProtocol === protocol
+        && sample.atMs >= now - FLOW_WINDOW_MS && sample.atMs <= now) {
+        flowByRoute.set(key, Math.max(sample.atMs, flowByRoute.get(key) ?? 0));
+        flowByApp.set(sample.app, Math.max(sample.atMs, flowByApp.get(sample.app) ?? 0));
+      }
     }
-    return { byRoute, byApp };
-  }, [samples, routes]);
+    return { byRoute, byApp, flowByRoute, flowByApp };
+  }, [samples, routes, canShowFlow]);
 }
 
 interface FocusProps {

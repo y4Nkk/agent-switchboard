@@ -42,6 +42,16 @@ pub struct ModelUsageDay {
     pub cache_creation_input_tokens: u64,
     pub output_tokens: u64,
     pub total_tokens: u64,
+    /// Older saved summaries only recorded the daily totals.
+    #[serde(default)]
+    pub models: Option<Vec<ModelUsageDayModel>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageDayModel {
+    pub model: Option<String>,
+    pub total_tokens: u64,
 }
 
 /// A token subtotal that cannot be assigned to a local calendar day because
@@ -75,12 +85,16 @@ pub struct ModelUsageReport {
     /// RFC 3339 UTC timestamp at which the report was generated.
     pub generated_at: String,
     pub groups: Vec<ModelUsageGroup>,
-    /// Daily local-calendar totals for records with usable timestamps.
+    /// Daily local-calendar totals for records with usable timestamps, oldest first.
     pub days: Vec<ModelUsageDay>,
     /// Totals included in `groups` but intentionally absent from `days`.
     /// This can be non-zero only for the `All` range, because date-bounded
     /// ranges cannot decide whether an undated record belongs inside them.
     pub unassigned_tokens: ModelUsageTokens,
+    /// For `All`, the greatest span between the first and last dated usage
+    /// calls in one client session. At least two calls are required.
+    #[serde(default)]
+    pub longest_session_span_seconds: Option<u64>,
     pub issues: Vec<ModelUsageIssue>,
     pub coverage: ModelUsageCoverage,
 }

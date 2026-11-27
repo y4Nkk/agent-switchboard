@@ -23,7 +23,7 @@ export const messages = {
 
   "nav.section.consumption": ["消耗统计", "Consumption"],
   "nav.section.requestPerformance": ["请求性能", "Request performance"],
-  "nav.section.quota": ["额度与重置", "Quota & Resets"],
+  "nav.section.quota": ["重置与额度", "Resets & Quota"],
   "nav.section.resources": ["资源占用", "Resources"],
   "nav.section.radar": ["降智雷达", "Degradation Radar"],
 
@@ -48,6 +48,7 @@ export const messages = {
 
   "shell.workspaceRestoring.aria": ["正在恢复工作区", "Restoring workspace"],
   "shell.startupPageReading": ["正在读取启动页面", "Reading startup page"],
+  "shell.workspaceLoading": ["正在加载工作区", "Loading workspace"],
   "shell.sessions.aria": ["会话管理", "Session management"],
 
   "window.minimize": ["最小化", "Minimize"],

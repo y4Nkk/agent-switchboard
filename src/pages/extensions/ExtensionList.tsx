@@ -80,9 +80,10 @@ function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; works
   const failure = report?.status === "failed" ? report.message : registry?.status === "failed" ? registry.message : null;
   const updatable = workspace.updates.updatable.find((entry) => entry.definitionId === item.id);
   const description = rowDescription(item);
-  const meta = item.kind === "mcp"
-    ? t(TRANSPORT_LABELS[item.transport])
-    : item.source?.resolvedCommit ? "GitHub" : t("extensions.list.sourceLocal");
+  const skillSource = item.kind === "skill"
+    ? item.source?.resolvedCommit ? "GitHub" : t("extensions.list.sourceLocal") : null;
+  const transport = item.kind === "mcp" ? t(TRANSPORT_LABELS[item.transport]) : null;
+  const summary = [transport, description.text].filter(Boolean).join(" · ");
   return (
     <Button
       variant="ghost"
@@ -93,21 +94,22 @@ function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; works
       onClick={() => void workspace.edit(item)}
     >
       <span className="asb-ext-table-title">
-        <span className="asb-ext-table-name" title={item.name}>{item.name}</span>
-        <span className="asb-ext-table-meta">{meta}</span>
+        <Tooltip asChild label={item.name}><span className="asb-ext-table-name">{item.name}</span></Tooltip>
+        {skillSource && <span className="asb-ext-table-meta">{skillSource}</span>}
         {registryVersion && <span className="asb-ext-table-meta">{registryVersion}</span>}
         {(updatable || registry?.status === "available") && <span className="asb-ext-update-badge">{t("extensions.list.updatable")}</span>}
         {registry?.status === "manual" && <span className="asb-ext-update-badge">{t("extensions.registry.manualUpdate", { version: registry.version })}</span>}
-        {failure && <span className="asb-ext-table-error" title={failure}>{t("extensions.list.checkError")}</span>}
+        {failure && <Tooltip asChild label={failure}><span className="asb-ext-table-error">{t("extensions.list.checkError")}</span></Tooltip>}
       </span>
-      {description.text && (
-        <span className="asb-ext-table-description" title={description.text}>
+      {summary && <Tooltip asChild label={summary}>
+        <span className="asb-ext-table-description">
+          {transport && `${transport} · `}
           {description.tone && (
             <span className="asb-ext-check-dot" data-tone={description.tone} aria-hidden="true" />
           )}
           {description.text}
         </span>
-      )}
+      </Tooltip>}
     </Button>
   );
 }

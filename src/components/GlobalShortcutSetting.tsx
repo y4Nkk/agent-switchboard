@@ -1,6 +1,6 @@
 import { globalShortcutLabel } from "../lib/global-shortcut";
 import { useI18n } from "../i18n";
-import { AppSettingRow } from "./AppPreferenceControls";
+import { SettingsRow } from "./SettingsLayout";
 import { Button } from "./Button";
 import { useGlobalShortcutRecorder } from "./useGlobalShortcutRecorder";
 
@@ -13,7 +13,7 @@ export function GlobalShortcutSetting({ value, busy, onChange }: {
   const { t } = useI18n();
   const { recording, preparing, error } = recorder;
   return (
-    <AppSettingRow label={t("settings.shortcut.label")} detail={t("settings.shortcut.detail")}>
+    <SettingsRow label={t("settings.shortcut.label")} description={t("settings.shortcut.detail")}>
       <div className="asb-shortcut-setting">
         <div className="asb-shortcut-controls">
           <Button ref={recorder.captureButton} variant="secondary" disabled={busy} aria-pressed={recording} aria-busy={preparing}
@@ -27,6 +27,6 @@ export function GlobalShortcutSetting({ value, busy, onChange }: {
         </div>
         {error && <p className="asb-field-error" role="alert">{error}</p>}
       </div>
-    </AppSettingRow>
+    </SettingsRow>
   );
 }

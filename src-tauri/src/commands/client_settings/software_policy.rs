@@ -115,7 +115,7 @@ fn managed_sources() -> Result<Vec<Map<String, Value>>, String> {
     Ok(sources)
 }
 
-fn managed_directory() -> PathBuf {
+pub(crate) fn managed_directory() -> PathBuf {
     #[cfg(windows)] { std::env::var_os("ProgramFiles").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Program Files")).join("ClaudeCode") }
     #[cfg(target_os = "macos")] { PathBuf::from("/Library/Application Support/ClaudeCode") }
     #[cfg(target_os = "linux")] { PathBuf::from("/etc/claude-code") }

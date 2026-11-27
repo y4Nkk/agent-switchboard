@@ -1,3 +1,4 @@
+import { Server, Wrench } from "lucide-react";
 import type { ProviderSaveReview as Review } from "../app/provider-save-review";
 import { useI18n } from "../i18n";
 import { FactList } from "./FactList";
@@ -10,8 +11,8 @@ export function ProviderSaveReview({ review }: { review: Review }) {
     : t("modelRoutes.automatic");
   return <>
     <FactList rows={[
-      { label: t("modelRoutes.editing"), value: review.editedName },
-      { label: t("modelRoutes.activeUnchanged"), value: review.activeName ?? t("modelRoutes.unmatched") },
+      { label: t("modelRoutes.editing"), icon: Wrench, value: review.editedName },
+      { label: t("modelRoutes.activeUnchanged"), icon: Server, value: review.activeName ?? t("modelRoutes.unmatched") },
     ]} />
     {review.changes.length > 0 && <Table rows={review.changes} rowKey={(row) => row.role} ariaLabel={t("modelRoutes.routeChanges")} columns={[
       { key: "role", header: t("modelRoutes.purpose"), render: (row) => t(`modelRoutes.role.${row.role}`) },

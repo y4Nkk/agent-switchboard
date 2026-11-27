@@ -3,6 +3,7 @@ import type { AppKind, ProviderDraft, ProviderProfile, ProviderConversion, Local
 import { useI18n } from "../i18n";
 import { localizedMessageText } from "../i18n/errors";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
+import { SettingsGroup } from "./SettingsLayout";
 import { ProviderDiagnosticsEntry } from "./provider-diagnostics/ProviderDiagnosticsEntry";
 import { ClaudeModelCatalog } from "./provider-editor/ClaudeModelCatalog";
 import { applyProviderPreset } from "./provider-editor/draft";
@@ -52,10 +53,9 @@ function ConnectionSection({ editor, ...props }: Props & { editor: Editor }) {
     {!props.profile && !props.conversion && !official && <ProviderPresetField app={draft.app} disabled={props.busy}
       onSelect={(preset) => setDraft((current) => applyProviderPreset(current, preset))} />}
     <ProviderIdentityFields editor={editor} busy={props.busy} />
-    {official ? <section className="asb-editor-section" aria-label={t("providers.label.officialLogin")}>
-      <h3 className="asb-section-title">{t("providers.label.officialLogin")}</h3>
-      <div className="asb-editor-section-fields"><OfficialLoginPanel app={draft.app} onFinished={editor.setLoginDone} /></div>
-    </section> : <>
+    {official ? <SettingsGroup title={t("providers.label.officialLogin")}>
+      <OfficialLoginPanel app={draft.app} onFinished={editor.setLoginDone} />
+    </SettingsGroup> : <>
       <ProviderConnectionFields editor={editor} busy={props.busy} autoFill={!props.profile && !props.conversion} />
       <ProviderConnectionTest app={draft.app} busy={props.busy} active={props.active}
         baseUrl={draft.baseUrl} apiKey={draft.apiKey} upstreamProtocol={draft.upstreamProtocol}

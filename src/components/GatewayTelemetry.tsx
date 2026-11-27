@@ -1,3 +1,4 @@
+import { useId, useState } from "react";
 import type { GatewayMetricsStatus, GatewaySample } from "../api/client";
 import { useI18n, type TFunction } from "../i18n";
 import { isProtocolTranslation, protocolLabel } from "../lib/protocol";
@@ -5,6 +6,10 @@ import { clientFullName } from "../lib/client-name";
 import { Table, type TableColumn } from "./Table";
 import { GatewayCharts } from "./GatewayCharts";
 import type { ClientFilterValue } from "./ClientFilter";
+import { ModuleHeader } from "./WorkspaceHeader";
+import { AppDialog } from "./AppDialog";
+import { Button } from "./Button";
+import { Pagination } from "./Pagination";
 
 const RECENT_ROW_COUNT = 20;
 
@@ -14,18 +19,28 @@ function formatClock(timestamp: number): string {
 }
 
 interface TelemetryProps {
-  metrics: GatewayMetricsStatus;
+  metrics: GatewayMetricsStatus | undefined;
+  unavailable: boolean;
   profileNames: Map<string, string>;
   focus: ClientFilterValue;
 }
 
 /** Statistics cover the gateway snapshot; client focus scopes recent requests. */
-export function GatewayTelemetry({ metrics, profileNames, focus }: TelemetryProps) {
+export function GatewayTelemetry({ metrics, unavailable, profileNames, focus }: TelemetryProps) {
+  const { t } = useI18n();
+  const titleId = useId();
   return (
-    <>
-      <GatewayCharts metrics={metrics} />
-      <GatewayRecentRequests samples={metrics.samples} profileNames={profileNames} focus={focus} />
-    </>
+    <section className="asb-panel asb-gateway-monitoring" aria-labelledby={titleId}>
+      <ModuleHeader id={titleId} title={t("gateway.monitorTitle")} />
+      {metrics ? (
+        <>
+          <GatewayCharts metrics={metrics} />
+          <GatewayRecentRequests samples={metrics.samples} profileNames={profileNames} focus={focus} />
+        </>
+      ) : (
+        <p className="asb-field-help">{t(unavailable ? "gateway.monitorUnavailable" : "gateway.monitorLoading")}</p>
+      )}
+    </section>
   );
 }
 
@@ -39,33 +54,48 @@ function GatewayRecentRequests({ samples, profileNames, focus }: {
   focus: ClientFilterValue;
 }) {
   const { t } = useI18n();
+  const [history, setHistory] = useState<GatewaySample[] | null>(null);
   const scoped = focus === "all" ? samples : samples.filter((sample) => sample.app === focus);
   const recent = scoped.slice(-RECENT_ROW_COUNT).reverse();
   return (
     <section className="asb-gateway-recent" aria-label={t("gateway.recentTitle")}>
       <header className="asb-gateway-recent-heading">
-        <h3 className="asb-section-title">{t("gateway.recentTitle")}</h3>
-        <span className="asb-gateway-recent-count" role="status">
-          {focus !== "all" && <>{clientFullName(focus)} · </>}
-          {recent.length > 0 ? t("gateway.recentCount", { count: recent.length }) : t("gateway.noRecords")}
-        </span>
+        <h4 className="asb-group-title">{t("gateway.recentTitle")}</h4>
+        <Button variant="secondary" size="compact" aria-haspopup="dialog" disabled={recent.length === 0}
+          onClick={() => setHistory(scoped.slice().reverse())}>{t("gateway.viewAllRequests")}</Button>
       </header>
-      {recent.length > 0 && (
-        <Table
-          ariaLabel={t("gateway.recentTableAriaLabel")}
-          columns={recentColumns(t, profileNames)}
-          rows={recent}
-          rowKey={(sample) =>
-            `${sample.atMs}:${sample.app}:${sample.profileId ?? "-"}:${sample.routeRevision ?? "-"}`
-          }
-          className="asb-gateway-recent-table"
-        />
-      )}
+      {recent.length > 0
+        ? <GatewayRequestTable rows={recent} profileNames={profileNames} label={t("gateway.recentTableAriaLabel")} />
+        : <p className="asb-gateway-note" role="status">{t("gateway.noRecords")}</p>}
       <p className="asb-gateway-note">
         {t("gateway.telemetryNote")}
       </p>
+      {history && <GatewayRequestHistory rows={history} profileNames={profileNames}
+        title={focus === "all" ? t("gateway.allRequests") : t("gateway.clientRequests", { app: clientFullName(focus) })}
+        onClose={() => setHistory(null)} />}
     </section>
   );
+}
+
+function GatewayRequestHistory({ rows, profileNames, title, onClose }: {
+  rows: GatewaySample[]; profileNames: Map<string, string>; title: string; onClose: () => void;
+}) {
+  const [page, setPage] = useState(1);
+  const start = (page - 1) * RECENT_ROW_COUNT;
+  return <AppDialog title={title} busy={false} wide onClose={onClose}
+    footer={rows.length > RECENT_ROW_COUNT && <Pagination page={page} pageSize={RECENT_ROW_COUNT}
+      total={rows.length} onPageChange={setPage} />}>
+    <GatewayRequestTable rows={rows.slice(start, start + RECENT_ROW_COUNT)} profileNames={profileNames} label={title} />
+  </AppDialog>;
+}
+
+function GatewayRequestTable({ rows, profileNames, label }: {
+  rows: GatewaySample[]; profileNames: Map<string, string>; label: string;
+}) {
+  const { t } = useI18n();
+  return <Table ariaLabel={label} columns={recentColumns(t, profileNames)} rows={rows}
+    rowKey={(sample, index) => `${sample.atMs}:${sample.app}:${sample.profileId ?? "-"}:${index}`}
+    className="asb-gateway-recent-table" />;
 }
 
 function recentColumns(t: TFunction, profileNames: Map<string, string>): Array<TableColumn<GatewaySample>> {

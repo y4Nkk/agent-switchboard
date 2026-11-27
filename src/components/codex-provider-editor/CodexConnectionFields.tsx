@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CodexUpstream } from "../../api/client";
 import type { ProviderConnectionOptions } from "../../api/providers";
 import { useI18n } from "../../i18n";
+import { SettingsGroup } from "../SettingsLayout";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
 import { Input } from "../Input";
@@ -129,8 +130,7 @@ export function CodexConnectionFields({ editor, busy, autoFill }: Props) {
     authentication: draft.authentication,
   });
   return (
-    <section className="asb-editor-section" aria-label={t("codex.connection.title")}>
-      <h3 className="asb-section-title">{t("codex.connection.title")}</h3>
+    <SettingsGroup title={t("codex.connection.title")}>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-connection-choice">
           <ProtocolField editor={editor} busy={busy} />
@@ -170,6 +170,6 @@ export function CodexConnectionFields({ editor, busy, autoFill }: Props) {
         </div>
         {gatewayRoute && <OverrideFields editor={editor} busy={busy} />}
       </div>
-    </section>
+    </SettingsGroup>
   );
 }

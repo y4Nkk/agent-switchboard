@@ -3,9 +3,9 @@ import { Save, X } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { WorkspaceSubpage } from "../WorkspaceSubpage";
-import { Input } from "../Input";
+import { SettingsGroup, SettingsLayout } from "../SettingsLayout";
 import { useUnsavedChanges } from "../useUnsavedChanges";
-import { McpClientFields, McpJsonField } from "./mcp-create/McpFormFields";
+import { McpClientFields, McpIdentityFields, McpJsonField } from "./mcp-create/McpFormFields";
 import { McpMetadataFields } from "./mcp-create/McpMetadataFields";
 import { McpWizard } from "./mcp-create/McpWizard";
 import { useMcpEditForm, type McpEditFormProps } from "./mcp-edit/useMcpEditForm";
@@ -43,20 +43,22 @@ function McpEditor(props: McpEditFormProps & { reload: () => Promise<void> }) {
     footer={<><Button variant="secondary" disabled={form.busy} onClick={close}><X size={16} aria-hidden="true" />{t("confirm.cancel")}</Button>
       <Button type="submit" form={id} variant="primary" disabled={form.busy || stale}><Save size={16} aria-hidden="true" />
         {form.saving ? t("mcp.edit.saving") : t("mcp.edit.save")}</Button></>}>
-    <form id={id} className="asb-form asb-mcp-create" aria-label={t("mcp.edit.aria")} aria-busy={form.busy} noValidate
-      aria-describedby={form.error ? `${id}-error` : undefined}
-      onSubmit={(event) => { event.preventDefault(); if (!stale) void form.submit(); }}>
-      {stale && <div className="asb-banner" role="alert">{t("extensions.workbench.sourceChanged")}
-        <Button variant="secondary" disabled={form.busy}
-          onClick={() => leave.request(() => void props.reload())}>{t("extensions.library.reload")}</Button></div>}
-      <section className="asb-editor-section"><label className="asb-field"><span>{t("mcp.edit.name")}</span>
-        <Input code aria-label={t("mcp.edit.name")} value={form.name} disabled={form.busy}
-          onChange={(event) => form.changeName(event.target.value)} /></label>
-        <McpMetadataFields value={form.metadata} busy={form.busy} onChange={form.changeMetadata} />
-        {props.initialClients && <McpClientFields clients={form.clients} busy={form.busy} onToggle={form.toggleClient} />}</section>
-      <section className="asb-editor-section"><McpJsonField value={form.json} busy={form.busy} focus={form.focusJson} invalid={Boolean(form.error)} errorId={`${id}-error`}
-        onChange={form.changeJson} onWizard={form.openWizard} /></section>
-      {form.error && <p id={`${id}-error`} className="asb-warn-text asb-mcp-error" role="alert">{form.error}</p>}
-    </form>{leave.confirmation}
+    <SettingsLayout>
+      <form id={id} className="asb-form asb-mcp-create" aria-label={t("mcp.edit.aria")} aria-busy={form.busy} noValidate
+        aria-describedby={form.error ? `${id}-error` : undefined}
+        onSubmit={(event) => { event.preventDefault(); if (!stale) void form.submit(); }}>
+        {stale && <div className="asb-banner" role="alert">{t("extensions.workbench.sourceChanged")}
+          <Button variant="secondary" disabled={form.busy}
+            onClick={() => leave.request(() => void props.reload())}>{t("extensions.library.reload")}</Button></div>}
+        <SettingsGroup title={t("mcp.group.identity")}>
+          <McpIdentityFields name={form.name} busy={form.busy} registry={props.envelope.mcpMetadata?.registry} onNameChange={form.changeName} />
+          <McpMetadataFields value={form.metadata} busy={form.busy} onChange={form.changeMetadata} />
+        </SettingsGroup>
+        <McpJsonField value={form.json} busy={form.busy} focus={form.focusJson} error={form.error} errorId={`${id}-error`}
+          onChange={form.changeJson} onWizard={form.openWizard} />
+        {props.initialClients && <McpClientFields clients={form.clients} busy={form.busy} onToggle={form.toggleClient} />}
+      </form>
+    </SettingsLayout>
+    {leave.confirmation}
   </WorkspaceSubpage>;
 }

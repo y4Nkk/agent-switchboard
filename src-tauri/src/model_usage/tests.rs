@@ -42,11 +42,16 @@ fn ranges_follow_actual_call_days_and_keep_cache_components_exact() {
     assert_eq!(daily.groups[0].cache_read_input_tokens, 2);
     assert_eq!(daily.groups[0].cache_creation_input_tokens, 1);
     assert_eq!(daily.coverage.sessions_without_usage, 0);
+    let models = daily.days[0].models.as_ref().unwrap();
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].model.as_deref(), Some("model-codex"));
+    assert_eq!(models[0].total_tokens, 23);
     assert_eq!(total(&report(ModelUsageRange::Last7Days, sources.clone(), vec![], now())), 23);
     assert_eq!(total(&report(ModelUsageRange::Last30Days, sources.clone(), vec![], now())), 36);
     let all = report(ModelUsageRange::All, sources, vec![], now());
     assert_eq!(total(&all), 36);
     assert_eq!(all.days.len(), 2);
+    assert_eq!(all.longest_session_span_seconds, None);
 }
 
 #[test]
@@ -57,6 +62,7 @@ fn continuations_deduplicate_request_identity_and_count_equal_usage_from_distinc
     next.push(first[2].clone());
     let mut second = first[2].clone();
     second["payload"]["response_id"] = json!("another-real-response");
+    second["timestamp"] = json!((now() - chrono::Duration::hours(2)).to_rfc3339());
     next.push(second);
     let mut source = source(temp.path(), "a.jsonl", "same", AppKind::Codex, &first);
     let continuation = source.paths[0].with_file_name("b.jsonl");
@@ -66,6 +72,7 @@ fn continuations_deduplicate_request_identity_and_count_equal_usage_from_distinc
     assert_eq!(total(&read), 46);
     assert_eq!(read.coverage.scanned_files, 2);
     assert_eq!(read.groups[0].session_count, 1);
+    assert_eq!(read.longest_session_span_seconds, Some(7200));
 }
 
 #[test]

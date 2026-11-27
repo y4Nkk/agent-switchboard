@@ -2,6 +2,7 @@ import { Check, RefreshCw } from "lucide-react";
 import { useMemo } from "react";
 import type { TraySnapshot } from "../api/client";
 import { useI18n } from "../i18n";
+import { Tooltip } from "../components/Tooltip";
 import { TrayUsage } from "./TrayUsage";
 import { trayUsageContent } from "./tray-usage";
 import { cx } from "../utils/cx";
@@ -35,36 +36,34 @@ export function TrayProviderItem({ provider, busy, switchingId, armedId, refresh
     ? t("tray.provider.current")
     : switchingId === provider.id ? t("tray.provider.switching")
     : armed ? confirmLabel : t("tray.provider.switch");
+  const summary = [provider.name, ...content.readings.map((reading) => reading.summary), content.alert?.detail]
+    .filter(Boolean).join("\n");
+  const refreshLabel = t("tray.usage.refresh");
 
   return (
     <div className={cx("tray-provider", provider.active && "is-active", switchingId === provider.id && "is-switching", armed && "is-armed")}>
-      <button
-        type="button"
-        className="tray-provider-main"
-        disabled={busy || provider.active}
-        aria-label={content.summary ? `${action}，${content.summary}` : action}
-        title={[provider.name, content.summary].filter(Boolean).join("\n")}
-        onClick={onSwitch}
-      >
-        <span className="tray-provider-check">{provider.active && <Check size={18} aria-hidden="true" />}</span>
-        <span className="tray-provider-name" title={provider.name}>{provider.name}</span>
-        <TrayUsage content={content} />
-        <span className={cx("tray-provider-switch", provider.active && "is-current")}>
-          {status}
-        </span>
-      </button>
-      {content.alert && (
+      <Tooltip label={summary} className="tray-provider-tooltip">
         <button
           type="button"
-          className="tray-provider-refresh"
-          disabled={busy}
-          aria-label={t("tray.usage.refresh")}
-          title={t("tray.usage.refresh")}
-          onClick={onRefreshUsage}
+          className="tray-provider-main"
+          disabled={busy || provider.active}
+          aria-label={content.summary ? `${action}，${content.summary}` : action}
+          onClick={onSwitch}
         >
+          <span className="tray-provider-check">{provider.active && <Check size={18} aria-hidden="true" />}</span>
+          <span className="tray-provider-name">{provider.name}</span>
+          <TrayUsage content={content} />
+          <span className={cx("tray-provider-switch", provider.active && "is-current")}>
+            {status}
+          </span>
+        </button>
+      </Tooltip>
+      {content.alert && <Tooltip label={refreshLabel}>
+        <button type="button" className="tray-provider-refresh" disabled={busy}
+          aria-label={refreshLabel} onClick={onRefreshUsage}>
           <RefreshCw size={14} className={cx(refreshingId === provider.id && "is-busy")} aria-hidden="true" />
         </button>
-      )}
+      </Tooltip>}
     </div>
   );
 }

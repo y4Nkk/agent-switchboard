@@ -6,6 +6,7 @@ import { useMessageState } from "../i18n/use-message-state";
 import { localizedMessageText } from "../i18n/errors";
 import type { LocalizedMessage } from "../api/switching";
 import { BackupArchiveArt } from "./BackupArchiveArt";
+import { SettingsGroup } from "./SettingsLayout";
 import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { DatePicker } from "./DatePicker";
@@ -48,25 +49,26 @@ export function BackupCleanup({ active, busy, onCleaned }: { active: boolean; bu
     list.map((warning, index) => <p className="asb-warn-text" key={index}>{localizedMessageText(warning, t)}</p>);
   const disabled = busy || working;
   return <>
-    <div className="asb-backup-hero">
-      <div className="asb-backup-hero-art"><BackupArchiveArt kind="cleanup" /></div>
-      <div className="asb-backup-hero-copy">
-        <h4 className="asb-section-title">{t("backup.cleanup.heading")}</h4>
-        <p className="asb-field-help">{t("backup.cleanup.policy")}</p>
-        <div className="asb-backup-cleanup-controls">
-          <label className="asb-cutoff-field">{t("backup.cleanup.cutoff")}
-            <DatePicker value={cutoff} disabled={disabled} ariaLabel={t("backup.cleanup.cutoff")}
-              onChange={(value) => { setCutoff(value); setPlan(null); }} />
-          </label>
-          <Button variant="secondary" disabled={disabled || !cutoff}
-            onClick={() => void run("preview")}>{t("backup.cleanup.preview")}</Button>
+    <SettingsGroup title={t("backup.cleanup.heading")} surface="plain">
+      <div className="asb-backup-hero">
+        <div className="asb-backup-hero-art"><BackupArchiveArt kind="cleanup" /></div>
+        <div className="asb-backup-hero-copy">
+          <p className="asb-field-help">{t("backup.cleanup.policy")}</p>
+          <div className="asb-backup-cleanup-controls">
+            <label className="asb-cutoff-field">{t("backup.cleanup.cutoff")}
+              <DatePicker value={cutoff} disabled={disabled} ariaLabel={t("backup.cleanup.cutoff")}
+                onChange={(value) => { setCutoff(value); setPlan(null); }} />
+            </label>
+            <Button variant="secondary" disabled={disabled || !cutoff}
+              onClick={() => void run("preview")}>{t("backup.cleanup.preview")}</Button>
+          </div>
+          {error && !plan && <p className="asb-warn-text" role="alert">{error}</p>}
+          {outcome && <div className="asb-backup-cleanup-result" role="status"><p>{t("backup.cleanup.done",
+            { count: outcome.removed, path: outcome.path })}</p>
+            {warnings(outcome.warnings)}</div>}
         </div>
-        {error && !plan && <p className="asb-warn-text" role="alert">{error}</p>}
-        {outcome && <div className="asb-backup-cleanup-result" role="status"><p>{t("backup.cleanup.done",
-          { count: outcome.removed, path: outcome.path })}</p>
-          {warnings(outcome.warnings)}</div>}
       </div>
-    </div>
+    </SettingsGroup>
     {active && plan && <ConfirmSheet title={t("backup.cleanup.heading")} confirmLabel={t("backup.cleanup.archiveConfirm")}
       busy={working} confirmDisabled={disabled || plan.digest.records === 0}
       destructive onCancel={() => setPlan(null)} onConfirm={() => { void run("cleanup"); }}>

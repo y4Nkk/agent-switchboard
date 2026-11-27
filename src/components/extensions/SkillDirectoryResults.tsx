@@ -5,6 +5,7 @@ import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { Pagination } from "../Pagination";
 import { SearchIcon } from "../icons";
+import { ExtensionMarketResult } from "./ExtensionMarket";
 import { ExtensionLoading } from "./ExtensionLoading";
 import { skillCandidateInstalled, skillSourceHasOtherVersion } from "./skill-source-model";
 import { skillRepositoryLabel, skillSourceUrl } from "./skill-repository-model";
@@ -21,23 +22,20 @@ function DirectoryEntry({ entry, state, busy }: { entry: SkillDirectoryEntry; st
   const empty = state.directory.resolutions[key]?.length === 0;
   const actionLabel = resolving ? t("extensions.sources.installing") : empty ? t("extensions.sources.retry") : t("extensions.registry.inspectSkill");
   return (
-    <li className="asb-skill-source-card" aria-label={entry.name}>
-      <div className="asb-skill-source-card-heading">
-        <h3 className="asb-group-title">{entry.name}</h3>
+    <ExtensionMarketResult title={entry.name}
+      origin={<p className="asb-skill-source-origin"><FolderGit2 size={14} /><span>{skillRepositoryLabel(entry)}</span></p>}
+      actions={<>
         <SkillSourceLink url={skillSourceUrl(entry.repo, entry.readmeUrl)} label={t("extensions.sources.viewSourceAria", { name: entry.name })} />
-      </div>
-      <p className="asb-skill-source-origin"><FolderGit2 size={14} /><span>{skillRepositoryLabel(entry)}</span></p>
-      {empty && <p className="asb-warn-text">{t("extensions.directory.noSkillMd")}</p>}
-      <div className="asb-skill-source-card-footer">
-        <span className="asb-skill-source-meta asb-num">{t("extensions.sources.installs", { count: entry.installs.toLocaleString() })}</span>
         <Button variant="primary" disabled={busy || state.loading || state.imports.busy}
           aria-label={`${actionLabel} ${entry.name}`}
           onClick={() => void state.inspectDirectory(entry)}>
           {resolving ? <LoaderCircle size={16} className="asb-skill-source-spinner" /> : <SearchIcon />}
           {actionLabel}
         </Button>
-      </div>
-    </li>
+      </>}>
+      <span className="asb-skill-source-meta asb-num">{t("extensions.sources.installs", { count: entry.installs.toLocaleString() })}</span>
+      {empty && <p className="asb-warn-text">{t("extensions.directory.noSkillMd")}</p>}
+    </ExtensionMarketResult>
   );
 }
 
@@ -66,7 +64,7 @@ export function SkillDirectoryResults({ state, busy, items }: {
         })}
       </p>
       {results.length === 0 ? <div className="asb-skill-source-empty"><p>{t("extensions.directory.noMatches")}</p></div> :
-        <ul className="asb-skill-source-grid">
+        <ul className="asb-ext-market-list">
           {results.slice(first, first + PAGE_SIZE).flatMap((entry) => {
             const key = skillDirectoryKey(entry);
             const candidates = directory.resolutions[key];

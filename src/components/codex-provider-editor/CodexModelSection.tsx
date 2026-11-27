@@ -7,6 +7,7 @@ import { catalogModel, providerPreset } from "../../lib/provider-catalog";
 import { Button } from "../Button";
 import { Input } from "../Input";
 import { Select } from "../Select";
+import { SettingsGroup } from "../SettingsLayout";
 import { ToggleChip } from "../ToggleChip";
 import { ModelCatalogCard } from "../provider-editor/ModelCatalogCard";
 import { ModelPickerDialog, type PickerCandidate } from "../provider-editor/ModelPickerDialog";
@@ -120,9 +121,7 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
     setDraft((current) => addCatalogModel(current, id));
     setPending("");
   };
-  return <section className="asb-editor-section" aria-label={t("providerSetup.catalog")}>
-    <h3 className="asb-section-title">{t("providerSetup.catalog")}</h3>
-    <p className="asb-field-help">{t("providerSetup.catalogHelp")}</p>
+  return <SettingsGroup title={t("providerSetup.catalog")} surface="plain">
     <div className="asb-editor-section-fields">
       <div className="asb-provider-model-toolbar">
         <div className="asb-provider-model-actions">
@@ -155,5 +154,5 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
     {picking && <ModelPickerDialog title={t("providerSetup.pickerTitle")} candidates={candidates} busy={busy}
       selected={new Set(draft.catalog.map(({ id }) => id))}
       onApply={(ids) => setDraft((current) => applyCatalogModels(current, ids))} onClose={() => setPicking(false)} />}
-  </section>;
+  </SettingsGroup>;
 }

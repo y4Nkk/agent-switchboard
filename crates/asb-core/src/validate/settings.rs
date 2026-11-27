@@ -51,11 +51,11 @@ impl CodexSubagentSettings {
 
 impl SettingsValues {
     pub fn validate_client_settings(&self, app: AppKind) -> Result<(), ValidationError> {
-        validate_scope(self, app, SettingOwner::Client)
+        validate_scope(self, app, SettingOwner::Client, false)
     }
 
     pub fn validate_provider_parameters(&self, app: AppKind) -> Result<(), ValidationError> {
-        validate_scope(self, app, SettingOwner::Provider)
+        validate_scope(self, app, SettingOwner::Provider, true)
     }
 }
 
@@ -63,6 +63,7 @@ fn validate_scope(
     values: &SettingsValues,
     app: AppKind,
     owner: SettingOwner,
+    complete: bool,
 ) -> Result<(), ValidationError> {
     if !values.claude_extra.is_empty() {
         if app != AppKind::Claude || owner != SettingOwner::Client {
@@ -92,7 +93,7 @@ fn validate_scope(
     }
     for spec in setting_specs(app)
         .into_iter()
-        .filter(|spec| spec.owner == owner && spec.control != SettingControl::None)
+        .filter(|spec| complete && spec.owner == owner && spec.control != SettingControl::None)
     {
         if !values.settings.contains_key(spec.key) {
             return Err(ValidationError::MissingSettingKey {

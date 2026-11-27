@@ -200,6 +200,11 @@ input.asb-input {
   padding: var(--asb-space-1);
 }
 
+.asb-select-viewport > .asb-tooltip-anchor {
+  display: block;
+  flex: none;
+}
+
 .asb-select-item {
   position: relative;
   display: flex;

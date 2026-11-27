@@ -1,7 +1,7 @@
-use crate::adapter::OverlayEntry;
+use crate::adapter::{OverlayEntry, client_changes::setting_entry};
 use crate::contracts::ClaudeModelRole;
 use crate::contracts::{
-    AppKind, AuthenticationScheme, ConfigValue, ModelOptions, SettingValue, SettingsValues,
+    AppKind, AuthenticationScheme, ConfigValue, ModelOptions, SettingValue,
     SwitchPlan, UpstreamProtocol,
 };
 use crate::ownership::{
@@ -122,30 +122,6 @@ fn model_name(
     name.clone().map(ConfigValue::Str)
 }
 
-/// Setting intent is explicit: automatic removes a previously managed
-/// key, while an explicit value is always written.
-fn setting_entry(value: &SettingValue) -> OverlayEntry {
-    match value {
-        SettingValue::Automatic => OverlayEntry::RemoveIfPresent,
-        SettingValue::Explicit { value } => OverlayEntry::Set(value.clone()),
-    }
-}
-
-pub(super) fn client_settings_overlay(
-    client_settings: &SettingsValues,
-) -> Vec<(String, OverlayEntry)> {
-    setting_specs(AppKind::Claude)
-        .into_iter()
-        .filter(|spec| spec.owner == SettingOwner::Client)
-        .map(|spec| {
-            let value = client_settings
-                .value(spec.key)
-                .expect("client-settings validation guarantees every catalog key");
-            (spec.key.to_string(), setting_entry(value))
-        })
-        .collect()
-}
-
 /// Builds all changes by iterating the ownership directory. Literal keys only
 /// map the declared slots to plan data; ownership and cleanup actions
 /// themselves remain owned by that directory.
@@ -167,11 +143,10 @@ pub(super) fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
                     .map(OverlayEntry::Set)
                     .unwrap_or_else(|| absent_provider_entry(spec.key)),
                 SettingOwner::Client => {
-                    let value = plan
-                        .client_settings
-                        .value(spec.key)
-                        .expect("plan validation guarantees complete client settings");
-                    setting_entry(value)
+                    match plan.client_settings.value(spec.key) {
+                        Some(value @ SettingValue::Explicit { .. }) => setting_entry(value),
+                        _ => OverlayEntry::Leave,
+                    }
                 }
                 SettingOwner::Host => unreachable!("host keys never appear in the directory"),
             };

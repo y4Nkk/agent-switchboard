@@ -3,11 +3,12 @@ import { useContext } from "react";
 import { useDialogFieldPopup } from "./AppDialog";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
 import { OverlayMotionContext } from "./overlay-motion";
+import { Tooltip } from "./Tooltip";
 
 export interface SelectOption {
   value: string;
   label: string;
-  title?: string;
+  tooltip?: string;
 }
 
 interface Props {
@@ -22,6 +23,7 @@ interface Props {
   ariaLabel: string;
   disabled?: boolean;
   contentClassName?: string;
+  triggerTooltip?: string;
 }
 
 /**
@@ -30,10 +32,23 @@ interface Props {
  * the chosen item marked by a right-aligned check. Rendering contract and
  * visuals are owned here; all values come from styles/tokens.css.
  */
-export function Select({ value, options, onChange, placeholder, ariaLabel, disabled = false, contentClassName }: Props) {
+export function Select({ value, options, onChange, placeholder, ariaLabel, disabled = false,
+  contentClassName, triggerTooltip }: Props) {
   const animate = useContext(OverlayMotionContext);
   // Radix handles an outside press before React Aria completes the gesture.
   const popup = useDialogFieldPopup(disabled, true);
+  // An open tooltip receives Escape before the listbox layer does.
+  const closeFromOptionTooltip = (event: KeyboardEvent) => {
+    event.stopPropagation();
+    popup.onOpenChange(false);
+  };
+  const trigger = <SelectPrimitive.Trigger className="asb-select-trigger" aria-label={ariaLabel}>
+    {/* Radix Value discards className, so its wrapper owns truncation. */}
+    <span className="asb-select-value"><SelectPrimitive.Value placeholder={placeholder} /></span>
+    <SelectPrimitive.Icon className="asb-select-chevron">
+      <ChevronDownIcon />
+    </SelectPrimitive.Icon>
+  </SelectPrimitive.Trigger>;
   return (
     <SelectPrimitive.Root
       value={value ?? ""}
@@ -42,13 +57,7 @@ export function Select({ value, options, onChange, placeholder, ariaLabel, disab
       open={popup.open}
       onOpenChange={popup.onOpenChange}
     >
-      <SelectPrimitive.Trigger className="asb-select-trigger" aria-label={ariaLabel}>
-        {/* Radix Value discards className, so its wrapper owns truncation. */}
-        <span className="asb-select-value"><SelectPrimitive.Value placeholder={placeholder} /></span>
-        <SelectPrimitive.Icon className="asb-select-chevron">
-          <ChevronDownIcon />
-        </SelectPrimitive.Icon>
-      </SelectPrimitive.Trigger>
+      {triggerTooltip ? <Tooltip label={triggerTooltip} side="bottom" enabled={!popup.open}>{trigger}</Tooltip> : trigger}
       <SelectPrimitive.Portal container={popup.container}>
         <SelectPrimitive.Content
           className={["asb-select-content", contentClassName].filter(Boolean).join(" ")}
@@ -61,16 +70,20 @@ export function Select({ value, options, onChange, placeholder, ariaLabel, disab
             <ChevronUpIcon />
           </SelectPrimitive.ScrollUpButton>
           <SelectPrimitive.Viewport className="asb-select-viewport">
-            {options.map(({ value: optionValue, label, title }) => (
-              <SelectPrimitive.Item key={optionValue} value={optionValue} title={title ?? label}
-                aria-label={title ?? label} className="asb-select-item">
-                <SelectPrimitive.ItemText>{label}</SelectPrimitive.ItemText>
-                <span className="asb-select-check" aria-hidden="true">
-                  <SelectPrimitive.ItemIndicator>
-                    <CheckIcon />
-                  </SelectPrimitive.ItemIndicator>
-                </span>
-              </SelectPrimitive.Item>
+            {options.map(({ value: optionValue, label, tooltip }) => (
+              <Tooltip key={optionValue} label={tooltip ?? label} side="right"
+                onEscapeKeyDown={closeFromOptionTooltip}>
+                <SelectPrimitive.Item asChild value={optionValue} aria-label={tooltip ?? label}>
+                  <span className="asb-select-item">
+                    <SelectPrimitive.ItemText>{label}</SelectPrimitive.ItemText>
+                    <span className="asb-select-check" aria-hidden="true">
+                      <SelectPrimitive.ItemIndicator>
+                        <CheckIcon />
+                      </SelectPrimitive.ItemIndicator>
+                    </span>
+                  </span>
+                </SelectPrimitive.Item>
+              </Tooltip>
             ))}
           </SelectPrimitive.Viewport>
           <SelectPrimitive.ScrollDownButton className="asb-select-scroll">

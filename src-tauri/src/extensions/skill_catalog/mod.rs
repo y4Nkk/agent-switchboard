@@ -3,6 +3,7 @@
 
 mod directory;
 mod progress;
+mod recovery;
 mod repositories;
 mod scan;
 
@@ -11,8 +12,10 @@ use serde::{Deserialize, Serialize};
 pub use directory::{resolve_directory_skill, search_directory};
 pub(crate) use progress::CatalogScanMonitor;
 pub use progress::CatalogScanProgress;
+pub(crate) use recovery::plan_repository_recovery;
+pub use recovery::SkillRepositoryRecoveryRequest;
 pub use repositories::SkillRepositoryCatalog;
-pub(crate) use scan::{scan_repositories, RepositoryScan};
+pub(crate) use scan::{scan_repositories, RepositoryScan, VerifiedRepository};
 
 pub const MAX_REPOSITORIES: usize = 32;
 
@@ -59,5 +62,7 @@ pub enum CatalogError {
     NotFound,
     #[error("Skill repository already exists with this repository, subpath and ref")]
     Conflict,
+    #[error("仓库配置已变化，请重新载入仓库后重试")]
+    Changed,
 }
 

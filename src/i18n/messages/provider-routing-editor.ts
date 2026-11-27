@@ -6,7 +6,6 @@ export const messages = {
   "providerEditor.section.parameters": ["运行参数", "Runtime parameters"],
   "providerEditor.selfTarget": ["本供应商 · {name}", "This provider · {name}"],
   "providerEditor.routingTitle": ["配置模型去向", "Configure model destinations"],
-  "providerEditor.routingHelp": ["连接、模型和各用途共用当前草稿，最后一起保存。指定本供应商时可以直接使用正在编辑的模型目录。", "Connection, models and purposes share this draft and save together. This provider uses the model catalog you are editing."],
   "providerEditor.resetPurposes": ["恢复用途自动路由", "Restore automatic purpose routing"],
   "providerEditor.catalog": ["模型目录与名称映射", "Model catalog & name mapping"],
   "providerEditor.fetchModels": ["从当前连接获取模型", "Fetch models from this connection"],

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
+import { Tooltip } from "./Tooltip";
 import { CheckIcon, RestoreIcon } from "./icons";
 
 /** One visible clipboard result for code, device codes and generated answers.
@@ -31,16 +32,15 @@ export function CopyButton({ content, iconOnly = false, label, copiedLabel }: {
     } finally { locked.current = false; }
   };
   const copied = status === "copied";
+  const text = t(copied ? "common.copied" : "common.copy");
+  const actionLabel = (copied ? copiedLabel : label) ?? text;
+  const button = <Button variant={iconOnly ? "icon" : "secondary"} disabled={status === "copying"}
+    onClick={() => void copy()} aria-label={iconOnly ? actionLabel : undefined}>
+    {copied ? <CheckIcon /> : <RestoreIcon />}
+    {!iconOnly && text}
+  </Button>;
   return <>
-    <Button
-      variant={iconOnly ? "icon" : "secondary"}
-      disabled={status === "copying"}
-      onClick={() => void copy()}
-      {...(iconOnly && { "aria-label": copied ? copiedLabel : label, title: copied ? copiedLabel : label })}
-    >
-      {copied ? <CheckIcon /> : <RestoreIcon />}
-      {!iconOnly && t(copied ? "common.copied" : "common.copy")}
-    </Button>
+    {iconOnly ? <Tooltip label={actionLabel}>{button}</Tooltip> : button}
     {status === "failed" && <span className="asb-field-error" role="alert">{t("common.copyFailed")}</span>}
   </>;
 }
