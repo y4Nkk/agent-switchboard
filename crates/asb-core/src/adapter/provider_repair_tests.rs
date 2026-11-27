@@ -53,10 +53,11 @@ fn codex_repair_preserves_live_client_settings_and_shared_fragment() {
     let full_rendered = render(current, &full).unwrap();
     let full_document: toml_edit::DocumentMut = full_rendered.parse().unwrap();
     assert_eq!(full_document["sandbox_mode"].as_str(), Some("read-only"));
-    assert!(full_document.get("agents").and_then(|item| item.get("max_threads")).is_none());
+    assert_eq!(full_document["agents"]["max_threads"].as_integer(), Some(7));
     assert_eq!(full_document["mcp_servers"]["tools"]["command"].as_str(), Some("stored-tool"));
-    assert!(preview(current, &full, "backup").unwrap().changes.iter()
-        .any(|change| change.key == "agents.max_threads"));
+    let full_changes = preview(current, &full, "backup").unwrap().changes;
+    assert!(full_changes.iter().any(|change| change.key == "sandbox_mode"));
+    assert!(full_changes.iter().all(|change| change.key != "agents.max_threads"));
 }
 
 #[test]
