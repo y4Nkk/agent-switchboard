@@ -96,7 +96,7 @@ function ExtensionVersions(props: ExtensionManagementProps) {
         )}
       </div>
     )}>
-      <SettingsRow label={t("extensions.facts.source")} description={source}
+      <SettingsRow label={t("extensions.facts.source")} description={source} children={null}
         details={skillSource?.resolvedCommit && (
           <span className="asb-scope-note">
             {t("extensions.facts.sourceCommit", { commit: skillSource.resolvedCommit.slice(0, 12) })}
